@@ -9,6 +9,10 @@ Review date: 2026-10-28
 - **Lint:** `ruff` 0.16.10 (the version pinned in `pyproject.toml`). The repo
   has no ruff config, so ruff's defaults were used, plus extra rule sets where
   noted.
+- **Line numbers** in this file were taken before the code was reformatted
+  with `ruff format`, so some (mostly in `runtime.py`) may now point a few
+  dozen lines early. Function and constant names are still correct; search for
+  those if a line number does not match.
 
 ## Strengths
 
@@ -29,8 +33,8 @@ Review date: 2026-10-28
 
 ### A1. Very large modules (highest priority)
 
-- `src/private_agent/agent/runtime.py` is 6,311 lines.
-  `_run_agent_cli_session` (lines 3522–6096) is about 2,500 lines in one
+- `src/private_agent/agent/runtime.py` is 6,445 lines.
+  `_run_agent_cli_session` (lines 3594–6227) is about 2,600 lines in one
   function.
 - `src/private_agent/database/memory.py` is 2,929 lines in one
   `PersistentMemory` class.
@@ -95,7 +99,9 @@ model), loaded once at startup and passed to the code that needs it.
 ### A5. Lint, format and typing are not enforced
 
 - With ruff's default rules: 378 lines over 88 characters (`E501`).
-- `ruff format --check` would reformat 51 of 74 files.
+- `ruff format --check` would reformat 51 of 74 files. (Update: since the
+  review, the code has been reformatted and all 74 files now pass; the lint
+  warnings below and the missing ruff config remain.)
 - With extra rule sets turned on, there are 608 warnings. The main ones:
 
   | Count | Rule | Issue |
@@ -1123,9 +1129,9 @@ There are 4–7 questions before the first message (RAG folder, workspace,
 mode, provider, URL, key, confirm), with no "remember my choices" and no
 command-line flags.
 
-**G8. No live status while working** (see F3).
+**G8. No live status while working** (see F3; fixed by step 9.7).
 
-**G9. No way to stop one turn** (see C12).
+**G9. No way to stop one turn** (see C12; fixed by step 6.4).
 
 **G10. No multi-line input.**
 There are no key bindings, so there is no Alt+Enter or Shift+Enter for a new
@@ -1143,7 +1149,7 @@ arguments are shown as a Python dict.
 Menus are numbered or typed, and `/tasks` opens a sub-prompt where commands
 such as `approve <ID>` are typed and IDs copied by hand.
 
-**G14. Replies and diagnostics are mixed** (see E34).
+**G14. Replies and diagnostics are mixed** (see E34; fixed by steps 5.2 and 8.2).
 
 ### Cosmetics missing
 
@@ -1845,13 +1851,15 @@ what each step needs first.
 
 **Milestones along the way:**
 
-- After **step 15**: the app runs cleanly in WSL, makes no tokenizer download,
-  and has its hidden config keys documented.
+- After **step 15**: the app is POSIX-only (native Windows points to WSL),
+  makes no tokenizer download, and has its hidden config keys documented.
 - After **step 37**: the quick wins are done (Markdown replies, coloured diffs,
-  better planning and RAG, `doctor`, DNS caching).
+  better planning and RAG, `doctor`, WSL warnings, DNS caching), and the app
+  runs cleanly in WSL.
 - After **step 41**: the test suite is green and CI runs on every PR.
-- After **step 98**: the core is restructured, and every local provider works
-  (not only Ollama).
+- After **step 98**: settings, tool state, commands and memory are
+  restructured, and every local provider works (not only Ollama). The shared
+  agent loop and permission policy (steps 99 and 109) start Stage 5.
 - After **step 140**: everything in this file is done.
 
 #### Stage 1: Trivial fixes
