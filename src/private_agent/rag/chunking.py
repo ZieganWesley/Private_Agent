@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 import math
 import re
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional, Sequence
 
 from ..run_logging import RUN_LOGGER, log_event
 
@@ -37,7 +37,7 @@ _CODE_BOUNDARY_RE = re.compile(
     re.MULTILINE,
 )
 
-EmbedFunction = Callable[[List[str]], List[List[float]]]
+EmbedFunction = Callable[[list[str]], list[list[float]]]
 
 
 @dataclass(frozen=True)
@@ -89,8 +89,8 @@ def _size(text: str, unit: str) -> int:
     return len(text)
 
 
-def _window_split(text: str, size: int, overlap: int, snap_to_word: bool) -> List[str]:
-    chunks: List[str] = []
+def _window_split(text: str, size: int, overlap: int, snap_to_word: bool) -> list[str]:
+    chunks: list[str] = []
     start = 0
     while start < len(text):
         end = min(start + size, len(text))
@@ -107,11 +107,11 @@ def _window_split(text: str, size: int, overlap: int, snap_to_word: bool) -> Lis
     return chunks
 
 
-def _unit_window_split(text: str, size: int, overlap: int, unit: str) -> List[str]:
+def _unit_window_split(text: str, size: int, overlap: int, unit: str) -> list[str]:
     """Sliding window over words or tokens, preserving the original spacing."""
     pattern = re.compile(r"\S+") if unit == "words" else _TOKEN_RE
     spans = [match.span() for match in pattern.finditer(text)]
-    chunks: List[str] = []
+    chunks: list[str] = []
     start = 0
     while start < len(spans):
         end = min(start + size, len(spans))
@@ -128,10 +128,10 @@ def _pack(
     pieces: Sequence[str],
     settings: ChunkingSettings,
     joiner: str,
-) -> List[str]:
+) -> list[str]:
     """Greedily pack pieces up to chunk_size, carrying trailing overlap forward."""
-    chunks: List[str] = []
-    current: List[str] = []
+    chunks: list[str] = []
+    current: list[str] = []
     current_size = 0
     join_size = _size(joiner, settings.unit) if joiner else 0
 
@@ -151,7 +151,7 @@ def _pack(
         extra = join_size if current else 0
         if current and current_size + extra + piece_size > settings.chunk_size:
             flush()
-            carried: List[str] = []
+            carried: list[str] = []
             carried_size = 0
             for previous in reversed(current):
                 previous_size = _size(previous, settings.unit)
@@ -170,7 +170,7 @@ def _pack(
     return chunks
 
 
-def _split_oversized(text: str, settings: ChunkingSettings) -> List[str]:
+def _split_oversized(text: str, settings: ChunkingSettings) -> list[str]:
     if settings.unit == "chars":
         return _window_split(text, settings.chunk_size, settings.chunk_overlap, True)
     return _unit_window_split(
@@ -178,8 +178,8 @@ def _split_oversized(text: str, settings: ChunkingSettings) -> List[str]:
     )
 
 
-def _split_sentences(text: str) -> List[str]:
-    sentences: List[str] = []
+def _split_sentences(text: str) -> list[str]:
+    sentences: list[str] = []
     position = 0
     for match in _SENTENCE_RE.finditer(text):
         sentence = text[position : match.start() + len(match.group().rstrip())]
@@ -194,7 +194,7 @@ def _split_sentences(text: str) -> List[str]:
 
 def _recursive_split(
     text: str, settings: ChunkingSettings, separators: Sequence[str]
-) -> List[str]:
+) -> list[str]:
     if _size(text, settings.unit) <= settings.chunk_size:
         stripped = text.strip()
         return [stripped] if stripped else []
@@ -203,7 +203,7 @@ def _recursive_split(
             split_parts = text.split(separator)
             parts = [part + separator for part in split_parts[:-1]] + split_parts[-1:]
             remaining = separators[index + 1 :]
-            pieces: List[str] = []
+            pieces: list[str] = []
             for part in parts:
                 if _size(part, settings.unit) > settings.chunk_size:
                     pieces.extend(_recursive_split(part, settings, remaining))
@@ -213,7 +213,7 @@ def _recursive_split(
     return _split_oversized(text, settings)
 
 
-def _split_markdown(text: str, settings: ChunkingSettings) -> List[str]:
+def _split_markdown(text: str, settings: ChunkingSettings) -> list[str]:
     starts = [match.start() for match in _HEADING_RE.finditer(text)]
     if not starts:
         return _recursive_split(text, settings, settings.separators)
@@ -223,7 +223,7 @@ def _split_markdown(text: str, settings: ChunkingSettings) -> List[str]:
         for begin, end in zip(boundaries, boundaries[1:])
         if text[begin:end].strip()
     ]
-    chunks: List[str] = []
+    chunks: list[str] = []
     buffer = ""
     for section in sections:
         if _size(section, settings.unit) > settings.chunk_size:
@@ -245,7 +245,7 @@ def _split_markdown(text: str, settings: ChunkingSettings) -> List[str]:
     return chunks
 
 
-def _split_code(text: str, settings: ChunkingSettings) -> List[str]:
+def _split_code(text: str, settings: ChunkingSettings) -> list[str]:
     starts = [match.start() for match in _CODE_BOUNDARY_RE.finditer(text)]
     if not starts:
         return _recursive_split(text, settings, ("\n\n", "\n", " "))
@@ -255,7 +255,7 @@ def _split_code(text: str, settings: ChunkingSettings) -> List[str]:
         for begin, end in zip(boundaries, boundaries[1:])
         if text[begin:end].strip()
     ]
-    pieces: List[str] = []
+    pieces: list[str] = []
     for block in blocks:
         if _size(block, settings.unit) > settings.chunk_size:
             pieces.extend(_recursive_split(block, settings, ("\n\n", "\n", " ")))
@@ -278,8 +278,8 @@ def _percentile(values: Sequence[float], percentile: float) -> float:
 
 
 def _split_semantic(
-    text: str, settings: ChunkingSettings, embed: Optional[EmbedFunction]
-) -> List[str]:
+    text: str, settings: ChunkingSettings, embed: EmbedFunction | None
+) -> list[str]:
     """Split where embedding distance between neighbouring sentences spikes."""
     sentences = _split_sentences(text)
     if (
@@ -310,13 +310,13 @@ def _split_semantic(
         _cosine_distance(vectors[i], vectors[i + 1]) for i in range(len(vectors) - 1)
     ]
     threshold = _percentile(distances, settings.semantic_breakpoint_percentile)
-    groups: List[List[str]] = [[sentences[0]]]
+    groups: list[list[str]] = [[sentences[0]]]
     for sentence, distance in zip(sentences[1:], distances):
         if distance > threshold:
             groups.append([sentence])
         else:
             groups[-1].append(sentence)
-    chunks: List[str] = []
+    chunks: list[str] = []
     for group in groups:
         joined = " ".join(group)
         if _size(joined, settings.unit) <= settings.chunk_size:
@@ -326,10 +326,10 @@ def _split_semantic(
     return chunks
 
 
-def _merge_small(chunks: List[str], minimum: int) -> List[str]:
+def _merge_small(chunks: list[str], minimum: int) -> list[str]:
     if minimum <= 0 or len(chunks) < 2:
         return chunks
-    merged: List[str] = []
+    merged: list[str] = []
     for chunk in chunks:
         if merged and len(chunk) < minimum:
             merged[-1] = f"{merged[-1]}\n{chunk}"
@@ -356,8 +356,8 @@ def split_text(
     text: str,
     settings: ChunkingSettings,
     extension: str = "",
-    embed: Optional[EmbedFunction] = None,
-) -> List[str]:
+    embed: EmbedFunction | None = None,
+) -> list[str]:
     """Split text using the configured strategy."""
     if not text or not text.strip():
         return []

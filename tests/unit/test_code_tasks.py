@@ -1,11 +1,12 @@
-import pathlib
 import json
+import pathlib
 import shutil
-import sys
 import subprocess
-from unittest.mock import patch, MagicMock
-from rich.console import Console
+import sys
+from unittest.mock import MagicMock, patch
+
 import pytest
+from rich.console import Console
 
 from private_agent.tools import (
     run_shell_command,
@@ -32,8 +33,8 @@ except ImportError:
 
 from private_agent.code_tasks import (
     CodeTaskWorkspace,
-    is_code_task_request,
     _isolated_command,
+    is_code_task_request,
 )
 
 console = Console()
@@ -302,7 +303,7 @@ def test_code_task_blocks_manual_git_shell_commands(monkeypatch):
 def test_isolated_command_fails_closed_when_isolation_is_unavailable(
     monkeypatch, tmp_path, system, available_tools, message
 ):
-    import private_agent.code_tasks as code_tasks
+    from private_agent import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: system)
     monkeypatch.setattr(
@@ -346,7 +347,7 @@ def test_isolated_command_fails_closed_when_isolation_is_unavailable(
 def test_isolation_readiness_reports_platform_without_raising(
     monkeypatch, system, available_tools, expected
 ):
-    import private_agent.code_tasks as code_tasks
+    from private_agent import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: system)
     monkeypatch.setattr(
@@ -361,7 +362,7 @@ def test_isolation_readiness_reports_platform_without_raising(
 def test_isolated_command_shares_network_only_when_explicitly_enabled(
     monkeypatch, tmp_path
 ):
-    import private_agent.code_tasks as code_tasks
+    from private_agent import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: "Linux")
     monkeypatch.setattr(
@@ -459,7 +460,7 @@ def test_generated_project_test_command_isolated_from_host_files(tmp_path):
 
 
 def test_project_runner_runs_all_detected_suites_after_failure(tmp_path, monkeypatch):
-    import private_agent.code_tasks as code_tasks
+    from private_agent import code_tasks
 
     project = tmp_path / "project"
     (project / "tests").mkdir(parents=True)
@@ -513,7 +514,7 @@ def test_project_runner_rejects_ignored_test_files(tmp_path):
 
 
 def test_project_runner_reports_missing_runner_and_timeout(tmp_path, monkeypatch):
-    import private_agent.code_tasks as code_tasks
+    from private_agent import code_tasks
 
     project = tmp_path / "project"
     project.mkdir()
@@ -545,7 +546,7 @@ def test_project_runner_reports_missing_runner_and_timeout(tmp_path, monkeypatch
 
 
 def test_project_runner_executes_configured_argv_inside_sandbox(tmp_path, monkeypatch):
-    import private_agent.code_tasks as code_tasks
+    from private_agent import code_tasks
 
     project = tmp_path / "project"
     project.mkdir()
@@ -587,7 +588,7 @@ def test_project_runner_executes_configured_argv_inside_sandbox(tmp_path, monkey
 
 
 def test_direct_workspace_access_does_not_copy_or_create_git(tmp_path, monkeypatch):
-    import private_agent.sandbox as sandbox
+    from private_agent import sandbox
 
     selected_root = tmp_path / "selected"
     selected_root.mkdir()

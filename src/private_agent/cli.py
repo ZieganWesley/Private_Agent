@@ -22,8 +22,8 @@ def main():
     exit_code = 0
     from .config import DEBUG_LOG_ENABLED
     from .run_logging import (
-        LoggingConsoleAdapter,
         RUN_LOGGER,
+        LoggingConsoleAdapter,
         install_logging_console_adapter,
         log_event,
         start_debug_logging,

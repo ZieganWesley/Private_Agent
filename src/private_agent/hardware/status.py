@@ -1,10 +1,10 @@
 """Hardware policy and runtime status for Ollama-backed inference."""
 
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 from urllib.parse import urlsplit
 
 import ollama
-
 
 ACCELERATION_MODES = frozenset({"auto", "cpu", "accelerator"})
 
@@ -47,7 +47,7 @@ def inspect_ollama_hardware(
     base_url: str,
     mode: str = "auto",
     *,
-    client_factory: Optional[Callable[..., Any]] = None,
+    client_factory: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """Inspect loaded-model placement reported by the configured Ollama server."""
     normalized_mode = normalize_acceleration_mode(mode)

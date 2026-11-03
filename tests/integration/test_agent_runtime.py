@@ -1,26 +1,27 @@
-import pytest
-import time
 import asyncio
-import types
 import json
+import time
+import types
 from io import StringIO
-from unittest.mock import patch, MagicMock, AsyncMock
-from rich.console import Console
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     SystemMessage,
     ToolMessage,
 )
+from rich.console import Console
 
-from private_agent.database import PersistentMemory
-from private_agent.sandbox import SandboxManager
 from private_agent.agent import (
-    authorize_network_research,
     _invoke_with_budget,
+    authorize_network_research,
     execute_tool_call,
     run_agent_cli_async,
 )
+from private_agent.database import PersistentMemory
+from private_agent.sandbox import SandboxManager
 
 try:
     from private_agent.agent import get_robust_chat_model
@@ -180,7 +181,7 @@ def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
 async def test_cli_requires_a_terminal_before_starting_session(monkeypatch):
     from types import SimpleNamespace
 
-    import private_agent.agent.runtime as runtime
+    from private_agent.agent import runtime
 
     printed = []
     memory_factory = MagicMock()
@@ -222,8 +223,8 @@ async def test_missing_local_runtimes_keeps_online_provider_available(
         "sys",
         SimpleNamespace(platform=runtime_platform, stdin=agent.sys.stdin),
     )
-    monkeypatch.setattr(agent, "_discover_available_local_runtimes", lambda: [])
-    monkeypatch.setattr(agent, "fetch_local_chat_models", lambda: [])
+    monkeypatch.setattr(agent, "_discover_available_local_runtimes", list)
+    monkeypatch.setattr(agent, "fetch_local_chat_models", list)
     hardware_status = MagicMock()
     monkeypatch.setattr(
         agent,
@@ -285,7 +286,7 @@ async def test_online_provider_preference_is_cached_for_session(
     from private_agent.agent import runtime as agent
 
     _agent, model, inputs, _workspace, _database_path = scripted_local_cli
-    monkeypatch.setattr(agent, "_discover_available_local_runtimes", lambda: [])
+    monkeypatch.setattr(agent, "_discover_available_local_runtimes", list)
     monkeypatch.setattr(
         agent,
         "APP_CONFIG",
@@ -932,8 +933,9 @@ async def test_plan_research_decline_offline_or_unavailable_results_are_safe(
 
 
 def test_sync_connect_backend_falls_back_to_second_validated_address(monkeypatch):
-    from private_agent.tools import _PublicOnlySyncNetworkBackend
     import httpcore
+
+    from private_agent.tools import _PublicOnlySyncNetworkBackend
 
     backend = _PublicOnlySyncNetworkBackend(allow_loopback=True)
     attempts = []
@@ -1148,9 +1150,10 @@ def test_permission_mode_policy_matrix(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tool_result_and_failure_are_returned_to_agent(monkeypatch):
-    import private_agent.agent.runtime as agent
     from rich.panel import Panel
     from rich.text import Text
+
+    import private_agent.agent.runtime as agent
 
     assert agent._tool_result_is_error("Web search failed: ConnectionError")
     assert agent._tool_result_is_error("Could not open camera device 0.")
@@ -1507,8 +1510,9 @@ def test_visible_reasoning_only_shows_explicit_summary_when_enabled(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_streaming_response_is_not_rendered_inside_live_status(monkeypatch):
-    import private_agent.agent.runtime as agent
     from contextlib import contextmanager
+
+    import private_agent.agent.runtime as agent
 
     status_active = False
     printed = []
@@ -1552,8 +1556,9 @@ async def test_streaming_response_is_not_rendered_inside_live_status(monkeypatch
 
 @pytest.mark.asyncio
 async def test_nonstreaming_response_keeps_live_status(monkeypatch):
-    import private_agent.agent.runtime as agent
     from contextlib import contextmanager
+
+    import private_agent.agent.runtime as agent
 
     status_active = False
 
@@ -1888,8 +1893,7 @@ async def test_runtime_rag_citations_are_prompted_and_shown(
 async def test_cli_requires_rebuild_confirmation_before_preserving_corrupt_rag_index(
     scripted_local_cli, monkeypatch, tmp_path
 ):
-    import private_agent.rag.indexing as indexing
-    from private_agent.rag import initialize_knowledge_base
+    from private_agent.rag import indexing, initialize_knowledge_base
 
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
     docs = tmp_path / "knowledge"
@@ -3102,7 +3106,7 @@ async def test_cli_does_not_call_web_tool_after_online_consent_decline(
     monkeypatch.setattr(agent, "WEB_RESEARCH_CONSENT", "ask")
     monkeypatch.setattr(agent, "has_internet_connection", lambda: True)
     monkeypatch.setattr(agent, "APP_CONFIG", {})
-    monkeypatch.setattr(agent, "_discover_available_local_runtimes", lambda: [])
+    monkeypatch.setattr(agent, "_discover_available_local_runtimes", list)
     monkeypatch.setattr(
         agent,
         "select_online_model",
@@ -3224,7 +3228,7 @@ async def test_online_model_applies_consented_tool_limits(
 ):
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
     monkeypatch.setattr(agent, "APP_CONFIG", {})
-    monkeypatch.setattr(agent, "fetch_local_chat_models", lambda: [])
+    monkeypatch.setattr(agent, "fetch_local_chat_models", list)
     monkeypatch.setattr(agent, "MAX_TOOL_ITERATIONS", round_limit)
     monkeypatch.setattr(agent, "MAX_TOOL_CALLS", call_limit)
     selection = {
@@ -3532,7 +3536,7 @@ async def test_ready_summary_is_compact_and_shows_local_hardware_only_for_local(
 async def test_maintenance_data_reset_clears_active_rag_and_session_context(
     tmp_path, monkeypatch
 ):
-    import private_agent.agent.runtime as runtime
+    from private_agent.agent import runtime
 
     index_path = tmp_path / "rag-index"
     index_path.mkdir()
@@ -4317,7 +4321,7 @@ async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
 @pytest.mark.asyncio
 async def test_checkpoint_system_failure_is_returned_to_runtime_call(monkeypatch):
     import private_agent.agent.runtime as agent
-    import private_agent.code_tasks as code_tasks
+    from private_agent import code_tasks
 
     class BrokenCheckpointWorkspace:
         def checkpoint(self, label, paths):
@@ -4436,9 +4440,10 @@ def test_model_capabilities_are_read_from_ollama_metadata(mock_client):
 async def test_interrupt_summary_reports_stages_and_saves(tmp_path):
     import io
 
-    import private_agent.agent.runtime as agent
     from langchain_core.messages import AIMessage, HumanMessage
     from rich.console import Console
+
+    import private_agent.agent.runtime as agent
 
     memory = PersistentMemory(db_path=str(tmp_path / "memory.sqlite"))
     memory.save_message("s1", "human", "hello")
@@ -4462,9 +4467,10 @@ async def test_interrupt_summary_reports_stages_and_saves(tmp_path):
 async def test_second_interrupt_skips_summary(tmp_path):
     import io
 
-    import private_agent.agent.runtime as agent
     from langchain_core.messages import HumanMessage
     from rich.console import Console
+
+    import private_agent.agent.runtime as agent
 
     memory = PersistentMemory(db_path=str(tmp_path / "memory.sqlite"))
     memory.save_message("s1", "human", "hello")

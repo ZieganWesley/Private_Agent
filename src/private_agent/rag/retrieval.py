@@ -1,7 +1,6 @@
 """Hybrid vector and lexical document retrieval."""
 
 import heapq
-from typing import List
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -15,7 +14,7 @@ console = Console()
 class HybridRAGRetriever:
     """Combine Chroma vector similarity and BM25 lexical retrieval."""
 
-    def __init__(self, vectorstore: Chroma, documents: List[Document]):
+    def __init__(self, vectorstore: Chroma, documents: list[Document]):
         self.vectorstore = vectorstore
         self.documents = documents
         self.bm25 = None
@@ -36,7 +35,7 @@ class HybridRAGRetriever:
 
     def similarity_search(
         self, query: str, k: int = RAG_SIMILARITY_RESULTS
-    ) -> List[Document]:
+    ) -> list[Document]:
         vector_results = self.vectorstore.similarity_search(query, k=k)
         if not self.bm25 or not self.documents:
             return vector_results

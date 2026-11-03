@@ -1,8 +1,8 @@
 """Git checkpoint and finalization operations for isolated code tasks."""
 
 import re
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Callable, Sequence
 
 from . import _TEST_FILE, _is_git_ignored, _is_likely_secret, _project_files
 

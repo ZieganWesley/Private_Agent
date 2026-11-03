@@ -4,8 +4,8 @@ from private_agent import cli
 
 
 def test_verbose_startup_flag_is_forwarded(monkeypatch):
-    import private_agent.run_logging as run_logging
-    import private_agent.agent.runtime as runtime
+    from private_agent import run_logging
+    from private_agent.agent import runtime
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--verbose-startup"])

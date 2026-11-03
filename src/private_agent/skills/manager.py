@@ -2,7 +2,6 @@
 
 import pathlib
 import re
-from typing import Dict, Optional
 
 from ..config import (
     MAX_SKILL_DESCRIPTION_CHARS,
@@ -60,8 +59,8 @@ def create_skill_file(
 
 def match_skill_by_relevancy(
     user_input: str,
-    loaded_skills: Dict[str, AgentSkill],
-) -> Optional[AgentSkill]:
+    loaded_skills: dict[str, AgentSkill],
+) -> AgentSkill | None:
     """Select a relevant skill using weighted keyword-token overlap."""
     if not loaded_skills:
         return None

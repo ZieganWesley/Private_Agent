@@ -709,7 +709,7 @@ async def test_task_tool_call_is_not_run_when_action_journaling_fails(
     tmp_path,
     monkeypatch,
 ):
-    import private_agent.agent.runtime as runtime
+    from private_agent.agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "task-journal.sqlite"))
     task = memory.create_task_plan(
@@ -742,7 +742,7 @@ async def test_uncertain_task_action_blocks_retries_until_user_reconciles(
     tmp_path,
     monkeypatch,
 ):
-    import private_agent.agent.runtime as runtime
+    from private_agent.agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "task-action-recovery.sqlite"))
     task = memory.create_task_plan(
@@ -850,7 +850,7 @@ async def test_cancelled_task_tool_is_journaled_unknown_and_blocks_next_action(
     tmp_path,
     monkeypatch,
 ):
-    import private_agent.agent.runtime as runtime
+    from private_agent.agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "cancelled-action.sqlite"))
     task = memory.create_task_plan(
@@ -942,10 +942,12 @@ def test_table_schema_reports_constraints_and_blocks_uninspected_planner_writes(
 ):
     from private_agent.tools import (
         clear_schema_reads,
-        create_task_plan as create_plan_tool,
         read_table_schema,
         set_active_db_path,
         set_active_task_context,
+    )
+    from private_agent.tools import (
+        create_task_plan as create_plan_tool,
     )
 
     memory = PersistentMemory(temp_db)

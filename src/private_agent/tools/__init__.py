@@ -1,37 +1,24 @@
+import contextvars
 import os
 import socket
-import contextvars
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Optional, Callable
-from functools import wraps
 from datetime import datetime
+from functools import wraps
+from typing import Optional
+
 from langchain_core.tools import tool
 from rich.console import Console
 
-from .schemas import (
-    CreateSkillInput,
+from ..config import (
+    INTERNET_CHECK_HOST,
+    INTERNET_CHECK_PORT,
+    INTERNET_CHECK_TIMEOUT,
+    MCP_AUTO_APPROVE_TOOLS,
+    SKILL_DESCRIPTION_PREVIEW_CHARS,
+    SKILLS_FOLDER_DEFAULT,
 )
-from . import _sqlite_state
-from . import _task_state
-from .network import (
-    _PublicOnlyAsyncHTTPTransport as _PublicOnlyAsyncHTTPTransport,
-    _PublicOnlyNetworkBackend as _PublicOnlyNetworkBackend,
-    _PublicOnlySyncHTTPTransport as _PublicOnlySyncHTTPTransport,
-    _PublicOnlySyncNetworkBackend as _PublicOnlySyncNetworkBackend,
-    _get_limited_response as _get_limited_response,
-    _network_slots as _network_slots,
-    _outbound_http_clients as _outbound_http_clients,
-    _public_only_async_client as _public_only_async_client,
-    _resolve_validated_peer as _resolve_validated_peer,
-    close_outbound_http_clients as close_outbound_http_clients,
-    ollama_client_kwargs as ollama_client_kwargs,
-    ollama_langchain_client_kwargs as ollama_langchain_client_kwargs,
-    public_only_sync_client as public_only_sync_client,
-    track_ollama_http_clients as track_ollama_http_clients,
-    search_duckduckgo,
-    validate_explicit_service_url,
-    validate_outbound_url as validate_outbound_url,
-)
+from . import _sqlite_state, _task_state
 from .media import (
     capture_webcam_image,
     list_microphone_devices,
@@ -40,13 +27,57 @@ from .media import (
     record_microphone_audio,
     transcribe_workspace_audio,
 )
-from ..config import (
-    INTERNET_CHECK_HOST,
-    INTERNET_CHECK_PORT,
-    INTERNET_CHECK_TIMEOUT,
-    SKILL_DESCRIPTION_PREVIEW_CHARS,
-    MCP_AUTO_APPROVE_TOOLS,
-    SKILLS_FOLDER_DEFAULT,
+from .network import (
+    _get_limited_response as _get_limited_response,
+)
+from .network import (
+    _network_slots as _network_slots,
+)
+from .network import (
+    _outbound_http_clients as _outbound_http_clients,
+)
+from .network import (
+    _public_only_async_client as _public_only_async_client,
+)
+from .network import (
+    _PublicOnlyAsyncHTTPTransport as _PublicOnlyAsyncHTTPTransport,
+)
+from .network import (
+    _PublicOnlyNetworkBackend as _PublicOnlyNetworkBackend,
+)
+from .network import (
+    _PublicOnlySyncHTTPTransport as _PublicOnlySyncHTTPTransport,
+)
+from .network import (
+    _PublicOnlySyncNetworkBackend as _PublicOnlySyncNetworkBackend,
+)
+from .network import (
+    _resolve_validated_peer as _resolve_validated_peer,
+)
+from .network import (
+    close_outbound_http_clients as close_outbound_http_clients,
+)
+from .network import (
+    ollama_client_kwargs as ollama_client_kwargs,
+)
+from .network import (
+    ollama_langchain_client_kwargs as ollama_langchain_client_kwargs,
+)
+from .network import (
+    public_only_sync_client as public_only_sync_client,
+)
+from .network import (
+    search_duckduckgo,
+    validate_explicit_service_url,
+)
+from .network import (
+    track_ollama_http_clients as track_ollama_http_clients,
+)
+from .network import (
+    validate_outbound_url as validate_outbound_url,
+)
+from .schemas import (
+    CreateSkillInput,
 )
 
 console = Console()
@@ -121,7 +152,7 @@ _ACTIVE_SKILL_REGISTRY = None
 _ACTIVE_SKILL_SESSION_ID = None
 
 
-def set_active_skill_runtime(folder_path: Optional[str], loaded_skills: dict) -> None:
+def set_active_skill_runtime(folder_path: str | None, loaded_skills: dict) -> None:
     """Set the configured destination and in-memory registry for skill creation."""
     global _ACTIVE_SKILL_DIRECTORY, _ACTIVE_SKILL_REGISTRY
     _ACTIVE_SKILL_DIRECTORY = (
@@ -130,15 +161,15 @@ def set_active_skill_runtime(folder_path: Optional[str], loaded_skills: dict) ->
     _ACTIVE_SKILL_REGISTRY = loaded_skills
 
 
-def set_active_skill_session(session_id: Optional[str]) -> None:
+def set_active_skill_session(session_id: str | None) -> None:
     """Associate newly created skills with the current conversation session."""
     global _ACTIVE_SKILL_SESSION_ID
     _ACTIVE_SKILL_SESSION_ID = session_id
 
 
 def set_active_task_context(
-    session_id: Optional[str],
-    task_id: Optional[str] = None,
+    session_id: str | None,
+    task_id: str | None = None,
 ) -> None:
     """Bind planner tools to the current session and optionally resumed task."""
     _task_state.set_active_task_context(session_id, task_id)
@@ -387,12 +418,10 @@ def create_skill(name: str, description: str, instructions: str) -> str:
 
 
 # Import after network helpers are defined; web.py depends on this shared policy layer.
-from .web import download_web_file, fetch_webpage, web_search  # noqa: E402
-from .location import fetch_current_location, get_weather  # noqa: E402
-from .filesystem import (  # noqa: E402
-    edit_local_file,
+from .filesystem import (
     apply_workspace_patch,
     delete_workspace_file,
+    edit_local_file,
     inspect_workspace_git,
     list_directory,
     preview_workspace_patch,
@@ -402,21 +431,22 @@ from .filesystem import (  # noqa: E402
     search_workspace_symbols,
     search_workspace_text,
 )
-from .shell import run_shell_command  # noqa: E402
-from .memory import (  # noqa: E402
+from .location import fetch_current_location, get_weather
+from .memory import (
     delete_chat_history_entry_from_sqlite,
     delete_chat_history_from_sqlite,
     read_chat_history_from_sqlite,
     search_chat_history_in_sqlite,
 )
-from .planner import (  # noqa: E402
+from .planner import (
     create_task_plan,
     inspect_task_plan,
     read_table_schema,
     revise_task_plan,
     update_todo_step,
 )
-
+from .shell import run_shell_command
+from .web import download_web_file, fetch_webpage, web_search
 
 AVAILABLE_TOOLS = {
     "get_local_datetime": get_local_datetime,
@@ -463,8 +493,8 @@ async def load_mcp_tools(*args, **kwargs) -> list:
     timeout, or exception instead of a dictionary or None.
     """
     try:
-        from mcp.client.stdio import stdio_client
         from mcp.client.session import ClientSession
+        from mcp.client.stdio import stdio_client
 
         # Establishing connection parameters and session
         async with stdio_client(*args, **kwargs) as (read, write):
@@ -481,7 +511,9 @@ async def load_mcp_tools(*args, **kwargs) -> list:
         return []
 
 
-from .mcp import (  # noqa: E402
+from .mcp import (
     close_mcp_sandbox_dirs as close_mcp_sandbox_dirs,
+)
+from .mcp import (
     load_configured_mcp_tools as load_configured_mcp_tools,
 )

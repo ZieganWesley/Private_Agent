@@ -15,7 +15,7 @@ def test_local_model_receives_bounded_context_and_output_options():
         acceleration_mode="auto",
         thinking=None,
         chat_model_factory=model_factory,
-        client_kwargs=lambda: {},
+        client_kwargs=dict,
         acceleration_options=lambda _mode: {},
         track_clients=lambda _model: None,
         max_output_tokens=512,
@@ -194,7 +194,7 @@ def test_local_runtime_discovery_survives_and_traces_client_close_failure(
 ):
     from types import SimpleNamespace
 
-    import private_agent.agent.local_runtimes as local_runtimes
+    from private_agent.agent import local_runtimes
     from private_agent.agent.local_runtimes import discover_local_runtimes
 
     events = []

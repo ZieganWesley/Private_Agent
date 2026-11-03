@@ -1,6 +1,6 @@
 """Argument schemas for built-in tool calls."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,7 +32,7 @@ class WebSearchInput(BaseModel):
 
 
 class GetWeatherInput(BaseModel):
-    location: Optional[str] = Field(
+    location: str | None = Field(
         default=None,
         max_length=200,
         description=(
@@ -40,14 +40,14 @@ class GetWeatherInput(BaseModel):
             "current location (Local sessions only)."
         ),
     )
-    date: Optional[str] = Field(
+    date: str | None = Field(
         default=None,
         description=(
             "First day as YYYY-MM-DD; defaults to today. Past dates return "
             "history; up to 16 days ahead returns a forecast."
         ),
     )
-    time: Optional[str] = Field(
+    time: str | None = Field(
         default=None,
         description="Optional 24-hour HH:MM to also report that hour's conditions.",
     )
@@ -143,7 +143,7 @@ class ReadSqliteHistoryInput(BaseModel):
 
 
 class DeleteSqliteHistoryInput(BaseModel):
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
         description="Specific session ID to delete, or leave empty/all to wipe.",
     )
@@ -156,7 +156,7 @@ class SearchSqliteHistoryInput(BaseModel):
         max_length=500,
         description="Literal text to search in locally stored messages and summaries.",
     )
-    session_id: Optional[str] = Field(
+    session_id: str | None = Field(
         default=None,
         max_length=200,
         description="Optionally restrict results to one session.",
@@ -208,7 +208,7 @@ class ReadTableSchemaInput(BaseModel):
 
 
 class InspectTaskPlanInput(BaseModel):
-    task_id: Optional[str] = Field(
+    task_id: str | None = Field(
         default=None,
         min_length=1,
         max_length=64,

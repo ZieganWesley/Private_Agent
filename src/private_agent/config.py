@@ -1,6 +1,6 @@
+import json
 import os
 import pathlib
-import json
 import tempfile
 import warnings
 

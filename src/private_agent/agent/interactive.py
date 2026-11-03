@@ -4,9 +4,10 @@ import os
 import re
 import shlex
 import sys
+from collections.abc import Mapping
 from itertools import islice
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion

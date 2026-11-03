@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, List, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
@@ -26,7 +27,7 @@ def message_text(message: Any) -> str:
     return str(content or "")
 
 
-def messages_tokens(messages: List[Any]) -> int:
+def messages_tokens(messages: list[Any]) -> int:
     total = 0
     for message in messages:
         total += token_count(message_text(message))
@@ -60,7 +61,7 @@ async def _summarize(
     return text[:max_chars]
 
 
-def _transcript(messages: List[Any], token_limit: int = _MAX_SOURCE_TOKENS) -> str:
+def _transcript(messages: list[Any], token_limit: int = _MAX_SOURCE_TOKENS) -> str:
     lines = []
     for message in messages:
         role = "User" if isinstance(message, HumanMessage) else "Assistant"
@@ -73,7 +74,7 @@ def _transcript(messages: List[Any], token_limit: int = _MAX_SOURCE_TOKENS) -> s
 
 
 def needs_history_compaction(
-    history: List[Any],
+    history: list[Any],
     current_input_tokens: int,
     prompt_budget: int,
     threshold: float,
@@ -88,14 +89,14 @@ def needs_history_compaction(
 
 async def compact_history(
     llm: Any,
-    history: List[Any],
+    history: list[Any],
     summary: str,
     *,
     keep_recent: int,
     max_chars: int,
     source_token_limit: int = _MAX_SOURCE_TOKENS,
-    notify: Optional[Callable[[str], None]] = None,
-) -> Tuple[List[Any], str]:
+    notify: Callable[[str], None] | None = None,
+) -> tuple[list[Any], str]:
     """Fold older turns into the running summary; keep the newest messages verbatim."""
     keep = 0 if keep_recent <= 0 else max(2, keep_recent - keep_recent % 2)
     if keep and len(history) <= keep:
@@ -130,7 +131,7 @@ async def compact_history(
     return recent, new_summary
 
 
-def summary_system_message(summary: str) -> Optional[SystemMessage]:
+def summary_system_message(summary: str) -> SystemMessage | None:
     if not summary:
         return None
     return SystemMessage(
@@ -143,12 +144,12 @@ def summary_system_message(summary: str) -> Optional[SystemMessage]:
 
 async def compact_loop_messages(
     llm: Any,
-    messages: List[Any],
+    messages: list[Any],
     limit_tokens: int,
     *,
     threshold: float,
     max_chars: int,
-    notify: Optional[Callable[[str], None]] = None,
+    notify: Callable[[str], None] | None = None,
 ) -> bool:
     """Shrink tool output inside a running turn when the prompt nears the limit.
 

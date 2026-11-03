@@ -8,8 +8,7 @@ from langchain_core.tools import tool
 
 from ..config import MAX_SUMMARY_CHARS
 from ..database import PersistentMemory
-from . import _sqlite_state
-from . import _task_state
+from . import _sqlite_state, _task_state
 from .schemas import (
     CreateTaskPlanInput,
     InspectTaskPlanInput,

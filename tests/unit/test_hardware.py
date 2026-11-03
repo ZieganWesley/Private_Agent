@@ -1,9 +1,10 @@
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from rich.console import Console
 
 from private_agent.tools import (
-    _PublicOnlySyncHTTPTransport,
     _PublicOnlyAsyncHTTPTransport,
+    _PublicOnlySyncHTTPTransport,
 )
 
 try:
@@ -25,14 +26,14 @@ except ImportError:
             return model
 
 
-from private_agent.rag import (
-    initialize_knowledge_base,
-)
 from private_agent.hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
     normalize_acceleration_mode,
     ollama_acceleration_options,
+)
+from private_agent.rag import (
+    initialize_knowledge_base,
 )
 
 console = Console()

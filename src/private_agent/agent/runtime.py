@@ -1,132 +1,39 @@
-import sys
-import importlib.util
-import logging
-import platform
-import time
 import asyncio
+import hashlib
+import importlib.util
 import inspect
-import uuid
+import ipaddress
+import json
+import logging
+import pathlib
+import platform
 import re
 import sqlite3
-import pathlib
-import json
-import hashlib
-import ipaddress
+import sys
+import time
+import uuid
+from collections.abc import AsyncIterator, Callable, Sequence
 from datetime import datetime, timezone
 from getpass import getpass
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Sequence
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
 
 import ollama
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
     HumanMessage,
-    ToolMessage,
     SystemMessage,
+    ToolMessage,
 )
 from langchain_ollama import ChatOllama
 from prompt_toolkit.history import InMemoryHistory
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
 
-from ..config import (
-    CONFIG_FILE_PATH,
-    DEFAULT_DB_PATH,
-    WORKSPACE_ROOT_DEFAULT,
-    CODE_OUTPUT_ROOT,
-    SKILLS_FOLDER_DEFAULT,
-    RAG_DOCS_DEFAULT,
-    RAG_AUTO_REFRESH_SECONDS,
-    RAG_INDEX_PATH,
-    OVERRIDE_TOOL_LIST,
-    MODEL_TEMPERATURE,
-    OLLAMA_BASE_URL,
-    HARDWARE_ACCELERATION_MODE,
-    ONLINE_PERMISSION_OVERRIDE,
-    PREFERRED_MODEL,
-    APP_CONFIG,
-    MAX_TOOL_ITERATIONS,
-    MAX_TOOL_CALLS,
-    MAX_TASK_SECONDS,
-    MAX_TOOL_OUTPUT_CHARS,
-    MAX_HISTORY_MESSAGES,
-    MAX_CONTEXT_TOKENS,
-    CONTEXT_COMPACTION_THRESHOLD,
-    CONTEXT_KEEP_RECENT_MESSAGES,
-    CONTEXT_SUMMARY_CHARS,
-    MAX_OUTPUT_TOKENS,
-    STREAMING_OUTPUT,
-    VISIBILE_REASONING,
-    MAX_SUMMARY_CHARS,
-    MAX_MEMORY_CONTEXT_TOKENS,
-    MAX_RELEVANT_EPISODES,
-    CONVERSATION_RETENTION_DAYS,
-    EPISODE_RETENTION_DAYS,
-    REGISTERED_SKILL_RETENTION_DAYS,
-    TASK_STALE_AFTER_DAYS,
-    AGENT_PERMISSION_MODE,
-    ENABLE_WEB_RESEARCH,
-    WEB_RESEARCH_CONSENT,
-    THINKING_TOGGLE_DEFAULT,
-    THINKING_EFFORT_DEFAULT,
-    INTERNET_CHECK_TIMEOUT,
-    ONLINE_REQUEST_TIMEOUT,
-    ONLINE_MODEL_LIST_TIMEOUT,
-    ONLINE_MAX_RETRIES,
-    ONLINE_MODEL_LIST_LIMIT,
-    MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
-    RAG_CONTEXT_RESULTS,
-    SUMMARY_PROMPT_SENTENCES,
-    MCP_SERVERS,
-    MCP_AUTO_APPROVE_TOOLS,
-    DEFAULT_EPISODIC_SUMMARIES,
-    MAX_SKILL_INSTRUCTION_CHARS,
-    MAX_SKILL_NAME_CHARS,
-    MAX_SKILL_DESCRIPTION_CHARS,
-    MAX_SKILL_PREVIEW_CHARS,
-    SYSTEM_PROMPT,
-)
-from ..database import PersistentMemory
-from ..sandbox import SandboxManager
-from ..tools import (
-    AVAILABLE_TOOLS,
-    NETWORK_TOOL_NAMES,
-    LOCAL_ONLY_NETWORK_TOOL_NAMES,
-    LOCAL_MEDIA_TOOL_NAMES,
-    MCP_TOOL_NAMES,
-    MCP_TOOL_SOURCES,
-    MCP_TOOL_TRANSPORTS,
-    describe_tool_catalog,
-    _public_only_async_client,
-    public_only_sync_client,
-    close_outbound_http_clients,
-    close_mcp_sandbox_dirs,
-    ollama_client_kwargs,
-    ollama_langchain_client_kwargs,
-    track_ollama_http_clients,
-    check_internet_connection,
-    has_internet_connection,
-    load_configured_mcp_tools,
-    set_active_db_path,
-    set_active_skill_runtime,
-    set_active_skill_session,
-    set_active_task_context,
-    clear_schema_reads,
-    approved_tool_invocation,
-)
-from ..rag import (
-    initialize_knowledge_base,
-    knowledge_base_signature,
-    reset_knowledge_base,
-)
-from ..skills import (
-    create_skill_file,
-    load_skills_from_folder,
-    match_skill_by_relevancy,
-)
+from .. import code_tasks as code_tasks_module
 from ..code_tasks import (
     CodeTaskWorkspace,
     checkpoint_code_task,
@@ -134,13 +41,113 @@ from ..code_tasks import (
     is_code_task_request,
     run_project_unit_tests,
 )
-from .. import code_tasks as code_tasks_module
+from ..config import (
+    AGENT_PERMISSION_MODE,
+    APP_CONFIG,
+    CODE_OUTPUT_ROOT,
+    CONFIG_FILE_PATH,
+    CONTEXT_COMPACTION_THRESHOLD,
+    CONTEXT_KEEP_RECENT_MESSAGES,
+    CONTEXT_SUMMARY_CHARS,
+    CONVERSATION_RETENTION_DAYS,
+    DEFAULT_DB_PATH,
+    DEFAULT_EPISODIC_SUMMARIES,
+    ENABLE_WEB_RESEARCH,
+    EPISODE_RETENTION_DAYS,
+    HARDWARE_ACCELERATION_MODE,
+    INTERNET_CHECK_TIMEOUT,
+    MAX_CONTEXT_TOKENS,
+    MAX_HISTORY_MESSAGES,
+    MAX_MEMORY_CONTEXT_TOKENS,
+    MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
+    MAX_OUTPUT_TOKENS,
+    MAX_RELEVANT_EPISODES,
+    MAX_SKILL_DESCRIPTION_CHARS,
+    MAX_SKILL_INSTRUCTION_CHARS,
+    MAX_SKILL_NAME_CHARS,
+    MAX_SKILL_PREVIEW_CHARS,
+    MAX_SUMMARY_CHARS,
+    MAX_TASK_SECONDS,
+    MAX_TOOL_CALLS,
+    MAX_TOOL_ITERATIONS,
+    MAX_TOOL_OUTPUT_CHARS,
+    MCP_AUTO_APPROVE_TOOLS,
+    MCP_SERVERS,
+    MODEL_TEMPERATURE,
+    OLLAMA_BASE_URL,
+    ONLINE_MAX_RETRIES,
+    ONLINE_MODEL_LIST_LIMIT,
+    ONLINE_MODEL_LIST_TIMEOUT,
+    ONLINE_PERMISSION_OVERRIDE,
+    ONLINE_REQUEST_TIMEOUT,
+    OVERRIDE_TOOL_LIST,
+    PREFERRED_MODEL,
+    RAG_AUTO_REFRESH_SECONDS,
+    RAG_CONTEXT_RESULTS,
+    RAG_DOCS_DEFAULT,
+    RAG_INDEX_PATH,
+    REGISTERED_SKILL_RETENTION_DAYS,
+    SKILLS_FOLDER_DEFAULT,
+    STREAMING_OUTPUT,
+    SUMMARY_PROMPT_SENTENCES,
+    SYSTEM_PROMPT,
+    TASK_STALE_AFTER_DAYS,
+    THINKING_EFFORT_DEFAULT,
+    THINKING_TOGGLE_DEFAULT,
+    VISIBILE_REASONING,
+    WEB_RESEARCH_CONSENT,
+    WORKSPACE_ROOT_DEFAULT,
+)
+from ..database import PersistentMemory
 from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
     ollama_acceleration_options,
 )
+from ..rag import (
+    initialize_knowledge_base,
+    knowledge_base_signature,
+    reset_knowledge_base,
+)
+from ..rag.citations import format_retrieved_citations
 from ..run_logging import RUN_LOGGER, log_event, logging_context
+from ..sandbox import SandboxManager
+from ..skills import (
+    create_skill_file,
+    load_skills_from_folder,
+    match_skill_by_relevancy,
+)
+from ..tools import (
+    AVAILABLE_TOOLS,
+    LOCAL_MEDIA_TOOL_NAMES,
+    LOCAL_ONLY_NETWORK_TOOL_NAMES,
+    MCP_TOOL_NAMES,
+    MCP_TOOL_SOURCES,
+    MCP_TOOL_TRANSPORTS,
+    NETWORK_TOOL_NAMES,
+    _public_only_async_client,
+    approved_tool_invocation,
+    check_internet_connection,
+    clear_schema_reads,
+    close_mcp_sandbox_dirs,
+    close_outbound_http_clients,
+    describe_tool_catalog,
+    has_internet_connection,
+    load_configured_mcp_tools,
+    ollama_client_kwargs,
+    ollama_langchain_client_kwargs,
+    public_only_sync_client,
+    set_active_db_path,
+    set_active_skill_runtime,
+    set_active_skill_session,
+    set_active_task_context,
+    track_ollama_http_clients,
+)
+from ..tools.media import (
+    approve_local_capture,
+    captured_image_message,
+    clear_captured_images,
+)
 from .compaction import (
     compact_history,
     compact_loop_messages,
@@ -149,53 +156,79 @@ from .compaction import (
     needs_history_compaction,
     summary_system_message,
 )
-from .project_paths import discover_project_resources
-from .session_stats import SessionStats, build_stats_table, format_duration
-from .prompts import (
-    build_bounded_user_input as _build_bounded_user_input,
-    calculate_prompt_budgets,
-    current_datetime_context as _current_datetime_context,
-    estimate_context_window,
-    token_count as _token_count,  # noqa: F401
-    trim_history_to_context_budget,
-)
-from ..rag.citations import format_retrieved_citations
-from .providers import (
-    create_local_chat_model as _create_local_chat_model,
-    create_openai_compatible_chat_model as _create_openai_compatible_chat_model,
-    create_robust_local_chat_model as _create_robust_local_chat_model,
-    has_saved_online_config as _has_saved_online_config,
-    inspect_local_model_capabilities as _inspect_local_model_capabilities,
-    online_request_failure as _online_request_failure,
-    select_online_model as _select_online_model,
-    validate_online_base_url as _validate_online_base_url,
-)
-from .local_runtimes import LocalRuntime, discover_local_runtimes
-from .permissions import (
-    authorize_network_research as _authorize_network_research,
-    coding_allows_command_network as _coding_allows_command_network,
-    coding_permission_mode as _coding_permission_mode,
-    coding_uses_isolated_copy as _coding_uses_isolated_copy,
-    select_coding_access_level as _select_coding_access_level,
-    select_permission_mode as _select_permission_mode_impl,
-    tool_needs_permission as _tool_needs_permission_impl,
-)
 from .interactive import format_help as _format_interactive_help
 from .interactive import (
     include_file_context,
     include_folder_context,
     prompt_user_input,
 )
-from ..tools.media import (
-    approve_local_capture,
-    captured_image_message,
-    clear_captured_images,
+from .local_runtimes import LocalRuntime, discover_local_runtimes
+from .permissions import (
+    authorize_network_research as _authorize_network_research,
 )
+from .permissions import (
+    coding_allows_command_network as _coding_allows_command_network,
+)
+from .permissions import (
+    coding_permission_mode as _coding_permission_mode,
+)
+from .permissions import (
+    coding_uses_isolated_copy as _coding_uses_isolated_copy,
+)
+from .permissions import (
+    select_coding_access_level as _select_coding_access_level,
+)
+from .permissions import (
+    select_permission_mode as _select_permission_mode_impl,
+)
+from .permissions import (
+    tool_needs_permission as _tool_needs_permission_impl,
+)
+from .project_paths import discover_project_resources
+from .prompts import (
+    build_bounded_user_input as _build_bounded_user_input,
+)
+from .prompts import (
+    calculate_prompt_budgets,
+    estimate_context_window,
+    trim_history_to_context_budget,
+)
+from .prompts import (
+    current_datetime_context as _current_datetime_context,
+)
+from .prompts import (
+    token_count as _token_count,
+)
+from .providers import (
+    create_local_chat_model as _create_local_chat_model,
+)
+from .providers import (
+    create_openai_compatible_chat_model as _create_openai_compatible_chat_model,
+)
+from .providers import (
+    create_robust_local_chat_model as _create_robust_local_chat_model,
+)
+from .providers import (
+    has_saved_online_config as _has_saved_online_config,
+)
+from .providers import (
+    inspect_local_model_capabilities as _inspect_local_model_capabilities,
+)
+from .providers import (
+    online_request_failure as _online_request_failure,
+)
+from .providers import (
+    select_online_model as _select_online_model,
+)
+from .providers import (
+    validate_online_base_url as _validate_online_base_url,
+)
+from .session_stats import SessionStats, build_stats_table, format_duration
 
 console = Console()
 TOOL_RESULT_PREVIEW_CHARS = 500
-_ACTIVE_MEMORY: Optional[PersistentMemory] = None
-_TASK_LEASE_HEARTBEAT: Optional[asyncio.Task] = None
+_ACTIVE_MEMORY: PersistentMemory | None = None
+_TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
 _SESSION_STATS = SessionStats()
 _SESSION_INFO: dict[str, Any] = {}
 TASK_LEASE_SECONDS = 180
@@ -208,7 +241,7 @@ OS_ISOLATED_TOOL_NAMES = frozenset(
         "finalize_code_task",
     }
 )
-_MODEL_CAPABILITIES_CACHE: Dict[tuple[str, str], Dict[str, Optional[bool] | int]] = {}
+_MODEL_CAPABILITIES_CACHE: dict[tuple[str, str], dict[str, bool | None | int]] = {}
 
 
 def _close_ollama_client(client):
@@ -300,7 +333,7 @@ async def _maintain_task_lease(memory: PersistentMemory, session_id: str) -> Non
             )
 
 
-def _local_location_refusal(name: str, args: Any, local_session: bool) -> Optional[str]:
+def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | None:
     """Explain why a location-revealing call must not run, or None if allowed."""
     if local_session:
         return None
@@ -326,8 +359,8 @@ def _tool_unavailable_reason(
     *,
     provider_type: str,
     capabilities: dict,
-    isolation_warning: Optional[str],
-) -> Optional[str]:
+    isolation_warning: str | None,
+) -> str | None:
     if name in OS_ISOLATED_TOOL_NAMES and isolation_warning:
         return isolation_warning
     if name in NETWORK_TOOL_NAMES and (
@@ -358,7 +391,7 @@ def _tools_for_model(
     *,
     provider_type: str,
     capabilities: dict,
-    isolation_warning: Optional[str],
+    isolation_warning: str | None,
 ) -> list:
     return [
         tool_object
@@ -438,7 +471,7 @@ def _print_tool_catalog(
 
 def _build_startup_memory_context(
     memory: PersistentMemory,
-    skills_directory: Optional[str],
+    skills_directory: str | None,
 ) -> str:
     """Build bounded local reference context from recent episodes and saved skills."""
     episode_count = memory.count_episodic_memories()
@@ -928,7 +961,7 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
     )
 
 
-def _resolve_learned_item(memory: PersistentMemory, prefix: str) -> Optional[dict]:
+def _resolve_learned_item(memory: PersistentMemory, prefix: str) -> dict | None:
     exact = memory.get_learned_item(prefix)
     if exact is not None:
         return exact
@@ -1060,10 +1093,10 @@ async def _run_memory_maintenance(
     llm: Any,
     *,
     allow_model_episode_context: bool,
-    rag_docs_path: Optional[str],
+    rag_docs_path: str | None,
     vectorstore: Any,
     local_model_suggestions_allowed: bool = False,
-    on_data_reset: Optional[Callable[[frozenset[str]], None]] = None,
+    on_data_reset: Callable[[frozenset[str]], None] | None = None,
 ) -> Any:
     console.print(
         "[bold cyan][Memory maintenance][/bold cyan] "
@@ -1503,7 +1536,7 @@ def _offer_skill_capture(
     memory: PersistentMemory,
     task: dict,
     session_id: str,
-    skills_directory: Optional[str],
+    skills_directory: str | None,
 ) -> None:
     verified_steps = task["steps"]
     if (
@@ -1738,13 +1771,13 @@ def _prune_memory_retention(
 def _run_task_management(
     memory: PersistentMemory,
     session_id: str,
-    skills_directory: Optional[str] = None,
-) -> Optional[str]:
+    skills_directory: str | None = None,
+) -> str | None:
     """Review and control durable SQLite task plans from the interactive CLI."""
     from ..tools import _task_state
 
     active_task_id = _task_state.ACTIVE_TASK_ID
-    approved_for_execution_id: Optional[str] = None
+    approved_for_execution_id: str | None = None
 
     def progress_summary(task: dict) -> str:
         steps = task["steps"]
@@ -1788,7 +1821,7 @@ def _run_task_management(
             )
         console.print(table)
 
-    def resolve_task(identifier: str) -> Optional[dict]:
+    def resolve_task(identifier: str) -> dict | None:
         task = memory.get_task(identifier)
         if task is not None:
             return task
@@ -2358,7 +2391,7 @@ def _run_task_management(
 def _approved_coding_task_scope(
     memory: PersistentMemory,
     requested_goal: str,
-) -> Optional[dict]:
+) -> dict | None:
     from ..tools import _task_state
 
     task_id = _task_state.ACTIVE_TASK_ID
@@ -2415,7 +2448,7 @@ def _approved_coding_task_scope(
 
 def inspect_model_capabilities(
     model_name: str,
-) -> Dict[str, Optional[bool] | int]:
+) -> dict[str, bool | None | int]:
     """Compatibility entry point for Ollama capability discovery."""
     return _inspect_local_model_capabilities(
         model_name,
@@ -2439,11 +2472,11 @@ def _effective_context_window(capabilities: dict) -> int:
 def get_robust_chat_model(
     primary_model_name: str,
     fallback_model_name: str,
-    tools: Optional[Sequence[Any]] = None,
+    tools: Sequence[Any] | None = None,
     *,
     temperature: float = MODEL_TEMPERATURE,
     base_url: str = OLLAMA_BASE_URL,
-    thinking: Optional[bool | str] = None,
+    thinking: bool | str | None = None,
 ):
     """Compatibility entry point for robust local model construction."""
     return _create_robust_local_chat_model(
@@ -2469,8 +2502,8 @@ def _make_chat_model(
     *,
     thinking_enabled: bool,
     thinking_effort: str,
-    supports_thinking: Optional[bool],
-    context_window: Optional[int] = None,
+    supports_thinking: bool | None,
+    context_window: int | None = None,
 ):
     effective_context = min(MAX_CONTEXT_TOKENS, context_window or MAX_CONTEXT_TOKENS)
     return _create_local_chat_model(
@@ -2547,7 +2580,7 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
     )
 
 
-def select_online_model(use_saved_details: Optional[bool] = None):
+def select_online_model(use_saved_details: bool | None = None):
     return _select_online_model(
         app_config=APP_CONFIG,
         console=console,
@@ -2653,7 +2686,7 @@ async def _invoke_with_budget(
     if remaining <= 0:
         raise TimeoutError("Agent task time budget exhausted before model invocation.")
     started = time.monotonic()
-    stream_method: Optional[Callable[[list], AsyncIterator[Any]]] = getattr(
+    stream_method: Callable[[list], AsyncIterator[Any]] | None = getattr(
         model, "astream", None
     )
     if _supports_async_streaming(model) and stream_method is not None:
@@ -3004,10 +3037,10 @@ def _model_response_is_empty(response: Any) -> bool:
 
 async def authorize_network_research(
     tool_name: str,
-    tool_args: Dict[str, Any],
+    tool_args: dict[str, Any],
     *,
     permission_mode: str = "manual",
-    session_consent_state: Optional[dict[str, bool]] = None,
+    session_consent_state: dict[str, bool] | None = None,
 ) -> tuple[bool, str]:
     return await _authorize_network_research(
         tool_name,
@@ -3094,7 +3127,7 @@ def _offer_local_data_reset(memory: PersistentMemory) -> frozenset[str]:
     return frozenset(reset_scopes)
 
 
-def fetch_local_chat_models() -> List[str]:
+def fetch_local_chat_models() -> list[str]:
     client = None
     try:
         client = ollama.Client(host=OLLAMA_BASE_URL, **ollama_client_kwargs())
@@ -3132,7 +3165,7 @@ def _redact_tool_arguments(value: Any) -> Any:
             if re.search(
                 r"(password|secret|token|api.?key|authorization|credential)",
                 str(key),
-                re.I,
+                re.IGNORECASE,
             ):
                 redacted[key] = "[REDACTED]"
             else:
@@ -3165,7 +3198,7 @@ def _sensitive_argument_values(
                 re.search(
                     r"(password|secret|token|api.?key|authorization|credential)",
                     str(key),
-                    re.I,
+                    re.IGNORECASE,
                 )
             )
             values.extend(_sensitive_argument_values(item, sensitive_parent=sensitive))
@@ -3219,7 +3252,7 @@ def _tool_log_redactions(arguments: Any) -> tuple[str, ...]:
 def _local_image_input_error(
     tool_calls: list[dict],
     tool_messages: list[ToolMessage],
-) -> Optional[str]:
+) -> str | None:
     """Return a local image tool result when no usable image was produced."""
     messages_by_call_id = {
         message.tool_call_id: str(message.content) for message in tool_messages
@@ -3457,7 +3490,7 @@ async def execute_tool_call(
                 redactions=_tool_log_redactions(args),
             )
             result = (
-                f"Error executing tool {name}: {str(exc)} "
+                f"Error executing tool {name}: {exc!s} "
                 f"(reference {reference_id}; verify possible side effects "
                 "before retrying)."
             )
@@ -3984,8 +4017,8 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
     if verbose_startup:
         console.print(f"[cyan][Agent Permission Mode][/cyan] {permission_mode.title()}")
 
-    online_selection: Optional[dict] = None
-    online_preference: Optional[bool] = None
+    online_selection: dict | None = None
+    online_preference: bool | None = None
     while True:
         console.print("\n[bold underline]Model Provider[/bold underline]")
         for runtime_index, runtime in enumerate(local_runtimes, 1):
@@ -4027,9 +4060,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
             )
         for choice_number, label, _use_saved_details in online_options:
             console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
-        if online_preference is not None:
-            default_choice = str(online_options[0][0])
-        elif _has_saved_online_config(APP_CONFIG):
+        if online_preference is not None or _has_saved_online_config(APP_CONFIG):
             default_choice = str(online_options[0][0])
         else:
             default_choice = "1" if local_runtimes else str(online_options[0][0])
@@ -4404,11 +4435,11 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
         )
 
         model_selection_failed = False
-        active_code_workspace: Optional[CodeTaskWorkspace] = None
+        active_code_workspace: CodeTaskWorkspace | None = None
         previous_workspace_root = SandboxManager.root_dir
         base_tools_list = list(tools_list)
         planning_mode_armed = False
-        selected_skill_key: Optional[str] = None
+        selected_skill_key: str | None = None
         pending_folder_context = ""
         pending_folder_context_files: tuple[str, ...] = ()
         pending_folder_context_bytes = 0
@@ -4423,7 +4454,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                 startup_memory_context = ""
                 session_summary_saved = False
 
-        def cleanup_code_task(*, finalize: bool) -> Optional[str]:
+        def cleanup_code_task(*, finalize: bool) -> str | None:
             nonlocal active_code_workspace, tools_list, llm_with_tools
             if active_code_workspace is None:
                 return None
@@ -6199,7 +6230,7 @@ Runtime context:
                 error_type=type(rte).__name__,
                 exc_info=True,
             )
-            console.print(f"\n[red][Exception] {str(rte)}[/red]")
+            console.print(f"\n[red][Exception] {rte!s}[/red]")
             console.print(
                 "[red][Action Required] Review the error and local model/tool configuration.[/red]\n"
             )
@@ -6216,7 +6247,7 @@ Runtime context:
                 exc_info=True,
             )
             console.print(
-                f"\n[red][Exception] Unexpected runtime error: {str(ex)}[/red]\n"
+                f"\n[red][Exception] Unexpected runtime error: {ex!s}[/red]\n"
             )
             continue
 

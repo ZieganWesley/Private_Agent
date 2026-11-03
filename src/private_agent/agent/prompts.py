@@ -7,7 +7,6 @@ from functools import lru_cache
 from ..config import MAX_CONTEXT_TOKENS
 from ..run_logging import RUN_LOGGER, log_event
 
-
 _TOKENIZER_FALLBACKS_REPORTED: set[str] = set()
 
 

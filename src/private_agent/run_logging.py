@@ -7,21 +7,21 @@ import re
 import time
 import traceback
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Iterator, Optional
+from typing import Any
 
 from rich.console import Console
 
 from .config import DEBUG_LOG_ENABLED, DEBUG_LOG_LEVEL
-
 
 RUN_LOGGER = logging.getLogger("private_agent.run")
 RUN_LOGGER.propagate = False
 PACKAGE_LOGGER = logging.getLogger("private_agent")
 PACKAGE_LOGGER.propagate = False
 
-_RUN_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_RUN_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "private_agent_run_id",
     default=None,
 )
@@ -30,7 +30,7 @@ _LOG_CONTEXT: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     default={},
 )
 _ACTIVE_HANDLERS: list[logging.Handler] = []
-_RUN_ID_TOKEN: Optional[contextvars.Token] = None
+_RUN_ID_TOKEN: contextvars.Token | None = None
 
 _SENSITIVE_FIELD = re.compile(
     r"(?:api[_-]?(?:key|token)|authorization|credential|password|secret|"
@@ -167,7 +167,7 @@ def logging_context(**values: Any) -> Iterator[None]:
         _LOG_CONTEXT.reset(token)
 
 
-def start_debug_logging() -> Optional[pathlib.Path]:
+def start_debug_logging() -> pathlib.Path | None:
     """Start a private per-run JSONL trace file when enabled by configuration."""
     global _RUN_ID_TOKEN
     if not DEBUG_LOG_ENABLED:
@@ -245,7 +245,7 @@ def render_console_values(*values: Any, **kwargs: Any) -> str:
 class LoggingConsoleAdapter:
     """Preserve Rich CLI rendering without recording conversation content."""
 
-    def __init__(self, base_console: Optional[Console] = None):
+    def __init__(self, base_console: Console | None = None):
         self._base = base_console or Console()
 
     def print(self, *values: Any, **kwargs: Any) -> None:
@@ -295,7 +295,7 @@ def install_logging_console_adapter(adapter: LoggingConsoleAdapter):
     from .agent import runtime
     from .rag import indexing, retrieval
     from .skills import loader
-    from .tools import media, mcp, network, shell
+    from .tools import mcp, media, network, shell
 
     modules = (
         runtime,
