@@ -118,18 +118,14 @@ Run the documented lint check with:
 ruff check src tests --select F
 ```
 
-Runtime dependencies are declared in `pyproject.toml`; `requirements.txt` is
-generated from that list. After changing runtime dependencies, run
-`python scripts/sync_requirements.py`; use `python scripts/sync_requirements.py
---check` to verify they match. RAG retrieval can be benchmarked with
+Runtime dependencies are declared only in `pyproject.toml`. RAG retrieval can be benchmarked with
 `python scripts/benchmark_rag.py` (see the README for required arguments and
 Ollama setup).
 
 ## Repository conventions
 
 - Add runtime dependencies to `[project].dependencies` in `pyproject.toml`,
-  then regenerate `requirements.txt` with the sync script. Development and
-  optional media dependencies belong in their existing optional-dependency
+  Development and optional media dependencies belong in their existing optional-dependency
   groups.
 - Add configuration defaults to the appropriate section of `DEFAULT_CONFIG`
   in `config.py`; preserve the existing categorized configuration and legacy

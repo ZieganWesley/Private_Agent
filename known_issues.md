@@ -2053,7 +2053,7 @@ Rules for every step:
 | 1.2 | Add `skipif` markers for tests that need `bwrap` / `prlimit`, and `importorskip` for media tests | A4 | Missing tools show up as skips, not failures |
 | 1.3 | Investigate the 3 git failures in `test_code_tasks.py` and the 5 failures in `test_agent_runtime.py`. Fix the code, or fix the tests if they are wrong | A4 | 0 failures on a machine without `bwrap` |
 | 1.4 | Add a `[tool.ruff]` section (line length, rule sets `E,F,W,I,B,UP,SIM`), run `ruff check --fix` and `ruff format` in a single formatting-only commit | A5 | `ruff check` and `ruff format --check` are clean |
-| 1.5 | Add a GitHub Actions workflow running ruff, pytest and `scripts/sync_requirements.py --check` on Python 3.10 and 3.14 | A5, A8 | CI runs on every PR |
+| 1.5 | Add a GitHub Actions workflow running ruff and pytest on Python 3.10 and 3.14 | A5, A8 | CI runs on every PR |
 | 1.6 | Add pre-commit hooks for ruff | A5 | Hooks run on commit |
 
 ### Phase 2: Quick fixes and real bugs

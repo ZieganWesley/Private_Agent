@@ -245,18 +245,6 @@ every failed test by node ID. Pytest also prints failure details and warnings.
 
 With `uv`, use `uv run pytest -q`.
 
-### Sync requirements (`scripts/sync_requirements.py`)
-
-`pyproject.toml` (`[project].dependencies`) is the single source of truth for
-runtime dependencies. `requirements.txt` is generated from it so the two never
-drift. Run the script after adding, removing or re-pinning a dependency:
-
-```sh
-python scripts/sync_requirements.py            # regenerate requirements.txt
-python scripts/sync_requirements.py --check    # verify only; exit 1 if out of date (use in CI)
-```
-
-On Python < 3.11 the script needs `tomli` (included in the `dev` extra).
 
 ### RAG retrieval benchmark (`scripts/benchmark_rag.py`)
 
@@ -505,4 +493,4 @@ media, memory, planning, schemas), `database/memory.py` (SQLite),
 `rag/` (indexing, retrieval, citations), `skills/`, `sandbox/` (Linux
 isolation), `code_tasks/` (workspaces, checkpoints, tests), `hardware/`.
 `main.py` is a source-checkout launcher; `scripts/` holds
-`benchmark_rag.py` and `sync_requirements.py`; tests are in `tests/`.
+`benchmark_rag.py`; tests are in `tests/`.
