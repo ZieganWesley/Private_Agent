@@ -483,6 +483,46 @@ events record operational metadata rather than prompt, result, or argument
 bodies. Captured exception details redact known credential patterns and
 argument values echoed by tools.
 
+### MCP server examples (calendar, notes, email, reminders)
+
+Personal tools are not built in; add them as MCP servers under `mcp.servers`.
+The server names below are placeholders; replace the URLs with a server you
+trust and run yourself. The config shape matches what the loader validates.
+
+**Remote servers (`streamable_http` or `sse`)** are the right choice for
+calendar, email and reminders, because they hold your account credentials
+outside the agent. Only `http`/`https` URLs are accepted, without embedded
+credentials, and the host must resolve to a public or loopback address (other
+private addresses are rejected):
+
+```json
+"mcp": {
+  "auto_approve_tools": [],
+  "servers": {
+    "calendar":  {"transport": "streamable_http", "url": "https://calendar-mcp.example.com/mcp"},
+    "reminders": {"transport": "sse", "url": "https://reminders-mcp.example.com/sse", "timeout": 30}
+  }
+}
+```
+
+**Local stdio servers** (for example a notes or memory server) start inside
+the Bubblewrap sandbox with **no network access** and only an empty temporary
+folder visible, so they cannot read your home folder, notes directory or mail.
+They suit self-contained tools whose runtime lives under `/usr`:
+
+```json
+"mcp": {
+  "servers": {
+    "notes": {"transport": "stdio", "command": "/usr/bin/my-notes-mcp", "args": ["--stdio"], "env": {"NOTES_MODE": "scratch"}}
+  }
+}
+```
+
+Notes on both forms: `timeout` and `sse_read_timeout` must be between 0.1 and
+120 seconds; a failing server is reported and skipped without stopping the
+others; tools run only after approval unless their names are listed in
+`auto_approve_tools`.
+
 ## Source Layout
 
 `src/private_agent/`: `cli.py` (entry point), `config.py`, `agent/`
