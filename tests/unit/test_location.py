@@ -17,7 +17,7 @@ TODAY = date(2026, 10, 4)
 def test_tools_are_registered_as_network_tools():
     assert {"fetch_current_location", "get_weather"} <= set(AVAILABLE_TOOLS)
     assert {"fetch_current_location", "get_weather"} <= NETWORK_TOOL_NAMES
-    assert LOCAL_ONLY_NETWORK_TOOL_NAMES == {"fetch_current_location"}
+    assert {"fetch_current_location"} == LOCAL_ONLY_NETWORK_TOOL_NAMES
 
 
 def test_location_tool_hidden_from_online_sessions(monkeypatch):

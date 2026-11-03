@@ -6,7 +6,6 @@ import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field

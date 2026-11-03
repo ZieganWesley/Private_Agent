@@ -168,7 +168,7 @@ def _read_sqlite_pages(file_path: pathlib.Path) -> list:
                 batch.append(
                     " | ".join(
                         f"{column}={_sqlite_cell(value)}"
-                        for column, value in zip(columns, row)
+                        for column, value in zip(columns, row, strict=False)
                     )
                 )
                 if len(batch) >= _SQLITE_ROWS_PER_CHUNK:
@@ -521,39 +521,41 @@ def initialize_knowledge_base(
         # Return Hybrid RAG retriever wrapper
         return HybridRAGRetriever(vectorstore, all_parsed_docs)
     except Exception as e:
-        if db_exists and not state_write_started and confirm_rebuild is not None:
-            if confirm_rebuild(
+        if (
+            db_exists
+            and not state_write_started
+            and confirm_rebuild is not None
+            and confirm_rebuild(
                 f"Vector database initialization/update failed: {e}. "
                 "The damaged index will be preserved before rebuilding."
-            ):
-                try:
-                    backup_path = _preserve_corrupt_index(
-                        pathlib.Path(chroma_persist_dir)
+            )
+        ):
+            try:
+                backup_path = _preserve_corrupt_index(pathlib.Path(chroma_persist_dir))
+                console.print(
+                    f"[yellow][RAG recovery][/yellow] Preserved the previous "
+                    f"vector index at '{backup_path}'. Rebuilding from current "
+                    "knowledge-base files."
+                )
+                if all_parsed_docs:
+                    vectorstore = Chroma.from_documents(
+                        all_parsed_docs,
+                        embeddings,
+                        persist_directory=chroma_persist_dir,
+                        ids=[doc.metadata["chunk_id"] for doc in all_parsed_docs],
                     )
-                    console.print(
-                        f"[yellow][RAG recovery][/yellow] Preserved the previous "
-                        f"vector index at '{backup_path}'. Rebuilding from current "
-                        "knowledge-base files."
+                else:
+                    vectorstore = Chroma(
+                        persist_directory=chroma_persist_dir,
+                        embedding_function=embeddings,
                     )
-                    if all_parsed_docs:
-                        vectorstore = Chroma.from_documents(
-                            all_parsed_docs,
-                            embeddings,
-                            persist_directory=chroma_persist_dir,
-                            ids=[doc.metadata["chunk_id"] for doc in all_parsed_docs],
-                        )
-                    else:
-                        vectorstore = Chroma(
-                            persist_directory=chroma_persist_dir,
-                            embedding_function=embeddings,
-                        )
-                    _write_index_state_atomic(state_file_path, updated_state)
-                    return HybridRAGRetriever(vectorstore, all_parsed_docs)
-                except Exception as recovery_error:
-                    console.print(
-                        f"[red][RAG recovery error] Rebuild failed after preserving "
-                        f"the previous index: {recovery_error}[/red]"
-                    )
-                    return None
+                _write_index_state_atomic(state_file_path, updated_state)
+                return HybridRAGRetriever(vectorstore, all_parsed_docs)
+            except Exception as recovery_error:
+                console.print(
+                    f"[red][RAG recovery error] Rebuild failed after preserving "
+                    f"the previous index: {recovery_error}[/red]"
+                )
+                return None
         console.print(f"[red][Error] Vector DB initialization error: {e}[/red]")
         return None

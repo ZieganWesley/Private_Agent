@@ -42,7 +42,7 @@ def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch)
 def test_config_uses_per_user_home_path():
     from private_agent import config
 
-    assert config.CONFIG_FILE_PATH == pathlib.Path.home() / ".private_agent.conf"
+    assert pathlib.Path.home() / ".private_agent.conf" == config.CONFIG_FILE_PATH
 
 
 def test_config_creates_private_default_file(tmp_path, monkeypatch):
@@ -178,8 +178,9 @@ def test_merge_config_migrates_old_default_rag_and_skills_paths():
 def test_override_tool_list_is_loaded_as_tool_names():
     from private_agent import config
 
-    assert config.OVERRIDE_TOOL_LIST == frozenset(
-        config.APP_CONFIG["tools"]["override_tool_list"]
+    assert (
+        frozenset(config.APP_CONFIG["tools"]["override_tool_list"])
+        == config.OVERRIDE_TOOL_LIST
     )
 
 

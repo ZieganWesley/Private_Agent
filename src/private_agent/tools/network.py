@@ -1,6 +1,7 @@
 """Peer-validated HTTP transports and managed outbound HTTP clients."""
 
 import asyncio
+import contextlib
 import ipaddress
 import json
 import logging
@@ -110,10 +111,8 @@ async def _getaddrinfo_async_with_timeout(host: str, port: int, timeout: float):
 
 
 async def _kill_and_reap_resolver(process):
-    try:
+    with contextlib.suppress(ProcessLookupError):
         process.kill()
-    except ProcessLookupError:
-        pass
     await process.communicate()
 
 
@@ -421,9 +420,11 @@ def track_ollama_http_clients(owner):
             if isinstance(client, (httpx.Client, httpx.AsyncClient)):
                 break
             client = getattr(client, "_client", None)
-        if isinstance(client, (httpx.Client, httpx.AsyncClient)):
-            if client not in _outbound_http_clients:
-                _outbound_http_clients.append(client)
+        if (
+            isinstance(client, (httpx.Client, httpx.AsyncClient))
+            and client not in _outbound_http_clients
+        ):
+            _outbound_http_clients.append(client)
 
 
 async def close_outbound_http_clients():
@@ -494,7 +495,7 @@ def _normalize_outbound_url(url: str) -> str:
     if not hostname:
         raise ValueError("The URL must contain a hostname.")
     try:
-        parsed.port
+        _ = parsed.port
     except ValueError as exc:
         raise ValueError("The URL contains an invalid port.") from exc
     return urllib.parse.urlunsplit(

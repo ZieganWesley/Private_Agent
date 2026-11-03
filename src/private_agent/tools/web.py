@@ -1,6 +1,7 @@
 """Built-in web search, fetch, and download tools."""
 
 import asyncio
+import contextlib
 import os
 import tempfile
 
@@ -112,10 +113,8 @@ def download_web_file(url: str, save_path: str) -> str:
             os.replace(temporary_path, target)
         except Exception:
             if temporary_path:
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     os.unlink(temporary_path)
-                except FileNotFoundError:
-                    pass
             raise
         return f"Success: File downloaded and saved to '{save_path}'."
 

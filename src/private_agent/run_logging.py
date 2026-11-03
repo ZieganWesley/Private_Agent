@@ -7,9 +7,10 @@ import re
 import time
 import traceback
 import uuid
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any
 
 from rich.console import Console
@@ -25,9 +26,9 @@ _RUN_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "private_agent_run_id",
     default=None,
 )
-_LOG_CONTEXT: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
+_LOG_CONTEXT: contextvars.ContextVar[Mapping[str, Any]] = contextvars.ContextVar(
     "private_agent_log_context",
-    default={},
+    default=MappingProxyType({}),
 )
 _ACTIVE_HANDLERS: list[logging.Handler] = []
 _RUN_ID_TOKEN: contextvars.Token | None = None
