@@ -1862,38 +1862,12 @@ what each step needs first.
   agent loop and permission policy (steps 99 and 109) start Stage 5.
 - After **step 140**: everything in this file is done.
 
-#### Stage 1: Trivial fixes
-
-15 steps.
-
-| # | Step | Task | Difficulty | Needs first |
-|---|---|---|---|---|
-| 1 | 1.1 | Fix pytest path, install dev tools, switch VS Code to pytest | Trivial | — |
-| 2 | 2.2 | Fix the `VISIBILE_REASONING` typo | Trivial | — |
-| 3 | 2.4 | Fix stale links in `copilot-instructions.md` | Trivial | — |
-| 4 | 2.5 | Add `check=` to every `subprocess.run` | Trivial | — |
-| 5 | 3.3 | Move the offline environment variables into startup | Trivial | — |
-| 6 | 5.8 | Decide on `requirements.txt` | Trivial | — |
-| 7 | 5.9 | Remove the `sys.path` edit in `main.py` | Trivial | — |
-| 8 | 8.16 | Document example MCP configs | Trivial | — |
-| 9 | 10.6 | Multi-line input | Trivial | — |
-| 10 | 11.1 | Declare POSIX only, exit on native Windows | Trivial | — |
-| 11 | 13.1 | Bundle the tokenizer vocabulary | Trivial | — |
-| 12 | 13.3 | Cache the internet check | Trivial | — |
-| 13 | 13.4 | SQLite WAL mode | Trivial | — |
-| 14 | 14.1 | Add the 3 hidden media keys to the defaults | Trivial | — |
-| 15 | 14.2 | `PRIVATE_AGENT_CONFIG` and `--config` | Trivial | — |
-
 #### Stage 2: Easy, independent fixes
 
-22 steps.
+18 steps remaining (4 of 22 are done).
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
-| 16 | 1.2 | Skip tests when `bwrap` or media libraries are missing | Easy | — |
-| 17 | 1.4 | Add ruff config, auto-fix and format | Easy | — |
-| 18 | 1.6 | Add pre-commit hooks | Trivial | 1.4 |
-| 19 | 2.1 | Fix the 7 loop-variable closure bugs (`B023`) | Easy | — |
 | 20 | 2.3 | Remove the pytest check from `config.py` | Easy | — |
 | 21 | 5.4 | Rewrite the risky-command check with `shlex` | Easy | — |
 | 22 | 5.5 | Reciprocal rank fusion and better BM25 tokenizing | Easy | — |
@@ -1912,6 +1886,7 @@ what each step needs first.
 | 35 | 11.4 | WSL warnings and Ollama setup | Easy | 11.2 |
 | 36 | 11.12 | Setup docs per platform | Easy | 11.3 |
 | 37 | 13.2 | Cache DNS lookups | Easy | — |
+| 13.3 | Remaining work: check once per turn and use real request errors as the offline signal (the 30-second cache is done) | J6 | — | Five web calls while offline wait at most one timeout |
 
 #### Stage 3: Medium (needs `Settings`, the green test suite or logging)
 
@@ -1919,8 +1894,8 @@ what each step needs first.
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
-| 38 | 1.3 | Investigate and fix the 8 remaining test failures | Medium | 1.2 |
-| 39 | 1.5 | Add the GitHub Actions CI workflow | Easy | 1.3, 1.4 |
+| 38 | 1.3 | Investigate and fix the 8 remaining test failures | Medium | — |
+| 39 | 1.5 | Add the GitHub Actions CI workflow | Easy | 1.3 |
 | 40 | 11.11 | CI matrix (Linux, arm64, macOS, core-only) | Easy | 1.5 |
 | 41 | 13.10 | Performance checks in CI | Easy | 1.5 |
 | 42 | 3.1 | Create the typed `Settings` model | Medium | — |
@@ -1943,7 +1918,7 @@ what each step needs first.
 | 59 | 10.4 | Fewer startup questions, flags, remembered choices | Medium | 3.1 |
 | 60 | 10.5 | One console, theme and message levels | Medium | 5.2 |
 | 61 | 10.10 | UI cosmetics | Easy | 10.5 |
-| 62 | 11.5 | Lazy imports and optional extras | Medium | 3.3 |
+| 62 | 11.5 | Lazy imports and optional extras | Medium | — |
 | 63 | 11.6 | Keyword-only document search fallback | Medium | 11.5 |
 | 64 | 13.6 | Incremental RAG refresh | Medium | — |
 | 65 | 13.9 | FTS5 keyword search for large corpora | Medium | 11.6 |
@@ -2049,22 +2024,14 @@ Rules for every step:
 
 | Step | Task | Fixes | Done when |
 |---|---|---|---|
-| 1.1 | Change `[tool.pytest.ini_options] pythonpath` to `["src"]`, install the `dev` extras in `.venv`, and switch `.vscode/settings.json` to pytest | A4 | Plain `pytest -q` runs from the repo root |
-| 1.2 | Add `skipif` markers for tests that need `bwrap` / `prlimit`, and `importorskip` for media tests | A4 | Missing tools show up as skips, not failures |
 | 1.3 | Investigate the 3 git failures in `test_code_tasks.py` and the 5 failures in `test_agent_runtime.py`. Fix the code, or fix the tests if they are wrong | A4 | 0 failures on a machine without `bwrap` |
-| 1.4 | Add a `[tool.ruff]` section (line length, rule sets `E,F,W,I,B,UP,SIM`), run `ruff check --fix` and `ruff format` in a single formatting-only commit | A5 | `ruff check` and `ruff format --check` are clean |
 | 1.5 | Add a GitHub Actions workflow running ruff and pytest on Python 3.10 and 3.14 | A5, A8 | CI runs on every PR |
-| 1.6 | Add pre-commit hooks for ruff | A5 | Hooks run on commit |
 
 ### Phase 2: Quick fixes and real bugs
 
 | Step | Task | Fixes | Done when |
 |---|---|---|---|
-| 2.1 | Fix the 7 `B023` loop-variable-in-closure warnings | A5 | `ruff check --select B023` is clean, with a test for each real bug |
-| 2.2 | Replace `VISIBILE_REASONING` with `VISIBLE_REASONING` everywhere, keeping the old config key readable for migration | A8 | The typo appears only in the legacy-key mapping |
 | 2.3 | Remove `sys_modules_safe()` from `config.py` and handle that case with a test fixture | A3 | Production code never checks for pytest |
-| 2.4 | Update `.github/copilot-instructions.md` so it no longer points to deleted files | A8 | No links to missing files |
-| 2.5 | Add `check=` explicitly to every `subprocess.run` call | A5 | `PLW1510` is clean |
 
 ### Phase 3: Remove global state
 
@@ -2072,7 +2039,6 @@ Rules for every step:
 |---|---|---|---|
 | 3.1 | Create a typed `Settings` model (pydantic) that mirrors the config sections. Load it in `cli.main`, but keep the old constants as thin aliases for now | A2 | `Settings` is loaded once at startup |
 | 3.2 | Move each module from the global constants to the `Settings` object, one module per PR, then delete the aliases | A2 | `config.py` does no work at import time |
-| 3.3 | Move the `HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` setup into startup code | A2 | Importing the package has no side effects |
 | 3.4 | Create a `ToolContext` object (database, workspace root, active task, skills, code task, approval state) and pass it to tools through `RunnableConfig` or injected arguments | A2, B3 | `set_active_*()` functions and `global` statements are gone from `tools/` |
 | 3.5 | Make the workspace root explicit: set it once at startup, and fail if the folder does not exist | B5 | `SandboxManager` has no import-time default |
 
@@ -2099,8 +2065,6 @@ Rules for every step:
 | 5.5 | Use reciprocal rank fusion in `HybridRAGRetriever` and a punctuation-aware tokenizer for BM25. Measure before and after with `scripts/benchmark_rag.py` | B9 | Recall@k and MRR are the same or better |
 | 5.6 | Support YAML front matter (`name`, `description`) in skills, and match them by embedding similarity, falling back to the current keyword match | B6, C9 | Old skills still load, and new skills use front matter |
 | 5.7 | Put web search behind a provider interface, with SearXNG (self-hosted) or an API as the main option and the DuckDuckGo scraper as a fallback | B7, E18 | The search provider is chosen in config |
-| 5.8 | Decide whether to keep `requirements.txt`. If it is not needed for deployment, delete it and `scripts/sync_requirements.py` | A8 | One source of truth for dependencies |
-| 5.9 | Remove the `sys.path` edit from `main.py`, or drop `main.py` in favour of `python -m private_agent` | A8 | No manual `sys.path` changes |
 
 ### Phase 6: Features from Claude Code and Codex
 
@@ -2164,7 +2128,6 @@ the right capability pack (steps 9.2–9.3) instead of as special cases.
 | 8.13 | Add a research loop to the Research pack (with `/research` as a shortcut): search, read, find gaps and search again, ending in a saved Markdown report with sources. Add downloaded files to RAG automatically, and allow consent once per research task | E19, E21, E22, E25 | 9.3, 8.4, 8.12 | A research question produces a report file with cited sources |
 | 8.14 | Add source dates and domain checks, cross-checking between sources, and specialist sources (Wikipedia API, arXiv, GitHub search) as optional providers | E23, E24 | 8.13 | Reports show source dates and flag single-source claims |
 | 8.15 | Run tests and lint automatically after edits outside coding tasks (through hooks), and add language tooling through an LSP MCP server or built-in type checking | E16, E17 | 6.11 | A failing test or type error after an edit is reported to the model |
-| 8.16 | Document example MCP server configs for calendar, notes, email and reminders instead of building each tool | E26 | — | The README has working example configs |
 | 8.17 | Add a calculator / sandboxed Python tool | E29 | 6.3 | Calculations run without the general shell tool |
 | 8.18 | Add document creation tools (Markdown to `.docx` and PDF, simple `.xlsx`) | E27 | — | The agent can write a `.docx` and a PDF, with tests |
 | 8.19 | Allow extra approved folders outside the workspace (for example `~/Documents`), each with its own permission rule | E32 | 6.5 | The helper can read an approved folder outside the workspace |
@@ -2202,7 +2165,6 @@ Steps 10.1–10.3 are small and are in Stage 2 of the implementation order
 | 10.3 | Show edit previews as coloured unified diffs with `rich.syntax` | G6 | — | Added and removed lines are coloured in approval prompts |
 | 10.4 | Cut the startup questions: remember the last choices, add `--model`, `--provider`, `--mode`, `--workspace` and `--rag` flags, and only ask about what is not set | G7 | 3.1 | Starting with saved settings asks no questions |
 | 10.5 | Use one shared console with a named theme, a few message levels (info, success, warning, error) with one colour and symbol each, and replace the ~57 ad-hoc `[Label]` prefixes | G15, G16, G22, G24 | 5.2 | All output goes through one console and theme, and `NO_COLOR` is respected |
-| 10.6 | Add multi-line input (Alt+Enter for a new line) and key bindings | G10 | — | A multi-line prompt can be typed and edited |
 | 10.7 | Show tool requests in readable form, and add Ctrl+O (or `/last`) to see full tool output | G11, G20 | 9.1 | The full output of the last tool can be shown on request |
 | 10.8 | Better approval prompts: a readable request, coloured diff and choices for yes, no, and always allow for this session or project | G12 | 6.5 | "Always allow" adds a permission rule |
 | 10.9 | Arrow-key menus for provider, model, mode and `/tasks`, with typed input still possible | G13 | 4.4 | Menus work with arrow keys and with typed numbers |
@@ -2215,11 +2177,10 @@ order (section L1), so the app runs cleanly in WSL early.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 11.1 | Declare POSIX only: add `Operating System :: POSIX` classifiers, exit on native Windows with a message pointing to WSL, remove the tests that simulate Windows, and update the README wording about "desktop platforms" | H4 | — | Native Windows exits with the WSL message, and no Windows-specific tests remain |
 | 11.2 | Add `platform_support.py` to detect Linux, WSL, macOS and Termux and report available features. Replace direct `platform.system()` checks with it | H3b, H4 | — | Each platform is detected correctly, with tests using fake `/proc` files and environment variables |
 | 11.3 | Add the `private-agent doctor` command, with the exact fix command per detected distribution and platform (for example `sudo dnf install bubblewrap`) | H3b, H3d | 11.2 | On this WSL machine, doctor reports the missing `bwrap` with `sudo dnf install bubblewrap` |
 | 11.4 | WSL support: warn when the workspace or RAG folder is under `/mnt/<drive>`, document Ollama inside WSL vs. Windows-side Ollama with mirrored networking, and allow an explicitly configured WSL host-gateway address as a local runtime | H3e, H3f | 11.2 | Doctor shows how Ollama is reached, and a `/mnt/c` workspace shows a warning |
-| 11.5 | Import optional parts lazily (Ollama client, Chroma, media) and split dependencies into a core plus `rag`, `media` and `all` extras | H3a, H3k | 3.3 | `pip install .` without extras starts, and missing features are reported instead of crashing |
+| 11.5 | Import optional parts lazily (Ollama client, Chroma, media) and split dependencies into a core plus `rag`, `media` and `all` extras | H3a, H3k | — | `pip install .` without extras starts, and missing features are reported instead of crashing |
 | 11.6 | Add a fallback for document search without the `rag` extra: BM25 only, or SQLite FTS5 | H3k | 11.5 | RAG answers with citations on a core-only install |
 | 11.7 | Add a sandbox interface with Bubblewrap, Seatbelt and None backends; move the current Bubblewrap code behind it, and use `resource.setrlimit` where `prlimit` is missing | H3h, H4 | 5.1 | The Bubblewrap backend passes the existing sandbox tests unchanged |
 | 11.8 | Add the macOS Seatbelt backend (same as step 6.14), and clear messages for camera and microphone permissions | H3h, H3i | 11.7 | Shell, tests and stdio MCP work on macOS |
@@ -2258,10 +2219,7 @@ gains.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 13.1 | Ship the `cl100k_base` vocabulary with the package (or fetch it once at install time with consent), set `TIKTOKEN_CACHE_DIR` under `~/.private_agent/`, and warn visibly on fallback | J3 | — | No network request happens on token counting, including offline and after a reboot, with a test that blocks network access |
 | 13.2 | Cache validated DNS results for a short time (bounded, rules re-checked on each use), and resolve in a thread with a deadline instead of a subprocess | J5 | — | A second request to the same host does no lookup, and a stuck resolver still times out, with tests for both |
-| 13.3 | Cache the internet check for about 30 seconds, check once per turn, and use real request errors as the offline signal | J6 | — | Five web calls while offline wait at most one timeout |
-| 13.4 | Turn on SQLite WAL mode with `synchronous=NORMAL` | J10 | — | All database tests pass with WAL on |
 | 13.5 | Import Chroma, Ollama packages and media libraries lazily, and build the RAG index in the background during provider selection | J2 | 11.5, 12.2 | Startup to the first question is under 0.5 s on this machine |
 | 13.6 | Incremental RAG refresh: keep chunks for unchanged files, re-parse only changed files, update BM25 in place, reuse the Chroma client | J7, J8 | — | Changing one file in a 300-file corpus refreshes in under 100 ms (excluding embedding), and semantic chunking embeds only the changed file |
 | 13.7 | Keep the system prompt and tool definitions identical between turns so local servers can reuse their prompt cache, and send only the needed tools (step 9.2) | J4 | 9.2 | Plain chat sends no tool definitions, and repeated turns keep the same prompt prefix |
@@ -2276,8 +2234,6 @@ dependencies and are in Stage 1 of the implementation order (section L1).
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 14.1 | Add the 3 hidden media keys to `DEFAULT_CONFIG` and the README | K1 | — | The keys appear in a newly generated config file |
-| 14.2 | Add a `PRIVATE_AGENT_CONFIG` environment variable and a `--config` flag | K7 | — | The app loads a config from another path, with a test |
 | 14.3 | Make the `Settings` model the single source of defaults and remove the repeated fallback values | K9 | 3.1 | Each default appears in exactly one place, checked by a test that compares the model with the generated file |
 | 14.4 | Move the sandbox limits (CPU, memory, processes, file size) into config, with safe minimums and maximums, and raise the memory default | K2 | 14.3 | A build that needs more than 2 GiB of address space can run after changing the setting |
 | 14.5 | Move timeouts and leases into config, use one lease default, and use one "slow operation" threshold | K3 | 14.3 | No timeout or lease value is written as a literal outside the settings |
@@ -2293,7 +2249,6 @@ dependencies and are in Stage 1 of the implementation order (section L1).
 Track progress by stage (section L1), since that is the order of work. The
 phase list below shows coverage by topic.
 
-- [x] Stage 1: Trivial (steps 1–15)
 - [ ] Stage 2: Easy (steps 16–37)
 - [ ] Stage 3: Medium (steps 38–73)
 - [ ] Stage 4: Hard (steps 74–98)
