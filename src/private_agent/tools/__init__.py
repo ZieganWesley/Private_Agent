@@ -1,6 +1,8 @@
 import contextvars
 import os
 import socket
+import threading
+import time
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
@@ -330,10 +332,35 @@ def describe_tool_catalog() -> list[dict[str, str]]:
     return catalog
 
 
+_INTERNET_CHECK_CACHE_SECONDS = 30.0
+_internet_check_lock = threading.Lock()
+_internet_check_result: tuple[float, bool] | None = None
+
+
+def reset_internet_check_cache() -> None:
+    global _internet_check_result
+    with _internet_check_lock:
+        _internet_check_result = None
+
+
 def has_internet_connection() -> bool:
-    return check_internet_connection(
-        INTERNET_CHECK_HOST, INTERNET_CHECK_PORT, INTERNET_CHECK_TIMEOUT
-    )
+    """Probe connectivity, reusing the last result for a short time.
+
+    Offline probes wait for the full timeout, so repeated web calls would
+    otherwise each pay it.
+    """
+    global _internet_check_result
+    with _internet_check_lock:
+        cached = _internet_check_result
+        if cached is not None and time.monotonic() - cached[0] < (
+            _INTERNET_CHECK_CACHE_SECONDS
+        ):
+            return cached[1]
+        reachable = check_internet_connection(
+            INTERNET_CHECK_HOST, INTERNET_CHECK_PORT, INTERNET_CHECK_TIMEOUT
+        )
+        _internet_check_result = (time.monotonic(), reachable)
+        return reachable
 
 
 def require_internet(func: Callable) -> Callable:

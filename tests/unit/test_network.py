@@ -456,11 +456,14 @@ def test_real_sync_http_transport_blocks_private_dns_results(monkeypatch):
     )
 
     try:
-        with httpx.Client(
-            transport=_PublicOnlySyncHTTPTransport(),
-            follow_redirects=False,
-            trust_env=False,
-        ) as client, pytest.raises(OSError, match="non-public"):
+        with (
+            httpx.Client(
+                transport=_PublicOnlySyncHTTPTransport(),
+                follow_redirects=False,
+                trust_env=False,
+            ) as client,
+            pytest.raises(OSError, match="non-public"),
+        ):
             client.get(f"http://public.example.test:{port}/")
         assert not connected.is_set()
     finally:
@@ -1028,3 +1031,27 @@ def test_online_permission_override_can_decline_tool_call_limits(monkeypatch):
 
     assert selected["allow_tools"] is True
     assert selected["enforce_tool_call_limits"] is False
+
+
+def test_internet_check_is_cached_for_repeated_offline_calls(monkeypatch):
+    from private_agent import tools
+
+    calls = []
+    clock = [1000.0]
+
+    def probe(*_args):
+        calls.append(1)
+        return False
+
+    monkeypatch.setattr(tools, "check_internet_connection", probe)
+    monkeypatch.setattr(tools.time, "monotonic", lambda: clock[0])
+    tools.reset_internet_check_cache()
+    try:
+        assert [tools.has_internet_connection() for _ in range(5)] == [False] * 5
+        assert len(calls) == 1
+
+        clock[0] += 31
+        assert tools.has_internet_connection() is False
+        assert len(calls) == 2
+    finally:
+        tools.reset_internet_check_cache()
