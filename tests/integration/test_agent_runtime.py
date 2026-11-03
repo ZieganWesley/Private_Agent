@@ -208,7 +208,7 @@ async def test_cli_requires_a_terminal_before_starting_session(monkeypatch):
     ("runtime_platform", "expected_notice"),
     [
         ("linux", "No local runtimes found to proceed"),
-        ("win32", "No local runtimes found to proceed"),
+        ("darwin", "No local runtimes found to proceed"),
     ],
 )
 async def test_missing_local_runtimes_keeps_online_provider_available(

@@ -29,7 +29,7 @@ an online provider or an online research request.
 ## Core Functionality and Operational Behaviour
 
 **Session flow.** `private-agent` loads `~/.private_agent.conf`, discovers
-reachable local inference runtimes on supported desktop platforms (Ollama,
+reachable local inference runtimes (Ollama,
 LM Studio, and configured loopback OpenAI-compatible servers such as llama.cpp), locks the
 workspace root, asks for a session permission mode, then asks for an available
 provider and model. If no local runtime is found, online mode is the default.
@@ -137,7 +137,8 @@ reports that in the current session rather than restarting it.
 
 Requirements: Python 3.10–3.14 (validated on 3.14), at least one supported
 local runtime or an online OpenAI-compatible endpoint. Local runtime discovery
-uses loopback APIs and is available across desktop platforms. On Linux,
+uses loopback APIs. Supported platforms are Linux, macOS and WSL2; native
+Windows is not supported and exits with a pointer to WSL. On Linux,
 `bubblewrap` (`bwrap`) plus `util-linux` (`prlimit`) are required for shell,
 code-task tests and stdio MCP (these features are disabled, not unsandboxed,
 without them).
@@ -335,7 +336,7 @@ values win on conflict.
   },
   "models": {
     "ollama_base_url": "http://localhost:11434",      // Ollama server URL
-    "local_openai_compatible_endpoints": [            // Loopback local APIs discovered on supported desktop platforms
+    "local_openai_compatible_endpoints": [            // Loopback local APIs discovered at startup
       {"name": "LM Studio", "base_url": "http://127.0.0.1:1234/v1"},
       {"name": "llama.cpp", "base_url": "http://127.0.0.1:8080/v1"}
     ],

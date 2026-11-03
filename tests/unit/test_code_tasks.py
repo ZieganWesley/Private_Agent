@@ -320,11 +320,6 @@ def test_isolated_command_fails_closed_when_isolation_is_unavailable(
     ("system", "available_tools", "expected"),
     [
         (
-            "Windows",
-            {"bwrap", "prlimit"},
-            "OS-level command isolation is currently supported only on Linux.",
-        ),
-        (
             "Darwin",
             {"bwrap", "prlimit"},
             "OS-level command isolation is currently supported only on Linux.",

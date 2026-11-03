@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import sys
 import time
 
 from rich.console import Console
@@ -14,7 +15,24 @@ def enforce_offline_environment() -> None:
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
 
+WINDOWS_UNSUPPORTED_MESSAGE = (
+    "Private Agent supports Linux, macOS and WSL2 only; native Windows is not "
+    "supported. Install WSL (https://learn.microsoft.com/windows/wsl/install) "
+    "and run private-agent inside it."
+)
+
+
+def ensure_supported_platform() -> None:
+    """Exit with a pointer to WSL when started on native Windows."""
+    if sys.platform == "win32":
+        console.print(
+            f"[red][Unsupported platform] {WINDOWS_UNSUPPORTED_MESSAGE}[/red]"
+        )
+        raise SystemExit(1)
+
+
 def main():
+    ensure_supported_platform()
     enforce_offline_environment()
     parser = argparse.ArgumentParser(
         prog="private-agent",

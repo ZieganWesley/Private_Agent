@@ -1,6 +1,8 @@
 import os
 import sys
 
+import pytest
+
 from private_agent import cli
 
 
@@ -39,3 +41,20 @@ def test_offline_environment_is_set_at_startup_not_import(monkeypatch):
     cli.enforce_offline_environment()
     assert os.environ["HF_HUB_OFFLINE"] == "1"
     assert os.environ["TRANSFORMERS_OFFLINE"] == "1"
+
+
+def test_native_windows_exits_with_wsl_message(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "argv", ["private-agent"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 1
+    assert "WSL" in capsys.readouterr().out.replace("\n", " ")
+
+
+def test_posix_platforms_start_normally(monkeypatch):
+    for platform_name in ("linux", "darwin"):
+        monkeypatch.setattr(sys, "platform", platform_name)
+        cli.ensure_supported_platform()
