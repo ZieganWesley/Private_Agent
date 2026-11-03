@@ -191,3 +191,31 @@ def test_online_permission_override_enables_device_tools(monkeypatch):
         )
         is None
     )
+
+
+def test_format_weather_uses_each_days_own_values():
+    from datetime import date
+
+    from private_agent.tools.location import format_weather
+
+    payload = {
+        "daily": {
+            "time": ["2026-10-05", "2026-10-06", "2026-10-07"],
+            "temperature_2m_max": [21, 22, 23],
+            "temperature_2m_min": [11, 12],
+        }
+    }
+
+    text = format_weather(
+        {"name": "Testville", "latitude": 1.0, "longitude": 2.0},
+        payload,
+        date(2026, 10, 5),
+        date(2026, 10, 7),
+        None,
+        date(2026, 10, 5),
+    )
+
+    day_lines = [line for line in text.splitlines() if line.startswith("- ")]
+    assert "high 21°C" in day_lines[0] and "low 11°C" in day_lines[0]
+    assert "high 22°C" in day_lines[1] and "low 12°C" in day_lines[1]
+    assert "high 23°C" in day_lines[2] and "low n/a" in day_lines[2]

@@ -4454,6 +4454,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                 startup_memory_context = ""
                 session_summary_saved = False
 
+        # This closure is redefined on every provider-selection iteration and must
+        # see the current llm/capabilities after a mid-session model switch, so its
+        # late binding of loop-assigned names (B023) is intentional.
         def cleanup_code_task(*, finalize: bool) -> str | None:
             nonlocal active_code_workspace, tools_list, llm_with_tools
             if active_code_workspace is None:
@@ -4472,21 +4475,21 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     "but the evidence could not be persisted: "
                     f"{type(exc).__name__}: {exc}[/yellow]"
                 )
-            SandboxManager.set_root(str(previous_workspace_root))
+            SandboxManager.set_root(str(previous_workspace_root))  # noqa: B023
             code_tasks_module.ACTIVE_CODE_TASK = None
             AVAILABLE_TOOLS.pop("run_project_unit_tests", None)
             AVAILABLE_TOOLS.pop("checkpoint_code_task", None)
             AVAILABLE_TOOLS.pop("finalize_code_task", None)
-            tools_list = list(base_tools_list)
-            if capabilities["tools"] is not False:
+            tools_list = list(base_tools_list)  # noqa: B023
+            if capabilities["tools"] is not False:  # noqa: B023
                 try:
-                    llm_with_tools = llm.bind_tools(tools_list)
+                    llm_with_tools = llm.bind_tools(tools_list)  # noqa: B023
                 except Exception as exc:
                     console.print(
                         f"[yellow]Could not restore the base tool set "
                         f"({type(exc).__name__}); tool calls are disabled for this model.[/yellow]"
                     )
-                    llm_with_tools = llm
+                    llm_with_tools = llm  # noqa: B023
             active_code_workspace = None
             return result
 

@@ -247,7 +247,7 @@ def format_weather(
     ]
     for index, day in enumerate(times):
 
-        def column(name):
+        def column(name, index=index):
             values = daily.get(name) or []
             return values[index] if index < len(values) else None
 
