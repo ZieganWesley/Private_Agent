@@ -69,6 +69,9 @@ class PersistentMemory:
         try:
             self.conn.execute("PRAGMA foreign_keys = ON")
             self.conn.execute("PRAGMA busy_timeout = 2000")
+            if self.db_path != ":memory:":
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.execute("PRAGMA synchronous = NORMAL")
             self._create_table()
         except BaseException:
             self.conn.close()

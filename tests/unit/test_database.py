@@ -1812,3 +1812,14 @@ def test_runtime_requires_typed_confirmation_for_selective_history_delete(
     memory = PersistentMemory(db_path=temp_db)
     assert memory.load_history("session-a") == []
     memory.close()
+
+
+def test_file_database_uses_wal_with_normal_synchronous(tmp_path):
+    memory = PersistentMemory(str(tmp_path / "wal.sqlite"))
+    try:
+        assert memory.conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        # synchronous: 1 == NORMAL
+        assert memory.conn.execute("PRAGMA synchronous").fetchone()[0] == 1
+        assert memory.conn.execute("PRAGMA busy_timeout").fetchone()[0] == 2000
+    finally:
+        memory.close()
