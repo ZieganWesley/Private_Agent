@@ -58,4 +58,4 @@ include = ["private_agent", "private_agent.*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-private_agent = ["resources/*.md"]
+private_agent = ["resources/*.md", "resources/tiktoken/*"]

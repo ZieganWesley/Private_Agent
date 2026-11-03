@@ -1,13 +1,21 @@
 """Prompt context, citation formatting, and context-budget helpers."""
 
 import logging
+import os
 from datetime import datetime
 from functools import lru_cache
+from pathlib import Path
+
+from rich.console import Console
 
 from ..config import MAX_CONTEXT_TOKENS
 from ..run_logging import RUN_LOGGER, log_event
 
 _TOKENIZER_FALLBACKS_REPORTED: set[str] = set()
+_BUNDLED_TIKTOKEN_DIR = (
+    Path(__file__).resolve().parent.parent / "resources" / "tiktoken"
+)
+_warning_console = Console(stderr=True)
 
 
 def _report_tokenizer_fallback(stage: str, exc: Exception) -> None:
@@ -22,6 +30,10 @@ def _report_tokenizer_fallback(stage: str, exc: Exception) -> None:
         stage=stage,
         error_type=type(exc).__name__,
         fallback="character_estimate",
+    )
+    _warning_console.print(
+        "[yellow][Tokenizer warning] Token counting fell back to a rough "
+        "character estimate; context trimming may be less accurate.[/yellow]"
     )
 
 
@@ -41,6 +53,7 @@ def _get_tokenizer():
     try:
         import tiktoken
 
+        os.environ["TIKTOKEN_CACHE_DIR"] = str(_BUNDLED_TIKTOKEN_DIR)
         return tiktoken.get_encoding("cl100k_base")
     except Exception as exc:
         _report_tokenizer_fallback("load", exc)
