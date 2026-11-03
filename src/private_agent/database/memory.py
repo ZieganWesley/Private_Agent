@@ -226,7 +226,7 @@ class PersistentMemory:
             )
 
     def _create_table(self):
-        with self._lock:
+        with self._lock:  # noqa: SIM117 - body is the large schema DDL
             with self.conn:
                 version = self.conn.execute("PRAGMA user_version").fetchone()[0]
                 if version > _SCHEMA_VERSION:
@@ -1173,8 +1173,7 @@ class PersistentMemory:
             raise ValueError("Approval scope must contain 1 to 1000 characters.")
         with self._lock, self._write_transaction():
             task = self.conn.execute(
-                "SELECT current_revision, status FROM agent_tasks "
-                "WHERE task_id = ?",
+                "SELECT current_revision, status FROM agent_tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             plan = self.conn.execute(
@@ -1232,15 +1231,13 @@ class PersistentMemory:
         expires_at = now + lease_seconds
         with self._lock, self._write_transaction():
             task = self.conn.execute(
-                "SELECT current_revision, status FROM agent_tasks "
-                "WHERE task_id = ?",
+                "SELECT current_revision, status FROM agent_tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if task is None:
                 raise ValueError("Task not found.")
             lease = self.conn.execute(
-                "SELECT owner_id, expires_at FROM agent_task_leases "
-                "WHERE task_id = ?",
+                "SELECT owner_id, expires_at FROM agent_task_leases WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if (
@@ -1328,8 +1325,7 @@ class PersistentMemory:
                 (task_id,),
             ).fetchone()
             lease = self.conn.execute(
-                "SELECT owner_id, expires_at FROM agent_task_leases "
-                "WHERE task_id = ?",
+                "SELECT owner_id, expires_at FROM agent_task_leases WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if not (
@@ -1494,8 +1490,7 @@ class PersistentMemory:
             if action[2] not in {"in_flight", "outcome_unknown"}:
                 raise ValueError("Only unresolved task actions can be reconciled.")
             lease = self.conn.execute(
-                "SELECT owner_id, expires_at FROM agent_task_leases "
-                "WHERE task_id = ?",
+                "SELECT owner_id, expires_at FROM agent_task_leases WHERE task_id = ?",
                 (action[0],),
             ).fetchone()
             if lease and lease[1] > time.time() and lease[0] != owner_id:
@@ -1692,14 +1687,11 @@ class PersistentMemory:
             )
         with self._lock, self._write_transaction():
             task = self.conn.execute(
-                "SELECT current_revision, status FROM agent_tasks "
-                "WHERE task_id = ?",
+                "SELECT current_revision, status FROM agent_tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if task is None or task[0] != revision or task[1] != "active":
-                raise ValueError(
-                    "Only steps in the active revision can be verified."
-                )
+                raise ValueError("Only steps in the active revision can be verified.")
             lease = self.conn.execute(
                 "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
                 (task_id,),
@@ -1750,8 +1742,7 @@ class PersistentMemory:
             )
         with self._lock, self._write_transaction():
             task = self.conn.execute(
-                "SELECT current_revision, status FROM agent_tasks "
-                "WHERE task_id = ?",
+                "SELECT current_revision, status FROM agent_tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if task is None or task[0] != revision or task[1] != "active":
@@ -1816,19 +1807,15 @@ class PersistentMemory:
             raise ValueError("Unsupported task lifecycle transition.")
         with self._lock, self._write_transaction():
             task = self.conn.execute(
-                "SELECT current_revision, status FROM agent_tasks "
-                "WHERE task_id = ?",
+                "SELECT current_revision, status FROM agent_tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if task is None:
                 raise ValueError("Task not found.")
             if task[1] not in transitions[status]:
-                raise ValueError(
-                    f"Cannot change task from '{task[1]}' to '{status}'."
-                )
+                raise ValueError(f"Cannot change task from '{task[1]}' to '{status}'.")
             lease = self.conn.execute(
-                "SELECT owner_id, expires_at FROM agent_task_leases "
-                "WHERE task_id = ?",
+                "SELECT owner_id, expires_at FROM agent_task_leases WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if lease and lease[1] > time.time() and lease[0] != owner_id:
@@ -1870,8 +1857,7 @@ class PersistentMemory:
         """Complete only when every current-revision step is explicitly verified."""
         with self._lock, self._write_transaction():
             task = self.conn.execute(
-                "SELECT current_revision, status FROM agent_tasks "
-                "WHERE task_id = ?",
+                "SELECT current_revision, status FROM agent_tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if task is None:
@@ -2033,8 +2019,7 @@ class PersistentMemory:
             raise ValueError("Task completeness rating must be an integer from 0 to 5.")
         with self._lock, self._write_transaction():
             task = self.conn.execute(
-                "SELECT current_revision, status FROM agent_tasks "
-                "WHERE task_id = ?",
+                "SELECT current_revision, status FROM agent_tasks WHERE task_id = ?",
                 (task_id,),
             ).fetchone()
             if task is None or task[1] != "completed":
@@ -2453,8 +2438,7 @@ class PersistentMemory:
                 deleted["episodes"] = cursor.rowcount
             if days_by_class["skill"]:
                 cutoff = (
-                    datetime.now(timezone.utc)
-                    - timedelta(days=days_by_class["skill"])
+                    datetime.now(timezone.utc) - timedelta(days=days_by_class["skill"])
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 skill_paths = [
                     str(row[0])

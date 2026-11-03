@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import pathlib
@@ -310,6 +311,7 @@ def _persist_categorized_config(config: dict) -> None:
         warnings.warn(
             f"Not migrating configuration through symbolic link {CONFIG_FILE_PATH}.",
             RuntimeWarning,
+            stacklevel=2,
         )
         return
     normalized = json.dumps(config, indent=4)
@@ -336,13 +338,12 @@ def _persist_categorized_config(config: dict) -> None:
         os.chmod(CONFIG_FILE_PATH, 0o600)
     except OSError as exc:
         if temporary_path is not None:
-            try:
+            with contextlib.suppress(OSError):
                 temporary_path.unlink(missing_ok=True)
-            except OSError:
-                pass
         warnings.warn(
             f"Could not update categorized configuration at {CONFIG_FILE_PATH}: {exc}",
             RuntimeWarning,
+            stacklevel=2,
         )
 
 
@@ -363,6 +364,7 @@ def load_or_create_config() -> dict:
             warnings.warn(
                 f"Failed to create default configuration file at {CONFIG_FILE_PATH}: {e}",
                 RuntimeWarning,
+                stacklevel=2,
             )
             return _merge_config(DEFAULT_CONFIG)
 
@@ -397,12 +399,14 @@ def load_or_create_config() -> dict:
             warnings.warn(
                 f"Malformed or invalid configuration encountered in {CONFIG_FILE_PATH}: {jde}. Falling back to default configuration.",
                 RuntimeWarning,
+                stacklevel=2,
             )
         return _merge_config(DEFAULT_CONFIG)
     except Exception as e:
         warnings.warn(
             f"Unexpected error reading configuration file {CONFIG_FILE_PATH}: {e}. Falling back to default configuration.",
             RuntimeWarning,
+            stacklevel=2,
         )
         return _merge_config(DEFAULT_CONFIG)
 
@@ -646,6 +650,7 @@ else:
     warnings.warn(
         "tools.override_tool_list must be a list of tool names; ignoring it.",
         RuntimeWarning,
+        stacklevel=2,
     )
     OVERRIDE_TOOL_LIST = frozenset()
 
@@ -782,6 +787,7 @@ if isinstance(_raw_code_task_test_commands, list):
         warnings.warn(
             "Only the first 16 code_tasks.test_commands entries will be used.",
             RuntimeWarning,
+            stacklevel=2,
         )
     for _test_command in _raw_code_task_test_commands[:16]:
         if (
@@ -798,11 +804,13 @@ if isinstance(_raw_code_task_test_commands, list):
                 "Ignoring invalid code_tasks.test_commands entry; use a non-empty "
                 "array of at most 64 non-empty argument strings.",
                 RuntimeWarning,
+                stacklevel=2,
             )
 elif _raw_code_task_test_commands:
     warnings.warn(
         "Ignoring invalid code_tasks.test_commands; expected an array of argument arrays.",
         RuntimeWarning,
+        stacklevel=2,
     )
 CODE_TASK_SUCCESS_OUTPUT_CHARS = _configured_int(
     "code_tasks", "successful_test_output_chars", 6000

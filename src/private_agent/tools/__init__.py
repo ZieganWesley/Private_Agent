@@ -7,7 +7,6 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
 from functools import wraps
-from typing import Optional
 
 from langchain_core.tools import tool
 from rich.console import Console
@@ -524,15 +523,17 @@ async def load_mcp_tools(*args, **kwargs) -> list:
         from mcp.client.stdio import stdio_client
 
         # Establishing connection parameters and session
-        async with stdio_client(*args, **kwargs) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                response = await session.list_tools()
+        async with (
+            stdio_client(*args, **kwargs) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            response = await session.list_tools()
 
-                tools = []
-                for tool in getattr(response, "tools", []):
-                    tools.append(tool)
-                return tools
+            tools = []
+            for tool in getattr(response, "tools", []):
+                tools.append(tool)
+            return tools
     except Exception as exc:
         console.print(f"[red][MCP error] Unable to discover tools: {exc}[/red]")
         return []

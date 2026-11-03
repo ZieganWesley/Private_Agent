@@ -242,13 +242,17 @@ pytest tests/unit -q                              # unit tests only
 pytest tests/integration -q                       # integration tests only
 pytest tests/unit/test_database.py -q             # one file
 pytest -k "permission and full" -q                # filter by name
-ruff check src tests --select F                   # lint for real errors
+ruff check src tests                              # lint (config in pyproject.toml)
+ruff format --check src tests                     # formatting check
 ```
 
 The final pytest summary includes counts by functional test category and lists
 every failed test by node ID. Pytest also prints failure details and warnings.
 
 With `uv`, use `uv run pytest -q`.
+
+To run ruff automatically on every commit, install the hooks once with
+`pip install pre-commit && pre-commit install` (see `.pre-commit-config.yaml`).
 
 
 ### RAG retrieval benchmark (`scripts/benchmark_rag.py`)

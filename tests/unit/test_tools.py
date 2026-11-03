@@ -383,6 +383,7 @@ def test_workspace_symbol_search_skips_symlink_escape_and_invalid_utf8(
     )
 
 
+@pytest.mark.requires_media
 def test_workspace_image_input_validates_path_and_size(temp_workspace, monkeypatch):
     from private_agent.config import MAX_CAPTURED_IMAGE_BYTES
     from private_agent.tools import load_workspace_image
@@ -1366,13 +1367,16 @@ async def test_mcp_stdio_sandbox_is_removed_when_client_initialization_fails(
         lambda command, root: (["/usr/bin/bwrap", *command], {}),
     )
     try:
-        with patch.dict(
-            sys.modules,
-            {
-                "langchain_mcp_adapters": parent,
-                "langchain_mcp_adapters.client": adapter,
-            },
-        ), pytest.raises(RuntimeError, match="Failed to load MCP server"):
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "langchain_mcp_adapters": parent,
+                    "langchain_mcp_adapters.client": adapter,
+                },
+            ),
+            pytest.raises(RuntimeError, match="Failed to load MCP server"),
+        ):
             await load_configured_mcp_tools(
                 "broken-stdio",
                 {"transport": "stdio", "command": "python", "args": ["server.py"]},
@@ -1412,13 +1416,16 @@ async def test_mcp_stdio_sandbox_is_removed_when_tool_discovery_fails(
         lambda command, root: (["/usr/bin/bwrap", *command], {}),
     )
     try:
-        with patch.dict(
-            sys.modules,
-            {
-                "langchain_mcp_adapters": parent,
-                "langchain_mcp_adapters.client": adapter,
-            },
-        ), pytest.raises(RuntimeError, match="Failed to load MCP server"):
+        with (
+            patch.dict(
+                sys.modules,
+                {
+                    "langchain_mcp_adapters": parent,
+                    "langchain_mcp_adapters.client": adapter,
+                },
+            ),
+            pytest.raises(RuntimeError, match="Failed to load MCP server"),
+        ):
             await load_configured_mcp_tools(
                 "failed-discovery",
                 {"transport": "stdio", "command": "python", "args": ["server.py"]},
@@ -1462,6 +1469,7 @@ def test_download_restricted_extension(temp_workspace):
     assert "restricted by security policy" in res
 
 
+@pytest.mark.requires_sandbox
 def test_shell_command_tool(temp_workspace):
     with (
         patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),

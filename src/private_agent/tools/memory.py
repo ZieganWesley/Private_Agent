@@ -19,10 +19,13 @@ def read_chat_history_from_sqlite(limit: int = DEFAULT_HISTORY_READ_LIMIT) -> st
     """Read recent conversation entries from persistent SQLite memory."""
     limit = max(1, min(int(limit), 500))
     try:
-        with _sqlite_lock, sqlite3.connect(
-            _sqlite_state.ACTIVE_DB_PATH,
-            check_same_thread=False,
-        ) as conn:
+        with (
+            _sqlite_lock,
+            sqlite3.connect(
+                _sqlite_state.ACTIVE_DB_PATH,
+                check_same_thread=False,
+            ) as conn,
+        ):
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT session_id, role, content, timestamp "
@@ -44,24 +47,28 @@ def read_chat_history_from_sqlite(limit: int = DEFAULT_HISTORY_READ_LIMIT) -> st
 def delete_chat_history_from_sqlite(session_id: str | None = None) -> str:
     """Delete stored SQLite chat history for one session or all sessions."""
     try:
-        with _sqlite_lock:
-            with sqlite3.connect(
+        with (
+            _sqlite_lock,
+            sqlite3.connect(
                 _sqlite_state.ACTIVE_DB_PATH,
                 check_same_thread=False,
-            ) as conn:
-                if session_id:
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "DELETE FROM chat_history WHERE session_id = ?",
-                        (session_id,),
-                    )
-                    rows_affected = cursor.rowcount
-                    return (
-                        f"Success: Deleted {rows_affected} messages for session "
-                        f"'{session_id}' from SQLite memory."
-                    )
-                conn.execute("DELETE FROM chat_history")
-                return "Success: Wiped all chat history rows from SQLite persistent database."
+            ) as conn,
+        ):
+            if session_id:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "DELETE FROM chat_history WHERE session_id = ?",
+                    (session_id,),
+                )
+                rows_affected = cursor.rowcount
+                return (
+                    f"Success: Deleted {rows_affected} messages for session "
+                    f"'{session_id}' from SQLite memory."
+                )
+            conn.execute("DELETE FROM chat_history")
+            return (
+                "Success: Wiped all chat history rows from SQLite persistent database."
+            )
     except Exception as exc:
         return f"Error deleting SQLite history: {exc}"
 
@@ -74,10 +81,13 @@ def search_chat_history_in_sqlite(
 ) -> str:
     """Search bounded local conversation history and summaries; results include reviewable entry IDs."""
     try:
-        with _sqlite_lock, sqlite3.connect(
-            _sqlite_state.ACTIVE_DB_PATH,
-            check_same_thread=False,
-        ) as conn:
+        with (
+            _sqlite_lock,
+            sqlite3.connect(
+                _sqlite_state.ACTIVE_DB_PATH,
+                check_same_thread=False,
+            ) as conn,
+        ):
             parameters: list[object] = [query.casefold()]
             session_clause = ""
             if session_id:
@@ -107,10 +117,13 @@ def search_chat_history_in_sqlite(
 def delete_chat_history_entry_from_sqlite(entry_id: int, session_id: str) -> str:
     """Delete one locally stored conversation entry identified by search results."""
     try:
-        with _sqlite_lock, sqlite3.connect(
-            _sqlite_state.ACTIVE_DB_PATH,
-            check_same_thread=False,
-        ) as conn:
+        with (
+            _sqlite_lock,
+            sqlite3.connect(
+                _sqlite_state.ACTIVE_DB_PATH,
+                check_same_thread=False,
+            ) as conn,
+        ):
             cursor = conn.execute(
                 "DELETE FROM chat_history WHERE id = ? AND session_id = ?",
                 (entry_id, session_id),

@@ -1,3 +1,4 @@
+import importlib.util
 import pathlib
 import tempfile
 from collections import Counter
@@ -111,3 +112,41 @@ def temp_workspace():
         SandboxManager.set_root(temporary_directory)
         yield pathlib.Path(temporary_directory)
         SandboxManager.set_root(str(original_root))
+
+
+def _sandbox_skip_reason():
+    from private_agent.code_tasks import isolation_unavailable_reason
+
+    return isolation_unavailable_reason()
+
+
+def _media_skip_reason():
+    missing = [
+        name for name in ("cv2", "PIL") if importlib.util.find_spec(name) is None
+    ]
+    if missing:
+        return f"media extras are not installed (missing {', '.join(missing)})"
+    return None
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "requires_sandbox: needs Bubblewrap and prlimit (skipped when missing)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "requires_media: needs the media extras (skipped when missing)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    checks = {
+        "requires_sandbox": _sandbox_skip_reason,
+        "requires_media": _media_skip_reason,
+    }
+    reasons = {name: check() for name, check in checks.items()}
+    for item in items:
+        for name, reason in reasons.items():
+            if reason and item.get_closest_marker(name):
+                item.add_marker(pytest.mark.skip(reason=reason))

@@ -249,7 +249,7 @@ def validate_online_base_url(base_url: str) -> str:
     if parsed.scheme not in {"https", "http"} or not parsed.hostname:
         raise ValueError("Enter a valid HTTP(S) OpenAI-compatible base URL.")
     try:
-        parsed.port
+        _ = parsed.port
     except ValueError as exc:
         raise ValueError("The API base URL contains an invalid port.") from exc
     if parsed.username or parsed.password or parsed.query or parsed.fragment:

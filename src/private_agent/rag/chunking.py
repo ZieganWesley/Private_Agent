@@ -220,7 +220,7 @@ def _split_markdown(text: str, settings: ChunkingSettings) -> list[str]:
     boundaries = ([0] if starts[0] != 0 else []) + starts + [len(text)]
     sections = [
         text[begin:end]
-        for begin, end in zip(boundaries, boundaries[1:])
+        for begin, end in zip(boundaries, boundaries[1:], strict=False)
         if text[begin:end].strip()
     ]
     chunks: list[str] = []
@@ -252,7 +252,7 @@ def _split_code(text: str, settings: ChunkingSettings) -> list[str]:
     boundaries = ([0] if starts[0] != 0 else []) + starts + [len(text)]
     blocks = [
         text[begin:end]
-        for begin, end in zip(boundaries, boundaries[1:])
+        for begin, end in zip(boundaries, boundaries[1:], strict=False)
         if text[begin:end].strip()
     ]
     pieces: list[str] = []
@@ -265,7 +265,7 @@ def _split_code(text: str, settings: ChunkingSettings) -> list[str]:
 
 
 def _cosine_distance(left: Sequence[float], right: Sequence[float]) -> float:
-    dot = sum(a * b for a, b in zip(left, right))
+    dot = sum(a * b for a, b in zip(left, right, strict=False))
     norm = math.sqrt(sum(a * a for a in left)) * math.sqrt(sum(b * b for b in right))
     return 1.0 - dot / norm if norm else 1.0
 
@@ -311,7 +311,7 @@ def _split_semantic(
     ]
     threshold = _percentile(distances, settings.semantic_breakpoint_percentile)
     groups: list[list[str]] = [[sentences[0]]]
-    for sentence, distance in zip(sentences[1:], distances):
+    for sentence, distance in zip(sentences[1:], distances, strict=False):
         if distance > threshold:
             groups.append([sentence])
         else:

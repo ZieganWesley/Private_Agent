@@ -1,5 +1,6 @@
 """Workspace-bounded file and directory tools."""
 
+import contextlib
 import difflib
 import fnmatch
 import os
@@ -90,10 +91,8 @@ def _run_git_bounded(command: list[str], environment: dict[str, str]):
     timed_out = False
 
     def terminate():
-        try:
+        with contextlib.suppress(ProcessLookupError):
             process.kill()
-        except ProcessLookupError:
-            pass
 
     with selectors.DefaultSelector() as selector:
         selector.register(process.stdout, selectors.EVENT_READ)
@@ -293,10 +292,8 @@ def _snapshot_file_descriptor(
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
     )
     try:
-        try:
+        with contextlib.suppress(FileExistsError):
             os.mkdir(".agent_snapshots", mode=0o700, dir_fd=root_fd)
-        except FileExistsError:
-            pass
         snapshot_fd = os.open(
             ".agent_snapshots",
             os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
@@ -440,10 +437,8 @@ def _write_workspace_replacement(
                 dst_dir_fd=parent_fd,
             )
     except Exception:
-        try:
+        with contextlib.suppress(FileNotFoundError):
             os.unlink(temporary_name, dir_fd=parent_fd)
-        except FileNotFoundError:
-            pass
         raise
 
 
@@ -750,10 +745,7 @@ def search_workspace_text(
                         break
             if len(matches) >= limit:
                 break
-        if not matches:
-            result = "No matching workspace text."
-        else:
-            result = "\n".join(matches)
+        result = "No matching workspace text." if not matches else "\n".join(matches)
         if truncated_scan:
             result += "\n[Search stopped at the configured workspace scan limit.]"
         if len(result) > _MAX_SEARCH_OUTPUT_CHARS:

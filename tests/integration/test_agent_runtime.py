@@ -2743,6 +2743,7 @@ async def test_sensitive_tool_arguments_are_not_logged_or_persisted(
         persisted.close()
 
 
+@pytest.mark.requires_sandbox
 @pytest.mark.asyncio
 async def test_repeated_cli_runs_remove_mcp_tools_and_sandboxes(
     scripted_local_cli, monkeypatch, tmp_path
@@ -2792,6 +2793,7 @@ async def test_repeated_cli_runs_remove_mcp_tools_and_sandboxes(
     assert "mcp_session_probe" not in agent.MCP_TOOL_NAMES
 
 
+@pytest.mark.requires_sandbox
 @pytest.mark.asyncio
 async def test_mcp_startup_failure_does_not_skip_other_servers_or_shutdown(
     scripted_local_cli, monkeypatch
@@ -4090,6 +4092,7 @@ async def test_online_cli_failure_does_not_print_provider_secrets(
     assert "Online request failed" in output
 
 
+@pytest.mark.requires_sandbox
 @pytest.mark.asyncio
 async def test_cli_code_task_keeps_failed_final_verification_visible(
     scripted_local_cli, monkeypatch, tmp_path
@@ -4165,6 +4168,7 @@ async def test_cli_code_task_keeps_failed_final_verification_visible(
         memory.close()
 
 
+@pytest.mark.requires_sandbox
 @pytest.mark.asyncio
 async def test_cli_code_task_retries_checkpoint_after_test_failure(
     scripted_local_cli, monkeypatch, tmp_path
@@ -4265,6 +4269,7 @@ async def test_cli_code_task_retries_checkpoint_after_test_failure(
     assert not agent.code_tasks_module.ACTIVE_CODE_TASK
 
 
+@pytest.mark.requires_sandbox
 @pytest.mark.asyncio
 async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
     scripted_local_cli, monkeypatch
