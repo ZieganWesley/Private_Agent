@@ -3,8 +3,8 @@
 ## Project shape
 
 Private Agent is a local-first Python CLI built around Ollama, SQLite, and a
-workspace-scoped tool system. The entry points `main.py`, `python -m
-private_agent`, and the `private-agent` console script all lead to
+workspace-scoped tool system. The entry points `python -m private_agent` and the
+`private-agent` console script both lead to
 `private_agent.cli:main`.
 
 `src/private_agent/agent/runtime.py` orchestrates startup, provider/model
@@ -97,8 +97,8 @@ Install the package and development tools with:
 python -m pip install -e ".[dev]"
 ```
 
-Run the CLI with `python main.py`, `python -m private_agent`, or (after
-installation) `private-agent`.
+Run the CLI with `python -m private_agent` or `private-agent` (both need the
+package installed).
 
 The tests use pytest and mock model/services, so they do not require Ollama,
 network access, or a GPU:

@@ -170,8 +170,7 @@ ollama pull nomic-embed-text  # needed only for RAG
 # 3. Run the installed command from the project you want it to work on
 cd /path/to/your/project
 private-agent
-# The source checkout can also be run with `python main.py` or
-# `python -m private_agent`.
+# After installing, it can also be run with `python -m private_agent`.
 ```
 
 Pass `--verbose-startup` to show configured paths, saved-memory counts, local
@@ -492,5 +491,4 @@ argument values echoed by tools.
 media, memory, planning, schemas), `database/memory.py` (SQLite),
 `rag/` (indexing, retrieval, citations), `skills/`, `sandbox/` (Linux
 isolation), `code_tasks/` (workspaces, checkpoints, tests), `hardware/`.
-`main.py` is a source-checkout launcher; `scripts/` holds
-`benchmark_rag.py`; tests are in `tests/`.
+`scripts/` holds `benchmark_rag.py`; tests are in `tests/`.
