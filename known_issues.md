@@ -2293,7 +2293,7 @@ dependencies and are in Stage 1 of the implementation order (section L1).
 Track progress by stage (section L1), since that is the order of work. The
 phase list below shows coverage by topic.
 
-- [ ] Stage 1: Trivial (steps 1–15)
+- [x] Stage 1: Trivial (steps 1–15)
 - [ ] Stage 2: Easy (steps 16–37)
 - [ ] Stage 3: Medium (steps 38–73)
 - [ ] Stage 4: Hard (steps 74–98)
