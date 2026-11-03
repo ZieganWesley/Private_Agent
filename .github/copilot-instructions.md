@@ -36,15 +36,15 @@ failure reporting when extending tools or runtime workflows.
 
 ## Roadmap-driven development
 
-`IMPLEMENTATION_ROADMAP.md` is the target-state vision and feature-priority
-reference; `structured implementation.md` is the dependency-ordered execution
-plan. Treat roadmap capabilities as future direction unless the current code
-proves they are implemented. Use the execution plan's phases and exit gates to
-sequence work, preserve compatibility, and avoid starting downstream
-implementation before its required interfaces and migration paths are ready.
-Do not attempt to implement the whole roadmap in one change unless explicitly
-asked. Update the relevant plan when an explicitly requested scope, dependency,
-migration strategy, or completion gate changes.
+`known_issues.md` holds the review findings and the staged fix roadmap
+(implementation order in section L1). Treat roadmap capabilities as future
+direction unless the current code proves they are implemented. Use its stages
+and per-step "needs first" dependencies to sequence work, preserve
+compatibility, and avoid starting downstream implementation before its
+required interfaces and migration paths are ready. Do not attempt to
+implement the whole roadmap in one change unless explicitly asked. Update
+`known_issues.md` when an explicitly requested scope, dependency, migration
+strategy, or completion gate changes.
 
 Apply the roadmap's privacy-first and enterprise goals without sacrificing
 correctness or resource efficiency. Prefer bounded memory and context,
