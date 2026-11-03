@@ -446,7 +446,10 @@ values win on conflict.
     "max_microphone_device_index": 128,               // Highest microphone index allowed
     "max_image_width": 1280,                          // Image downscale width
     "max_image_height": 720,                          // Image downscale height
-    "jpeg_quality": 85                                // JPEG quality for encoded frames
+    "jpeg_quality": 85,                               // JPEG quality for encoded frames
+    "max_decoded_image_pixels": 20000000,             // Max pixels allowed when decoding an image
+    "max_media_file_bytes": 26214400,                 // Max size of an image/video/audio file (25 MB)
+    "max_video_seconds": 120                          // Max video length analysed
   },
   "skills": {
     "max_name_chars": 64,                             // Skill name length cap

@@ -148,6 +148,9 @@ DEFAULT_CONFIG = {
         "max_image_width": 1280,
         "max_image_height": 720,
         "jpeg_quality": 85,
+        "max_decoded_image_pixels": 20000000,
+        "max_media_file_bytes": 26214400,
+        "max_video_seconds": 120,
     },
     "skills": {
         "max_name_chars": 64,

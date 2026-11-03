@@ -465,3 +465,12 @@ def test_debug_logging_repeated_start_does_not_duplicate_handlers(
     assert (
         sum(record["event"] == "test.single_record" for record in second_records) == 1
     )
+
+
+def test_media_limits_are_in_defaults_and_match_runtime_values():
+    from private_agent import config
+
+    media = config.DEFAULT_CONFIG["media"]
+    assert media["max_decoded_image_pixels"] == 20_000_000
+    assert media["max_media_file_bytes"] == 25 * 1024 * 1024
+    assert media["max_video_seconds"] == 120
