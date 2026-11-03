@@ -6,10 +6,6 @@ import warnings
 
 from .hardware import normalize_acceleration_mode
 
-# --- STRICT OFFLINE ENVIRONMENT ENFORCEMENT ---
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-
 CONFIG_FILE_PATH = pathlib.Path.home() / ".private_agent.conf"
 DEFAULT_SYSTEM_PROMPT_PATH = (
     pathlib.Path(__file__).parent / "resources" / "default_system_prompt.md"

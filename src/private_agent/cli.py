@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 import time
 
 from rich.console import Console
@@ -7,7 +8,14 @@ from rich.console import Console
 console = Console()
 
 
+def enforce_offline_environment() -> None:
+    """Keep Hugging Face libraries from making network requests."""
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+
 def main():
+    enforce_offline_environment()
     parser = argparse.ArgumentParser(
         prog="private-agent",
         description="Run the local-first Private Agent CLI.",

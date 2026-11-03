@@ -1,3 +1,4 @@
+import os
 import sys
 
 from private_agent import cli
@@ -21,3 +22,20 @@ def test_verbose_startup_flag_is_forwarded(monkeypatch):
     cli.main()
 
     assert received == [{"verbose_startup": True}]
+
+
+def test_offline_environment_is_set_at_startup_not_import(monkeypatch):
+    import importlib
+
+    from private_agent import config
+
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
+
+    importlib.reload(config)
+    assert "HF_HUB_OFFLINE" not in os.environ
+    assert "TRANSFORMERS_OFFLINE" not in os.environ
+
+    cli.enforce_offline_environment()
+    assert os.environ["HF_HUB_OFFLINE"] == "1"
+    assert os.environ["TRANSFORMERS_OFFLINE"] == "1"
