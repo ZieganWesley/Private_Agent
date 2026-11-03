@@ -58,3 +58,26 @@ def test_posix_platforms_start_normally(monkeypatch):
     for platform_name in ("linux", "darwin"):
         monkeypatch.setattr(sys, "platform", platform_name)
         cli.ensure_supported_platform()
+
+
+def test_config_flag_sets_config_path_environment(monkeypatch, tmp_path):
+    from private_agent import run_logging
+    from private_agent.agent import runtime
+
+    seen = []
+    custom = str(tmp_path / "custom.conf")
+    monkeypatch.delenv("PRIVATE_AGENT_CONFIG", raising=False)
+    monkeypatch.setattr(sys, "argv", ["private-agent", "--config", custom])
+    monkeypatch.setattr(run_logging, "start_debug_logging", lambda: None)
+    monkeypatch.setattr(run_logging, "log_event", lambda *_a, **_k: None)
+    monkeypatch.setattr(run_logging, "stop_debug_logging", lambda: None)
+    monkeypatch.setattr(
+        runtime,
+        "run_agent_cli",
+        lambda **_kwargs: seen.append(os.environ.get("PRIVATE_AGENT_CONFIG")),
+    )
+
+    cli.main()
+    os.environ.pop("PRIVATE_AGENT_CONFIG", None)
+
+    assert seen == [custom]

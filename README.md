@@ -175,6 +175,10 @@ private-agent
 # After installing, it can also be run with `python -m private_agent`.
 ```
 
+Use `--config PATH` (or the `PRIVATE_AGENT_CONFIG` environment variable) to load
+and create the configuration file at another location instead of
+`~/.private_agent.conf`; the flag takes precedence over the variable.
+
 Pass `--verbose-startup` to show configured paths, saved-memory counts, local
 runtime details, detailed hardware diagnostics, and successful MCP/skill
 discovery messages. The concise Ready summary includes OS/architecture and

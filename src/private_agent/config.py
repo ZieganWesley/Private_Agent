@@ -6,7 +6,20 @@ import warnings
 
 from .hardware import normalize_acceleration_mode
 
-CONFIG_FILE_PATH = pathlib.Path.home() / ".private_agent.conf"
+CONFIG_PATH_ENV_VAR = "PRIVATE_AGENT_CONFIG"
+
+
+def resolve_config_path(environ=None) -> pathlib.Path:
+    """Return the config file path: $PRIVATE_AGENT_CONFIG or ~/.private_agent.conf."""
+    override = (environ if environ is not None else os.environ).get(
+        CONFIG_PATH_ENV_VAR, ""
+    )
+    if override.strip():
+        return pathlib.Path(override.strip()).expanduser().absolute()
+    return pathlib.Path.home() / ".private_agent.conf"
+
+
+CONFIG_FILE_PATH = resolve_config_path()
 DEFAULT_SYSTEM_PROMPT_PATH = (
     pathlib.Path(__file__).parent / "resources" / "default_system_prompt.md"
 )

@@ -43,7 +43,15 @@ def main():
         action="store_true",
         help="Show detailed startup diagnostics and configured paths.",
     )
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="Use this configuration file instead of ~/.private_agent.conf "
+        "(also settable with PRIVATE_AGENT_CONFIG).",
+    )
     args = parser.parse_args()
+    if args.config:
+        os.environ["PRIVATE_AGENT_CONFIG"] = args.config
     originals = []
     exit_code = 0
     from .config import DEBUG_LOG_ENABLED

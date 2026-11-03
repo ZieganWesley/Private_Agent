@@ -474,3 +474,29 @@ def test_media_limits_are_in_defaults_and_match_runtime_values():
     assert media["max_decoded_image_pixels"] == 20_000_000
     assert media["max_media_file_bytes"] == 25 * 1024 * 1024
     assert media["max_video_seconds"] == 120
+
+
+def test_config_path_honours_environment_variable(tmp_path):
+    from private_agent import config
+
+    custom = tmp_path / "custom.conf"
+    assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": str(custom)}) == custom
+    default = pathlib.Path.home() / ".private_agent.conf"
+    assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": "  "}) == default
+    assert config.resolve_config_path({}) == default
+
+
+def test_config_file_can_be_loaded_from_another_path(tmp_path, monkeypatch):
+    from private_agent import config
+
+    custom = tmp_path / "elsewhere.conf"
+    monkeypatch.setattr(
+        config,
+        "CONFIG_FILE_PATH",
+        config.resolve_config_path({"PRIVATE_AGENT_CONFIG": str(custom)}),
+    )
+
+    settings = load_or_create_config()
+
+    assert custom.exists()
+    assert settings["agent"] == config.DEFAULT_CONFIG["agent"]
