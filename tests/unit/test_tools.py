@@ -1,28 +1,29 @@
-import pytest
 import asyncio
 import subprocess
 import sys
 import types
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from rich.console import Console
 
-from private_agent.sandbox import SandboxManager, evaluate_shell_command
-from private_agent.tools import (
-    read_local_file,
-    edit_local_file,
-    run_shell_command,
-    download_web_file,
-    load_mcp_tools,
-    load_configured_mcp_tools,
-    describe_tool_catalog,
-    get_local_datetime,
-    close_outbound_http_clients,
-    close_mcp_sandbox_dirs,
-    ollama_client_kwargs,
-    ollama_langchain_client_kwargs,
-)
 from private_agent.agent import (
     execute_tool_call,
+)
+from private_agent.sandbox import SandboxManager, evaluate_shell_command
+from private_agent.tools import (
+    close_mcp_sandbox_dirs,
+    close_outbound_http_clients,
+    describe_tool_catalog,
+    download_web_file,
+    edit_local_file,
+    get_local_datetime,
+    load_configured_mcp_tools,
+    load_mcp_tools,
+    ollama_client_kwargs,
+    ollama_langchain_client_kwargs,
+    read_local_file,
+    run_shell_command,
 )
 
 try:
@@ -342,8 +343,7 @@ def test_workspace_symbol_search_finds_supported_declarations(temp_workspace):
 def test_workspace_symbol_search_is_bounded_and_rejects_unsafe_patterns(
     temp_workspace, monkeypatch
 ):
-    import private_agent.tools.filesystem as filesystem
-    from private_agent.tools import search_workspace_symbols
+    from private_agent.tools import filesystem, search_workspace_symbols
 
     source = temp_workspace / "app.py"
     source.write_text(
@@ -404,8 +404,7 @@ def test_workspace_image_input_validates_path_and_size(temp_workspace, monkeypat
 def test_workspace_image_input_normalizes_and_consumes_single_use_image(
     temp_workspace, monkeypatch
 ):
-    from private_agent.tools import load_workspace_image
-    import private_agent.tools.media as media
+    from private_agent.tools import load_workspace_image, media
 
     image_path = temp_workspace / "source.png"
     image_path.write_bytes(b"fake image bytes")
@@ -693,8 +692,7 @@ def test_workspace_mutations_fail_closed_without_secure_os_support(
 def test_workspace_rename_does_not_overwrite_racing_destination(
     temp_workspace, monkeypatch
 ):
-    from private_agent.tools import rename_workspace_file
-    import private_agent.tools.filesystem as filesystem
+    from private_agent.tools import filesystem, rename_workspace_file
 
     source = temp_workspace / "source.txt"
     source.write_text("source", encoding="utf-8")
@@ -887,7 +885,7 @@ def test_shell_command_requires_explicit_approval(temp_workspace):
 
 
 def test_tool_catalog_shows_origin_permissions_and_effects(monkeypatch):
-    import private_agent.tools as tools
+    from private_agent import tools
 
     monkeypatch.setattr(
         tools,
@@ -934,7 +932,7 @@ def test_local_datetime_tool_is_listed_as_read_only():
 
 
 def test_workspace_symbol_tool_is_registered_as_read_only():
-    import private_agent.tools as tools
+    from private_agent import tools
 
     assert tools.AVAILABLE_TOOLS["search_workspace_symbols"] is (
         tools.search_workspace_symbols
@@ -949,7 +947,7 @@ def test_workspace_symbol_tool_is_registered_as_read_only():
 
 
 def test_workspace_media_tools_are_registered_as_local_approved_tools():
-    import private_agent.tools as tools
+    from private_agent import tools
 
     for name in ("load_workspace_video", "transcribe_workspace_audio"):
         assert name in tools.AVAILABLE_TOOLS
@@ -989,6 +987,7 @@ def test_unavailable_ollama_returns_no_models_without_raising(monkeypatch):
 
 def test_agent_current_datetime_context_includes_local_date_and_timezone():
     from datetime import datetime
+
     from private_agent.agent import _current_datetime_context
 
     context = _current_datetime_context()
@@ -1001,7 +1000,9 @@ def test_agent_current_datetime_context_includes_local_date_and_timezone():
 
 def test_tool_catalog_compactly_separates_names_descriptions_and_boundaries():
     import io
+
     from rich.console import Console as RichConsole
+
     from private_agent.agent import _print_tool_catalog
 
     output = io.StringIO()
@@ -1068,7 +1069,9 @@ def test_override_tool_list_includes_platform_filtered_tools():
 
 def test_tool_catalog_marks_overridden_unavailable_entries_red_and_struck_out():
     import io
+
     from rich.console import Console as RichConsole
+
     from private_agent.agent import _print_tool_catalog
 
     output = io.StringIO()
@@ -1191,6 +1194,7 @@ async def test_live_mcp_transports_close_connections_after_discovery_and_calls(
 
     import uvicorn
     from mcp.server.fastmcp import FastMCP
+
     import private_agent.tools.mcp as mcp_module
     from private_agent.tools.network import mcp_http_client_factory
 
@@ -1261,7 +1265,8 @@ def test_ollama_client_kwargs_use_pinned_transports():
 
 def test_langchain_ollama_clients_are_tracked_and_closed():
     from langchain_ollama import ChatOllama, OllamaEmbeddings
-    import private_agent.tools as tools
+
+    from private_agent import tools
 
     chat = ChatOllama(
         model="test",
@@ -1367,12 +1372,11 @@ async def test_mcp_stdio_sandbox_is_removed_when_client_initialization_fails(
                 "langchain_mcp_adapters": parent,
                 "langchain_mcp_adapters.client": adapter,
             },
-        ):
-            with pytest.raises(RuntimeError, match="Failed to load MCP server"):
-                await load_configured_mcp_tools(
-                    "broken-stdio",
-                    {"transport": "stdio", "command": "python", "args": ["server.py"]},
-                )
+        ), pytest.raises(RuntimeError, match="Failed to load MCP server"):
+            await load_configured_mcp_tools(
+                "broken-stdio",
+                {"transport": "stdio", "command": "python", "args": ["server.py"]},
+            )
         assert not sandbox_dir.exists()
         assert str(sandbox_dir) not in mcp_module._mcp_sandbox_dirs
     finally:
@@ -1414,12 +1418,11 @@ async def test_mcp_stdio_sandbox_is_removed_when_tool_discovery_fails(
                 "langchain_mcp_adapters": parent,
                 "langchain_mcp_adapters.client": adapter,
             },
-        ):
-            with pytest.raises(RuntimeError, match="Failed to load MCP server"):
-                await load_configured_mcp_tools(
-                    "failed-discovery",
-                    {"transport": "stdio", "command": "python", "args": ["server.py"]},
-                )
+        ), pytest.raises(RuntimeError, match="Failed to load MCP server"):
+            await load_configured_mcp_tools(
+                "failed-discovery",
+                {"transport": "stdio", "command": "python", "args": ["server.py"]},
+            )
         assert not sandbox_dir.exists()
         assert str(sandbox_dir) not in mcp_module._mcp_sandbox_dirs
     finally:

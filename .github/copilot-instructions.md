@@ -3,8 +3,8 @@
 ## Project shape
 
 Private Agent is a local-first Python CLI built around Ollama, SQLite, and a
-workspace-scoped tool system. The entry points `main.py`, `python -m
-private_agent`, and the `private-agent` console script all lead to
+workspace-scoped tool system. The entry points `python -m private_agent` and the
+`private-agent` console script both lead to
 `private_agent.cli:main`.
 
 `src/private_agent/agent/runtime.py` orchestrates startup, provider/model
@@ -36,15 +36,15 @@ failure reporting when extending tools or runtime workflows.
 
 ## Roadmap-driven development
 
-`IMPLEMENTATION_ROADMAP.md` is the target-state vision and feature-priority
-reference; `structured implementation.md` is the dependency-ordered execution
-plan. Treat roadmap capabilities as future direction unless the current code
-proves they are implemented. Use the execution plan's phases and exit gates to
-sequence work, preserve compatibility, and avoid starting downstream
-implementation before its required interfaces and migration paths are ready.
-Do not attempt to implement the whole roadmap in one change unless explicitly
-asked. Update the relevant plan when an explicitly requested scope, dependency,
-migration strategy, or completion gate changes.
+`known_issues.md` holds the review findings and the staged fix roadmap
+(implementation order in section L1). Treat roadmap capabilities as future
+direction unless the current code proves they are implemented. Use its stages
+and per-step "needs first" dependencies to sequence work, preserve
+compatibility, and avoid starting downstream implementation before its
+required interfaces and migration paths are ready. Do not attempt to
+implement the whole roadmap in one change unless explicitly asked. Update
+`known_issues.md` when an explicitly requested scope, dependency, migration
+strategy, or completion gate changes.
 
 Apply the roadmap's privacy-first and enterprise goals without sacrificing
 correctness or resource efficiency. Prefer bounded memory and context,
@@ -97,8 +97,8 @@ Install the package and development tools with:
 python -m pip install -e ".[dev]"
 ```
 
-Run the CLI with `python main.py`, `python -m private_agent`, or (after
-installation) `private-agent`.
+Run the CLI with `python -m private_agent` or `private-agent` (both need the
+package installed).
 
 The tests use pytest and mock model/services, so they do not require Ollama,
 network access, or a GPU:
@@ -118,18 +118,14 @@ Run the documented lint check with:
 ruff check src tests --select F
 ```
 
-Runtime dependencies are declared in `pyproject.toml`; `requirements.txt` is
-generated from that list. After changing runtime dependencies, run
-`python scripts/sync_requirements.py`; use `python scripts/sync_requirements.py
---check` to verify they match. RAG retrieval can be benchmarked with
+Runtime dependencies are declared only in `pyproject.toml`. RAG retrieval can be benchmarked with
 `python scripts/benchmark_rag.py` (see the README for required arguments and
 Ollama setup).
 
 ## Repository conventions
 
 - Add runtime dependencies to `[project].dependencies` in `pyproject.toml`,
-  then regenerate `requirements.txt` with the sync script. Development and
-  optional media dependencies belong in their existing optional-dependency
+  Development and optional media dependencies belong in their existing optional-dependency
   groups.
 - Add configuration defaults to the appropriate section of `DEFAULT_CONFIG`
   in `config.py`; preserve the existing categorized configuration and legacy

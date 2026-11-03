@@ -29,7 +29,7 @@ an online provider or an online research request.
 ## Core Functionality and Operational Behaviour
 
 **Session flow.** `private-agent` loads `~/.private_agent.conf`, discovers
-reachable local inference runtimes on supported desktop platforms (Ollama,
+reachable local inference runtimes (Ollama,
 LM Studio, and configured loopback OpenAI-compatible servers such as llama.cpp), locks the
 workspace root, asks for a session permission mode, then asks for an available
 provider and model. If no local runtime is found, online mode is the default.
@@ -122,7 +122,8 @@ reports that in the current session rather than restarting it.
   through a tool.
 - **MCP**: stdio (sandboxed) and remote HTTP MCP servers configured in the
   config file, with an auto-approve allow-list for trusted tools.
-- **Interactive CLI**: command and `@file` auto-completion, session-wide prompt
+- **Interactive CLI**: command and `@file` auto-completion, multi-line input (Alt+Enter or
+  Ctrl+J adds a new line; Enter sends), session-wide prompt
   history, `/help`, `/status`, `/context`, `/add`, `/list_tools`,
   `/maintenance`, `/plan`, `/tasks`, `/skills`, `switch`,
   `exit`, compact startup counts for memory and saved plans.
@@ -136,7 +137,8 @@ reports that in the current session rather than restarting it.
 
 Requirements: Python 3.10–3.14 (validated on 3.14), at least one supported
 local runtime or an online OpenAI-compatible endpoint. Local runtime discovery
-uses loopback APIs and is available across desktop platforms. On Linux,
+uses loopback APIs. Supported platforms are Linux, macOS and WSL2; native
+Windows is not supported and exits with a pointer to WSL. On Linux,
 `bubblewrap` (`bwrap`) plus `util-linux` (`prlimit`) are required for shell,
 code-task tests and stdio MCP (these features are disabled, not unsandboxed,
 without them).
@@ -170,9 +172,12 @@ ollama pull nomic-embed-text  # needed only for RAG
 # 3. Run the installed command from the project you want it to work on
 cd /path/to/your/project
 private-agent
-# The source checkout can also be run with `python main.py` or
-# `python -m private_agent`.
+# After installing, it can also be run with `python -m private_agent`.
 ```
+
+Use `--config PATH` (or the `PRIVATE_AGENT_CONFIG` environment variable) to load
+and create the configuration file at another location instead of
+`~/.private_agent.conf`; the flag takes precedence over the variable.
 
 Pass `--verbose-startup` to show configured paths, saved-memory counts, local
 runtime details, detailed hardware diagnostics, and successful MCP/skill
@@ -245,18 +250,6 @@ every failed test by node ID. Pytest also prints failure details and warnings.
 
 With `uv`, use `uv run pytest -q`.
 
-### Sync requirements (`scripts/sync_requirements.py`)
-
-`pyproject.toml` (`[project].dependencies`) is the single source of truth for
-runtime dependencies. `requirements.txt` is generated from it so the two never
-drift. Run the script after adding, removing or re-pinning a dependency:
-
-```sh
-python scripts/sync_requirements.py            # regenerate requirements.txt
-python scripts/sync_requirements.py --check    # verify only; exit 1 if out of date (use in CI)
-```
-
-On Python < 3.11 the script needs `tomli` (included in the `dev` extra).
 
 ### RAG retrieval benchmark (`scripts/benchmark_rag.py`)
 
@@ -347,7 +340,7 @@ values win on conflict.
   },
   "models": {
     "ollama_base_url": "http://localhost:11434",      // Ollama server URL
-    "local_openai_compatible_endpoints": [            // Loopback local APIs discovered on supported desktop platforms
+    "local_openai_compatible_endpoints": [            // Loopback local APIs discovered at startup
       {"name": "LM Studio", "base_url": "http://127.0.0.1:1234/v1"},
       {"name": "llama.cpp", "base_url": "http://127.0.0.1:8080/v1"}
     ],
@@ -457,7 +450,10 @@ values win on conflict.
     "max_microphone_device_index": 128,               // Highest microphone index allowed
     "max_image_width": 1280,                          // Image downscale width
     "max_image_height": 720,                          // Image downscale height
-    "jpeg_quality": 85                                // JPEG quality for encoded frames
+    "jpeg_quality": 85,                               // JPEG quality for encoded frames
+    "max_decoded_image_pixels": 20000000,             // Max pixels allowed when decoding an image
+    "max_media_file_bytes": 26214400,                 // Max size of an image/video/audio file (25 MB)
+    "max_video_seconds": 120                          // Max video length analysed
   },
   "skills": {
     "max_name_chars": 64,                             // Skill name length cap
@@ -496,6 +492,46 @@ events record operational metadata rather than prompt, result, or argument
 bodies. Captured exception details redact known credential patterns and
 argument values echoed by tools.
 
+### MCP server examples (calendar, notes, email, reminders)
+
+Personal tools are not built in; add them as MCP servers under `mcp.servers`.
+The server names below are placeholders; replace the URLs with a server you
+trust and run yourself. The config shape matches what the loader validates.
+
+**Remote servers (`streamable_http` or `sse`)** are the right choice for
+calendar, email and reminders, because they hold your account credentials
+outside the agent. Only `http`/`https` URLs are accepted, without embedded
+credentials, and the host must resolve to a public or loopback address (other
+private addresses are rejected):
+
+```json
+"mcp": {
+  "auto_approve_tools": [],
+  "servers": {
+    "calendar":  {"transport": "streamable_http", "url": "https://calendar-mcp.example.com/mcp"},
+    "reminders": {"transport": "sse", "url": "https://reminders-mcp.example.com/sse", "timeout": 30}
+  }
+}
+```
+
+**Local stdio servers** (for example a notes or memory server) start inside
+the Bubblewrap sandbox with **no network access** and only an empty temporary
+folder visible, so they cannot read your home folder, notes directory or mail.
+They suit self-contained tools whose runtime lives under `/usr`:
+
+```json
+"mcp": {
+  "servers": {
+    "notes": {"transport": "stdio", "command": "/usr/bin/my-notes-mcp", "args": ["--stdio"], "env": {"NOTES_MODE": "scratch"}}
+  }
+}
+```
+
+Notes on both forms: `timeout` and `sse_read_timeout` must be between 0.1 and
+120 seconds; a failing server is reported and skipped without stopping the
+others; tools run only after approval unless their names are listed in
+`auto_approve_tools`.
+
 ## Source Layout
 
 `src/private_agent/`: `cli.py` (entry point), `config.py`, `agent/`
@@ -504,30 +540,4 @@ argument values echoed by tools.
 media, memory, planning, schemas), `database/memory.py` (SQLite),
 `rag/` (indexing, retrieval, citations), `skills/`, `sandbox/` (Linux
 isolation), `code_tasks/` (workspaces, checkpoints, tests), `hardware/`.
-`main.py` is a source-checkout launcher; `scripts/` holds
-`benchmark_rag.py` and `sync_requirements.py`; tests are in `tests/`.
-
-## 🤝 Contributing
-
-Contributions are welcome from anyone and open-source contributors of all experience levels.
-
-Whether you want to:
-
-- Fix bugs
-- Improve documentation
-- Add new tools or integrations
-- Enhance security controls
-- Improve agent capabilities
-- Add MCP-compatible services
-- Optimize performance
-- Expand test coverage
-
-Your contributions are appreciated.
-
-### Getting Started
-
-1. Fork the repository.
-2. Create a feature branch.
-
-```bash
-git checkout -b feature/my-feature
+`scripts/` holds `benchmark_rag.py`; tests are in `tests/`.

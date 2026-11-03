@@ -1,9 +1,9 @@
 import sys
 import types
-from unittest.mock import patch, MagicMock
-from rich.console import Console
+from unittest.mock import MagicMock, patch
 
 import pytest
+from rich.console import Console
 
 try:
     from private_agent.agent import get_robust_chat_model
@@ -26,12 +26,12 @@ except ImportError:
 
 from private_agent.tools.media import (
     capture_webcam_image,
+    captured_image_message,
+    consume_captured_image,
     list_microphone_devices,
     load_workspace_video,
     record_microphone_audio,
     transcribe_workspace_audio,
-    consume_captured_image,
-    captured_image_message,
 )
 
 console = Console()
@@ -135,7 +135,7 @@ def test_microphone_transcription_uses_local_model_without_downloading(
 
 
 def test_workspace_video_sampling_is_bounded_and_transient(monkeypatch, temp_workspace):
-    import private_agent.tools.media as media
+    from private_agent.tools import media
 
     video_path = temp_workspace / "clip.mp4"
     video_path.write_bytes(b"bounded mock video")
@@ -206,12 +206,11 @@ def test_workspace_audio_file_is_bounded_and_transcribed_locally(
     import wave
 
     audio_path = temp_workspace / "speech.wav"
-    with audio_path.open("wb") as raw_audio:
-        with wave.open(raw_audio, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)
-            wav_file.setframerate(16000)
-            wav_file.writeframes(b"\0\0" * 16000)
+    with audio_path.open("wb") as raw_audio, wave.open(raw_audio, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\0\0" * 16000)
 
     def transcribe(audio_file):
         assert isinstance(audio_file, io.BytesIO)
@@ -229,7 +228,6 @@ def test_workspace_audio_rejects_unsupported_and_oversized_inputs(
     monkeypatch, temp_workspace
 ):
     from private_agent.config import MAX_MEDIA_FILE_BYTES
-
     from private_agent.tools.media import transcribe_workspace_audio
 
     assert "PCM WAV files only" in transcribe_workspace_audio.invoke(
@@ -322,8 +320,9 @@ def test_workspace_video_rejects_oversized_frame_before_decoding(
 
 
 def test_runtime_attaches_every_transient_video_frame(monkeypatch):
-    import private_agent.agent.runtime as agent
     from langchain_core.messages import HumanMessage, ToolMessage
+
+    import private_agent.agent.runtime as agent
 
     references = [f"video-image:{index:032x}" for index in range(3)]
     attached = []
@@ -448,8 +447,9 @@ async def test_workspace_video_requires_vision_capability(monkeypatch):
 
 
 def test_webcam_tool_failure_is_reported_without_model_retry():
-    import private_agent.agent.runtime as agent
     from langchain_core.messages import ToolMessage
+
+    import private_agent.agent.runtime as agent
 
     error = agent._local_image_input_error(
         [{"name": "capture_webcam_image", "id": "camera-failed"}],

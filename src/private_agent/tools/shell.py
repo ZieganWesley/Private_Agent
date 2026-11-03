@@ -71,6 +71,7 @@ def run_shell_command(command: str) -> str:
         result = subprocess.run(
             isolated_command,
             shell=False,
+            check=False,
             capture_output=True,
             text=True,
             timeout=SHELL_COMMAND_TIMEOUT,

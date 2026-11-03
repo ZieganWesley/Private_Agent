@@ -1,31 +1,32 @@
-import pytest
 import asyncio
 import sys
 import types
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from rich.console import Console
 
-from private_agent.tools import (
-    download_web_file,
-    load_configured_mcp_tools,
-    check_internet_connection,
-    validate_outbound_url,
-    _get_limited_response,
-    _PublicOnlyNetworkBackend,
-    _PublicOnlySyncHTTPTransport,
-    _PublicOnlyAsyncHTTPTransport,
-    close_outbound_http_clients,
-    _search_duckduckgo,
-    _validate_explicit_service_url,
-)
-from private_agent.tools import network as network_tools
 from private_agent.agent import (
-    _online_request_failure,
-    execute_tool_call,
-    _validate_online_base_url,
     _make_online_chat_model,
+    _online_request_failure,
+    _validate_online_base_url,
+    execute_tool_call,
     select_online_model,
 )
+from private_agent.tools import (
+    _get_limited_response,
+    _PublicOnlyAsyncHTTPTransport,
+    _PublicOnlyNetworkBackend,
+    _PublicOnlySyncHTTPTransport,
+    _search_duckduckgo,
+    _validate_explicit_service_url,
+    check_internet_connection,
+    close_outbound_http_clients,
+    download_web_file,
+    load_configured_mcp_tools,
+    validate_outbound_url,
+)
+from private_agent.tools import network as network_tools
 
 try:
     from private_agent.agent import get_robust_chat_model
@@ -122,6 +123,7 @@ def test_outbound_url_rejects_domains_resolving_to_private_addresses(monkeypatch
 
 def test_resolver_child_timeout_is_bounded_and_reported(monkeypatch):
     import subprocess
+
     import httpcore
 
     run = MagicMock(side_effect=subprocess.TimeoutExpired("resolver", 0.025))
@@ -135,8 +137,9 @@ def test_resolver_child_timeout_is_bounded_and_reported(monkeypatch):
 
 
 def test_stalled_system_dns_child_is_terminated_within_deadline(monkeypatch):
-    import httpcore
     import time
+
+    import httpcore
 
     monkeypatch.setattr(
         network_tools,
@@ -189,8 +192,9 @@ async def test_async_resolver_kills_and_reaps_child_on_timeout(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stalled_async_dns_child_is_terminated_within_deadline(monkeypatch):
-    import httpcore
     import time
+
+    import httpcore
 
     monkeypatch.setattr(
         network_tools,
@@ -423,9 +427,10 @@ async def test_real_http_transport_blocks_private_dns_results(
 
 
 def test_real_sync_http_transport_blocks_private_dns_results(monkeypatch):
-    import httpx
     import socket
     import threading
+
+    import httpx
 
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
@@ -451,13 +456,15 @@ def test_real_sync_http_transport_blocks_private_dns_results(monkeypatch):
     )
 
     try:
-        with httpx.Client(
-            transport=_PublicOnlySyncHTTPTransport(),
-            follow_redirects=False,
-            trust_env=False,
-        ) as client:
-            with pytest.raises(OSError, match="non-public"):
-                client.get(f"http://public.example.test:{port}/")
+        with (
+            httpx.Client(
+                transport=_PublicOnlySyncHTTPTransport(),
+                follow_redirects=False,
+                trust_env=False,
+            ) as client,
+            pytest.raises(OSError, match="non-public"),
+        ):
+            client.get(f"http://public.example.test:{port}/")
         assert not connected.is_set()
     finally:
         listener.close()
@@ -501,7 +508,7 @@ async def test_http_response_size_limit_is_enforced(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_http_total_timeout_releases_concurrency_slot(monkeypatch):
-    import private_agent.tools as tools
+    from private_agent import tools
 
     class SlowClient:
         def stream(self, *args, **kwargs):
@@ -532,7 +539,8 @@ async def test_http_total_timeout_releases_concurrency_slot(monkeypatch):
 @pytest.mark.asyncio
 async def test_async_request_timeout_cancels_dns_validation(monkeypatch):
     import httpcore
-    import private_agent.tools as tools
+
+    from private_agent import tools
 
     cancelled = asyncio.Event()
 
@@ -712,6 +720,7 @@ def test_online_model_listing_uses_safe_transport_and_session_key(monkeypatch):
 
 def test_online_model_authentication_failure_is_redacted(monkeypatch):
     import httpx
+
     import private_agent.agent.runtime as agent
 
     class FakeResponse:
@@ -840,7 +849,7 @@ def test_mcp_http_transport_uses_pinned_client_factory(monkeypatch):
 
 
 def test_explicit_endpoint_blocks_private_hostname_resolution(monkeypatch):
-    import private_agent.tools as tools
+    from private_agent import tools
 
     monkeypatch.setattr(
         "private_agent.tools.network._getaddrinfo_with_timeout",
@@ -1022,3 +1031,27 @@ def test_online_permission_override_can_decline_tool_call_limits(monkeypatch):
 
     assert selected["allow_tools"] is True
     assert selected["enforce_tool_call_limits"] is False
+
+
+def test_internet_check_is_cached_for_repeated_offline_calls(monkeypatch):
+    from private_agent import tools
+
+    calls = []
+    clock = [1000.0]
+
+    def probe(*_args):
+        calls.append(1)
+        return False
+
+    monkeypatch.setattr(tools, "check_internet_connection", probe)
+    monkeypatch.setattr(tools.time, "monotonic", lambda: clock[0])
+    tools.reset_internet_check_cache()
+    try:
+        assert [tools.has_internet_connection() for _ in range(5)] == [False] * 5
+        assert len(calls) == 1
+
+        clock[0] += 31
+        assert tools.has_internet_connection() is False
+        assert len(calls) == 2
+    finally:
+        tools.reset_internet_check_cache()

@@ -4,14 +4,16 @@ import os
 import re
 import shlex
 import sys
+from collections.abc import Mapping
 from itertools import islice
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.history import History
+from prompt_toolkit.key_binding import KeyBindings
 
 from ..config import MAX_READ_FILE_BYTES
 from ..sandbox import SandboxManager
@@ -214,6 +216,18 @@ class AgentCompleter(Completer):
                 break
 
 
+def build_prompt_key_bindings() -> KeyBindings:
+    """Enter submits; Alt+Enter (or Ctrl+J) inserts a newline."""
+    bindings = KeyBindings()
+
+    @bindings.add("escape", "enter")
+    @bindings.add("c-j")
+    def _insert_newline(event) -> None:
+        event.current_buffer.insert_text("\n")
+
+    return bindings
+
+
 async def prompt_user_input(
     console: Any,
     workspace_root: Path,
@@ -228,6 +242,7 @@ async def prompt_user_input(
         complete_while_typing=True,
         enable_history_search=True,
         history=history,
+        key_bindings=build_prompt_key_bindings(),
     )
     return await session.prompt_async(ANSI("\x1b[1;34m" + prompt_message + "\x1b[0m"))
 

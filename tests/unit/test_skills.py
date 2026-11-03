@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
-from rich.console import Console
 
 import pytest
+from rich.console import Console
 
 from private_agent.tools import (
     create_skill,
@@ -98,7 +98,7 @@ def test_create_skill_tool_rejects_path_traversal_and_existing_files(tmp_path):
 @pytest.mark.asyncio
 async def test_skill_creation_requires_interactive_approval(monkeypatch, tmp_path):
     import private_agent.agent.runtime as agent
-    import private_agent.tools as tools
+    from private_agent import tools
 
     registry = {}
     set_active_skill_runtime(str(tmp_path / "skills"), registry)

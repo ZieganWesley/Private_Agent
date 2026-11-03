@@ -15,15 +15,14 @@ from collections.abc import Iterable
 import httpcore
 import httpx
 from bs4 import BeautifulSoup
-from rich.console import Console
-
 from httpcore._backends.base import (
+    SOCKET_OPTION,
     AsyncNetworkBackend,
     AsyncNetworkStream,
     NetworkBackend,
     NetworkStream,
-    SOCKET_OPTION,
 )
+from rich.console import Console
 
 from ..config import (
     MAX_HTTP_REDIRECTS,

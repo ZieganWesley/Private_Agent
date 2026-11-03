@@ -5,7 +5,7 @@ import json
 import re
 import urllib.parse
 from datetime import date, datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from langchain_core.tools import tool
 
@@ -73,7 +73,7 @@ def _run(coroutine):
     return asyncio.run(coroutine)
 
 
-async def _get_json_async(url: str, params: Optional[dict] = None) -> Any:
+async def _get_json_async(url: str, params: dict | None = None) -> Any:
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
     async with _public_only_async_client(
@@ -86,11 +86,11 @@ async def _get_json_async(url: str, params: Optional[dict] = None) -> Any:
     return json.loads(body.decode(encoding, errors="replace"))
 
 
-def _get_json(url: str, params: Optional[dict] = None) -> Any:
+def _get_json(url: str, params: dict | None = None) -> Any:
     return _run(_get_json_async(url, params))
 
 
-def _number(value: Any) -> Optional[float]:
+def _number(value: Any) -> float | None:
     return (
         float(value)
         if isinstance(value, (int, float)) and not isinstance(value, bool)
@@ -98,7 +98,7 @@ def _number(value: Any) -> Optional[float]:
     )
 
 
-def _parse_ip_location(payload: Any, service: str) -> Optional[dict]:
+def _parse_ip_location(payload: Any, service: str) -> dict | None:
     if (
         not isinstance(payload, dict)
         or payload.get("success") is False
@@ -187,7 +187,7 @@ def _geocode(place: str) -> dict:
 
 
 def resolve_weather_dates(
-    start: Optional[str], days: int, *, today: Optional[date] = None
+    start: str | None, days: int, *, today: date | None = None
 ) -> tuple[date, date]:
     """Validate the requested date range; raises ValueError with a clear reason."""
     today = today or date.today()
@@ -208,7 +208,7 @@ def resolve_weather_dates(
     return first, last
 
 
-def _parse_time(value: Optional[str]) -> Optional[int]:
+def _parse_time(value: str | None) -> int | None:
     if not value:
         return None
     match = re.fullmatch(r"([01]?\d|2[0-3])(?::([0-5]\d))?", value.strip())
@@ -227,7 +227,7 @@ def format_weather(
     payload: dict,
     first: date,
     last: date,
-    hour: Optional[int],
+    hour: int | None,
     today: date,
 ) -> str:
     daily = payload.get("daily") or {}
@@ -286,7 +286,7 @@ def format_weather(
 
 
 def fetch_weather(
-    location: dict, first: date, last: date, hour: Optional[int], today: date
+    location: dict, first: date, last: date, hour: int | None, today: date
 ) -> str:
     daily = [
         "weather_code",
@@ -323,9 +323,9 @@ def fetch_weather(
 
 @tool(args_schema=GetWeatherInput)
 def get_weather(
-    location: Optional[str] = None,
-    date: Optional[str] = None,
-    time: Optional[str] = None,
+    location: str | None = None,
+    date: str | None = None,
+    time: str | None = None,
     days: int = 1,
 ) -> str:
     """Get weather for a place on a date: history (past days/weeks), today, or a forecast up to 16 days ahead. Omit location to use the current location (Local sessions only)."""

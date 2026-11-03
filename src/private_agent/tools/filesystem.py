@@ -1,7 +1,7 @@
 """Workspace-bounded file and directory tools."""
 
-import fnmatch
 import difflib
+import fnmatch
 import os
 import re
 import selectors
@@ -20,9 +20,9 @@ from ..config import (
 )
 from ..sandbox import SandboxManager
 from .schemas import (
-    EditFileInput,
     ApplyWorkspacePatchInput,
     DeleteWorkspaceFileInput,
+    EditFileInput,
     InspectWorkspaceGitInput,
     ListDirInput,
     PreviewWorkspacePatchInput,

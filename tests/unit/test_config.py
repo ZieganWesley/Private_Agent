@@ -2,6 +2,7 @@ import json
 import pathlib
 import stat
 from unittest.mock import MagicMock
+
 import pytest
 
 from private_agent.config import load_or_create_config
@@ -18,7 +19,7 @@ def test_malformed_config_handling(tmp_path, monkeypatch):
 
 
 def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch):
-    import private_agent.run_logging as run_logging
+    from private_agent import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(
@@ -39,13 +40,13 @@ def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch)
 
 
 def test_config_uses_per_user_home_path():
-    import private_agent.config as config
+    from private_agent import config
 
     assert config.CONFIG_FILE_PATH == pathlib.Path.home() / ".private_agent.conf"
 
 
 def test_config_creates_private_default_file(tmp_path, monkeypatch):
-    import private_agent.config as config
+    from private_agent import config
 
     config_path = tmp_path / ".private_agent.conf"
     monkeypatch.setattr(config, "CONFIG_FILE_PATH", config_path)
@@ -68,7 +69,7 @@ def test_config_creates_private_default_file(tmp_path, monkeypatch):
 def test_default_system_prompt_is_loaded_from_packaged_resource_and_configured(
     tmp_path, monkeypatch
 ):
-    import private_agent.config as config
+    from private_agent import config
 
     config_path = tmp_path / ".private_agent.conf"
     monkeypatch.setattr(config, "CONFIG_FILE_PATH", config_path)
@@ -82,7 +83,7 @@ def test_default_system_prompt_is_loaded_from_packaged_resource_and_configured(
 
 
 def test_custom_system_prompt_is_preserved_in_user_config(tmp_path, monkeypatch):
-    import private_agent.config as config
+    from private_agent import config
 
     config_path = tmp_path / ".private_agent.conf"
     config_path.write_text(
@@ -101,7 +102,7 @@ def test_custom_system_prompt_is_preserved_in_user_config(tmp_path, monkeypatch)
 
 
 def test_empty_system_prompt_is_replaced_with_packaged_default():
-    import private_agent.config as config
+    from private_agent import config
 
     settings = config._merge_config({"agent": {"system_prompt": "  "}})
 
@@ -109,7 +110,7 @@ def test_empty_system_prompt_is_replaced_with_packaged_default():
 
 
 def test_categorized_config_preserves_legacy_keys_and_prefers_category_values():
-    import private_agent.config as config
+    from private_agent import config
 
     merged = config._merge_config(
         {
@@ -127,7 +128,7 @@ def test_categorized_config_preserves_legacy_keys_and_prefers_category_values():
 
 
 def test_categorized_config_maps_legacy_flat_settings():
-    import private_agent.config as config
+    from private_agent import config
 
     merged = config._merge_config(
         {
@@ -143,7 +144,7 @@ def test_categorized_config_maps_legacy_flat_settings():
 
 
 def test_categorized_online_api_key_has_legacy_runtime_alias():
-    import private_agent.config as config
+    from private_agent import config
 
     merged = config._merge_config({"models": {"online_api_key": "configured-test-key"}})
 
@@ -152,7 +153,7 @@ def test_categorized_online_api_key_has_legacy_runtime_alias():
 
 
 def test_merge_config_migrates_old_default_rag_and_skills_paths():
-    import private_agent.config as config
+    from private_agent import config
 
     merged = config._merge_config(
         {
@@ -175,7 +176,7 @@ def test_merge_config_migrates_old_default_rag_and_skills_paths():
 
 
 def test_override_tool_list_is_loaded_as_tool_names():
-    import private_agent.config as config
+    from private_agent import config
 
     assert config.OVERRIDE_TOOL_LIST == frozenset(
         config.APP_CONFIG["tools"]["override_tool_list"]
@@ -183,7 +184,7 @@ def test_override_tool_list_is_loaded_as_tool_names():
 
 
 def test_config_paths_are_home_anchored_and_tilde_expanded(tmp_path, monkeypatch):
-    import private_agent.config as config
+    from private_agent import config
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -198,7 +199,7 @@ def test_config_paths_are_home_anchored_and_tilde_expanded(tmp_path, monkeypatch
 
 
 def test_runtime_limits_read_categorized_config_and_validate_ranges(monkeypatch):
-    import private_agent.config as config
+    from private_agent import config
 
     monkeypatch.setattr(
         config,
@@ -217,7 +218,7 @@ def test_runtime_limits_read_categorized_config_and_validate_ranges(monkeypatch)
 def test_streaming_output_configuration_parses_boolean_values(
     monkeypatch, value, expected
 ):
-    import private_agent.config as config
+    from private_agent import config
 
     monkeypatch.setattr(config, "APP_CONFIG", {"agent": {"streaming_output": value}})
 
@@ -225,7 +226,7 @@ def test_streaming_output_configuration_parses_boolean_values(
 
 
 def test_visible_reasoning_configuration_defaults_off_and_accepts_legacy_name():
-    import private_agent.config as config
+    from private_agent import config
 
     assert config.DEFAULT_CONFIG["agent"]["visible_reasoning"] is False
     assert (
@@ -262,24 +263,19 @@ def test_loading_legacy_config_migrates_it_to_categorized_sections(
 
 
 def test_debug_log_config_defaults_off(tmp_path, monkeypatch):
-    import private_agent.config as config
+    from private_agent import config
 
     monkeypatch.setattr(config, "CONFIG_FILE_PATH", tmp_path / ".private_agent.conf")
     assert load_or_create_config()["DEBUG_LOG_ENABLED"] == 0
 
 
 def test_logging_console_adapter_installs_and_restores_module_consoles():
-    import private_agent.code_tasks as code_tasks
     import private_agent.rag.indexing as rag_indexing
     import private_agent.rag.retrieval as rag_retrieval
-    import private_agent.run_logging as run_logging
     import private_agent.skills.loader as skill_loader
-    import private_agent.tools as tools
-    import private_agent.tools.media as media
-    import private_agent.tools.mcp as mcp
-    import private_agent.tools.network as network
-    import private_agent.tools.shell as shell
+    from private_agent import code_tasks, run_logging, tools
     from private_agent.agent import runtime
+    from private_agent.tools import mcp, media, network, shell
 
     modules = (
         runtime,
@@ -310,10 +306,10 @@ def test_debug_log_records_are_structured_and_console_content_is_not_logged(
     tmp_path,
     monkeypatch,
 ):
-    import logging
     import json
+    import logging
 
-    import private_agent.run_logging as run_logging
+    from private_agent import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "DEBUG")
@@ -379,7 +375,7 @@ def test_debug_log_level_filters_and_terminal_stays_clean(
 ):
     import logging
 
-    import private_agent.run_logging as run_logging
+    from private_agent import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "WARNING")
@@ -400,7 +396,7 @@ def test_debug_log_level_filters_and_terminal_stays_clean(
 def test_debug_log_file_and_directory_permissions_are_private(tmp_path, monkeypatch):
     import stat
 
-    import private_agent.run_logging as run_logging
+    from private_agent import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
@@ -447,7 +443,7 @@ def test_debug_logging_repeated_start_does_not_duplicate_handlers(
 ):
     import json
 
-    import private_agent.run_logging as run_logging
+    from private_agent import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "INFO")
@@ -469,3 +465,38 @@ def test_debug_logging_repeated_start_does_not_duplicate_handlers(
     assert (
         sum(record["event"] == "test.single_record" for record in second_records) == 1
     )
+
+
+def test_media_limits_are_in_defaults_and_match_runtime_values():
+    from private_agent import config
+
+    media = config.DEFAULT_CONFIG["media"]
+    assert media["max_decoded_image_pixels"] == 20_000_000
+    assert media["max_media_file_bytes"] == 25 * 1024 * 1024
+    assert media["max_video_seconds"] == 120
+
+
+def test_config_path_honours_environment_variable(tmp_path):
+    from private_agent import config
+
+    custom = tmp_path / "custom.conf"
+    assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": str(custom)}) == custom
+    default = pathlib.Path.home() / ".private_agent.conf"
+    assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": "  "}) == default
+    assert config.resolve_config_path({}) == default
+
+
+def test_config_file_can_be_loaded_from_another_path(tmp_path, monkeypatch):
+    from private_agent import config
+
+    custom = tmp_path / "elsewhere.conf"
+    monkeypatch.setattr(
+        config,
+        "CONFIG_FILE_PATH",
+        config.resolve_config_path({"PRIVATE_AGENT_CONFIG": str(custom)}),
+    )
+
+    settings = load_or_create_config()
+
+    assert custom.exists()
+    assert settings["agent"] == config.DEFAULT_CONFIG["agent"]

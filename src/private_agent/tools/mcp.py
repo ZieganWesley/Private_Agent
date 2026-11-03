@@ -29,7 +29,7 @@ def _remove_mcp_sandbox_dir(directory: str):
 
 
 def close_mcp_sandbox_dirs():
-    for directory in list(_mcp_sandbox_dirs):
+    for directory in _mcp_sandbox_dirs:
         _remove_mcp_sandbox_dir(directory)
 
 

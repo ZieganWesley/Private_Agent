@@ -7,7 +7,6 @@ import os
 import threading
 import uuid
 import wave
-from typing import Optional
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
@@ -81,7 +80,7 @@ class MicrophoneInput(BaseModel):
         le=MAX_MICROPHONE_SECONDS,
         description="Recording length in seconds (maximum 30 seconds).",
     )
-    device_index: Optional[int] = Field(
+    device_index: int | None = Field(
         default=None,
         ge=0,
         le=MAX_MICROPHONE_DEVICE_INDEX,
@@ -140,7 +139,7 @@ def captured_image_message(reference: str):
     )
 
 
-def consume_captured_image(reference: str) -> Optional[bytes]:
+def consume_captured_image(reference: str) -> bytes | None:
     """Consume a single-use image reference returned by a local media tool."""
     prefix = next(
         (
@@ -191,7 +190,7 @@ def approve_local_capture(tool_name: str, args: dict) -> bool:
     return answer.strip().lower() == "y"
 
 
-def _normalize_video_frame(cv2, frame) -> Optional[bytes]:
+def _normalize_video_frame(cv2, frame) -> bytes | None:
     if frame is None or getattr(frame, "ndim", 0) < 2:
         return None
     height, width = frame.shape[:2]
@@ -560,7 +559,7 @@ def load_workspace_image(file_path: str) -> str:
 @tool(args_schema=MicrophoneInput)
 def record_microphone_audio(
     duration_seconds: float = DEFAULT_MICROPHONE_SECONDS,
-    device_index: Optional[int] = None,
+    device_index: int | None = None,
 ) -> str:
     """Record a short local microphone clip and transcribe it with a configured offline Whisper model."""
     try:

@@ -1,29 +1,22 @@
+import hashlib
+import json
 import os
 import pathlib
-import json
-import hashlib
-import tempfile
 import shutil
 import sqlite3
 import stat as stat_module
+import tempfile
 import uuid
-from urllib.parse import quote
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import Optional, List, Callable
-from rich.console import Console
+from urllib.parse import quote
+
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
 from langchain_core.documents import Document
+from langchain_ollama import OllamaEmbeddings
+from rich.console import Console
 
 from ..config import (
-    EMBEDDING_MODEL,
-    HARDWARE_ACCELERATION_MODE,
-    OLLAMA_BASE_URL,
-    RAG_INDEX_PATH,
-    RAG_MAX_CORPUS_BYTES,
-    RAG_MAX_DOCUMENTS,
-    RAG_MAX_FILE_BYTES,
-    RAG_MAX_PDF_PAGES,
     CHUNKING_MIN_CHUNK_CHARS,
     CHUNKING_OVERLAP,
     CHUNKING_SEMANTIC_BUFFER,
@@ -33,6 +26,14 @@ from ..config import (
     CHUNKING_SIZE,
     CHUNKING_STRATEGY,
     CHUNKING_UNIT,
+    EMBEDDING_MODEL,
+    HARDWARE_ACCELERATION_MODE,
+    OLLAMA_BASE_URL,
+    RAG_INDEX_PATH,
+    RAG_MAX_CORPUS_BYTES,
+    RAG_MAX_DOCUMENTS,
+    RAG_MAX_FILE_BYTES,
+    RAG_MAX_PDF_PAGES,
     RAG_SQLITE_MAX_ROWS_PER_TABLE,
 )
 from ..hardware import ollama_acceleration_options
@@ -106,7 +107,7 @@ def _source_fingerprint(file_path: pathlib.Path, file_stat) -> dict:
     return {"mtime_ns": mtime_ns, "size": size}
 
 
-def knowledge_base_signature(docs_path: Optional[str]) -> Optional[str]:
+def knowledge_base_signature(docs_path: str | None) -> str | None:
     """Cheap digest of the indexable files' paths, sizes and mtimes."""
     if not docs_path or not str(docs_path).strip():
         return None
@@ -187,7 +188,7 @@ def _read_sqlite_pages(file_path: pathlib.Path) -> list:
         connection.close()
 
 
-def reset_knowledge_base(index_path: Optional[str] = None) -> str:
+def reset_knowledge_base(index_path: str | None = None) -> str:
     """Remove only the configured Chroma index directory after path safety checks."""
     configured_path = pathlib.Path(index_path or RAG_INDEX_PATH).expanduser()
     if configured_path.is_symlink():
@@ -233,10 +234,10 @@ def load_chunking_settings() -> ChunkingSettings:
 
 def _split_into_chunks(
     content: str,
-    settings: Optional[ChunkingSettings] = None,
+    settings: ChunkingSettings | None = None,
     extension: str = "",
     embed=None,
-) -> List[str]:
+) -> list[str]:
     return split_text(content, settings or load_chunking_settings(), extension, embed)
 
 
@@ -300,10 +301,10 @@ def _preserve_corrupt_index(index_path: pathlib.Path) -> pathlib.Path:
 
 
 def initialize_knowledge_base(
-    docs_path: Optional[str],
+    docs_path: str | None,
     *,
-    index_path: Optional[str] = None,
-    confirm_rebuild: Optional[Callable[[str], bool]] = None,
+    index_path: str | None = None,
+    confirm_rebuild: Callable[[str], bool] | None = None,
 ):
     """Initializes the Chroma vector store exclusively when an explicit, valid knowledge base folder path is provided."""
     if not docs_path or not str(docs_path).strip():
@@ -431,7 +432,7 @@ def initialize_knowledge_base(
                     if page_number is not None:
                         metadata["page"] = page_number
                     chunk_id = hashlib.sha256(
-                        f"{file_key}\0{chunk_number}\0{chunk_text}".encode("utf-8")
+                        f"{file_key}\0{chunk_number}\0{chunk_text}".encode()
                     ).hexdigest()
                     metadata["chunk_id"] = chunk_id
                     file_docs.append(

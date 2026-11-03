@@ -4,9 +4,10 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional
 
 from ..config import CODE_TASK_TEST_TIMEOUT
 
@@ -31,9 +32,9 @@ class CodeTaskWorkspace:
     root: Path
     task_id: str
     git_enabled: bool
-    original_source: Optional[Path] = None
-    last_test_result: Optional[str] = None
-    initial_commit: Optional[str] = None
+    original_source: Path | None = None
+    last_test_result: str | None = None
+    initial_commit: str | None = None
     direct_source: bool = False
     allow_network: bool = False
 
@@ -43,7 +44,7 @@ class CodeTaskWorkspace:
         task_description: str,
         output_root: str,
         *,
-        source_path: Optional[str] = None,
+        source_path: str | None = None,
         direct_source: bool = False,
         allow_network: bool = False,
         confirm_without_git=None,

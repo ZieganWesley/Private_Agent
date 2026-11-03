@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, Mapping, Protocol
-
+from typing import Any, Literal, Protocol
 
 _PLUGIN_NAME = re.compile(r"^[a-z][a-z0-9_-]{1,62}$")
 _VERSION = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")

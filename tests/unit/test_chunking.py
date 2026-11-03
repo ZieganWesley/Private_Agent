@@ -81,7 +81,7 @@ def test_min_chunk_chars_merges_small_pieces():
 
 
 def test_semantic_splits_at_topic_shift_and_traces_fallback(monkeypatch):
-    import private_agent.rag.chunking as chunking
+    from private_agent.rag import chunking
 
     text = " ".join(["Cats purr softly."] * 4 + ["Stocks fell sharply."] * 4)
     events = []

@@ -2,23 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
 class ModelCapabilities:
     """Capabilities reported for a selected model; unknown is not support."""
 
-    tools: Optional[bool] = None
-    function_calls: Optional[bool] = None
-    structured_output: Optional[bool] = None
-    thinking: Optional[bool] = None
-    vision: Optional[bool] = None
-    audio: Optional[bool] = None
-    computer_use: Optional[bool] = None
-    context_window: Optional[int] = None
+    tools: bool | None = None
+    function_calls: bool | None = None
+    structured_output: bool | None = None
+    thinking: bool | None = None
+    vision: bool | None = None
+    audio: bool | None = None
+    computer_use: bool | None = None
+    context_window: int | None = None
 
 
 @dataclass(frozen=True)
@@ -34,18 +35,18 @@ class ModelRequest:
     """Bounded model invocation input independent of provider SDK classes."""
 
     messages: tuple[ModelMessage, ...]
-    model: Optional[str] = None
-    temperature: Optional[float] = None
-    max_output_tokens: Optional[int] = None
-    timeout_seconds: Optional[float] = None
+    model: str | None = None
+    temperature: float | None = None
+    max_output_tokens: int | None = None
+    timeout_seconds: float | None = None
 
 
 @dataclass(frozen=True)
 class TokenUsage:
     """Token usage reported by a provider when available."""
 
-    input_tokens: Optional[int] = None
-    output_tokens: Optional[int] = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -71,8 +72,8 @@ class ModelResponse:
     """Provider-neutral model output with optional usage and tool calls."""
 
     content: str
-    model: Optional[str] = None
-    usage: Optional[TokenUsage] = None
+    model: str | None = None
+    usage: TokenUsage | None = None
     tool_calls: tuple[ToolCall, ...] = ()
 
 
@@ -82,9 +83,9 @@ class Evidence:
 
     source: str
     retrieved_at: datetime
-    excerpt: Optional[str] = None
-    locator: Optional[str] = None
-    confidence: Optional[float] = None
+    excerpt: str | None = None
+    locator: str | None = None
+    confidence: float | None = None
 
 
 @dataclass(frozen=True)
@@ -95,8 +96,8 @@ class MemoryRecord:
     kind: Literal["episodic", "semantic", "procedural", "repository"]
     content: str
     created_at: datetime
-    scope: Optional[str] = None
-    expires_at: Optional[datetime] = None
+    scope: str | None = None
+    expires_at: datetime | None = None
     evidence: tuple[Evidence, ...] = ()
 
 
@@ -109,7 +110,7 @@ class ExecutionError(RuntimeError):
         message: str,
         *,
         retryable: bool = False,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         if not code.strip():
             raise ValueError("ExecutionError code must not be empty.")

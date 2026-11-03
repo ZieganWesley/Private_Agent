@@ -1,11 +1,14 @@
+import os
 import sys
+
+import pytest
 
 from private_agent import cli
 
 
 def test_verbose_startup_flag_is_forwarded(monkeypatch):
-    import private_agent.run_logging as run_logging
-    import private_agent.agent.runtime as runtime
+    from private_agent import run_logging
+    from private_agent.agent import runtime
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--verbose-startup"])
@@ -21,3 +24,60 @@ def test_verbose_startup_flag_is_forwarded(monkeypatch):
     cli.main()
 
     assert received == [{"verbose_startup": True}]
+
+
+def test_offline_environment_is_set_at_startup_not_import(monkeypatch):
+    import importlib
+
+    from private_agent import config
+
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
+
+    importlib.reload(config)
+    assert "HF_HUB_OFFLINE" not in os.environ
+    assert "TRANSFORMERS_OFFLINE" not in os.environ
+
+    cli.enforce_offline_environment()
+    assert os.environ["HF_HUB_OFFLINE"] == "1"
+    assert os.environ["TRANSFORMERS_OFFLINE"] == "1"
+
+
+def test_native_windows_exits_with_wsl_message(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "argv", ["private-agent"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 1
+    assert "WSL" in capsys.readouterr().out.replace("\n", " ")
+
+
+def test_posix_platforms_start_normally(monkeypatch):
+    for platform_name in ("linux", "darwin"):
+        monkeypatch.setattr(sys, "platform", platform_name)
+        cli.ensure_supported_platform()
+
+
+def test_config_flag_sets_config_path_environment(monkeypatch, tmp_path):
+    from private_agent import run_logging
+    from private_agent.agent import runtime
+
+    seen = []
+    custom = str(tmp_path / "custom.conf")
+    monkeypatch.delenv("PRIVATE_AGENT_CONFIG", raising=False)
+    monkeypatch.setattr(sys, "argv", ["private-agent", "--config", custom])
+    monkeypatch.setattr(run_logging, "start_debug_logging", lambda: None)
+    monkeypatch.setattr(run_logging, "log_event", lambda *_a, **_k: None)
+    monkeypatch.setattr(run_logging, "stop_debug_logging", lambda: None)
+    monkeypatch.setattr(
+        runtime,
+        "run_agent_cli",
+        lambda **_kwargs: seen.append(os.environ.get("PRIVATE_AGENT_CONFIG")),
+    )
+
+    cli.main()
+    os.environ.pop("PRIVATE_AGENT_CONFIG", None)
+
+    assert seen == [custom]

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import time
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any
 
 from rich.table import Table
 
@@ -13,13 +14,13 @@ from .compaction import message_text
 from .prompts import token_count
 
 
-def _int_or_none(value: Any) -> Optional[int]:
+def _int_or_none(value: Any) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
         return value
     return None
 
 
-def response_usage(response: Any) -> Tuple[Optional[int], Optional[int]]:
+def response_usage(response: Any) -> tuple[int | None, int | None]:
     """Return provider-reported (input, output) tokens when available."""
     usage = getattr(response, "usage_metadata", None)
     usage = usage if isinstance(usage, dict) else {}
@@ -106,7 +107,7 @@ def format_duration(seconds: float) -> str:
     return f"{hours}h {minutes}m {secs}s" if hours else f"{minutes}m {secs}s"
 
 
-def build_stats_table(stats: SessionStats, info: Dict[str, Any]) -> Table:
+def build_stats_table(stats: SessionStats, info: dict[str, Any]) -> Table:
     """Build the statistics table; `info` holds descriptive session fields."""
     table = Table(
         title="Session Statistics", show_header=True, header_style="bold cyan"

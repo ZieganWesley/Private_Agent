@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import sys
 import time
 
 from rich.console import Console
@@ -7,7 +9,31 @@ from rich.console import Console
 console = Console()
 
 
+def enforce_offline_environment() -> None:
+    """Keep Hugging Face libraries from making network requests."""
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+
+
+WINDOWS_UNSUPPORTED_MESSAGE = (
+    "Private Agent supports Linux, macOS and WSL2 only; native Windows is not "
+    "supported. Install WSL (https://learn.microsoft.com/windows/wsl/install) "
+    "and run private-agent inside it."
+)
+
+
+def ensure_supported_platform() -> None:
+    """Exit with a pointer to WSL when started on native Windows."""
+    if sys.platform == "win32":
+        console.print(
+            f"[red][Unsupported platform] {WINDOWS_UNSUPPORTED_MESSAGE}[/red]"
+        )
+        raise SystemExit(1)
+
+
 def main():
+    ensure_supported_platform()
+    enforce_offline_environment()
     parser = argparse.ArgumentParser(
         prog="private-agent",
         description="Run the local-first Private Agent CLI.",
@@ -17,13 +43,21 @@ def main():
         action="store_true",
         help="Show detailed startup diagnostics and configured paths.",
     )
+    parser.add_argument(
+        "--config",
+        metavar="PATH",
+        help="Use this configuration file instead of ~/.private_agent.conf "
+        "(also settable with PRIVATE_AGENT_CONFIG).",
+    )
     args = parser.parse_args()
+    if args.config:
+        os.environ["PRIVATE_AGENT_CONFIG"] = args.config
     originals = []
     exit_code = 0
     from .config import DEBUG_LOG_ENABLED
     from .run_logging import (
-        LoggingConsoleAdapter,
         RUN_LOGGER,
+        LoggingConsoleAdapter,
         install_logging_console_adapter,
         log_event,
         start_debug_logging,

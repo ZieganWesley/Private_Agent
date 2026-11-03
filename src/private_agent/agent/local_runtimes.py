@@ -3,9 +3,10 @@
 import ipaddress
 import logging
 import math
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 from urllib.parse import urlsplit
 
 from ..run_logging import RUN_LOGGER, log_event
@@ -63,7 +64,7 @@ def _probe_endpoint(
     path: str,
     client_factory: Callable[..., Any],
     timeout: float,
-) -> Optional[LocalRuntime]:
+) -> LocalRuntime | None:
     """Probe one loopback endpoint and return its local runtime when reachable."""
     if not _is_loopback_url(base_url):
         log_event(

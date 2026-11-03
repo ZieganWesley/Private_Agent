@@ -1,23 +1,22 @@
 """Process-local binding for planner tools; durable task state lives in SQLite."""
 
 import uuid
-from typing import Optional
 
-ACTIVE_TASK_SESSION_ID: Optional[str] = None
-ACTIVE_TASK_ID: Optional[str] = None
+ACTIVE_TASK_SESSION_ID: str | None = None
+ACTIVE_TASK_ID: str | None = None
 RUNTIME_OWNER_ID = uuid.uuid4().hex
 SCHEMA_READ_TABLES: set[str] = set()
 
 
-def set_runtime_owner(owner_id: Optional[str] = None) -> str:
+def set_runtime_owner(owner_id: str | None = None) -> str:
     global RUNTIME_OWNER_ID
     RUNTIME_OWNER_ID = owner_id or uuid.uuid4().hex
     return RUNTIME_OWNER_ID
 
 
 def set_active_task_context(
-    session_id: Optional[str],
-    task_id: Optional[str] = None,
+    session_id: str | None,
+    task_id: str | None = None,
 ) -> None:
     global ACTIVE_TASK_SESSION_ID, ACTIVE_TASK_ID
     ACTIVE_TASK_SESSION_ID = session_id

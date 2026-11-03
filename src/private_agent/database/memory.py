@@ -1,35 +1,36 @@
 """SQLite-backed conversation history and episodic memory."""
 
-import sqlite3
-import threading
-import pathlib
-import os
 import hashlib
 import json
 import logging
+import os
+import pathlib
 import re
+import sqlite3
 import tempfile
+import threading
 import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+
 from langchain_core.messages import (
-    HumanMessage,
     AIMessage,
+    BaseMessage,
+    HumanMessage,
     SystemMessage,
     ToolMessage,
-    BaseMessage,
 )
+
 from ..config import (
     DEFAULT_DB_PATH,
     DEFAULT_EPISODIC_SUMMARIES,
     DEFAULT_HISTORY_MESSAGES,
-    MAX_SUMMARY_CHARS,
-    MAX_LEARNED_ITEM_CHARS,
-    MAX_RESUME_STATE_CHARS,
     LEARNED_ITEM_EXPIRY_DAYS,
     LEARNED_ITEM_REVIEW_DAYS,
+    MAX_LEARNED_ITEM_CHARS,
+    MAX_RESUME_STATE_CHARS,
+    MAX_SUMMARY_CHARS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -68,6 +69,9 @@ class PersistentMemory:
         try:
             self.conn.execute("PRAGMA foreign_keys = ON")
             self.conn.execute("PRAGMA busy_timeout = 2000")
+            if self.db_path != ":memory:":
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                self.conn.execute("PRAGMA synchronous = NORMAL")
             self._create_table()
         except BaseException:
             self.conn.close()
@@ -512,9 +516,9 @@ class PersistentMemory:
 
     @staticmethod
     def _decode_episode_plan(
-        plan_json: Optional[str],
+        plan_json: str | None,
         episode_id: int,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         if not plan_json:
             return None
         try:
@@ -537,9 +541,9 @@ class PersistentMemory:
 
     @staticmethod
     def _decode_resume_capsule(
-        capsule_json: Optional[str],
+        capsule_json: str | None,
         task_id: str,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         if not capsule_json:
             return None
         try:
@@ -594,7 +598,7 @@ class PersistentMemory:
     ) -> None:
         details_json = json.dumps(details, ensure_ascii=False, sort_keys=True)
         event_id = hashlib.sha256(
-            f"{task_id}:{revision}:{event_type}:{details_json}".encode("utf-8")
+            f"{task_id}:{revision}:{event_type}:{details_json}".encode()
         ).hexdigest()
         self.conn.execute(
             "INSERT OR IGNORE INTO agent_task_events "
@@ -860,10 +864,10 @@ class PersistentMemory:
         task_type: str,
         steps: list[dict],
         *,
-        assumptions: Optional[list[str]] = None,
-        constraints: Optional[list[str]] = None,
-        research_questions: Optional[list[str]] = None,
-        research_references: Optional[list[str]] = None,
+        assumptions: list[str] | None = None,
+        constraints: list[str] | None = None,
+        research_questions: list[str] | None = None,
+        research_references: list[str] | None = None,
     ) -> dict:
         """Persist a new task and its first immutable plan revision."""
         goal = str(goal).strip()
@@ -889,35 +893,34 @@ class PersistentMemory:
         }
         plan_json, digest = self._plan_digest(plan)
         task_id = uuid.uuid4().hex
-        with self._lock:
-            with self._write_transaction():
-                self.conn.execute(
-                    "INSERT INTO agent_tasks "
-                    "(task_id, originating_session_id, goal, task_type, status, "
-                    "current_revision) VALUES (?, ?, ?, ?, 'awaiting_approval', 1)",
-                    (task_id, session_id, goal, task_type),
-                )
-                self.conn.execute(
-                    "INSERT INTO agent_plan_revisions "
-                    "(task_id, revision, digest, plan_json) VALUES (?, 1, ?, ?)",
-                    (task_id, digest, plan_json),
-                )
-                self.conn.executemany(
-                    "INSERT INTO agent_todo_steps "
-                    "(task_id, revision, step_id, position, description) "
-                    "VALUES (?, 1, ?, ?, ?)",
-                    [
-                        (task_id, step["step_id"], index, step["description"])
-                        for index, step in enumerate(normalized_steps, start=1)
-                    ],
-                )
-                self._record_task_event(
-                    task_id,
-                    1,
-                    "created",
-                    {"goal": goal, "task_type": task_type},
-                )
-                self._refresh_task_resume_capsule(task_id)
+        with self._lock, self._write_transaction():
+            self.conn.execute(
+                "INSERT INTO agent_tasks "
+                "(task_id, originating_session_id, goal, task_type, status, "
+                "current_revision) VALUES (?, ?, ?, ?, 'awaiting_approval', 1)",
+                (task_id, session_id, goal, task_type),
+            )
+            self.conn.execute(
+                "INSERT INTO agent_plan_revisions "
+                "(task_id, revision, digest, plan_json) VALUES (?, 1, ?, ?)",
+                (task_id, digest, plan_json),
+            )
+            self.conn.executemany(
+                "INSERT INTO agent_todo_steps "
+                "(task_id, revision, step_id, position, description) "
+                "VALUES (?, 1, ?, ?, ?)",
+                [
+                    (task_id, step["step_id"], index, step["description"])
+                    for index, step in enumerate(normalized_steps, start=1)
+                ],
+            )
+            self._record_task_event(
+                task_id,
+                1,
+                "created",
+                {"goal": goal, "task_type": task_type},
+            )
+            self._refresh_task_resume_capsule(task_id)
         return self.get_task(task_id)
 
     def revise_task_plan(
@@ -928,10 +931,10 @@ class PersistentMemory:
         steps: list[dict],
         *,
         expected_revision: int,
-        assumptions: Optional[list[str]] = None,
-        constraints: Optional[list[str]] = None,
-        research_questions: Optional[list[str]] = None,
-        research_references: Optional[list[str]] = None,
+        assumptions: list[str] | None = None,
+        constraints: list[str] | None = None,
+        research_questions: list[str] | None = None,
+        research_references: list[str] | None = None,
     ) -> dict:
         """Append an immutable revision and invalidate any previous approval."""
         goal = str(goal).strip()
@@ -956,55 +959,54 @@ class PersistentMemory:
             ),
         }
         plan_json, digest = self._plan_digest(plan)
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision FROM agent_tasks WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None:
-                    raise ValueError("Task not found.")
-                if task[0] != expected_revision:
-                    raise ValueError(
-                        "Task plan changed since it was read; refresh before revising."
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision FROM agent_tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None:
+                raise ValueError("Task not found.")
+            if task[0] != expected_revision:
+                raise ValueError(
+                    "Task plan changed since it was read; refresh before revising."
+                )
+            revision = expected_revision + 1
+            self.conn.execute(
+                "INSERT INTO agent_plan_revisions "
+                "(task_id, revision, digest, plan_json) VALUES (?, ?, ?, ?)",
+                (task_id, revision, digest, plan_json),
+            )
+            self.conn.executemany(
+                "INSERT INTO agent_todo_steps "
+                "(task_id, revision, step_id, position, description) "
+                "VALUES (?, ?, ?, ?, ?)",
+                [
+                    (
+                        task_id,
+                        revision,
+                        step["step_id"],
+                        index,
+                        step["description"],
                     )
-                revision = expected_revision + 1
-                self.conn.execute(
-                    "INSERT INTO agent_plan_revisions "
-                    "(task_id, revision, digest, plan_json) VALUES (?, ?, ?, ?)",
-                    (task_id, revision, digest, plan_json),
-                )
-                self.conn.executemany(
-                    "INSERT INTO agent_todo_steps "
-                    "(task_id, revision, step_id, position, description) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    [
-                        (
-                            task_id,
-                            revision,
-                            step["step_id"],
-                            index,
-                            step["description"],
-                        )
-                        for index, step in enumerate(normalized_steps, start=1)
-                    ],
-                )
-                self.conn.execute(
-                    "UPDATE agent_tasks SET goal = ?, task_type = ?, status = "
-                    "'awaiting_approval', current_revision = ?, "
-                    "approved_revision = NULL, approved_digest = NULL, "
-                    "approved_scope = NULL, validation_revision = NULL, "
-                    "validation_evidence = NULL, updated_at = CURRENT_TIMESTAMP, "
-                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                    (goal, task_type, revision, task_id),
-                )
-                self._record_task_event(
-                    task_id,
-                    revision,
-                    "revised",
-                    {"previous_revision": expected_revision},
-                )
-                self._refresh_task_resume_capsule(task_id)
+                    for index, step in enumerate(normalized_steps, start=1)
+                ],
+            )
+            self.conn.execute(
+                "UPDATE agent_tasks SET goal = ?, task_type = ?, status = "
+                "'awaiting_approval', current_revision = ?, "
+                "approved_revision = NULL, approved_digest = NULL, "
+                "approved_scope = NULL, validation_revision = NULL, "
+                "validation_evidence = NULL, updated_at = CURRENT_TIMESTAMP, "
+                "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (goal, task_type, revision, task_id),
+            )
+            self._record_task_event(
+                task_id,
+                revision,
+                "revised",
+                {"previous_revision": expected_revision},
+            )
+            self._refresh_task_resume_capsule(task_id)
         return self.get_task(task_id)
 
     def list_tasks(self, limit: int = 50) -> list[dict]:
@@ -1052,39 +1054,38 @@ class PersistentMemory:
             datetime.now(timezone.utc) - timedelta(days=stale_after_days)
         ).strftime("%Y-%m-%d %H:%M:%S")
         now = time.time()
-        with self._lock:
-            with self._write_transaction():
-                rows = self.conn.execute(
-                    "SELECT task.task_id, task.current_revision, task.status "
-                    "FROM agent_tasks AS task WHERE task.status IN "
-                    "('draft', 'awaiting_approval', 'active', 'paused', 'interrupted') "
-                    "AND COALESCE(task.checkpoint_at, task.updated_at) < ? "
-                    "AND NOT EXISTS (SELECT 1 FROM agent_task_leases AS lease "
-                    "WHERE lease.task_id = task.task_id AND lease.expires_at > ?)",
-                    (cutoff, now),
-                ).fetchall()
-                for task_id, revision, previous_status in rows:
-                    self.conn.execute(
-                        "UPDATE agent_tasks SET status = 'stale', "
-                        "approved_revision = NULL, approved_digest = NULL, "
-                        "approved_scope = NULL, updated_at = CURRENT_TIMESTAMP, "
-                        "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                        (task_id,),
-                    )
-                    self.conn.execute(
-                        "DELETE FROM agent_task_leases WHERE task_id = ?",
-                        (task_id,),
-                    )
-                    self._record_task_event(
-                        task_id,
-                        revision,
-                        "staled",
-                        {"previous_status": previous_status},
-                    )
-                    self._refresh_task_resume_capsule(task_id)
+        with self._lock, self._write_transaction():
+            rows = self.conn.execute(
+                "SELECT task.task_id, task.current_revision, task.status "
+                "FROM agent_tasks AS task WHERE task.status IN "
+                "('draft', 'awaiting_approval', 'active', 'paused', 'interrupted') "
+                "AND COALESCE(task.checkpoint_at, task.updated_at) < ? "
+                "AND NOT EXISTS (SELECT 1 FROM agent_task_leases AS lease "
+                "WHERE lease.task_id = task.task_id AND lease.expires_at > ?)",
+                (cutoff, now),
+            ).fetchall()
+            for task_id, revision, previous_status in rows:
+                self.conn.execute(
+                    "UPDATE agent_tasks SET status = 'stale', "
+                    "approved_revision = NULL, approved_digest = NULL, "
+                    "approved_scope = NULL, updated_at = CURRENT_TIMESTAMP, "
+                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                    (task_id,),
+                )
+                self.conn.execute(
+                    "DELETE FROM agent_task_leases WHERE task_id = ?",
+                    (task_id,),
+                )
+                self._record_task_event(
+                    task_id,
+                    revision,
+                    "staled",
+                    {"previous_status": previous_status},
+                )
+                self._refresh_task_resume_capsule(task_id)
         return [row[0] for row in rows]
 
-    def get_task(self, task_id: str) -> Optional[dict]:
+    def get_task(self, task_id: str) -> dict | None:
         with self._lock:
             task = self.conn.execute(
                 "SELECT task_id, originating_session_id, goal, task_type, status, "
@@ -1165,53 +1166,52 @@ class PersistentMemory:
         digest: str,
         scope: str,
         *,
-        owner_id: Optional[str] = None,
+        owner_id: str | None = None,
     ) -> dict:
         """Record explicit runtime approval for one immutable plan and scope."""
         if not scope or len(scope) > 1000:
             raise ValueError("Approval scope must contain 1 to 1000 characters.")
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, status FROM agent_tasks "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                plan = self.conn.execute(
-                    "SELECT digest FROM agent_plan_revisions "
-                    "WHERE task_id = ? AND revision = ?",
-                    (task_id, revision),
-                ).fetchone()
-                if task is None or plan is None:
-                    raise ValueError("Task or plan revision not found.")
-                lease = self.conn.execute(
-                    "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if lease and lease[0] != owner_id:
-                    raise ValueError(
-                        "Task approval blocked: another process owns the task lease."
-                    )
-                if task[0] != revision or plan[0] != digest:
-                    raise ValueError("Approval does not match the current plan.")
-                if task[1] not in {"awaiting_approval", "paused", "interrupted"}:
-                    raise ValueError(
-                        f"Task cannot be approved while status is '{task[1]}'."
-                    )
-                self.conn.execute(
-                    "UPDATE agent_tasks SET status = 'active', "
-                    "approved_revision = ?, approved_digest = ?, "
-                    "approved_scope = ?, updated_at = CURRENT_TIMESTAMP, "
-                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                    (revision, digest, scope, task_id),
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, status FROM agent_tasks "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            plan = self.conn.execute(
+                "SELECT digest FROM agent_plan_revisions "
+                "WHERE task_id = ? AND revision = ?",
+                (task_id, revision),
+            ).fetchone()
+            if task is None or plan is None:
+                raise ValueError("Task or plan revision not found.")
+            lease = self.conn.execute(
+                "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if lease and lease[0] != owner_id:
+                raise ValueError(
+                    "Task approval blocked: another process owns the task lease."
                 )
-                self._record_task_event(
-                    task_id,
-                    revision,
-                    "approved",
-                    {"scope": scope, "digest": digest},
+            if task[0] != revision or plan[0] != digest:
+                raise ValueError("Approval does not match the current plan.")
+            if task[1] not in {"awaiting_approval", "paused", "interrupted"}:
+                raise ValueError(
+                    f"Task cannot be approved while status is '{task[1]}'."
                 )
-                self._refresh_task_resume_capsule(task_id)
+            self.conn.execute(
+                "UPDATE agent_tasks SET status = 'active', "
+                "approved_revision = ?, approved_digest = ?, "
+                "approved_scope = ?, updated_at = CURRENT_TIMESTAMP, "
+                "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (revision, digest, scope, task_id),
+            )
+            self._record_task_event(
+                task_id,
+                revision,
+                "approved",
+                {"scope": scope, "digest": digest},
+            )
+            self._refresh_task_resume_capsule(task_id)
         return self.get_task(task_id)
 
     def acquire_task_lease(
@@ -1230,60 +1230,58 @@ class PersistentMemory:
             raise ValueError("Task lease duration must be between 30 and 3600 seconds.")
         now = time.time()
         expires_at = now + lease_seconds
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, status FROM agent_tasks "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None:
-                    raise ValueError("Task not found.")
-                lease = self.conn.execute(
-                    "SELECT owner_id, expires_at FROM agent_task_leases "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if (
-                    lease
-                    and lease[0] != owner_id
-                    and (lease[1] > now or not allow_takeover)
-                ):
-                    return False
-                self.conn.execute(
-                    "INSERT INTO agent_task_leases "
-                    "(task_id, owner_id, session_id, expires_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) "
-                    "ON CONFLICT(task_id) DO UPDATE SET "
-                    "owner_id = excluded.owner_id, session_id = excluded.session_id, "
-                    "expires_at = excluded.expires_at, updated_at = CURRENT_TIMESTAMP",
-                    (task_id, owner_id, session_id, expires_at),
-                )
-                self._record_task_event(
-                    task_id,
-                    task[0],
-                    "lease_acquired",
-                    {"session_id": session_id, "expires_at": expires_at},
-                )
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, status FROM agent_tasks "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None:
+                raise ValueError("Task not found.")
+            lease = self.conn.execute(
+                "SELECT owner_id, expires_at FROM agent_task_leases "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if (
+                lease
+                and lease[0] != owner_id
+                and (lease[1] > now or not allow_takeover)
+            ):
+                return False
+            self.conn.execute(
+                "INSERT INTO agent_task_leases "
+                "(task_id, owner_id, session_id, expires_at, updated_at) "
+                "VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) "
+                "ON CONFLICT(task_id) DO UPDATE SET "
+                "owner_id = excluded.owner_id, session_id = excluded.session_id, "
+                "expires_at = excluded.expires_at, updated_at = CURRENT_TIMESTAMP",
+                (task_id, owner_id, session_id, expires_at),
+            )
+            self._record_task_event(
+                task_id,
+                task[0],
+                "lease_acquired",
+                {"session_id": session_id, "expires_at": expires_at},
+            )
         return True
 
     def release_task_lease(self, task_id: str, owner_id: str) -> bool:
-        with self._lock:
-            with self._write_transaction():
-                cursor = self.conn.execute(
-                    "DELETE FROM agent_task_leases WHERE task_id = ? AND owner_id = ?",
-                    (task_id, owner_id),
+        with self._lock, self._write_transaction():
+            cursor = self.conn.execute(
+                "DELETE FROM agent_task_leases WHERE task_id = ? AND owner_id = ?",
+                (task_id, owner_id),
+            )
+            if cursor.rowcount:
+                self._record_task_event(
+                    task_id,
+                    0,
+                    "lease_released",
+                    {"owner_id": owner_id},
                 )
-                if cursor.rowcount:
-                    self._record_task_event(
-                        task_id,
-                        0,
-                        "lease_released",
-                        {"owner_id": owner_id},
-                    )
-                return cursor.rowcount == 1
+            return cursor.rowcount == 1
 
-    def get_task_lease(self, task_id: str) -> Optional[dict]:
+    def get_task_lease(self, task_id: str) -> dict | None:
         with self._lock:
             row = self.conn.execute(
                 "SELECT owner_id, session_id, expires_at FROM agent_task_leases "
@@ -1323,123 +1321,121 @@ class PersistentMemory:
         )
         args_digest = hashlib.sha256(args_json.encode("utf-8")).hexdigest()
         action_id = uuid.uuid4().hex
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, approved_revision, approved_digest, status "
-                    "FROM agent_tasks WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                lease = self.conn.execute(
-                    "SELECT owner_id, expires_at FROM agent_task_leases "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if not (
-                    task
-                    and task[3] == "active"
-                    and task[0] == task[1]
-                    and lease
-                    and lease[0] == owner_id
-                    and lease[1] > time.time()
-                ):
-                    raise ValueError(
-                        "Action blocked: this process does not hold the active "
-                        "approved task lease."
-                    )
-                unresolved = self.conn.execute(
-                    "SELECT tool_name, status FROM agent_task_actions "
-                    "WHERE task_id = ? AND status IN "
-                    "('in_flight', 'outcome_unknown') LIMIT 1",
-                    (task_id,),
-                ).fetchone()
-                if unresolved:
-                    raise ValueError(
-                        "Action blocked: unresolved action "
-                        f"'{unresolved[0]}' has status '{unresolved[1]}'. "
-                        "A user must reconcile it before another task action."
-                    )
-                plan = self.conn.execute(
-                    "SELECT digest FROM agent_plan_revisions "
-                    "WHERE task_id = ? AND revision = ?",
-                    (task_id, task[0]),
-                ).fetchone()
-                if not plan or plan[0] != task[2]:
-                    raise ValueError("Action blocked: active plan approval is stale.")
-                existing = self.conn.execute(
-                    "SELECT action_id, status FROM agent_task_actions "
-                    "WHERE task_id = ? AND tool_call_id = ?",
-                    (task_id, tool_call_id),
-                ).fetchone()
-                if existing:
-                    raise ValueError(
-                        f"Tool call {tool_call_id} already has durable action state "
-                        f"'{existing[1]}'; reconcile before retrying."
-                    )
-                self.conn.execute(
-                    "INSERT INTO agent_task_actions "
-                    "(action_id, task_id, revision, tool_call_id, tool_name, "
-                    "arguments_digest, status) "
-                    "VALUES (?, ?, ?, ?, ?, ?, 'in_flight')",
-                    (
-                        action_id,
-                        task_id,
-                        task[0],
-                        tool_call_id,
-                        tool_name,
-                        args_digest,
-                    ),
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, approved_revision, approved_digest, status "
+                "FROM agent_tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            lease = self.conn.execute(
+                "SELECT owner_id, expires_at FROM agent_task_leases "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if not (
+                task
+                and task[3] == "active"
+                and task[0] == task[1]
+                and lease
+                and lease[0] == owner_id
+                and lease[1] > time.time()
+            ):
+                raise ValueError(
+                    "Action blocked: this process does not hold the active "
+                    "approved task lease."
                 )
-                self.conn.execute(
-                    "UPDATE agent_task_leases SET expires_at = ?, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE task_id = ? AND owner_id = ?",
-                    (time.time() + lease_seconds, task_id, owner_id),
+            unresolved = self.conn.execute(
+                "SELECT tool_name, status FROM agent_task_actions "
+                "WHERE task_id = ? AND status IN "
+                "('in_flight', 'outcome_unknown') LIMIT 1",
+                (task_id,),
+            ).fetchone()
+            if unresolved:
+                raise ValueError(
+                    "Action blocked: unresolved action "
+                    f"'{unresolved[0]}' has status '{unresolved[1]}'. "
+                    "A user must reconcile it before another task action."
                 )
-                self._record_task_event(
+            plan = self.conn.execute(
+                "SELECT digest FROM agent_plan_revisions "
+                "WHERE task_id = ? AND revision = ?",
+                (task_id, task[0]),
+            ).fetchone()
+            if not plan or plan[0] != task[2]:
+                raise ValueError("Action blocked: active plan approval is stale.")
+            existing = self.conn.execute(
+                "SELECT action_id, status FROM agent_task_actions "
+                "WHERE task_id = ? AND tool_call_id = ?",
+                (task_id, tool_call_id),
+            ).fetchone()
+            if existing:
+                raise ValueError(
+                    f"Tool call {tool_call_id} already has durable action state "
+                    f"'{existing[1]}'; reconcile before retrying."
+                )
+            self.conn.execute(
+                "INSERT INTO agent_task_actions "
+                "(action_id, task_id, revision, tool_call_id, tool_name, "
+                "arguments_digest, status) "
+                "VALUES (?, ?, ?, ?, ?, ?, 'in_flight')",
+                (
+                    action_id,
                     task_id,
                     task[0],
-                    "action_intent",
-                    {
-                        "action_id": action_id,
-                        "tool_name": tool_name,
-                        "arguments_digest": args_digest,
-                        "status": "in_flight",
-                    },
-                )
-                self._refresh_task_resume_capsule(task_id)
+                    tool_call_id,
+                    tool_name,
+                    args_digest,
+                ),
+            )
+            self.conn.execute(
+                "UPDATE agent_task_leases SET expires_at = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE task_id = ? AND owner_id = ?",
+                (time.time() + lease_seconds, task_id, owner_id),
+            )
+            self._record_task_event(
+                task_id,
+                task[0],
+                "action_intent",
+                {
+                    "action_id": action_id,
+                    "tool_name": tool_name,
+                    "arguments_digest": args_digest,
+                    "status": "in_flight",
+                },
+            )
+            self._refresh_task_resume_capsule(task_id)
         return action_id
 
     def finish_task_action(
         self,
         action_id: str,
         status: str,
-        outcome_digest: Optional[str] = None,
+        outcome_digest: str | None = None,
     ) -> dict:
         if status not in {"outcome_observed", "outcome_unknown"}:
             raise ValueError("Task action outcome status is invalid.")
-        with self._lock:
-            with self._write_transaction():
-                action = self.conn.execute(
-                    "SELECT task_id, revision, status FROM agent_task_actions "
-                    "WHERE action_id = ?",
-                    (action_id,),
-                ).fetchone()
-                if action is None:
-                    raise ValueError("Task action record not found.")
-                if action[2] != "in_flight":
-                    raise ValueError("Task action is no longer in flight.")
-                self.conn.execute(
-                    "UPDATE agent_task_actions SET status = ?, outcome_digest = ?, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE action_id = ?",
-                    (status, outcome_digest, action_id),
-                )
-                self._record_task_event(
-                    action[0],
-                    action[1],
-                    "action_outcome",
-                    {"action_id": action_id, "status": status},
-                )
-                self._refresh_task_resume_capsule(action[0])
+        with self._lock, self._write_transaction():
+            action = self.conn.execute(
+                "SELECT task_id, revision, status FROM agent_task_actions "
+                "WHERE action_id = ?",
+                (action_id,),
+            ).fetchone()
+            if action is None:
+                raise ValueError("Task action record not found.")
+            if action[2] != "in_flight":
+                raise ValueError("Task action is no longer in flight.")
+            self.conn.execute(
+                "UPDATE agent_task_actions SET status = ?, outcome_digest = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE action_id = ?",
+                (status, outcome_digest, action_id),
+            )
+            self._record_task_event(
+                action[0],
+                action[1],
+                "action_outcome",
+                {"action_id": action_id, "status": status},
+            )
+            self._refresh_task_resume_capsule(action[0])
         return {
             "action_id": action_id,
             "task_id": action[0],
@@ -1482,44 +1478,43 @@ class PersistentMemory:
         action_id: str,
         resolution: str,
         *,
-        owner_id: Optional[str] = None,
+        owner_id: str | None = None,
     ) -> dict:
         """Record a user's explicit reconciliation of an uncertain action."""
         if resolution not in {"verified", "not_executed"}:
             raise ValueError("Resolution must be 'verified' or 'not_executed'.")
-        with self._lock:
-            with self._write_transaction():
-                action = self.conn.execute(
-                    "SELECT task_id, revision, status FROM agent_task_actions "
-                    "WHERE action_id = ?",
-                    (action_id,),
-                ).fetchone()
-                if action is None:
-                    raise ValueError("Task action record not found.")
-                if action[2] not in {"in_flight", "outcome_unknown"}:
-                    raise ValueError("Only unresolved task actions can be reconciled.")
-                lease = self.conn.execute(
-                    "SELECT owner_id, expires_at FROM agent_task_leases "
-                    "WHERE task_id = ?",
-                    (action[0],),
-                ).fetchone()
-                if lease and lease[1] > time.time() and lease[0] != owner_id:
-                    raise ValueError(
-                        "Action reconciliation blocked: another process still "
-                        "holds the active task lease."
-                    )
-                self.conn.execute(
-                    "UPDATE agent_task_actions SET status = ?, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE action_id = ?",
-                    (resolution, action_id),
+        with self._lock, self._write_transaction():
+            action = self.conn.execute(
+                "SELECT task_id, revision, status FROM agent_task_actions "
+                "WHERE action_id = ?",
+                (action_id,),
+            ).fetchone()
+            if action is None:
+                raise ValueError("Task action record not found.")
+            if action[2] not in {"in_flight", "outcome_unknown"}:
+                raise ValueError("Only unresolved task actions can be reconciled.")
+            lease = self.conn.execute(
+                "SELECT owner_id, expires_at FROM agent_task_leases "
+                "WHERE task_id = ?",
+                (action[0],),
+            ).fetchone()
+            if lease and lease[1] > time.time() and lease[0] != owner_id:
+                raise ValueError(
+                    "Action reconciliation blocked: another process still "
+                    "holds the active task lease."
                 )
-                self._record_task_event(
-                    action[0],
-                    action[1],
-                    "action_reconciled",
-                    {"action_id": action_id, "resolution": resolution},
-                )
-                self._refresh_task_resume_capsule(action[0])
+            self.conn.execute(
+                "UPDATE agent_task_actions SET status = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE action_id = ?",
+                (resolution, action_id),
+            )
+            self._record_task_event(
+                action[0],
+                action[1],
+                "action_reconciled",
+                {"action_id": action_id, "resolution": resolution},
+            )
+            self._refresh_task_resume_capsule(action[0])
         return {
             "action_id": action_id,
             "task_id": action[0],
@@ -1529,35 +1524,34 @@ class PersistentMemory:
 
     def reconcile_task_actions_after_restart(self) -> int:
         """Mark orphaned in-flight actions unknown; never guess they completed."""
-        with self._lock:
-            with self._write_transaction():
-                now = time.time()
-                rows = self.conn.execute(
-                    "SELECT action.action_id, action.task_id, action.revision "
-                    "FROM agent_task_actions AS action "
-                    "LEFT JOIN agent_task_leases AS lease "
-                    "ON lease.task_id = action.task_id "
-                    "WHERE action.status = 'in_flight' "
-                    "AND (lease.task_id IS NULL OR lease.expires_at <= ?)",
-                    (now,),
-                ).fetchall()
-                for action_id, task_id, revision in rows:
-                    self.conn.execute(
-                        "UPDATE agent_task_actions SET status = 'outcome_unknown', "
-                        "updated_at = CURRENT_TIMESTAMP WHERE action_id = ?",
-                        (action_id,),
-                    )
-                    self._record_task_event(
-                        task_id,
-                        revision,
-                        "action_reconciliation_required",
-                        {"action_id": action_id, "status": "outcome_unknown"},
-                    )
-                    self._refresh_task_resume_capsule(task_id)
+        with self._lock, self._write_transaction():
+            now = time.time()
+            rows = self.conn.execute(
+                "SELECT action.action_id, action.task_id, action.revision "
+                "FROM agent_task_actions AS action "
+                "LEFT JOIN agent_task_leases AS lease "
+                "ON lease.task_id = action.task_id "
+                "WHERE action.status = 'in_flight' "
+                "AND (lease.task_id IS NULL OR lease.expires_at <= ?)",
+                (now,),
+            ).fetchall()
+            for action_id, task_id, revision in rows:
                 self.conn.execute(
-                    "DELETE FROM agent_task_leases WHERE expires_at <= ?",
-                    (now,),
+                    "UPDATE agent_task_actions SET status = 'outcome_unknown', "
+                    "updated_at = CURRENT_TIMESTAMP WHERE action_id = ?",
+                    (action_id,),
                 )
+                self._record_task_event(
+                    task_id,
+                    revision,
+                    "action_reconciliation_required",
+                    {"action_id": action_id, "status": "outcome_unknown"},
+                )
+                self._refresh_task_resume_capsule(task_id)
+            self.conn.execute(
+                "DELETE FROM agent_task_leases WHERE expires_at <= ?",
+                (now,),
+            )
         return len(rows)
 
     def update_task_step(
@@ -1567,7 +1561,7 @@ class PersistentMemory:
         step_id: str,
         status: str,
         evidence: str = "",
-        owner_id: Optional[str] = None,
+        owner_id: str | None = None,
     ) -> dict:
         """Persist a model-reported todo update for the approved active plan."""
         allowed_statuses = {
@@ -1589,94 +1583,93 @@ class PersistentMemory:
             )
         if status in {"reported_done", "blocked"} and not evidence:
             raise ValueError("A reported completion or blocked step needs evidence.")
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, approved_revision, approved_digest, "
-                    "status FROM agent_tasks WHERE task_id = ?",
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, approved_revision, approved_digest, "
+                "status FROM agent_tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            plan = self.conn.execute(
+                "SELECT digest, plan_json FROM agent_plan_revisions "
+                "WHERE task_id = ? AND revision = ?",
+                (task_id, revision),
+            ).fetchone()
+            if (
+                task is None
+                or plan is None
+                or task[0] != revision
+                or task[1] != revision
+                or task[2] != plan[0]
+                or task[3] != "active"
+            ):
+                raise ValueError("No active approval for this plan revision.")
+            if owner_id is not None:
+                lease = self.conn.execute(
+                    "SELECT owner_id, expires_at FROM agent_task_leases "
+                    "WHERE task_id = ?",
                     (task_id,),
                 ).fetchone()
-                plan = self.conn.execute(
-                    "SELECT digest, plan_json FROM agent_plan_revisions "
-                    "WHERE task_id = ? AND revision = ?",
-                    (task_id, revision),
-                ).fetchone()
-                if (
-                    task is None
-                    or plan is None
-                    or task[0] != revision
-                    or task[1] != revision
-                    or task[2] != plan[0]
-                    or task[3] != "active"
-                ):
-                    raise ValueError("No active approval for this plan revision.")
-                if owner_id is not None:
-                    lease = self.conn.execute(
-                        "SELECT owner_id, expires_at FROM agent_task_leases "
-                        "WHERE task_id = ?",
-                        (task_id,),
-                    ).fetchone()
-                    if not lease or lease[0] != owner_id or lease[1] <= time.time():
-                        raise ValueError(
-                            "Progress update blocked: this process does not hold "
-                            "the active task lease."
-                        )
-                step = self.conn.execute(
-                    "SELECT position FROM agent_todo_steps WHERE task_id = ? "
-                    "AND revision = ? AND step_id = ?",
-                    (task_id, revision, step_id),
-                ).fetchone()
-                if step is None:
-                    raise ValueError("Todo step not found in the active plan.")
-                if status in {"in_progress", "reported_done"}:
-                    plan_steps = json.loads(plan[1]).get("steps", [])
-                    dependencies = next(
-                        (
-                            item.get("dependencies", [])
-                            for item in plan_steps
-                            if item.get("step_id") == step_id
-                        ),
-                        [],
+                if not lease or lease[0] != owner_id or lease[1] <= time.time():
+                    raise ValueError(
+                        "Progress update blocked: this process does not hold "
+                        "the active task lease."
                     )
-                    dependency_states = {
-                        row[0]: row[1]
-                        for row in self.conn.execute(
-                            "SELECT step_id, status FROM agent_todo_steps "
-                            "WHERE task_id = ? AND revision = ?",
-                            (task_id, revision),
-                        ).fetchall()
-                    }
-                    unmet_dependencies = [
-                        dependency
-                        for dependency in dependencies
-                        if dependency_states.get(dependency)
-                        not in {"reported_done", "verified", "skipped"}
-                    ]
-                    if unmet_dependencies:
-                        names = ", ".join(unmet_dependencies)
-                        raise ValueError(
-                            f"Step dependencies must be reported complete first: {names}"
-                        )
-                cursor = self.conn.execute(
-                    "UPDATE agent_todo_steps SET status = ?, evidence = ?, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE task_id = ? "
-                    "AND revision = ? AND step_id = ? AND status != 'verified'",
-                    (status, evidence, task_id, revision, step_id),
+            step = self.conn.execute(
+                "SELECT position FROM agent_todo_steps WHERE task_id = ? "
+                "AND revision = ? AND step_id = ?",
+                (task_id, revision, step_id),
+            ).fetchone()
+            if step is None:
+                raise ValueError("Todo step not found in the active plan.")
+            if status in {"in_progress", "reported_done"}:
+                plan_steps = json.loads(plan[1]).get("steps", [])
+                dependencies = next(
+                    (
+                        item.get("dependencies", [])
+                        for item in plan_steps
+                        if item.get("step_id") == step_id
+                    ),
+                    [],
                 )
-                if cursor.rowcount != 1:
-                    raise ValueError("Todo step not found in the active plan.")
-                self.conn.execute(
-                    "UPDATE agent_tasks SET updated_at = CURRENT_TIMESTAMP, "
-                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                    (task_id,),
-                )
-                self._record_task_event(
-                    task_id,
-                    revision,
-                    "step_updated",
-                    {"step_id": step_id, "status": status, "evidence": evidence},
-                )
-                self._refresh_task_resume_capsule(task_id)
+                dependency_states = {
+                    row[0]: row[1]
+                    for row in self.conn.execute(
+                        "SELECT step_id, status FROM agent_todo_steps "
+                        "WHERE task_id = ? AND revision = ?",
+                        (task_id, revision),
+                    ).fetchall()
+                }
+                unmet_dependencies = [
+                    dependency
+                    for dependency in dependencies
+                    if dependency_states.get(dependency)
+                    not in {"reported_done", "verified", "skipped"}
+                ]
+                if unmet_dependencies:
+                    names = ", ".join(unmet_dependencies)
+                    raise ValueError(
+                        f"Step dependencies must be reported complete first: {names}"
+                    )
+            cursor = self.conn.execute(
+                "UPDATE agent_todo_steps SET status = ?, evidence = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE task_id = ? "
+                "AND revision = ? AND step_id = ? AND status != 'verified'",
+                (status, evidence, task_id, revision, step_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Todo step not found in the active plan.")
+            self.conn.execute(
+                "UPDATE agent_tasks SET updated_at = CURRENT_TIMESTAMP, "
+                "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (task_id,),
+            )
+            self._record_task_event(
+                task_id,
+                revision,
+                "step_updated",
+                {"step_id": step_id, "status": status, "evidence": evidence},
+            )
+            self._refresh_task_resume_capsule(task_id)
         return self.get_task(task_id)
 
     def verify_task_step(
@@ -1686,7 +1679,7 @@ class PersistentMemory:
         step_id: str,
         evidence: str,
         *,
-        owner_id: Optional[str] = None,
+        owner_id: str | None = None,
     ) -> dict:
         """Mark a model-reported step verified through the user/runtime flow."""
         evidence = str(evidence).strip()
@@ -1697,46 +1690,45 @@ class PersistentMemory:
                 "Verification evidence exceeds the 2000-character application "
                 "limit; prepare a concise, meaning-preserving summary."
             )
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, status FROM agent_tasks "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None or task[0] != revision or task[1] != "active":
-                    raise ValueError(
-                        "Only steps in the active revision can be verified."
-                    )
-                lease = self.conn.execute(
-                    "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if lease and lease[0] != owner_id:
-                    raise ValueError(
-                        "Step verification blocked: another process owns the task lease."
-                    )
-                cursor = self.conn.execute(
-                    "UPDATE agent_todo_steps SET status = 'verified', evidence = ?, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE task_id = ? "
-                    "AND revision = ? AND step_id = ? "
-                    "AND status = 'reported_done'",
-                    (evidence, task_id, revision, step_id),
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, status FROM agent_tasks "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None or task[0] != revision or task[1] != "active":
+                raise ValueError(
+                    "Only steps in the active revision can be verified."
                 )
-                if cursor.rowcount != 1:
-                    raise ValueError("Step is not reported complete or does not exist.")
-                self.conn.execute(
-                    "UPDATE agent_tasks SET updated_at = CURRENT_TIMESTAMP, "
-                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                    (task_id,),
+            lease = self.conn.execute(
+                "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if lease and lease[0] != owner_id:
+                raise ValueError(
+                    "Step verification blocked: another process owns the task lease."
                 )
-                self._record_task_event(
-                    task_id,
-                    revision,
-                    "step_verified",
-                    {"step_id": step_id, "evidence": evidence},
-                )
-                self._refresh_task_resume_capsule(task_id)
+            cursor = self.conn.execute(
+                "UPDATE agent_todo_steps SET status = 'verified', evidence = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE task_id = ? "
+                "AND revision = ? AND step_id = ? "
+                "AND status = 'reported_done'",
+                (evidence, task_id, revision, step_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Step is not reported complete or does not exist.")
+            self.conn.execute(
+                "UPDATE agent_tasks SET updated_at = CURRENT_TIMESTAMP, "
+                "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (task_id,),
+            )
+            self._record_task_event(
+                task_id,
+                revision,
+                "step_verified",
+                {"step_id": step_id, "evidence": evidence},
+            )
+            self._refresh_task_resume_capsule(task_id)
         return self.get_task(task_id)
 
     def record_task_validation(
@@ -1745,7 +1737,7 @@ class PersistentMemory:
         revision: int,
         evidence: str,
         *,
-        owner_id: Optional[str] = None,
+        owner_id: str | None = None,
     ) -> dict:
         """Persist verified runtime evidence for the current task revision."""
         evidence = str(evidence).strip()
@@ -1756,38 +1748,37 @@ class PersistentMemory:
                 "Task validation evidence exceeds the 2000-character application "
                 "limit; prepare a concise, meaning-preserving summary."
             )
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, status FROM agent_tasks "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None or task[0] != revision or task[1] != "active":
-                    raise ValueError(
-                        "Validation evidence must match the active task revision."
-                    )
-                lease = self.conn.execute(
-                    "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if lease and lease[0] != owner_id:
-                    raise ValueError(
-                        "Task validation blocked: another process owns the task lease."
-                    )
-                self.conn.execute(
-                    "UPDATE agent_tasks SET validation_revision = ?, "
-                    "validation_evidence = ?, updated_at = CURRENT_TIMESTAMP, "
-                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                    (revision, evidence, task_id),
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, status FROM agent_tasks "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None or task[0] != revision or task[1] != "active":
+                raise ValueError(
+                    "Validation evidence must match the active task revision."
                 )
-                self._record_task_event(
-                    task_id,
-                    revision,
-                    "task_validated",
-                    {"evidence": evidence},
+            lease = self.conn.execute(
+                "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if lease and lease[0] != owner_id:
+                raise ValueError(
+                    "Task validation blocked: another process owns the task lease."
                 )
-                self._refresh_task_resume_capsule(task_id)
+            self.conn.execute(
+                "UPDATE agent_tasks SET validation_revision = ?, "
+                "validation_evidence = ?, updated_at = CURRENT_TIMESTAMP, "
+                "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (revision, evidence, task_id),
+            )
+            self._record_task_event(
+                task_id,
+                revision,
+                "task_validated",
+                {"evidence": evidence},
+            )
+            self._refresh_task_resume_capsule(task_id)
         return self.get_task(task_id)
 
     def set_task_status(
@@ -1795,7 +1786,7 @@ class PersistentMemory:
         task_id: str,
         status: str,
         *,
-        owner_id: Optional[str] = None,
+        owner_id: str | None = None,
     ) -> dict:
         """Apply user/runtime task lifecycle transitions; never model approval."""
         transitions = {
@@ -1823,213 +1814,211 @@ class PersistentMemory:
         }
         if status not in transitions:
             raise ValueError("Unsupported task lifecycle transition.")
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, status FROM agent_tasks "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None:
-                    raise ValueError("Task not found.")
-                if task[1] not in transitions[status]:
-                    raise ValueError(
-                        f"Cannot change task from '{task[1]}' to '{status}'."
-                    )
-                lease = self.conn.execute(
-                    "SELECT owner_id, expires_at FROM agent_task_leases "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if lease and lease[1] > time.time() and lease[0] != owner_id:
-                    raise ValueError(
-                        "Task transition blocked: another process still holds "
-                        "the active task lease."
-                    )
-                if status in {
-                    "paused",
-                    "interrupted",
-                    "awaiting_approval",
-                    "cancelled",
-                    "abandoned",
-                    "stale",
-                }:
-                    self.conn.execute(
-                        "UPDATE agent_tasks SET status = ?, approved_revision = NULL, "
-                        "approved_digest = NULL, approved_scope = NULL, "
-                        "updated_at = CURRENT_TIMESTAMP, "
-                        "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                        (status, task_id),
-                    )
-                    self.conn.execute(
-                        "DELETE FROM agent_task_leases WHERE task_id = ?",
-                        (task_id,),
-                    )
-                self._record_task_event(
-                    task_id, task[0], status, {"previous_status": task[1]}
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, status FROM agent_tasks "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None:
+                raise ValueError("Task not found.")
+            if task[1] not in transitions[status]:
+                raise ValueError(
+                    f"Cannot change task from '{task[1]}' to '{status}'."
                 )
-                self._refresh_task_resume_capsule(task_id)
+            lease = self.conn.execute(
+                "SELECT owner_id, expires_at FROM agent_task_leases "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if lease and lease[1] > time.time() and lease[0] != owner_id:
+                raise ValueError(
+                    "Task transition blocked: another process still holds "
+                    "the active task lease."
+                )
+            if status in {
+                "paused",
+                "interrupted",
+                "awaiting_approval",
+                "cancelled",
+                "abandoned",
+                "stale",
+            }:
+                self.conn.execute(
+                    "UPDATE agent_tasks SET status = ?, approved_revision = NULL, "
+                    "approved_digest = NULL, approved_scope = NULL, "
+                    "updated_at = CURRENT_TIMESTAMP, "
+                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                    (status, task_id),
+                )
+                self.conn.execute(
+                    "DELETE FROM agent_task_leases WHERE task_id = ?",
+                    (task_id,),
+                )
+            self._record_task_event(
+                task_id, task[0], status, {"previous_status": task[1]}
+            )
+            self._refresh_task_resume_capsule(task_id)
         return self.get_task(task_id)
 
     def complete_task(
         self,
         task_id: str,
         *,
-        owner_id: Optional[str] = None,
+        owner_id: str | None = None,
     ) -> dict:
         """Complete only when every current-revision step is explicitly verified."""
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, status FROM agent_tasks "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None:
-                    raise ValueError("Task not found.")
-                if task[1] != "active":
-                    raise ValueError("Only an active task can be completed.")
-                unresolved_actions = self.conn.execute(
-                    "SELECT COUNT(*) FROM agent_task_actions "
-                    "WHERE task_id = ? AND status IN "
-                    "('in_flight', 'outcome_unknown')",
-                    (task_id,),
-                ).fetchone()[0]
-                if unresolved_actions:
-                    raise ValueError(
-                        "Task cannot be completed while tool actions have "
-                        "unresolved outcomes."
-                    )
-                lease = self.conn.execute(
-                    "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if lease and lease[0] != owner_id:
-                    raise ValueError(
-                        "Task completion blocked: another process owns the task lease."
-                    )
-                remaining = self.conn.execute(
-                    "SELECT COUNT(*) FROM agent_todo_steps WHERE task_id = ? "
-                    "AND revision = ? AND status NOT IN ('verified', 'skipped')",
-                    (task_id, task[0]),
-                ).fetchone()[0]
-                if remaining:
-                    raise ValueError(
-                        "Every current plan step must be verified or explicitly skipped."
-                    )
-                details = self.conn.execute(
-                    "SELECT task.originating_session_id, task.goal, task.task_type, "
-                    "revision.plan_json FROM agent_tasks AS task "
-                    "JOIN agent_plan_revisions AS revision "
-                    "ON revision.task_id = task.task_id "
-                    "AND revision.revision = task.current_revision "
-                    "WHERE task.task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                verified_steps = self.conn.execute(
-                    "SELECT step_id, description, status, evidence "
-                    "FROM agent_todo_steps WHERE task_id = ? AND revision = ? "
-                    "ORDER BY position",
-                    (task_id, task[0]),
-                ).fetchall()
-                plan = json.loads(details[3])
-                plan_steps = {item["step_id"]: item for item in plan.get("steps", [])}
-                episode_topic = self._sanitize_episode_text(details[1].splitlines()[0])
-                episode_description = (
-                    f"Completed {details[2]} task: "
-                    f"{sum(row[2] == 'verified' for row in verified_steps)} verified, "
-                    f"{sum(row[2] == 'skipped' for row in verified_steps)} skipped."
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, status FROM agent_tasks "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None:
+                raise ValueError("Task not found.")
+            if task[1] != "active":
+                raise ValueError("Only an active task can be completed.")
+            unresolved_actions = self.conn.execute(
+                "SELECT COUNT(*) FROM agent_task_actions "
+                "WHERE task_id = ? AND status IN "
+                "('in_flight', 'outcome_unknown')",
+                (task_id,),
+            ).fetchone()[0]
+            if unresolved_actions:
+                raise ValueError(
+                    "Task cannot be completed while tool actions have "
+                    "unresolved outcomes."
                 )
-                episode_task_summary = self._sanitize_episode_text(details[1])
-                episode_plan = {
-                    "assumptions": [
-                        self._sanitize_episode_text(value)
-                        for value in plan.get("assumptions", [])
-                    ],
-                    "constraints": [
-                        self._sanitize_episode_text(value)
-                        for value in plan.get("constraints", [])
-                    ],
-                    "research_questions": [
-                        self._sanitize_episode_text(value)
-                        for value in plan.get("research_questions", [])
-                    ],
-                    "steps": [
-                        {
-                            "step_id": row[0],
-                            "description": self._sanitize_episode_text(row[1]),
-                            "status": row[2],
-                            "dependencies": plan_steps.get(row[0], {}).get(
-                                "dependencies", []
-                            ),
-                            "validation": [
-                                self._sanitize_episode_text(value)
-                                for value in plan_steps.get(row[0], {}).get(
-                                    "validation", []
-                                )
-                            ],
-                            "proof": [
-                                self._sanitize_episode_text(value)
-                                for value in plan_steps.get(row[0], {}).get("proof", [])
-                            ],
-                            "risks": [
-                                self._sanitize_episode_text(value)
-                                for value in plan_steps.get(row[0], {}).get("risks", [])
-                            ],
-                            "edge_cases": [
-                                self._sanitize_episode_text(value)
-                                for value in plan_steps.get(row[0], {}).get(
-                                    "edge_cases", []
-                                )
-                            ],
-                        }
-                        for row in verified_steps
-                    ],
-                }
-                episode_outcome = (
-                    "Completed after all steps were verified or explicitly skipped."
+            lease = self.conn.execute(
+                "SELECT owner_id FROM agent_task_leases WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if lease and lease[0] != owner_id:
+                raise ValueError(
+                    "Task completion blocked: another process owns the task lease."
                 )
-                episode_content = (
-                    f"Topic: {episode_topic}\n"
-                    f"Description: {episode_description}\n"
-                    f"{episode_description}\n{episode_outcome}"
+            remaining = self.conn.execute(
+                "SELECT COUNT(*) FROM agent_todo_steps WHERE task_id = ? "
+                "AND revision = ? AND status NOT IN ('verified', 'skipped')",
+                (task_id, task[0]),
+            ).fetchone()[0]
+            if remaining:
+                raise ValueError(
+                    "Every current plan step must be verified or explicitly skipped."
                 )
-                if len(episode_content) > MAX_SUMMARY_CHARS:
-                    raise ValueError(
-                        "Structured episode summary exceeds the configured "
-                        f"{MAX_SUMMARY_CHARS}-character budget."
-                    )
-                self.conn.execute(
-                    "UPDATE agent_tasks SET status = 'completed', "
-                    "updated_at = CURRENT_TIMESTAMP, "
-                    "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                    (task_id,),
+            details = self.conn.execute(
+                "SELECT task.originating_session_id, task.goal, task.task_type, "
+                "revision.plan_json FROM agent_tasks AS task "
+                "JOIN agent_plan_revisions AS revision "
+                "ON revision.task_id = task.task_id "
+                "AND revision.revision = task.current_revision "
+                "WHERE task.task_id = ?",
+                (task_id,),
+            ).fetchone()
+            verified_steps = self.conn.execute(
+                "SELECT step_id, description, status, evidence "
+                "FROM agent_todo_steps WHERE task_id = ? AND revision = ? "
+                "ORDER BY position",
+                (task_id, task[0]),
+            ).fetchall()
+            plan = json.loads(details[3])
+            plan_steps = {item["step_id"]: item for item in plan.get("steps", [])}
+            episode_topic = self._sanitize_episode_text(details[1].splitlines()[0])
+            episode_description = (
+                f"Completed {details[2]} task: "
+                f"{sum(row[2] == 'verified' for row in verified_steps)} verified, "
+                f"{sum(row[2] == 'skipped' for row in verified_steps)} skipped."
+            )
+            episode_task_summary = self._sanitize_episode_text(details[1])
+            episode_plan = {
+                "assumptions": [
+                    self._sanitize_episode_text(value)
+                    for value in plan.get("assumptions", [])
+                ],
+                "constraints": [
+                    self._sanitize_episode_text(value)
+                    for value in plan.get("constraints", [])
+                ],
+                "research_questions": [
+                    self._sanitize_episode_text(value)
+                    for value in plan.get("research_questions", [])
+                ],
+                "steps": [
+                    {
+                        "step_id": row[0],
+                        "description": self._sanitize_episode_text(row[1]),
+                        "status": row[2],
+                        "dependencies": plan_steps.get(row[0], {}).get(
+                            "dependencies", []
+                        ),
+                        "validation": [
+                            self._sanitize_episode_text(value)
+                            for value in plan_steps.get(row[0], {}).get(
+                                "validation", []
+                            )
+                        ],
+                        "proof": [
+                            self._sanitize_episode_text(value)
+                            for value in plan_steps.get(row[0], {}).get("proof", [])
+                        ],
+                        "risks": [
+                            self._sanitize_episode_text(value)
+                            for value in plan_steps.get(row[0], {}).get("risks", [])
+                        ],
+                        "edge_cases": [
+                            self._sanitize_episode_text(value)
+                            for value in plan_steps.get(row[0], {}).get(
+                                "edge_cases", []
+                            )
+                        ],
+                    }
+                    for row in verified_steps
+                ],
+            }
+            episode_outcome = (
+                "Completed after all steps were verified or explicitly skipped."
+            )
+            episode_content = (
+                f"Topic: {episode_topic}\n"
+                f"Description: {episode_description}\n"
+                f"{episode_description}\n{episode_outcome}"
+            )
+            if len(episode_content) > MAX_SUMMARY_CHARS:
+                raise ValueError(
+                    "Structured episode summary exceeds the configured "
+                    f"{MAX_SUMMARY_CHARS}-character budget."
                 )
-                self.conn.execute(
-                    "DELETE FROM agent_task_leases WHERE task_id = ?",
-                    (task_id,),
-                )
-                episode_cursor = self.conn.execute(
-                    "INSERT INTO chat_history "
-                    "(session_id, role, content, episode_topic, "
-                    "episode_description, episode_task_summary, "
-                    "episode_plan_json, episode_outcome, episode_task_id) "
-                    "VALUES (?, 'summary', ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        details[0],
-                        episode_content,
-                        episode_topic,
-                        episode_description,
-                        episode_task_summary,
-                        json.dumps(episode_plan, ensure_ascii=False),
-                        episode_outcome,
-                        task_id,
-                    ),
-                )
-                self._record_task_event(
-                    task_id, task[0], "completed", {"verified_steps_only": True}
-                )
-                self._refresh_task_resume_capsule(task_id)
+            self.conn.execute(
+                "UPDATE agent_tasks SET status = 'completed', "
+                "updated_at = CURRENT_TIMESTAMP, "
+                "checkpoint_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (task_id,),
+            )
+            self.conn.execute(
+                "DELETE FROM agent_task_leases WHERE task_id = ?",
+                (task_id,),
+            )
+            episode_cursor = self.conn.execute(
+                "INSERT INTO chat_history "
+                "(session_id, role, content, episode_topic, "
+                "episode_description, episode_task_summary, "
+                "episode_plan_json, episode_outcome, episode_task_id) "
+                "VALUES (?, 'summary', ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    details[0],
+                    episode_content,
+                    episode_topic,
+                    episode_description,
+                    episode_task_summary,
+                    json.dumps(episode_plan, ensure_ascii=False),
+                    episode_outcome,
+                    task_id,
+                ),
+            )
+            self._record_task_event(
+                task_id, task[0], "completed", {"verified_steps_only": True}
+            )
+            self._refresh_task_resume_capsule(task_id)
         completed = self.get_task(task_id)
         completed["episode_id"] = episode_cursor.lastrowid
         return completed
@@ -2042,26 +2031,25 @@ class PersistentMemory:
             or not 0 <= rating <= 5
         ):
             raise ValueError("Task completeness rating must be an integer from 0 to 5.")
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT current_revision, status FROM agent_tasks "
-                    "WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None or task[1] != "completed":
-                    raise ValueError("Only a completed task can receive a rating.")
-                self.conn.execute(
-                    "UPDATE agent_tasks SET user_rating = ?, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",
-                    (rating, task_id),
-                )
-                self._record_task_event(
-                    task_id,
-                    task[0],
-                    "user_rated",
-                    {"rating": rating, "rating_is_subjective": True},
-                )
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT current_revision, status FROM agent_tasks "
+                "WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None or task[1] != "completed":
+                raise ValueError("Only a completed task can receive a rating.")
+            self.conn.execute(
+                "UPDATE agent_tasks SET user_rating = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE task_id = ?",
+                (rating, task_id),
+            )
+            self._record_task_event(
+                task_id,
+                task[0],
+                "user_rated",
+                {"rating": rating, "rating_is_subjective": True},
+            )
         return self.get_task(task_id)
 
     def learning_is_enabled(self) -> bool:
@@ -2073,15 +2061,14 @@ class PersistentMemory:
         return bool(row and row[0] == "1")
 
     def set_learning_enabled(self, enabled: bool) -> None:
-        with self._lock:
-            with self._write_transaction():
-                self.conn.execute(
-                    "INSERT INTO agent_learning_settings "
-                    "(setting_key, setting_value) VALUES ('enabled', ?) "
-                    "ON CONFLICT(setting_key) DO UPDATE SET "
-                    "setting_value = excluded.setting_value",
-                    ("1" if enabled else "0",),
-                )
+        with self._lock, self._write_transaction():
+            self.conn.execute(
+                "INSERT INTO agent_learning_settings "
+                "(setting_key, setting_value) VALUES ('enabled', ?) "
+                "ON CONFLICT(setting_key) DO UPDATE SET "
+                "setting_value = excluded.setting_value",
+                ("1" if enabled else "0",),
+            )
 
     def add_learned_item(
         self,
@@ -2089,7 +2076,7 @@ class PersistentMemory:
         scope: str,
         *,
         provenance: str = "user-confirmed",
-        source_task_id: Optional[str] = None,
+        source_task_id: str | None = None,
     ) -> dict:
         statement = self._validate_learned_statement(statement)
         scope = str(scope).strip().lower()
@@ -2101,39 +2088,38 @@ class PersistentMemory:
         if not provenance or len(provenance) > 100:
             raise ValueError("Learning provenance must contain 1 to 100 characters.")
         item_id = uuid.uuid4().hex
-        with self._lock:
-            with self._write_transaction():
-                enabled = self.conn.execute(
-                    "SELECT setting_value FROM agent_learning_settings "
-                    "WHERE setting_key = 'enabled'"
+        with self._lock, self._write_transaction():
+            enabled = self.conn.execute(
+                "SELECT setting_value FROM agent_learning_settings "
+                "WHERE setting_key = 'enabled'"
+            ).fetchone()
+            if enabled is None or enabled[0] != "1":
+                raise ValueError("Adaptive learning is disabled.")
+            if source_task_id:
+                source = self.conn.execute(
+                    "SELECT status FROM agent_tasks WHERE task_id = ?",
+                    (source_task_id,),
                 ).fetchone()
-                if enabled is None or enabled[0] != "1":
-                    raise ValueError("Adaptive learning is disabled.")
-                if source_task_id:
-                    source = self.conn.execute(
-                        "SELECT status FROM agent_tasks WHERE task_id = ?",
-                        (source_task_id,),
-                    ).fetchone()
-                    if source is None or source[0] != "completed":
-                        raise ValueError(
-                            "Learned task procedures must reference a completed task."
-                        )
-                self.conn.execute(
-                    "INSERT INTO agent_learned_items "
-                    "(item_id, statement, scope, provenance, source_task_id, "
-                    "expires_at, review_at) "
-                    "VALUES (?, ?, ?, ?, ?, "
-                    "datetime('now', ?), datetime('now', ?))",
-                    (
-                        item_id,
-                        statement,
-                        scope,
-                        provenance,
-                        source_task_id,
-                        f"+{LEARNED_ITEM_EXPIRY_DAYS} days",
-                        f"+{LEARNED_ITEM_REVIEW_DAYS} days",
-                    ),
-                )
+                if source is None or source[0] != "completed":
+                    raise ValueError(
+                        "Learned task procedures must reference a completed task."
+                    )
+            self.conn.execute(
+                "INSERT INTO agent_learned_items "
+                "(item_id, statement, scope, provenance, source_task_id, "
+                "expires_at, review_at) "
+                "VALUES (?, ?, ?, ?, ?, "
+                "datetime('now', ?), datetime('now', ?))",
+                (
+                    item_id,
+                    statement,
+                    scope,
+                    provenance,
+                    source_task_id,
+                    f"+{LEARNED_ITEM_EXPIRY_DAYS} days",
+                    f"+{LEARNED_ITEM_REVIEW_DAYS} days",
+                ),
+            )
         return self.get_learned_item(item_id)
 
     def list_learned_items(self, *, include_disabled: bool = True) -> list[dict]:
@@ -2147,7 +2133,7 @@ class PersistentMemory:
             item for row in rows if (item := self.get_learned_item(row[0])) is not None
         ]
 
-    def get_learned_item(self, item_id: str) -> Optional[dict]:
+    def get_learned_item(self, item_id: str) -> dict | None:
         with self._lock:
             row = self.conn.execute(
                 "SELECT item_id, statement, scope, provenance, source_task_id, "
@@ -2189,67 +2175,63 @@ class PersistentMemory:
             raise ValueError(
                 "Learning scope must be global, coding, research, or other."
             )
-        with self._lock:
-            with self._write_transaction():
-                cursor = self.conn.execute(
-                    "UPDATE agent_learned_items SET statement = ?, scope = ?, "
-                    "provenance = 'user-corrected', status = 'active', "
-                    "expires_at = datetime('now', ?), "
-                    "review_at = datetime('now', ?), "
-                    "updated_at = CURRENT_TIMESTAMP WHERE item_id = ?",
-                    (
-                        statement,
-                        scope,
-                        f"+{LEARNED_ITEM_EXPIRY_DAYS} days",
-                        f"+{LEARNED_ITEM_REVIEW_DAYS} days",
-                        item_id,
-                    ),
-                )
-                if cursor.rowcount != 1:
-                    raise ValueError("Learned item was not found.")
+        with self._lock, self._write_transaction():
+            cursor = self.conn.execute(
+                "UPDATE agent_learned_items SET statement = ?, scope = ?, "
+                "provenance = 'user-corrected', status = 'active', "
+                "expires_at = datetime('now', ?), "
+                "review_at = datetime('now', ?), "
+                "updated_at = CURRENT_TIMESTAMP WHERE item_id = ?",
+                (
+                    statement,
+                    scope,
+                    f"+{LEARNED_ITEM_EXPIRY_DAYS} days",
+                    f"+{LEARNED_ITEM_REVIEW_DAYS} days",
+                    item_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Learned item was not found.")
         return self.get_learned_item(item_id)
 
     def review_learned_item(self, item_id: str) -> dict:
         """Renew an item only after the user explicitly confirms it remains useful."""
-        with self._lock:
-            with self._write_transaction():
-                cursor = self.conn.execute(
-                    "UPDATE agent_learned_items SET status = 'active', "
-                    "expires_at = datetime('now', ?), "
-                    "review_at = datetime('now', ?), "
-                    "updated_at = CURRENT_TIMESTAMP WHERE item_id = ?",
-                    (
-                        f"+{LEARNED_ITEM_EXPIRY_DAYS} days",
-                        f"+{LEARNED_ITEM_REVIEW_DAYS} days",
-                        item_id,
-                    ),
-                )
-                if cursor.rowcount != 1:
-                    raise ValueError("Learned item was not found.")
+        with self._lock, self._write_transaction():
+            cursor = self.conn.execute(
+                "UPDATE agent_learned_items SET status = 'active', "
+                "expires_at = datetime('now', ?), "
+                "review_at = datetime('now', ?), "
+                "updated_at = CURRENT_TIMESTAMP WHERE item_id = ?",
+                (
+                    f"+{LEARNED_ITEM_EXPIRY_DAYS} days",
+                    f"+{LEARNED_ITEM_REVIEW_DAYS} days",
+                    item_id,
+                ),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Learned item was not found.")
         return self.get_learned_item(item_id)
 
     def set_learned_item_status(self, item_id: str, status: str) -> dict:
         if status not in {"active", "disabled"}:
             raise ValueError("Learned item status must be active or disabled.")
-        with self._lock:
-            with self._write_transaction():
-                cursor = self.conn.execute(
-                    "UPDATE agent_learned_items SET status = ?, "
-                    "updated_at = CURRENT_TIMESTAMP WHERE item_id = ?",
-                    (status, item_id),
-                )
-                if cursor.rowcount != 1:
-                    raise ValueError("Learned item was not found.")
+        with self._lock, self._write_transaction():
+            cursor = self.conn.execute(
+                "UPDATE agent_learned_items SET status = ?, "
+                "updated_at = CURRENT_TIMESTAMP WHERE item_id = ?",
+                (status, item_id),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Learned item was not found.")
         return self.get_learned_item(item_id)
 
     def delete_learned_item(self, item_id: str) -> bool:
-        with self._lock:
-            with self._write_transaction():
-                cursor = self.conn.execute(
-                    "DELETE FROM agent_learned_items WHERE item_id = ?",
-                    (item_id,),
-                )
-                return cursor.rowcount == 1
+        with self._lock, self._write_transaction():
+            cursor = self.conn.execute(
+                "DELETE FROM agent_learned_items WHERE item_id = ?",
+                (item_id,),
+            )
+            return cursor.rowcount == 1
 
     def get_relevant_learned_items(
         self,
@@ -2280,18 +2262,17 @@ class PersistentMemory:
         ]
 
     def save_message(self, session_id: str, role: str, content: str):
-        with self._lock:
-            with self.conn:
-                self.conn.execute(
-                    "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
-                    (session_id, role, content),
-                )
+        with self._lock, self.conn:
+            self.conn.execute(
+                "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
+                (session_id, role, content),
+            )
 
     def get_history(
         self,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         limit: int = DEFAULT_HISTORY_MESSAGES,
-    ) -> List[BaseMessage]:
+    ) -> list[BaseMessage]:
         with self._lock:
             cursor = self.conn.cursor()
             if session_id:
@@ -2324,7 +2305,7 @@ class PersistentMemory:
                 messages.append(HumanMessage(content=content))
         return messages
 
-    def get_latest_session_id(self) -> Optional[str]:
+    def get_latest_session_id(self) -> str | None:
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
@@ -2334,7 +2315,7 @@ class PersistentMemory:
             row = cursor.fetchone()
         return row[0] if row else None
 
-    def list_sessions(self) -> List[str]:
+    def list_sessions(self) -> list[str]:
         with self._lock:
             cursor = self.conn.cursor()
             cursor.execute(
@@ -2365,33 +2346,32 @@ class PersistentMemory:
 
     def load_history(
         self,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
         limit: int = DEFAULT_HISTORY_MESSAGES,
-    ) -> List[BaseMessage]:
+    ) -> list[BaseMessage]:
         """Alias for get_history to support test expectations."""
         return self.get_history(session_id, limit)
 
-    def clear_history(self, session_id: Optional[str] = None):
-        with self._lock:
-            with self.conn:
-                if session_id:
-                    self.conn.execute(
-                        "DELETE FROM agent_learned_items WHERE source_task_id IN "
-                        "(SELECT task_id FROM agent_tasks "
-                        "WHERE originating_session_id = ?)",
-                        (session_id,),
-                    )
-                    self.conn.execute(
-                        "DELETE FROM agent_tasks WHERE originating_session_id = ?",
-                        (session_id,),
-                    )
-                    self.conn.execute(
-                        "DELETE FROM chat_history WHERE session_id = ?", (session_id,)
-                    )
-                else:
-                    self.conn.execute("DELETE FROM agent_learned_items")
-                    self.conn.execute("DELETE FROM agent_tasks")
-                    self.conn.execute("DELETE FROM chat_history")
+    def clear_history(self, session_id: str | None = None):
+        with self._lock, self.conn:
+            if session_id:
+                self.conn.execute(
+                    "DELETE FROM agent_learned_items WHERE source_task_id IN "
+                    "(SELECT task_id FROM agent_tasks "
+                    "WHERE originating_session_id = ?)",
+                    (session_id,),
+                )
+                self.conn.execute(
+                    "DELETE FROM agent_tasks WHERE originating_session_id = ?",
+                    (session_id,),
+                )
+                self.conn.execute(
+                    "DELETE FROM chat_history WHERE session_id = ?", (session_id,)
+                )
+            else:
+                self.conn.execute("DELETE FROM agent_learned_items")
+                self.conn.execute("DELETE FROM agent_tasks")
+                self.conn.execute("DELETE FROM chat_history")
 
     def save_summary(self, session_id: str, summary: str):
         """Save an episodic session summary to the database."""
@@ -2403,12 +2383,11 @@ class PersistentMemory:
                 f"Episode summary exceeds the configured {MAX_SUMMARY_CHARS}-"
                 "character limit; provide a schema-informed concise summary."
             )
-        with self._lock:
-            with self.conn:
-                self.conn.execute(
-                    "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
-                    (session_id, "summary", summary),
-                )
+        with self._lock, self.conn:
+            self.conn.execute(
+                "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
+                (session_id, "summary", summary),
+            )
 
     def prune_history(self, retention_days: int) -> int:
         """Delete messages and derived summaries older than the retention window."""
@@ -2417,12 +2396,11 @@ class PersistentMemory:
         cutoff = (
             datetime.now(timezone.utc) - timedelta(days=retention_days)
         ).isoformat(sep=" ", timespec="seconds")
-        with self._lock:
-            with self.conn:
-                cursor = self.conn.execute(
-                    "DELETE FROM chat_history WHERE timestamp < ?", (cutoff,)
-                )
-                return cursor.rowcount
+        with self._lock, self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM chat_history WHERE timestamp < ?", (cutoff,)
+            )
+            return cursor.rowcount
 
     def prune_retained_records(
         self,
@@ -2447,65 +2425,64 @@ class PersistentMemory:
             "interrupted",
             "stale",
         )
-        with self._lock:
-            with self._write_transaction():
-                if days_by_class["conversation"]:
-                    cutoff = (
-                        datetime.now(timezone.utc)
-                        - timedelta(days=days_by_class["conversation"])
-                    ).strftime("%Y-%m-%d %H:%M:%S")
-                    cursor = self.conn.execute(
-                        "DELETE FROM chat_history WHERE timestamp < ? "
-                        "AND role NOT IN ('summary', 'skill') "
-                        "AND is_skill_file = 0",
-                        (cutoff,),
-                    )
-                    deleted["conversation"] = cursor.rowcount
-                if days_by_class["episode"]:
-                    cutoff = (
-                        datetime.now(timezone.utc)
-                        - timedelta(days=days_by_class["episode"])
-                    ).strftime("%Y-%m-%d %H:%M:%S")
-                    cursor = self.conn.execute(
-                        "DELETE FROM chat_history WHERE role = 'summary' "
-                        "AND timestamp < ? AND (episode_task_id IS NULL OR "
-                        "episode_task_id NOT IN (SELECT task_id FROM agent_tasks "
-                        "WHERE status IN (?, ?, ?, ?, ?, ?)))",
+        with self._lock, self._write_transaction():
+            if days_by_class["conversation"]:
+                cutoff = (
+                    datetime.now(timezone.utc)
+                    - timedelta(days=days_by_class["conversation"])
+                ).strftime("%Y-%m-%d %H:%M:%S")
+                cursor = self.conn.execute(
+                    "DELETE FROM chat_history WHERE timestamp < ? "
+                    "AND role NOT IN ('summary', 'skill') "
+                    "AND is_skill_file = 0",
+                    (cutoff,),
+                )
+                deleted["conversation"] = cursor.rowcount
+            if days_by_class["episode"]:
+                cutoff = (
+                    datetime.now(timezone.utc)
+                    - timedelta(days=days_by_class["episode"])
+                ).strftime("%Y-%m-%d %H:%M:%S")
+                cursor = self.conn.execute(
+                    "DELETE FROM chat_history WHERE role = 'summary' "
+                    "AND timestamp < ? AND (episode_task_id IS NULL OR "
+                    "episode_task_id NOT IN (SELECT task_id FROM agent_tasks "
+                    "WHERE status IN (?, ?, ?, ?, ?, ?)))",
+                    (cutoff, *resumable_statuses),
+                )
+                deleted["episodes"] = cursor.rowcount
+            if days_by_class["skill"]:
+                cutoff = (
+                    datetime.now(timezone.utc)
+                    - timedelta(days=days_by_class["skill"])
+                ).strftime("%Y-%m-%d %H:%M:%S")
+                skill_paths = [
+                    str(row[0])
+                    for row in self.conn.execute(
+                        "SELECT skill_file_path FROM chat_history "
+                        "WHERE is_skill_file = 1 AND timestamp < ? "
+                        "AND (skill_task_id IS NULL OR skill_task_id NOT IN "
+                        "(SELECT task_id FROM agent_tasks "
+                        "WHERE status IN (?, ?, ?, ?, ?, ?))) "
+                        "AND skill_file_path IS NOT NULL",
                         (cutoff, *resumable_statuses),
-                    )
-                    deleted["episodes"] = cursor.rowcount
-                if days_by_class["skill"]:
-                    cutoff = (
-                        datetime.now(timezone.utc)
-                        - timedelta(days=days_by_class["skill"])
-                    ).strftime("%Y-%m-%d %H:%M:%S")
-                    skill_paths = [
-                        str(row[0])
-                        for row in self.conn.execute(
-                            "SELECT skill_file_path FROM chat_history "
-                            "WHERE is_skill_file = 1 AND timestamp < ? "
-                            "AND (skill_task_id IS NULL OR skill_task_id NOT IN "
-                            "(SELECT task_id FROM agent_tasks "
-                            "WHERE status IN (?, ?, ?, ?, ?, ?))) "
-                            "AND skill_file_path IS NOT NULL",
-                            (cutoff, *resumable_statuses),
-                        ).fetchall()
-                    ]
-                    cursor = self.conn.execute(
-                        "DELETE FROM chat_history WHERE is_skill_file = 1 "
-                        "AND timestamp < ? AND (skill_task_id IS NULL OR "
-                        "skill_task_id NOT IN (SELECT task_id FROM agent_tasks "
-                        "WHERE status IN (?, ?, ?, ?, ?, ?)))",
-                        (cutoff, *resumable_statuses),
-                    )
-                    deleted["skills"] = cursor.rowcount
+                    ).fetchall()
+                ]
+                cursor = self.conn.execute(
+                    "DELETE FROM chat_history WHERE is_skill_file = 1 "
+                    "AND timestamp < ? AND (skill_task_id IS NULL OR "
+                    "skill_task_id NOT IN (SELECT task_id FROM agent_tasks "
+                    "WHERE status IN (?, ?, ?, ?, ?, ?)))",
+                    (cutoff, *resumable_statuses),
+                )
+                deleted["skills"] = cursor.rowcount
         return {**deleted, "skill_paths": skill_paths}
 
     def get_all_episodic_summaries(
         self,
         limit: int = DEFAULT_EPISODIC_SUMMARIES,
-        session_id: Optional[str] = None,
-    ) -> List[str]:
+        session_id: str | None = None,
+    ) -> list[str]:
         """Retrieve recent summaries, optionally restricted to one session."""
         with self._lock:
             cursor = self.conn.cursor()
@@ -2688,7 +2665,7 @@ class PersistentMemory:
         matches.sort(key=lambda item: (-item[0], -item[1], -item[2]))
         return [item[3] for item in matches[:limit]]
 
-    def get_episodic_memory(self, entry_id: int) -> Optional[dict[str, object]]:
+    def get_episodic_memory(self, entry_id: int) -> dict[str, object] | None:
         """Return one saved session summary by its SQLite row ID."""
         with self._lock:
             row = self.conn.execute(
@@ -2714,13 +2691,12 @@ class PersistentMemory:
 
     def delete_episodic_memory(self, entry_id: int) -> bool:
         """Delete one summary row without deleting the associated conversation."""
-        with self._lock:
-            with self.conn:
-                cursor = self.conn.execute(
-                    "DELETE FROM chat_history WHERE id = ? AND role = 'summary'",
-                    (entry_id,),
-                )
-                return cursor.rowcount == 1
+        with self._lock, self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM chat_history WHERE id = ? AND role = 'summary'",
+                (entry_id,),
+            )
+            return cursor.rowcount == 1
 
     def register_skill_file(
         self,
@@ -2728,62 +2704,60 @@ class PersistentMemory:
         skill_file_path: str,
         description: str,
         *,
-        source_task_id: Optional[str] = None,
+        source_task_id: str | None = None,
     ) -> int:
         """Associate a successfully created skill artifact with its originating session."""
-        with self._lock:
-            with self.conn:
-                cursor = self.conn.execute(
-                    "INSERT INTO chat_history "
-                    "(session_id, role, content, is_skill_file, skill_file_path, "
-                    "skill_task_id) VALUES (?, 'skill', ?, ?, ?, ?)",
-                    (
-                        session_id,
-                        description,
-                        True,
-                        skill_file_path,
-                        source_task_id,
-                    ),
-                )
-                return int(cursor.lastrowid)
+        with self._lock, self.conn:
+            cursor = self.conn.execute(
+                "INSERT INTO chat_history "
+                "(session_id, role, content, is_skill_file, skill_file_path, "
+                "skill_task_id) VALUES (?, 'skill', ?, ?, ?, ?)",
+                (
+                    session_id,
+                    description,
+                    True,
+                    skill_file_path,
+                    source_task_id,
+                ),
+            )
+            return int(cursor.lastrowid)
 
     def delete_task_records(self, task_id: str) -> dict:
         """Delete a non-active task and its linked learning, episode, and skill metadata."""
-        with self._lock:
-            with self._write_transaction():
-                task = self.conn.execute(
-                    "SELECT status FROM agent_tasks WHERE task_id = ?",
-                    (task_id,),
-                ).fetchone()
-                if task is None:
-                    raise ValueError("Task not found.")
-                if task[0] == "active":
-                    raise ValueError(
-                        "Pause or cancel an active task before deleting its records."
-                    )
-                skill_rows = self.conn.execute(
-                    "SELECT id, skill_file_path FROM chat_history "
-                    "WHERE is_skill_file = 1 AND skill_task_id = ?",
-                    (task_id,),
-                ).fetchall()
-                episode_cursor = self.conn.execute(
-                    "DELETE FROM chat_history WHERE role = 'summary' "
-                    "AND episode_task_id = ?",
-                    (task_id,),
+        with self._lock, self._write_transaction():
+            task = self.conn.execute(
+                "SELECT status FROM agent_tasks WHERE task_id = ?",
+                (task_id,),
+            ).fetchone()
+            if task is None:
+                raise ValueError("Task not found.")
+            if task[0] == "active":
+                raise ValueError(
+                    "Pause or cancel an active task before deleting its records."
                 )
-                self.conn.execute(
-                    "DELETE FROM chat_history WHERE is_skill_file = 1 "
-                    "AND skill_task_id = ?",
-                    (task_id,),
-                )
-                self.conn.execute(
-                    "DELETE FROM agent_learned_items WHERE source_task_id = ?",
-                    (task_id,),
-                )
-                self.conn.execute(
-                    "DELETE FROM agent_tasks WHERE task_id = ?",
-                    (task_id,),
-                )
+            skill_rows = self.conn.execute(
+                "SELECT id, skill_file_path FROM chat_history "
+                "WHERE is_skill_file = 1 AND skill_task_id = ?",
+                (task_id,),
+            ).fetchall()
+            episode_cursor = self.conn.execute(
+                "DELETE FROM chat_history WHERE role = 'summary' "
+                "AND episode_task_id = ?",
+                (task_id,),
+            )
+            self.conn.execute(
+                "DELETE FROM chat_history WHERE is_skill_file = 1 "
+                "AND skill_task_id = ?",
+                (task_id,),
+            )
+            self.conn.execute(
+                "DELETE FROM agent_learned_items WHERE source_task_id = ?",
+                (task_id,),
+            )
+            self.conn.execute(
+                "DELETE FROM agent_tasks WHERE task_id = ?",
+                (task_id,),
+            )
         return {
             "task_id": task_id,
             "episodes_deleted": episode_cursor.rowcount,

@@ -1,7 +1,8 @@
 """Provider-independent validation and error formatting for model backends."""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from ..run_logging import RUN_LOGGER, log_event
@@ -23,14 +24,14 @@ def inspect_local_model_capabilities(
     max_cache_entries: int,
     console: Any,
     close_client: Callable[[Any], None],
-) -> Dict[str, Optional[bool] | int]:
+) -> dict[str, bool | None | int]:
     """Read Ollama-declared capabilities, with a bounded per-process cache."""
     cache_key = (base_url, model_name)
     cached = capability_cache.get(cache_key)
     if cached is not None:
         return cached.copy()
 
-    result: Dict[str, Optional[bool] | int] = {
+    result: dict[str, bool | None | int] = {
         "tools": None,
         "function_calls": None,
         "structured_output": None,
@@ -110,15 +111,15 @@ def create_local_chat_model(
     temperature: float,
     base_url: str,
     acceleration_mode: str,
-    thinking: Optional[bool | str],
+    thinking: bool | str | None,
     chat_model_factory: Callable[..., Any],
     client_kwargs: Callable[[], dict],
     acceleration_options: Callable[[str], dict],
     track_clients: Callable[[Any], None],
     max_output_tokens: int = 2048,
-    context_window: Optional[int] = None,
+    context_window: int | None = None,
 ) -> Any:
-    options: Dict[str, Any] = {
+    options: dict[str, Any] = {
         "model": model_name,
         "temperature": temperature,
         "base_url": base_url,
@@ -176,22 +177,22 @@ def create_openai_compatible_chat_model(
 def create_robust_local_chat_model(
     primary_model_name: str,
     fallback_model_name: str,
-    tools: Optional[Sequence[Any]],
+    tools: Sequence[Any] | None,
     *,
     temperature: float,
     base_url: str,
     acceleration_mode: str,
-    thinking: Optional[bool | str],
+    thinking: bool | str | None,
     chat_model_factory: Callable[..., Any],
     client_kwargs: Callable[[], dict],
     acceleration_options: Callable[[str], dict],
     track_clients: Callable[[Any], None],
     console: Any,
     max_output_tokens: int = 2048,
-    context_window: Optional[int] = None,
+    context_window: int | None = None,
 ) -> Any:
     """Create a local model, retrying a compatible fallback when appropriate."""
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
     for model_name in dict.fromkeys((primary_model_name, fallback_model_name)):
         try:
             model = create_local_chat_model(
@@ -328,10 +329,10 @@ def select_online_model(
     public_sync_client: Callable[..., Any],
     model_factory: Callable[[str, str, str], Any],
     permission_override: bool = False,
-    use_saved_details: Optional[bool] = None,
+    use_saved_details: bool | None = None,
     max_tool_iterations: int,
     max_tool_calls: int,
-) -> Optional[dict]:
+) -> dict | None:
     """Collect session-only OpenAI-compatible settings after connectivity check."""
     if not is_interactive():
         console.print(
@@ -437,7 +438,7 @@ def select_online_model(
         console.print("[red]No API key entered; returning to model selection.[/red]")
         return None
 
-    model_choices: List[str] = []
+    model_choices: list[str] = []
     try:
         import httpx
 

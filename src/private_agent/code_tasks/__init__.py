@@ -1,15 +1,17 @@
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
-import platform
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional
 
-from pydantic import BaseModel, Field
 from langchain_core.tools import tool
+from pydantic import BaseModel, Field
 from rich.console import Console
+
 from ..config import (
     CODE_TASK_GIT_TIMEOUT,
 )
@@ -72,7 +74,7 @@ def _run_git(
     )
 
 
-def isolation_unavailable_reason() -> Optional[str]:
+def isolation_unavailable_reason() -> str | None:
     """Explain why OS-isolated project commands cannot run on this host."""
     if platform.system() != "Linux":
         return "OS-level command isolation is currently supported only on Linux."
@@ -423,7 +425,7 @@ def _not_ignored_by_project_git(root: Path, relative_path: str) -> bool:
     )
 
 
-ACTIVE_CODE_TASK: Optional[CodeTaskWorkspace] = None
+ACTIVE_CODE_TASK: CodeTaskWorkspace | None = None
 
 
 class RunTestsInput(BaseModel):

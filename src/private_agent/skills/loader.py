@@ -1,10 +1,10 @@
 """Load Markdown skill profiles into the runtime registry."""
 
 import pathlib
-from typing import Dict
+
+from rich.console import Console
 
 from ..config import SKILL_DESCRIPTION_PREVIEW_CHARS, SKILL_MAX_ITERATIONS
-from rich.console import Console
 
 console = Console()
 
@@ -23,7 +23,7 @@ class AgentSkill:
         self.max_iterations = max_iterations
 
 
-def load_skills_from_folder(folder_path: str) -> Dict[str, AgentSkill]:
+def load_skills_from_folder(folder_path: str) -> dict[str, AgentSkill]:
     """Load Markdown skill profiles from the designated skills directory."""
     skills = {}
     path = pathlib.Path(folder_path)

@@ -1,20 +1,21 @@
-import os
-import pytest
-import pathlib
 import json
+import os
+import pathlib
 import sys
 import types
-from unittest.mock import patch, MagicMock
-from rich.console import Console
-from langchain_core.messages import HumanMessage, AIMessage
+from unittest.mock import MagicMock, patch
 
-from private_agent.database import PersistentMemory
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage
+from rich.console import Console
+
 from private_agent.agent import (
-    trim_history_to_context_budget,
     _build_bounded_user_input,
     _token_count,
     format_retrieved_citations,
+    trim_history_to_context_budget,
 )
+from private_agent.database import PersistentMemory
 
 try:
     from private_agent.agent import get_robust_chat_model
@@ -36,13 +37,13 @@ except ImportError:
 
 
 from private_agent.rag import (
-    initialize_knowledge_base,
     HybridRAGRetriever,
+    initialize_knowledge_base,
 )
 from private_agent.rag.indexing import (
-    _split_into_chunks,
     ChunkingSettings,
     _read_index_state,
+    _split_into_chunks,
     _write_index_state_atomic,
 )
 
@@ -60,7 +61,7 @@ def test_context_budget_preserves_newest_messages():
 
 
 def test_prompt_tokenizer_fallback_is_traceable_without_prompt_content(monkeypatch):
-    import private_agent.agent.prompts as prompts
+    from private_agent.agent import prompts
 
     events = []
 
@@ -317,11 +318,13 @@ def test_rag_limits_file_size_and_keeps_state_write_atomic(tmp_path, monkeypatch
     state_path = index / ".index_state.json"
     original_state = '{"unchanged": {"mtime_ns": 1, "size": 1}}'
     state_path.write_text(original_state, encoding="utf-8")
-    with patch(
-        "private_agent.rag.indexing.os.replace", side_effect=OSError("disk error")
+    with (
+        patch(
+            "private_agent.rag.indexing.os.replace", side_effect=OSError("disk error")
+        ),
+        pytest.raises(OSError, match="disk error"),
     ):
-        with pytest.raises(OSError, match="disk error"):
-            _write_index_state_atomic(state_path, {"new": {"mtime_ns": 2, "size": 2}})
+        _write_index_state_atomic(state_path, {"new": {"mtime_ns": 2, "size": 2}})
     assert state_path.read_text(encoding="utf-8") == original_state
     assert list(index.glob("*.tmp")) == []
     assert list(index.glob(".*.tmp")) == []
@@ -724,3 +727,34 @@ def test_knowledge_base_signature_changes_with_new_or_updated_files(tmp_path):
     first.write_text("one changed", encoding="utf-8")
     assert knowledge_base_signature(str(docs)) != after_add
     assert knowledge_base_signature(str(tmp_path / "missing")) is None
+
+
+def test_tokenizer_uses_bundled_vocabulary_without_network(monkeypatch, tmp_path):
+    import tiktoken.load
+
+    from private_agent.agent import prompts
+
+    def no_network(*_args, **_kwargs):
+        raise AssertionError("Tokenizer vocabulary must not be downloaded.")
+
+    monkeypatch.setattr(tiktoken.load, "read_file", no_network)
+    monkeypatch.delenv("TIKTOKEN_CACHE_DIR", raising=False)
+    monkeypatch.setenv("DATA_GYM_CACHE_DIR", str(tmp_path / "empty-cache"))
+    prompts._get_tokenizer.cache_clear()
+    try:
+        encoding = prompts._get_tokenizer()
+        assert encoding is not None
+        assert encoding.encode("hello world") == [15339, 1917]
+    finally:
+        prompts._get_tokenizer.cache_clear()
+
+
+def test_tokenizer_fallback_warns_visibly(monkeypatch, capsys):
+    from private_agent.agent import prompts
+
+    monkeypatch.setattr(prompts, "_TOKENIZER_FALLBACKS_REPORTED", set())
+    monkeypatch.setattr(prompts, "log_event", lambda *_a, **_k: None)
+
+    prompts._report_tokenizer_fallback("load", OSError("offline"))
+
+    assert "Tokenizer warning" in capsys.readouterr().err
