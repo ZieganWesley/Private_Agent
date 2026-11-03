@@ -47,6 +47,7 @@ def test_code_task_request_detection_requires_code_intent():
     assert not is_code_task_request("Research local database options")
 
 
+@pytest.mark.requires_sandbox
 def test_code_workspace_isolated_git_and_test_gated_checkpoint(tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "user.name")
@@ -160,6 +161,7 @@ def test_git_initialization_failure_requires_confirmation_and_removes_partial_re
     assert not (workspace.root / ".git").exists()
 
 
+@pytest.mark.requires_sandbox
 def test_existing_code_workspace_copy_excludes_git_secrets_and_caches(
     tmp_path, monkeypatch
 ):
@@ -496,6 +498,7 @@ def test_project_runner_runs_all_detected_suites_after_failure(tmp_path, monkeyp
     assert not result.startswith("Tests passed:")
 
 
+@pytest.mark.requires_sandbox
 def test_project_runner_rejects_ignored_test_files(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
