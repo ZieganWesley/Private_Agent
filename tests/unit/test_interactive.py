@@ -1960,6 +1960,7 @@ async def test_interactive_prompt_uses_prompt_toolkit_completer(
     assert isinstance(captured["completer"], AgentCompleter)
     assert captured["complete_while_typing"]
     assert captured["enable_history_search"]
+    assert captured["key_bindings"] is not None
 
 
 @pytest.mark.asyncio
@@ -1990,3 +1991,21 @@ async def test_prompt_toolkit_uses_shared_session_history(temp_workspace, monkey
     await prompt_user_input(object(), temp_workspace, history=history)
 
     assert captured == [history, history]
+
+
+def test_prompt_key_bindings_insert_newline_on_alt_enter_and_ctrl_j():
+    from prompt_toolkit.buffer import Buffer
+    from prompt_toolkit.keys import Keys
+
+    bindings = interactive.build_prompt_key_bindings()
+    by_keys = {binding.keys: binding for binding in bindings.bindings}
+    assert (Keys.Escape, Keys.ControlM) in by_keys
+    assert (Keys.ControlJ,) in by_keys
+
+    for keys in ((Keys.Escape, Keys.ControlM), (Keys.ControlJ,)):
+        buffer = Buffer()
+        buffer.insert_text("line one")
+        event = type("Event", (), {"current_buffer": buffer})()
+        by_keys[keys].handler(event)
+        buffer.insert_text("line two")
+        assert buffer.text == "line one\nline two"

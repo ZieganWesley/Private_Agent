@@ -122,7 +122,8 @@ reports that in the current session rather than restarting it.
   through a tool.
 - **MCP**: stdio (sandboxed) and remote HTTP MCP servers configured in the
   config file, with an auto-approve allow-list for trusted tools.
-- **Interactive CLI**: command and `@file` auto-completion, session-wide prompt
+- **Interactive CLI**: command and `@file` auto-completion, multi-line input (Alt+Enter or
+  Ctrl+J adds a new line; Enter sends), session-wide prompt
   history, `/help`, `/status`, `/context`, `/add`, `/list_tools`,
   `/maintenance`, `/plan`, `/tasks`, `/skills`, `switch`,
   `exit`, compact startup counts for memory and saved plans.
