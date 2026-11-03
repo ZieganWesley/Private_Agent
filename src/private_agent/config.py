@@ -521,7 +521,6 @@ MAX_CONTEXT_TOKENS = _positive_int("max_context_tokens", 12000)
 MAX_OUTPUT_TOKENS = _configured_int_range("agent", "max_output_tokens", 2048, 1, 32768)
 STREAMING_OUTPUT = _configured_bool("agent", "streaming_output", True)
 VISIBLE_REASONING = _configured_bool("agent", "visible_reasoning", False)
-VISIBILE_REASONING = VISIBLE_REASONING
 _configured_system_prompt = APP_CONFIG.get("agent", {}).get("system_prompt")
 SYSTEM_PROMPT = (
     _configured_system_prompt.strip()

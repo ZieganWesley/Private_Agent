@@ -94,7 +94,7 @@ from ..config import (
     TASK_STALE_AFTER_DAYS,
     THINKING_EFFORT_DEFAULT,
     THINKING_TOGGLE_DEFAULT,
-    VISIBILE_REASONING,
+    VISIBLE_REASONING,
     WEB_RESEARCH_CONSENT,
     WORKSPACE_ROOT_DEFAULT,
 )
@@ -2660,7 +2660,7 @@ def _visible_reasoning_summary(response: Any) -> str:
 
 
 def _display_visible_reasoning(response: Any) -> None:
-    if not VISIBILE_REASONING:
+    if not VISIBLE_REASONING:
         return
     summary = _visible_reasoning_summary(response)
     if summary:

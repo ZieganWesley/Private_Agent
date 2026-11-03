@@ -1494,11 +1494,11 @@ def test_visible_reasoning_only_shows_explicit_summary_when_enabled(monkeypatch)
         response_metadata={"reasoning_summary": "Compared two available options."},
     )
 
-    monkeypatch.setattr(agent, "VISIBILE_REASONING", False)
+    monkeypatch.setattr(agent, "VISIBLE_REASONING", False)
     agent._display_visible_reasoning(response)
     assert not printed
 
-    monkeypatch.setattr(agent, "VISIBILE_REASONING", True)
+    monkeypatch.setattr(agent, "VISIBLE_REASONING", True)
     agent._display_visible_reasoning(response)
 
     panel = printed[0][0][0]
