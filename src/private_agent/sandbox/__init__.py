@@ -5,6 +5,8 @@ from .linux import (
     SandboxManager,
     create_hitl_snapshot,
     evaluate_shell_command,
+    requires_shell_interpreter,
+    shell_command_programs,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "SandboxManager",
     "create_hitl_snapshot",
     "evaluate_shell_command",
+    "requires_shell_interpreter",
+    "shell_command_programs",
 ]

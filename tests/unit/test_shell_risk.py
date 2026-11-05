@@ -1,6 +1,10 @@
 import pytest
 
-from private_agent.sandbox import evaluate_shell_command
+from private_agent.sandbox import (
+    evaluate_shell_command,
+    requires_shell_interpreter,
+    shell_command_programs,
+)
 
 
 @pytest.mark.parametrize(
@@ -151,3 +155,49 @@ def test_wrapped_shell_with_safe_script_is_not_flagged():
 def test_unbalanced_quotes_still_flag_risky_programs():
     assert evaluate_shell_command("sudo echo 'unterminated") is True
     assert evaluate_shell_command("echo 'unterminated") is False
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cd src && python --version",
+        "cd /home/user/project && source venv/bin/activate && python --version",
+        "pytest -q | tail -5",
+        "echo one; echo two",
+        "false || echo recovered",
+        "make > build.log 2>&1",
+        "wc -l < out.txt",
+        "cat <<< hello",
+        "cd src",
+        "source venv/bin/activate",
+        "export DEBUG=1",
+        "echo $HOME",
+        "echo `date`",
+        "ls *.py",
+        "ls ~",
+        "(cd build && make)",
+    ],
+)
+def test_shell_syntax_requires_interpreter(command):
+    assert requires_shell_interpreter(command) is True
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "ls -la",
+        "python -m pytest -q",
+        "git status",
+        'grep -n "TODO" src/app.py',
+        'echo "a && b"',
+        "echo 'pipe | inside quotes'",
+    ],
+)
+def test_plain_commands_do_not_require_interpreter(command):
+    assert requires_shell_interpreter(command) is False
+
+
+def test_shell_command_programs_lists_every_simple_command():
+    assert shell_command_programs(
+        "cd src && DEBUG=1 python app.py | tee log.txt; /usr/bin/git status"
+    ) == ["cd", "python", "tee", "git"]

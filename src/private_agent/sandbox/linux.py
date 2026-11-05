@@ -91,6 +91,25 @@ _SYSTEM_PATHS = (
     "/dev",
 )
 _FORK_BOMB = ":(){:|:&};:"
+# Builtins that do nothing useful (or fail) when run as a standalone program.
+_SHELL_BUILTINS = frozenset(
+    {
+        "cd",
+        "source",
+        ".",
+        "export",
+        "unset",
+        "set",
+        "alias",
+        "pushd",
+        "popd",
+        "umask",
+        "ulimit",
+        "eval",
+    }
+)
+_SHELL_EXPANSION_CHARS = frozenset("$`*?[]{}~")
+_INPUT_REDIRECT_OPERATORS = frozenset({"<", "<<", "<<<", "<&", "<>"})
 
 
 def _tokenize_shell_command(command: str) -> list[str]:
@@ -214,3 +233,34 @@ def evaluate_shell_command(command: str) -> bool:
         elif program and _is_risky_simple_command(program, args):
             return True
     return False
+
+
+def shell_command_programs(command: str) -> list[str]:
+    """Return the program name of each simple command in a shell command line."""
+    commands, _redirect_targets = _split_commands(_tokenize_shell_command(command))
+    programs = []
+    for words in commands:
+        program, _args = _program_and_args(words)
+        if program:
+            programs.append(program)
+    return programs
+
+
+def requires_shell_interpreter(command: str) -> bool:
+    """Return True when a command line needs `bash -c` to run as written.
+
+    Operators (`&&`, `|`, `;`, redirects), builtins such as `cd` or `source`,
+    and expansions (`$VAR`, globs, `~`) only work inside a shell; running them
+    as a plain argv passes them through as literal arguments.
+    """
+    tokens = _tokenize_shell_command(command)
+    if any(
+        token in _COMMAND_SEPARATORS
+        or token in _REDIRECT_OPERATORS
+        or token in _INPUT_REDIRECT_OPERATORS
+        for token in tokens
+    ):
+        return True
+    if any(program in _SHELL_BUILTINS for program in shell_command_programs(command)):
+        return True
+    return any(char in _SHELL_EXPANSION_CHARS for char in command)

@@ -1480,6 +1480,74 @@ def test_shell_command_tool(temp_workspace):
     assert "sandbox integration test" in res
 
 
+def _run_shell_with_fake_sandbox(command):
+    isolated = []
+
+    def isolate(command_args, root, **_kwargs):
+        isolated.append((list(command_args), root))
+        return ["bwrap", "--", *command_args], {"PATH": "/usr/bin"}
+
+    with (
+        patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("private_agent.tools.shell.console.input", return_value="y"),
+        patch("private_agent.code_tasks._isolated_command", side_effect=isolate),
+        patch(
+            "private_agent.tools.shell.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, "ok\n", ""),
+        ) as run,
+    ):
+        result = run_shell_command.invoke({"command": command})
+    return result, isolated, run
+
+
+def test_shell_compound_command_runs_through_bash_in_sandbox(temp_workspace):
+    command = "cd src && source venv/bin/activate && python --version"
+    result, isolated, run = _run_shell_with_fake_sandbox(command)
+
+    assert "Exit Code: 0" in result
+    assert isolated == [(["/bin/bash", "-c", command], SandboxManager.root_dir)]
+    assert run.call_args.args[0] == ["bwrap", "--", "/bin/bash", "-c", command]
+    assert run.call_args.kwargs["shell"] is False
+
+
+def test_shell_plain_command_is_not_wrapped_in_bash(temp_workspace):
+    _result, isolated, _run = _run_shell_with_fake_sandbox("python -m pytest -q")
+    assert isolated[0][0] == ["python", "-m", "pytest", "-q"]
+
+
+def test_shell_script_host_workspace_paths_point_at_sandbox_mount(temp_workspace):
+    root = SandboxManager.root_dir
+    _result, isolated, _run = _run_shell_with_fake_sandbox(
+        f"cd {root}/src && ls {root}"
+    )
+    assert isolated[0][0] == ["/bin/bash", "-c", "cd /workspace/src && ls /workspace"]
+
+
+def test_code_task_blocks_git_inside_compound_command(monkeypatch, temp_workspace):
+    from private_agent import code_tasks
+
+    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", object())
+    result, isolated, _run = _run_shell_with_fake_sandbox("cd src && git status")
+    assert "manual Git commands are disabled" in result
+    assert isolated == []
+
+
+@pytest.mark.requires_sandbox
+def test_shell_compound_command_in_real_sandbox(temp_workspace):
+    (temp_workspace / "sub").mkdir()
+    (temp_workspace / "sub" / "note.txt").write_text("hello\n", encoding="utf-8")
+    with (
+        patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("private_agent.tools.shell.console.input", return_value="y"),
+    ):
+        res = run_shell_command.invoke(
+            {"command": "cd sub && cat note.txt | tr a-z A-Z && pwd > ../where.txt"}
+        )
+    assert "Exit Code: 0" in res
+    assert "HELLO" in res
+    assert (temp_workspace / "where.txt").read_text().strip() == "/workspace/sub"
+
+
 @patch("mcp.client.stdio.stdio_client")
 @patch("mcp.client.session.ClientSession")
 @pytest.mark.asyncio
