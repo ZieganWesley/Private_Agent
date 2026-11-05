@@ -1807,7 +1807,7 @@ weaken safety:
 - tool permission groups (`agent/permissions.py`, `tools/__init__.py:91–102`);
 - schema version, step statuses and weather codes.
 
-The risky-command word list (`sandbox/linux.py:64–86`) and the RAG file types
+The risky-program and system-path lists (`sandbox/linux.py:63–93`) and the RAG file types
 could be configurable, but only in the stricter direction: adding words, or
 allowing a subset of file types.
 
@@ -1864,11 +1864,10 @@ what each step needs first.
 
 #### Stage 2: Easy, independent fixes
 
-17 steps remaining (5 of 22 are done).
+16 steps remaining (6 of 22 are done).
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
-| 21 | 5.4 | Rewrite the risky-command check with `shlex` | Easy | — |
 | 22 | 5.5 | Reciprocal rank fusion and better BM25 tokenizing | Easy | — |
 | 23 | 6.2 | Paged `read_local_file` (offset and limit) | Easy | — |
 | 24 | 7.1 | Read-only tools in planning mode | Easy | — |
@@ -1928,7 +1927,7 @@ what each step needs first.
 | 70 | 14.7 | Configurable RAG values | Easy | 14.3 |
 | 71 | 14.8 | Configurable external services | Easy | 5.7, 14.3 |
 | 72 | 14.9 | Plan limits defined once | Easy | 14.3 |
-| 73 | 14.11 | Stricter-only safety lists in config | Easy | 5.4, 14.3 |
+| 73 | 14.11 | Stricter-only safety lists in config | Easy | 14.3 |
 
 #### Stage 4: Hard (core refactors and what they unlock)
 
@@ -2058,7 +2057,6 @@ All steps in this phase are done.
 | 5.1 | Make network and shell tools async (`httpx.AsyncClient`, `asyncio.create_subprocess_exec`), removing `asyncio.run` from thread pools | A7, B8 | `ASYNC221` is clean, and no `asyncio.run` is left outside `cli.main` |
 | 5.2 | Replace print-based diagnostics with module-level `logging` loggers, keeping `rich` for user-facing output | A6, E34 | Diagnostics go to the run log, and user output stays unchanged |
 | 5.3 | Narrow the 93 blind `except Exception` blocks to specific exceptions, keeping broad catches only at the outer session boundary | A5 | `BLE001` warnings are only at documented boundaries |
-| 5.4 | Rewrite `evaluate_shell_command` using `shlex` parsing and a program/flag list | B4 | `echo /usr` is not flagged and `rm -fr` is, with tests |
 | 5.5 | Use reciprocal rank fusion in `HybridRAGRetriever` and a punctuation-aware tokenizer for BM25. Measure before and after with `scripts/benchmark_rag.py` | B9 | Recall@k and MRR are the same or better |
 | 5.6 | Support YAML front matter (`name`, `description`) in skills, and match them by embedding similarity, falling back to the current keyword match | B6, C9 | Old skills still load, and new skills use front matter |
 | 5.7 | Put web search behind a provider interface, with SearXNG (self-hosted) or an API as the main option and the DuckDuckGo scraper as a fallback | B7, E18 | The search provider is chosen in config |
@@ -2239,7 +2237,7 @@ dependencies and are in Stage 1 of the implementation order (section L1).
 | 14.8 | Make external services configurable (location, geocoding, weather, search URLs and limits, tokenizer), and remove the second copy of the online base URL | K6 | 14.3, 5.7 | Each service URL can be replaced by a self-hosted one, with tests |
 | 14.9 | Define plan limits once and use them for both the tool schemas and the database checks | K8 | 14.3 | Changing one limit changes both, with a test |
 | 14.10 | Remove `SNAPSHOT_DIR` or resolve it from the workspace at use time | K7 | 3.5 | No snapshot path is resolved at import time |
-| 14.11 | Allow the risky-command list and RAG file types to be extended in config only in the stricter direction | K10 | 5.4, 14.3 | Config can add risky words but cannot remove built-in ones, with tests |
+| 14.11 | Allow the risky-command list and RAG file types to be extended in config only in the stricter direction | K10 | 14.3 | Config can add risky words but cannot remove built-in ones, with tests |
 
 ### Progress tracker
 
