@@ -13,7 +13,8 @@ def test_malformed_config_handling(tmp_path, monkeypatch):
     config_path.write_text("{ malformed_json: ", encoding="utf-8")
     monkeypatch.setattr("private_agent.config.CONFIG_FILE_PATH", config_path)
 
-    config = load_or_create_config()
+    with pytest.warns(RuntimeWarning, match="Malformed or invalid configuration"):
+        config = load_or_create_config()
     assert isinstance(config, dict)
     assert "default_model_temperature" in config
 

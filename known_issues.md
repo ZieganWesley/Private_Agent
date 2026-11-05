@@ -1864,11 +1864,10 @@ what each step needs first.
 
 #### Stage 2: Easy, independent fixes
 
-18 steps remaining (4 of 22 are done).
+17 steps remaining (5 of 22 are done).
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
-| 20 | 2.3 | Remove the pytest check from `config.py` | Easy | — |
 | 21 | 5.4 | Rewrite the risky-command check with `shlex` | Easy | — |
 | 22 | 5.5 | Reciprocal rank fusion and better BM25 tokenizing | Easy | — |
 | 23 | 6.2 | Paged `read_local_file` (offset and limit) | Easy | — |
@@ -2029,9 +2028,7 @@ Rules for every step:
 
 ### Phase 2: Quick fixes and real bugs
 
-| Step | Task | Fixes | Done when |
-|---|---|---|---|
-| 2.3 | Remove `sys_modules_safe()` from `config.py` and handle that case with a test fixture | A3 | Production code never checks for pytest |
+All steps in this phase are done.
 
 ### Phase 3: Remove global state
 

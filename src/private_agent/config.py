@@ -394,13 +394,11 @@ def load_or_create_config() -> dict:
         PermissionError,
         OSError,
     ) as jde:
-        # Suppress or issue warning cleanly for malformed/invalid config scenarios
-        if not sys_modules_safe():
-            warnings.warn(
-                f"Malformed or invalid configuration encountered in {CONFIG_FILE_PATH}: {jde}. Falling back to default configuration.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
+        warnings.warn(
+            f"Malformed or invalid configuration encountered in {CONFIG_FILE_PATH}: {jde}. Falling back to default configuration.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         return _merge_config(DEFAULT_CONFIG)
     except Exception as e:
         warnings.warn(
@@ -409,12 +407,6 @@ def load_or_create_config() -> dict:
             stacklevel=2,
         )
         return _merge_config(DEFAULT_CONFIG)
-
-
-def sys_modules_safe() -> bool:
-    import sys
-
-    return "pytest" in sys.modules
 
 
 def load_config() -> dict:
