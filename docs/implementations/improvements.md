@@ -34,8 +34,8 @@ Re-verified: 2026-11-17, against `main` at commit `2bc0b4c`
 
 ### A1. Very large modules (highest priority)
 
-- `src/private_agent/agent/runtime.py` was 6,507 lines.
-  `_run_agent_cli_session` is still about 2,600 lines in one function.
+- `src/private_agent/agent/runtime.py` was 6,507 lines with
+  `_run_agent_cli_session` at about 2,600 lines in one function.
 - `src/private_agent/database/memory.py` is 2,926 lines in one
   `PersistentMemory` class.
 - **Partly fixed:** `runtime.py` was split into focused modules that keep
@@ -43,9 +43,21 @@ Re-verified: 2026-11-17, against `main` at commit `2bc0b4c`
   `model_selection.py` (290), `streaming.py` (456), `learning.py` (642),
   `memory_context.py` (700), `task_commands.py` (784), `task_lease.py` (66),
   plus the shared `console.py` and `session_state.py` singletons.
-  `runtime.py` is now about 3,550 lines and holds only the interactive
-  session loop and tool execution. `_run_agent_cli_session` is still one
-  monolithic function, and `database/memory.py` is unchanged.
+  `runtime.py` holds only the interactive session loop and tool execution.
+- **Also fixed:** `_run_agent_cli_session` was split into
+  `_prepare_session` (about 415 lines: startup, RAG, skills, memory and
+  session setup) and `_choose_provider` (about 450 lines: the provider and
+  model menu plus the ready summary). They exchange the frozen
+  `SessionSetup` and `ProviderSelection` containers from
+  `agent/session_types.py`, and a mutable `ProviderPreference` carries the
+  online choice across retries. `runtime.py` is now about 3,700 lines and
+  the session function about 1,880 lines; its remaining turn-loop body is
+  the next candidate for extraction.
+- **Also fixed:** `PersistentMemory` (2,926 lines) is now a thin facade in
+  `database/memory.py` composed from per-concern mixins:
+  `connection.py` (436 lines), `tasks.py` (1,197), `task_actions.py` (426),
+  `learning.py` (256), `conversations.py` (165), `episodes.py` (251),
+  `skills.py` (68) and `maintenance.py` (220).
 - The ruff complexity counts below were measured at review time and were not
   re-measured; the `runtime.py` split above has not changed them.
 - Ruff complexity checks flag:

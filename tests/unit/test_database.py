@@ -392,7 +392,7 @@ def test_stale_task_expiry_clears_approval_but_preserves_recovery_state(temp_db)
 
 
 def test_failed_schema_migration_preserves_existing_database(tmp_path, monkeypatch):
-    import private_agent.database.memory as memory_module
+    import private_agent.database.connection as connection_module
 
     db_path = str(tmp_path / "migration-failure.sqlite")
     connection = sqlite3.connect(db_path)
@@ -420,10 +420,10 @@ def test_failed_schema_migration_preserves_existing_database(tmp_path, monkeypat
         )
         return connection
 
-    monkeypatch.setattr(memory_module.sqlite3, "connect", deny_alter)
+    monkeypatch.setattr(connection_module.sqlite3, "connect", deny_alter)
     with pytest.raises(sqlite3.DatabaseError):
         PersistentMemory(db_path)
-    monkeypatch.setattr(memory_module.sqlite3, "connect", original_connect)
+    monkeypatch.setattr(connection_module.sqlite3, "connect", original_connect)
 
     connection = sqlite3.connect(db_path)
     row = connection.execute(
@@ -493,9 +493,9 @@ def test_future_schema_version_is_rejected_without_modifying_existing_data(tmp_p
 
 
 def test_task_resume_capsule_enforces_configured_size_limit(tmp_path, monkeypatch):
-    import private_agent.database.memory as memory_module
+    import private_agent.database.task_actions as actions_repository
 
-    monkeypatch.setattr(memory_module, "MAX_RESUME_STATE_CHARS", 256)
+    monkeypatch.setattr(actions_repository, "MAX_RESUME_STATE_CHARS", 256)
     memory = PersistentMemory(str(tmp_path / "resume-capsule-limit.sqlite"))
     with pytest.raises(ValueError, match="resume capsule exceeds"):
         memory.create_task_plan(
@@ -1255,9 +1255,9 @@ def test_learned_preferences_are_scoped_correctable_and_globally_disabled(temp_d
 
 
 def test_learned_item_expiry_review_and_configured_size_limit(temp_db, monkeypatch):
-    import private_agent.database.memory as memory_module
+    import private_agent.database.learning as learning_repository
 
-    monkeypatch.setattr(memory_module, "MAX_LEARNED_ITEM_CHARS", 12)
+    monkeypatch.setattr(learning_repository, "MAX_LEARNED_ITEM_CHARS", 12)
     memory = PersistentMemory(db_path=temp_db)
     with pytest.raises(ValueError, match="1 to 12"):
         memory.add_learned_item("A statement that is too long", "global")
@@ -1423,7 +1423,7 @@ def test_sqlite_memory_reset_also_removes_persisted_task_state(temp_db):
 def test_memory_constructor_closes_connection_when_initialization_fails(
     tmp_path, monkeypatch
 ):
-    import private_agent.database.memory as memory_module
+    import private_agent.database.connection as connection_module
 
     class BrokenConnection:
         closed = False
@@ -1442,7 +1442,7 @@ def test_memory_constructor_closes_connection_when_initialization_fails(
 
     connection = BrokenConnection()
     monkeypatch.setattr(
-        memory_module.sqlite3,
+        connection_module.sqlite3,
         "connect",
         lambda *_args, **_kwargs: connection,
     )
@@ -1492,7 +1492,7 @@ def test_memory_retention_prunes_messages_and_summaries(temp_db):
 
 
 def test_memory_summaries_are_bounded(temp_db, monkeypatch):
-    monkeypatch.setattr("private_agent.database.memory.MAX_SUMMARY_CHARS", 12)
+    monkeypatch.setattr("private_agent.database.conversations.MAX_SUMMARY_CHARS", 12)
     memory = PersistentMemory(db_path=temp_db)
     with pytest.raises(ValueError, match="configured 12-character limit"):
         memory.save_summary("session", "x" * 100)

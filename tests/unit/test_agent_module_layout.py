@@ -75,3 +75,30 @@ def test_agent_modules_stay_below_the_previous_monolith_size():
         if len(path.read_text().splitlines()) > 4000
     }
     assert oversized == {}
+
+
+def test_session_startup_and_provider_selection_are_separate_functions():
+    import inspect
+
+    from private_agent.agent import session_types
+
+    for helper in (runtime._prepare_session, runtime._choose_provider):
+        assert inspect.iscoroutinefunction(helper)
+        assert inspect.getmodule(helper) is runtime
+
+    for container in (
+        session_types.SessionSetup,
+        session_types.ProviderSelection,
+        session_types.ProviderPreference,
+    ):
+        assert inspect.isclass(container)
+
+
+def test_session_loop_stays_small_after_the_split():
+    import inspect
+
+    session_source = inspect.getsource(runtime._run_agent_cli_session)
+    # The turn loop body is still large; startup and provider selection are out.
+    assert len(session_source.splitlines()) < 1900
+    assert "_prepare_session(" in session_source
+    assert "_choose_provider(" in session_source

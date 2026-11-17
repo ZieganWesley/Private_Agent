@@ -2219,7 +2219,7 @@ async def test_runtime_summarizes_full_context_instead_of_dropping_it(
             "thinking": False,
             "vision": False,
             "audio": False,
-            "context_window": 1800,
+            "context_window": 4096,
         },
     )
     monkeypatch.setattr(
@@ -2241,12 +2241,17 @@ async def test_runtime_summarizes_full_context_instead_of_dropping_it(
     )
     await run_agent_cli_async()
 
-    summarizing, answering = model.calls[0], model.calls[1]
-    assert token_count("\n".join(str(m.content) for m in summarizing)) <= 1800 - 200
+    summarizing = model.calls[0]
+    answering = next(
+        call
+        for call in model.calls
+        if "new question" in "\n".join(str(message.content) for message in call)
+    )
+    assert token_count("\n".join(str(m.content) for m in summarizing)) <= 4096 - 200
     assembled = "\n".join(str(m.content) for m in answering)
     assert "EARLIER-WORK-SUMMARY" in assembled
     assert "new question" in assembled
-    assert token_count(assembled) <= 1800 - 200
+    assert token_count(assembled) <= 4096 - 200
 
 
 @pytest.mark.asyncio

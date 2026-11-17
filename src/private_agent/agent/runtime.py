@@ -184,8 +184,10 @@ from .providers import (
 from .providers import (
     online_request_failure as _online_request_failure,
 )
+from .session_state import SESSION_INFO as _SESSION_INFO
 from .session_state import SESSION_STATS as _SESSION_STATS
 from .session_stats import build_stats_table, format_duration
+from .session_types import ProviderPreference, ProviderSelection, SessionSetup
 from .streaming import (
     _invoke_with_status,
     _visible_chunk_text,
@@ -213,7 +215,6 @@ from .tool_display import (
 
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
-_SESSION_INFO: dict[str, Any] = {}
 OS_ISOLATED_TOOL_NAMES = frozenset(
     {
         "run_shell_command",
@@ -699,10 +700,14 @@ async def _execute_task_tool_call(
     return result
 
 
-async def _run_agent_cli_session(*, verbose_startup: bool = False):
-    global _ACTIVE_MEMORY, _SESSION_INFO
+async def _prepare_session(
+    *,
+    verbose_startup: bool,
+) -> SessionSetup | None:
+    """Discover local resources, open memory and build the session state."""
+    global _ACTIVE_MEMORY, _SESSION_INFO, _TASK_LEASE_HEARTBEAT
     _SESSION_STATS.reset()
-    _SESSION_INFO = {}
+    _SESSION_INFO.clear()
     startup_started = time.monotonic()
     if not sys.stdin.isatty():
         console.print(
@@ -1081,7 +1086,6 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
 
     _task_state.set_runtime_owner()
     set_active_task_context(session_id)
-    global _TASK_LEASE_HEARTBEAT
     network_consent_state: dict[str, bool] = {}
     _TASK_LEASE_HEARTBEAT = asyncio.create_task(
         _maintain_task_lease(memory, session_id)
@@ -1091,418 +1095,538 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
     permission_mode = _select_permission_mode()
     if verbose_startup:
         console.print(f"[cyan][Agent Permission Mode][/cyan] {permission_mode.title()}")
+    return SessionSetup(
+        memory=memory,
+        local_runtimes=local_runtimes,
+        hardware_status_by_url=hardware_status_by_url,
+        isolation_warning=isolation_warning,
+        vectorstore=vectorstore,
+        docs_input=docs_input,
+        is_rag_active=is_rag_active,
+        rag_signature=rag_signature,
+        rag_last_check=rag_last_check,
+        skills_folder_input=skills_folder_input,
+        loaded_skills=loaded_skills,
+        mode_label=mode_label,
+        session_id=session_id,
+        network_consent_state=network_consent_state,
+        thinking_enabled=thinking_enabled,
+        thinking_effort=thinking_effort,
+        permission_mode=permission_mode,
+        _task_state=_task_state,
+    )
 
-    online_selection: dict | None = None
-    online_preference: bool | None = None
-    while True:
-        console.print("\n[bold underline]Model Provider[/bold underline]")
-        for runtime_index, runtime in enumerate(local_runtimes, 1):
-            console.print(
-                f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
-                f"— {len(runtime.models)} model(s)"
-            )
-        online_options: list[tuple[int, str, bool]] = []
-        next_choice = len(local_runtimes) + 1
-        if online_preference is not None:
-            label = (
-                "Online — configured in config (session preference)"
-                if online_preference
-                else "Online — manual details (session preference)"
-            )
-            online_options.append((next_choice, label, online_preference))
-        elif _has_saved_online_config(APP_CONFIG):
-            online_options.extend(
-                [
-                    (
-                        next_choice,
-                        "Online — configured in config",
-                        True,
-                    ),
-                    (
-                        next_choice + 1,
-                        "Online — enter details manually",
-                        False,
-                    ),
-                ]
-            )
-        else:
-            online_options.append(
+
+async def _choose_provider(
+    *,
+    verbose_startup: bool,
+    preference: ProviderPreference,
+    memory,
+    local_runtimes,
+    hardware_status_by_url,
+    isolation_warning,
+    thinking_enabled,
+    thinking_effort,
+    permission_mode,
+    loaded_skills,
+    mode_label,
+    is_rag_active,
+    vectorstore,
+    session_id,
+    skills_folder_input,
+) -> ProviderSelection | None:
+    """Ask for a provider and model, initialise it and print the ready summary."""
+    global _ACTIVE_MEMORY, _SESSION_INFO, _TASK_LEASE_HEARTBEAT
+    _SESSION_STATS.reset()
+    _SESSION_INFO.clear()
+    available_models: list = []
+    console.print("\n[bold underline]Model Provider[/bold underline]")
+    for runtime_index, runtime in enumerate(local_runtimes, 1):
+        console.print(
+            f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
+            f"— {len(runtime.models)} model(s)"
+        )
+    online_options: list[tuple[int, str, bool]] = []
+    next_choice = len(local_runtimes) + 1
+    if preference.online_preference is not None:
+        label = (
+            "Online — configured in config (session preference)"
+            if preference.online_preference
+            else "Online — manual details (session preference)"
+        )
+        online_options.append((next_choice, label, preference.online_preference))
+    elif _has_saved_online_config(APP_CONFIG):
+        online_options.extend(
+            [
                 (
                     next_choice,
+                    "Online — configured in config",
+                    True,
+                ),
+                (
+                    next_choice + 1,
                     "Online — enter details manually",
                     False,
-                )
-            )
-        for choice_number, label, _use_saved_details in online_options:
-            console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
-        if online_preference is not None or _has_saved_online_config(APP_CONFIG):
-            default_choice = str(online_options[0][0])
-        else:
-            default_choice = "1" if local_runtimes else str(online_options[0][0])
-        last_choice = online_options[-1][0]
-        provider_choice = (
-            console.input(
-                f"[cyan]Choose provider [1-{last_choice}] "
-                f"(Default: {default_choice}): [/cyan]"
-            ).strip()
-            or default_choice
+                ),
+            ]
         )
-        selected_online_option = next(
-            (option for option in online_options if provider_choice == str(option[0])),
-            None,
+    else:
+        online_options.append(
+            (
+                next_choice,
+                "Online — enter details manually",
+                False,
+            )
         )
-        if selected_online_option is not None:
-            selected_local_runtime = None
-            selected_online_preference = selected_online_option[2]
-            if online_selection is None:
-                online_selection = select_online_model(selected_online_preference)
-            if online_selection is None:
-                continue
-            online_preference = selected_online_preference
-            provider_type = "online"
-            selected_model = online_selection["model_name"]
-            capabilities = online_selection["capabilities"]
-            llm = online_selection["model"]
-            tools_list = (
-                _tools_for_model(
-                    provider_type=provider_type,
-                    capabilities=capabilities,
-                    isolation_warning=isolation_warning,
-                )
-                if online_selection["allow_tools"]
-                else []
+    for choice_number, label, _use_saved_details in online_options:
+        console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
+    if preference.online_preference is not None or _has_saved_online_config(APP_CONFIG):
+        default_choice = str(online_options[0][0])
+    else:
+        default_choice = "1" if local_runtimes else str(online_options[0][0])
+    last_choice = online_options[-1][0]
+    provider_choice = (
+        console.input(
+            f"[cyan]Choose provider [1-{last_choice}] "
+            f"(Default: {default_choice}): [/cyan]"
+        ).strip()
+        or default_choice
+    )
+    selected_online_option = next(
+        (option for option in online_options if provider_choice == str(option[0])),
+        None,
+    )
+    if selected_online_option is not None:
+        selected_local_runtime = None
+        selected_online_preference = selected_online_option[2]
+        if preference.online_selection is None:
+            preference.online_selection = select_online_model(
+                selected_online_preference
             )
-            if not online_selection["share_context"] and not ONLINE_PERMISSION_OVERRIDE:
-                tools_list = [
-                    tool
-                    for tool in tools_list
-                    if tool.name
-                    not in {
-                        "create_task_plan",
-                        "inspect_task_plan",
-                        "update_todo_step",
-                        "revise_task_plan",
-                    }
-                ]
-            if online_selection["allow_tools"]:
-                try:
-                    llm_with_tools = llm.bind_tools(tools_list)
-                except Exception as exc:
-                    console.print(
-                        f"[yellow]The selected endpoint/model does not accept tool calls "
-                        f"({type(exc).__name__}); continuing without tools.[/yellow]"
-                    )
-                    llm_with_tools = llm
-                    capabilities["tools"] = False
-                    online_selection["allow_tools"] = False
-            else:
-                llm_with_tools = llm
-            if verbose_startup:
-                console.print(
-                    f"[green][Online model][/green] {selected_model} at "
-                    f"{online_selection['base_url']}"
-                )
-        elif provider_choice.isdigit() and 1 <= int(provider_choice) <= len(
-            local_runtimes
-        ):
-            local_runtime = local_runtimes[int(provider_choice) - 1]
-            selected_local_runtime = local_runtime
-            provider_type = "local"
-            available_models = list(local_runtime.models)
-            if PREFERRED_MODEL in available_models:
-                available_models.remove(PREFERRED_MODEL)
-                available_models.insert(0, PREFERRED_MODEL)
-            if not available_models:
-                console.print(
-                    f"[yellow]{local_runtime.name} is running, but it advertises "
-                    "no chat models. Choose another runtime or online mode.[/yellow]"
-                )
-                continue
-            console.print(
-                f"\n[bold underline]Available {local_runtime.name} Chat Models:[/bold underline]"
-            )
-            for idx, model_name in enumerate(available_models, 1):
-                marker = (
-                    " [green](configured, preferred)[/green]"
-                    if PREFERRED_MODEL and model_name == PREFERRED_MODEL
-                    else ""
-                )
-                console.print(f"  [cyan]{idx}.[/cyan] {model_name}{marker}")
-            if PREFERRED_MODEL and PREFERRED_MODEL not in available_models:
-                console.print(
-                    f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
-                    f"installed in {local_runtime.name}.[/yellow]"
-                )
-            while True:
-                choice_input = console.input(
-                    f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
-                ).strip()
-                if not choice_input:
-                    selected_model = available_models[0]
-                    break
-                try:
-                    choice_idx = int(choice_input) - 1
-                    if 0 <= choice_idx < len(available_models):
-                        selected_model = available_models[choice_idx]
-                        break
-                except ValueError:
-                    pass
-                console.print("[red][Error] Invalid selection.[/red]")
-
-            console.print(
-                f"[green][Info] Initializing local model client for: {selected_model}[/green]"
-            )
-            if local_runtime.kind == "ollama":
-                capabilities = inspect_model_capabilities(selected_model)
-            else:
-                capabilities = inspect_openai_compatible_model_capabilities(
-                    local_runtime, selected_model
-                )
-            if local_runtime.kind == "ollama" and capabilities["tools"] is False:
-                tool_capable_model = next(
-                    (
-                        candidate
-                        for candidate in available_models
-                        if candidate != selected_model
-                        and inspect_model_capabilities(candidate)["tools"] is True
-                    ),
-                    None,
-                )
-                if tool_capable_model:
-                    console.print(
-                        f"[yellow][Capability routing] {selected_model} does not support tools; "
-                        f"using compatible local model {tool_capable_model} for agent tasks.[/yellow]"
-                    )
-                    selected_model = tool_capable_model
-                    capabilities = inspect_model_capabilities(selected_model)
-            try:
-                llm = _make_selected_local_chat_model(
-                    local_runtime,
-                    selected_model,
-                    thinking_enabled=thinking_enabled,
-                    thinking_effort=thinking_effort,
-                    capabilities=capabilities,
-                )
-            except Exception as exc:
-                log_event(
-                    RUN_LOGGER,
-                    "provider.local_model_initialization_failed",
-                    level=logging.ERROR,
-                    runtime=local_runtime.name,
-                    model=selected_model,
-                    error_type=type(exc).__name__,
-                    exc_info=True,
-                )
-                console.print(
-                    f"[red]Could not initialize {local_runtime.name} "
-                    f"model '{selected_model}' ({type(exc).__name__}). "
-                    "Choose another runtime or online mode.[/red]"
-                )
-                continue
-            tools_list = _tools_for_model(
+        if preference.online_selection is None:
+            return None
+        preference.online_preference = selected_online_preference
+        provider_type = "online"
+        selected_model = preference.online_selection["model_name"]
+        capabilities = preference.online_selection["capabilities"]
+        llm = preference.online_selection["model"]
+        tools_list = (
+            _tools_for_model(
                 provider_type=provider_type,
                 capabilities=capabilities,
                 isolation_warning=isolation_warning,
             )
-            if capabilities["tools"] is False:
-                llm_with_tools = llm
-            else:
-                try:
-                    llm_with_tools = llm.bind_tools(tools_list)
-                except Exception as exc:
-                    fallback_model = (
-                        next(
-                            (
-                                candidate
-                                for candidate in available_models
-                                if candidate != selected_model
-                                and inspect_model_capabilities(candidate)["tools"]
-                                is True
-                            ),
-                            None,
-                        )
-                        if local_runtime.kind == "ollama"
-                        else None
-                    )
-                    if fallback_model is None:
-                        console.print(
-                            f"[yellow][Model limitation] Tool binding failed for {selected_model} "
-                            f"({type(exc).__name__}); continuing without tools.[/yellow]"
-                        )
-                        llm_with_tools = llm
-                    else:
-                        console.print(
-                            f"[yellow][Model fallback] Switching to tool-capable model {fallback_model}.[/yellow]"
-                        )
-                        selected_model = fallback_model
-                        capabilities = inspect_model_capabilities(selected_model)
-                        llm = _make_selected_local_chat_model(
-                            local_runtime,
-                            selected_model,
-                            thinking_enabled=thinking_enabled,
-                            thinking_effort=thinking_effort,
-                            capabilities=capabilities,
-                        )
-                        llm_with_tools = llm.bind_tools(tools_list)
-            log_event(
-                RUN_LOGGER,
-                "providers.local_runtime_selected",
-                runtime=local_runtime.name,
-                runtime_kind=local_runtime.kind,
-                model=selected_model,
-            )
-        else:
-            console.print(f"[red]Select a provider from 1 to {last_choice}.[/red]")
-            continue
-        if provider_type == "local":
-            webcam_status = (
-                "webcam, workspace image, and sampled workspace video input enabled"
-                if capabilities["vision"] is True
-                else (
-                    "webcam, workspace image, and workspace video input unavailable "
-                    "(model lacks vision support)"
-                )
-            )
-            missing_media = [
-                package
-                for package, module in (
-                    ("opencv-python-headless", "cv2"),
-                    ("Pillow", "PIL"),
-                    ("sounddevice", "sounddevice"),
-                    ("faster-whisper", "faster_whisper"),
-                )
-                if importlib.util.find_spec(module) is None
-            ]
-            if missing_media:
-                console.print(
-                    "[yellow][Local media][/yellow] "
-                    f"{webcam_status}; optional media packages missing "
-                    f"({', '.join(missing_media)}); install with "
-                    '`pip install ".[media]"`. Workspace PCM WAV transcription '
-                    "is local-only and requires per-use approval."
-                )
-            elif capabilities["vision"] is not True:
-                console.print(f"[yellow][Local media][/yellow] {webcam_status}.")
-        console.print(
-            "[cyan][Capabilities][/cyan] "
-            + ", ".join(
-                f"{name}={'yes' if value else 'no' if value is False else 'unknown'}"
-                for name, value in capabilities.items()
-                if name != "context_window"
-            )
-        )
-        include_private_context = (
-            provider_type == "local" or online_selection["share_context"]
-        )
-        startup_memory_context = (
-            _build_startup_memory_context(memory, skills_folder_input or None)
-            if include_private_context
-            else ""
-        )
-        chat_history = (
-            memory.load_history(session_id, limit=MAX_HISTORY_MESSAGES)
-            if include_private_context
+            if preference.online_selection["allow_tools"]
             else []
         )
-        context_summary = ""
-        session_summary_saved = False
-        _SESSION_INFO.update(
-            {
-                "SQL session ID": session_id,
-                "Session mode": re.sub(r"\[/?[^\]]*\]", "", mode_label),
-                "Agent (permission) mode": permission_mode,
-                "Model provider": (
-                    f"Local ({selected_local_runtime.name})"
-                    if provider_type == "local" and selected_local_runtime
-                    else "Online"
+        if (
+            not preference.online_selection["share_context"]
+            and not ONLINE_PERMISSION_OVERRIDE
+        ):
+            tools_list = [
+                tool
+                for tool in tools_list
+                if tool.name
+                not in {
+                    "create_task_plan",
+                    "inspect_task_plan",
+                    "update_todo_step",
+                    "revise_task_plan",
+                }
+            ]
+        if preference.online_selection["allow_tools"]:
+            try:
+                llm_with_tools = llm.bind_tools(tools_list)
+            except Exception as exc:
+                console.print(
+                    f"[yellow]The selected endpoint/model does not accept tool calls "
+                    f"({type(exc).__name__}); continuing without tools.[/yellow]"
+                )
+                llm_with_tools = llm
+                capabilities["tools"] = False
+                preference.online_selection["allow_tools"] = False
+        else:
+            llm_with_tools = llm
+        if verbose_startup:
+            console.print(
+                f"[green][Online model][/green] {selected_model} at "
+                f"{preference.online_selection['base_url']}"
+            )
+    elif provider_choice.isdigit() and 1 <= int(provider_choice) <= len(local_runtimes):
+        local_runtime = local_runtimes[int(provider_choice) - 1]
+        selected_local_runtime = local_runtime
+        provider_type = "local"
+        available_models = list(local_runtime.models)
+        if PREFERRED_MODEL in available_models:
+            available_models.remove(PREFERRED_MODEL)
+            available_models.insert(0, PREFERRED_MODEL)
+        if not available_models:
+            console.print(
+                f"[yellow]{local_runtime.name} is running, but it advertises "
+                "no chat models. Choose another runtime or online mode.[/yellow]"
+            )
+            return None
+        console.print(
+            f"\n[bold underline]Available {local_runtime.name} Chat Models:[/bold underline]"
+        )
+        for idx, model_name in enumerate(available_models, 1):
+            marker = (
+                " [green](configured, preferred)[/green]"
+                if PREFERRED_MODEL and model_name == PREFERRED_MODEL
+                else ""
+            )
+            console.print(f"  [cyan]{idx}.[/cyan] {model_name}{marker}")
+        if PREFERRED_MODEL and PREFERRED_MODEL not in available_models:
+            console.print(
+                f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
+                f"installed in {local_runtime.name}.[/yellow]"
+            )
+        while True:
+            choice_input = console.input(
+                f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
+            ).strip()
+            if not choice_input:
+                selected_model = available_models[0]
+                break
+            try:
+                choice_idx = int(choice_input) - 1
+                if 0 <= choice_idx < len(available_models):
+                    selected_model = available_models[choice_idx]
+                    break
+            except ValueError:
+                pass
+            console.print("[red][Error] Invalid selection.[/red]")
+
+        console.print(
+            f"[green][Info] Initializing local model client for: {selected_model}[/green]"
+        )
+        if local_runtime.kind == "ollama":
+            capabilities = inspect_model_capabilities(selected_model)
+        else:
+            capabilities = inspect_openai_compatible_model_capabilities(
+                local_runtime, selected_model
+            )
+        if local_runtime.kind == "ollama" and capabilities["tools"] is False:
+            tool_capable_model = next(
+                (
+                    candidate
+                    for candidate in available_models
+                    if candidate != selected_model
+                    and inspect_model_capabilities(candidate)["tools"] is True
                 ),
-                "Model": selected_model,
-                "Thinking": (
-                    f"{'on' if thinking_enabled else 'off'} (effort: {thinking_effort})"
-                ),
-                "Workspace": str(SandboxManager.root_dir),
-                "Local RAG": "active" if is_rag_active else "off",
-                "Skills loaded": len(loaded_skills),
-                "Resumed history messages": len(chat_history),
-            }
+                None,
+            )
+            if tool_capable_model:
+                console.print(
+                    f"[yellow][Capability routing] {selected_model} does not support tools; "
+                    f"using compatible local model {tool_capable_model} for agent tasks.[/yellow]"
+                )
+                selected_model = tool_capable_model
+                capabilities = inspect_model_capabilities(selected_model)
+        try:
+            llm = _make_selected_local_chat_model(
+                local_runtime,
+                selected_model,
+                thinking_enabled=thinking_enabled,
+                thinking_effort=thinking_effort,
+                capabilities=capabilities,
+            )
+        except Exception as exc:
+            log_event(
+                RUN_LOGGER,
+                "provider.local_model_initialization_failed",
+                level=logging.ERROR,
+                runtime=local_runtime.name,
+                model=selected_model,
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+            console.print(
+                f"[red]Could not initialize {local_runtime.name} "
+                f"model '{selected_model}' ({type(exc).__name__}). "
+                "Choose another runtime or online mode.[/red]"
+            )
+            return None
+        tools_list = _tools_for_model(
+            provider_type=provider_type,
+            capabilities=capabilities,
+            isolation_warning=isolation_warning,
         )
-        startup_summary = Table(
-            title="Ready",
-            box=None,
-            show_header=False,
+        if capabilities["tools"] is False:
+            llm_with_tools = llm
+        else:
+            try:
+                llm_with_tools = llm.bind_tools(tools_list)
+            except Exception as exc:
+                fallback_model = (
+                    next(
+                        (
+                            candidate
+                            for candidate in available_models
+                            if candidate != selected_model
+                            and inspect_model_capabilities(candidate)["tools"] is True
+                        ),
+                        None,
+                    )
+                    if local_runtime.kind == "ollama"
+                    else None
+                )
+                if fallback_model is None:
+                    console.print(
+                        f"[yellow][Model limitation] Tool binding failed for {selected_model} "
+                        f"({type(exc).__name__}); continuing without tools.[/yellow]"
+                    )
+                    llm_with_tools = llm
+                else:
+                    console.print(
+                        f"[yellow][Model fallback] Switching to tool-capable model {fallback_model}.[/yellow]"
+                    )
+                    selected_model = fallback_model
+                    capabilities = inspect_model_capabilities(selected_model)
+                    llm = _make_selected_local_chat_model(
+                        local_runtime,
+                        selected_model,
+                        thinking_enabled=thinking_enabled,
+                        thinking_effort=thinking_effort,
+                        capabilities=capabilities,
+                    )
+                    llm_with_tools = llm.bind_tools(tools_list)
+        log_event(
+            RUN_LOGGER,
+            "providers.local_runtime_selected",
+            runtime=local_runtime.name,
+            runtime_kind=local_runtime.kind,
+            model=selected_model,
         )
-        startup_summary.add_column("Setting", style="cyan")
-        startup_summary.add_column("Value", overflow="fold")
-        os_name = platform.system() or sys.platform
-        architecture = platform.machine()
-        startup_summary.add_row(
-            "Platform",
-            f"{os_name} ({architecture})" if architecture else os_name,
+    else:
+        console.print(f"[red]Select a provider from 1 to {last_choice}.[/red]")
+        return None
+    if provider_type == "local":
+        webcam_status = (
+            "webcam, workspace image, and sampled workspace video input enabled"
+            if capabilities["vision"] is True
+            else (
+                "webcam, workspace image, and workspace video input unavailable "
+                "(model lacks vision support)"
+            )
         )
-        startup_summary.add_row(
-            "Isolation",
-            (
-                f"Disabled — {isolation_warning}"
-                if isolation_warning
-                else "Available — bubblewrap + prlimit"
-            ),
+        missing_media = [
+            package
+            for package, module in (
+                ("opencv-python-headless", "cv2"),
+                ("Pillow", "PIL"),
+                ("sounddevice", "sounddevice"),
+                ("faster-whisper", "faster_whisper"),
+            )
+            if importlib.util.find_spec(module) is None
+        ]
+        if missing_media:
+            console.print(
+                "[yellow][Local media][/yellow] "
+                f"{webcam_status}; optional media packages missing "
+                f"({', '.join(missing_media)}); install with "
+                '`pip install ".[media]"`. Workspace PCM WAV transcription '
+                "is local-only and requires per-use approval."
+            )
+        elif capabilities["vision"] is not True:
+            console.print(f"[yellow][Local media][/yellow] {webcam_status}.")
+    console.print(
+        "[cyan][Capabilities][/cyan] "
+        + ", ".join(
+            f"{name}={'yes' if value else 'no' if value is False else 'unknown'}"
+            for name, value in capabilities.items()
+            if name != "context_window"
         )
-        startup_summary.add_row(
-            "Provider",
-            (
+    )
+    include_private_context = (
+        provider_type == "local" or preference.online_selection["share_context"]
+    )
+    startup_memory_context = (
+        _build_startup_memory_context(memory, skills_folder_input or None)
+        if include_private_context
+        else ""
+    )
+    chat_history = (
+        memory.load_history(session_id, limit=MAX_HISTORY_MESSAGES)
+        if include_private_context
+        else []
+    )
+    context_summary = ""
+    session_summary_saved = False
+    _SESSION_INFO.update(
+        {
+            "SQL session ID": session_id,
+            "Session mode": re.sub(r"\[/?[^\]]*\]", "", mode_label),
+            "Agent (permission) mode": permission_mode,
+            "Model provider": (
                 f"Local ({selected_local_runtime.name})"
-                if provider_type == "local"
+                if provider_type == "local" and selected_local_runtime
                 else "Online"
             ),
-        )
-        startup_summary.add_row("Model", selected_model)
-        startup_summary.add_row("Permission", permission_mode.title())
-        startup_summary.add_row(
-            "Workspace",
-            str(SandboxManager.root_dir),
-        )
-        startup_summary.add_row(
-            "Local RAG",
-            "active" if is_rag_active else "inactive",
-        )
-        startup_summary.add_row("Skills", str(len(loaded_skills)))
-        if (
-            provider_type == "local"
-            and selected_local_runtime is not None
-            and selected_local_runtime.kind == "ollama"
-        ):
-            hardware_info = hardware_status_by_url.get(selected_local_runtime.base_url)
-            if hardware_info is None:
-                hardware_info = inspect_ollama_hardware(
-                    selected_local_runtime.base_url,
-                    HARDWARE_ACCELERATION_MODE,
-                    client_factory=lambda **kwargs: ollama.Client(
-                        **kwargs, **ollama_client_kwargs()
-                    ),
-                )
-                hardware_status_by_url[selected_local_runtime.base_url] = hardware_info
-            hardware_value = str(hardware_info.get("placement", "unknown"))
-            reported_models = hardware_info.get("models")
-            if isinstance(reported_models, list) and reported_models:
-                loaded_models = ", ".join(
-                    str(model.get("name") or "unnamed model")
-                    + (
-                        f" ({model['size_vram'] / (1024**3):.2f} GiB VRAM)"
-                        if isinstance(model, dict)
-                        and isinstance(model.get("size_vram"), int)
-                        else " (VRAM unknown)"
-                    )
-                    for model in reported_models
+            "Model": selected_model,
+            "Thinking": (
+                f"{'on' if thinking_enabled else 'off'} (effort: {thinking_effort})"
+            ),
+            "Workspace": str(SandboxManager.root_dir),
+            "Local RAG": "active" if is_rag_active else "off",
+            "Skills loaded": len(loaded_skills),
+            "Resumed history messages": len(chat_history),
+        }
+    )
+    startup_summary = Table(
+        title="Ready",
+        box=None,
+        show_header=False,
+    )
+    startup_summary.add_column("Setting", style="cyan")
+    startup_summary.add_column("Value", overflow="fold")
+    os_name = platform.system() or sys.platform
+    architecture = platform.machine()
+    startup_summary.add_row(
+        "Platform",
+        f"{os_name} ({architecture})" if architecture else os_name,
+    )
+    startup_summary.add_row(
+        "Isolation",
+        (
+            f"Disabled — {isolation_warning}"
+            if isolation_warning
+            else "Available — bubblewrap + prlimit"
+        ),
+    )
+    startup_summary.add_row(
+        "Provider",
+        (
+            f"Local ({selected_local_runtime.name})"
+            if provider_type == "local"
+            else "Online"
+        ),
+    )
+    startup_summary.add_row("Model", selected_model)
+    startup_summary.add_row("Permission", permission_mode.title())
+    startup_summary.add_row(
+        "Workspace",
+        str(SandboxManager.root_dir),
+    )
+    startup_summary.add_row(
+        "Local RAG",
+        "active" if is_rag_active else "inactive",
+    )
+    startup_summary.add_row("Skills", str(len(loaded_skills)))
+    if (
+        provider_type == "local"
+        and selected_local_runtime is not None
+        and selected_local_runtime.kind == "ollama"
+    ):
+        hardware_info = hardware_status_by_url.get(selected_local_runtime.base_url)
+        if hardware_info is None:
+            hardware_info = inspect_ollama_hardware(
+                selected_local_runtime.base_url,
+                HARDWARE_ACCELERATION_MODE,
+                client_factory=lambda **kwargs: ollama.Client(
+                    **kwargs, **ollama_client_kwargs()
+                ),
+            )
+            hardware_status_by_url[selected_local_runtime.base_url] = hardware_info
+        hardware_value = str(hardware_info.get("placement", "unknown"))
+        reported_models = hardware_info.get("models")
+        if isinstance(reported_models, list) and reported_models:
+            loaded_models = ", ".join(
+                str(model.get("name") or "unnamed model")
+                + (
+                    f" ({model['size_vram'] / (1024**3):.2f} GiB VRAM)"
                     if isinstance(model, dict)
+                    and isinstance(model.get("size_vram"), int)
+                    else " (VRAM unknown)"
                 )
-                if loaded_models:
-                    hardware_value += f" — {loaded_models}"
-            startup_summary.add_row("Ollama hardware", hardware_value)
-        console.print(startup_summary)
-        console.print(
-            f"\n[bold green]--- {mode_label} Ready! Type 'exit' or 'switch' ---[/bold green]"
-        )
+                for model in reported_models
+                if isinstance(model, dict)
+            )
+            if loaded_models:
+                hardware_value += f" — {loaded_models}"
+        startup_summary.add_row("Ollama hardware", hardware_value)
+    console.print(startup_summary)
+    console.print(
+        f"\n[bold green]--- {mode_label} Ready! Type 'exit' or 'switch' ---[/bold green]"
+    )
+    return ProviderSelection(
+        provider_type=provider_type,
+        selected_model=selected_model,
+        capabilities=capabilities,
+        llm=llm,
+        llm_with_tools=llm_with_tools,
+        tools_list=tools_list,
+        selected_local_runtime=selected_local_runtime,
+        include_private_context=include_private_context,
+        startup_memory_context=startup_memory_context,
+        chat_history=chat_history,
+        context_summary=context_summary,
+        session_summary_saved=session_summary_saved,
+        available_models=available_models,
+    )
 
+
+async def _run_agent_cli_session(*, verbose_startup: bool = False):
+    global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
+    setup = await _prepare_session(
+        verbose_startup=verbose_startup,
+    )
+    if setup is None:
+        return
+    memory = setup.memory
+    local_runtimes = setup.local_runtimes
+    hardware_status_by_url = setup.hardware_status_by_url
+    isolation_warning = setup.isolation_warning
+    vectorstore = setup.vectorstore
+    docs_input = setup.docs_input
+    is_rag_active = setup.is_rag_active
+    rag_signature = setup.rag_signature
+    rag_last_check = setup.rag_last_check
+    skills_folder_input = setup.skills_folder_input
+    loaded_skills = setup.loaded_skills
+    mode_label = setup.mode_label
+    session_id = setup.session_id
+    network_consent_state = setup.network_consent_state
+    thinking_enabled = setup.thinking_enabled
+    thinking_effort = setup.thinking_effort
+    permission_mode = setup.permission_mode
+    _task_state = setup._task_state
+
+    provider_preference = ProviderPreference()
+    while True:
+        selection = await _choose_provider(
+            verbose_startup=verbose_startup,
+            preference=provider_preference,
+            memory=memory,
+            local_runtimes=local_runtimes,
+            hardware_status_by_url=hardware_status_by_url,
+            isolation_warning=isolation_warning,
+            thinking_enabled=thinking_enabled,
+            thinking_effort=thinking_effort,
+            permission_mode=permission_mode,
+            loaded_skills=loaded_skills,
+            mode_label=mode_label,
+            is_rag_active=is_rag_active,
+            vectorstore=vectorstore,
+            session_id=session_id,
+            skills_folder_input=skills_folder_input,
+        )
+        if selection is None:
+            continue
+        provider_type = selection.provider_type
+        selected_model = selection.selected_model
+        capabilities = selection.capabilities
+        llm = selection.llm
+        llm_with_tools = selection.llm_with_tools
+        tools_list = selection.tools_list
+        selected_local_runtime = selection.selected_local_runtime
+        include_private_context = selection.include_private_context
+        startup_memory_context = selection.startup_memory_context
+        chat_history = selection.chat_history
+        context_summary = selection.context_summary
+        session_summary_saved = selection.session_summary_saved
+        available_models = selection.available_models
+        online_selection = provider_preference.online_selection
         model_selection_failed = False
         active_code_workspace: CodeTaskWorkspace | None = None
         previous_workspace_root = SandboxManager.root_dir
