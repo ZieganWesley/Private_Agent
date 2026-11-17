@@ -97,3 +97,61 @@ def test_loop_compaction_noop_when_small_or_disabled():
     assert not asyncio.run(
         compact_loop_messages(FakeLLM(), messages, 1, threshold=0, max_chars=100)
     )
+
+
+class RecordingIndicator:
+    """Record the summarization spinner without starting a real rich Live."""
+
+    created = []
+
+    def __init__(self, message, **kwargs):
+        self.message = message
+        self.kwargs = kwargs
+        self.stopped = False
+        RecordingIndicator.created.append(self)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_exc_info):
+        self.stopped = True
+        return False
+
+
+def test_summarizing_context_shows_a_live_status_spinner(monkeypatch):
+    from private_agent.agent import compaction
+
+    RecordingIndicator.created = []
+    monkeypatch.setattr(compaction, "StatusIndicator", RecordingIndicator)
+
+    asyncio.run(
+        compact_history(
+            FakeLLM("S"),
+            history(10),
+            "",
+            keep_recent=4,
+            max_chars=100,
+            model_name="m",
+        )
+    )
+
+    spinner = RecordingIndicator.created[0]
+    assert spinner.message == "Summarizing earlier conversation with m"
+    assert spinner.kwargs == {"phase": compaction.SUMMARIZING}
+    assert spinner.stopped
+
+
+def test_summary_spinner_stops_when_the_model_fails(monkeypatch):
+    from private_agent.agent import compaction
+
+    RecordingIndicator.created = []
+    monkeypatch.setattr(compaction, "StatusIndicator", RecordingIndicator)
+
+    recent, summary = asyncio.run(
+        compact_history(
+            FakeLLM(fail=True), history(10), "keep", keep_recent=4, max_chars=100
+        )
+    )
+
+    assert len(recent) == 4 and summary == "keep"
+    assert RecordingIndicator.created[0].stopped

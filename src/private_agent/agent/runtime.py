@@ -188,6 +188,12 @@ from .session_state import SESSION_INFO as _SESSION_INFO
 from .session_state import SESSION_STATS as _SESSION_STATS
 from .session_stats import build_stats_table, format_duration
 from .session_types import ProviderPreference, ProviderSelection, SessionSetup
+from .status import (
+    SUMMARIZING,
+    StatusIndicator,
+    context_state_line,
+    summarizing_message,
+)
 from .streaming import (
     _invoke_with_status,
     _visible_chunk_text,
@@ -2086,6 +2092,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             _history_with_summary(context_summary, chat_history),
                             provider_type,
                             reason="on demand",
+                            model_name=selected_model,
                         )
                     continue
                 if user_input.lower() == "/compact":
@@ -2102,6 +2109,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         notify=lambda text: console.print(
                             f"[cyan][Context][/cyan] {text}"
                         ),
+                        model_name=selected_model,
                     )
                     console.print(
                         "[green][Context][/green] Compacted into a working summary "
@@ -2122,6 +2130,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             session_id,
                             _history_with_summary(context_summary, chat_history),
                             provider_type,
+                            model_name=selected_model,
                         )
                     _print_session_statistics()
                     return
@@ -2730,6 +2739,7 @@ Runtime context:
                         notify=lambda text: console.print(
                             f"[cyan][Context][/cyan] {text}"
                         ),
+                        model_name=selected_model,
                     )
                 summary_message = summary_system_message(context_summary)
                 if summary_message is not None:
@@ -2764,11 +2774,7 @@ Runtime context:
                     max_context=effective_context - output_budget,
                     system_prompts=system_prompts,
                 )
-                console.print(
-                    f"[dim][Context State] ~{context_stats['tokens']} / "
-                    f"{context_stats['max']} prompt tokens; up to {output_budget} "
-                    "output tokens[/dim]"
-                )
+                usage = _print_context_state(context_stats, output_budget)
 
                 messages = (
                     system_prompts
@@ -2787,6 +2793,7 @@ Runtime context:
                         status_message=status_message,
                         local_model=provider_type == "local",
                         thinking_enabled=thinking_enabled,
+                        context_usage=usage,
                     )
                 except Exception as e:
                     error_text = str(e).lower()
@@ -3302,7 +3309,9 @@ Runtime context:
                         notify=lambda text: console.print(
                             f"[cyan][Context][/cyan] {text}"
                         ),
+                        model_name=selected_model,
                     )
+                    usage = (messages_tokens(messages), context_stats["max"])
                     try:
                         response = await _invoke_with_status(
                             llm_with_tools,
@@ -3312,6 +3321,7 @@ Runtime context:
                             status_message="Processing tool outputs...",
                             local_model=provider_type == "local",
                             thinking_enabled=thinking_enabled,
+                            context_usage=usage,
                         )
                     except Exception as exc:
                         if provider_type == "online":
@@ -3450,6 +3460,7 @@ Runtime context:
                     session_id,
                     _history_with_summary(context_summary, chat_history),
                     provider_type,
+                    model_name=selected_model,
                 )
             _print_session_statistics()
             return
@@ -3490,6 +3501,12 @@ Runtime context:
         break
 
 
+def _print_context_state(stats: dict, output_tokens: int) -> tuple[int, int]:
+    """Print the context-window gauge and return the ``(used, maximum)`` pair."""
+    console.print(context_state_line(stats, output_tokens))
+    return stats["tokens"], stats["max"]
+
+
 def _history_with_summary(summary: str, history: list) -> list:
     if not summary:
         return history
@@ -3504,6 +3521,7 @@ async def _summarize_and_save_session(
     chat_history: list,
     provider_type: str,
     reason: str = "before exit",
+    model_name: str = "model",
 ) -> bool:
     """Summarize the session into SQLite with concise stage output.
 
@@ -3561,38 +3579,45 @@ async def _summarize_and_save_session(
         console_obj.print(
             "[cyan][Summary 2/3][/cyan] Model is summarizing the session..."
         )
-        call_started = time.monotonic()
-        summary_res = await llm.ainvoke(summary_messages)
-        _SESSION_STATS.record_model_call(
-            summary_messages, summary_res, time.monotonic() - call_started
-        )
-        summary_text = str(summary_res.content).strip()
-        if len(summary_text) > summary_limit:
-            shorten_messages = [
-                SystemMessage(
-                    content=(
-                        "Semantically summarize the provided "
-                        "candidate for the exact SQLite schema "
-                        "budget below. Do not slice or merely "
-                        "remove its ending. Return only the "
-                        "revised summary value.\n"
-                        + json.dumps(
-                            {
-                                "schema": summary_schema,
-                                "maximum_characters": summary_limit,
-                            },
-                            ensure_ascii=False,
-                        )
-                    )
-                ),
-                HumanMessage(content=summary_text),
-            ]
+        with StatusIndicator(
+            summarizing_message(model_name, "the session"),
+            phase=SUMMARIZING,
+            console=console_obj,
+        ):
             call_started = time.monotonic()
-            summary_res = await llm.ainvoke(shorten_messages)
+            summary_res = await llm.ainvoke(summary_messages)
             _SESSION_STATS.record_model_call(
-                shorten_messages, summary_res, time.monotonic() - call_started
+                summary_messages, summary_res, time.monotonic() - call_started
             )
             summary_text = str(summary_res.content).strip()
+            if len(summary_text) > summary_limit:
+                shorten_messages = [
+                    SystemMessage(
+                        content=(
+                            "Semantically summarize the provided "
+                            "candidate for the exact SQLite schema "
+                            "budget below. Do not slice or merely "
+                            "remove its ending. Return only the "
+                            "revised summary value.\n"
+                            + json.dumps(
+                                {
+                                    "schema": summary_schema,
+                                    "maximum_characters": summary_limit,
+                                },
+                                ensure_ascii=False,
+                            )
+                        )
+                    ),
+                    HumanMessage(content=summary_text),
+                ]
+                call_started = time.monotonic()
+                summary_res = await llm.ainvoke(shorten_messages)
+                _SESSION_STATS.record_model_call(
+                    shorten_messages,
+                    summary_res,
+                    time.monotonic() - call_started,
+                )
+                summary_text = str(summary_res.content).strip()
         console_obj.print("[cyan][Summary 3/3][/cyan] Saving summary to SQLite...")
         memory.save_summary(session_id, summary_text)
         elapsed = time.monotonic() - summary_started

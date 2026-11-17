@@ -136,6 +136,7 @@ async def _invoke_with_budget(
     model_name: str = "model",
     status_message: str = "Processing model response...",
     local_model: bool = False,
+    context_usage: tuple[int, int] | None = None,
 ):
     """Invoke a model within the task deadline, streaming text when supported."""
     remaining = deadline - time.monotonic()
@@ -149,6 +150,7 @@ async def _invoke_with_budget(
         indicator = StatusIndicator(
             waiting_message(model_name, local_model=local_model),
             phase=LOADING if local_model else PROCESSING,
+            context_usage=context_usage,
         ).start()
 
         async def collect_stream():
@@ -441,6 +443,7 @@ async def _invoke_with_status(
     status_message: str,
     local_model: bool = False,
     thinking_enabled: bool = False,
+    context_usage: tuple[int, int] | None = None,
 ):
     """Show operation progress and report elapsed time for slow model calls."""
     started = time.monotonic()
@@ -453,6 +456,7 @@ async def _invoke_with_status(
                 model_name=model_name,
                 status_message=status_message,
                 local_model=local_model,
+                context_usage=context_usage,
             )
         except Exception as exc:
             reference_id = uuid.uuid4().hex[:8]
@@ -478,7 +482,7 @@ async def _invoke_with_status(
             else waiting_message(model_name, local_model=local_model)
         )
         try:
-            with StatusIndicator(message, phase=phase):
+            with StatusIndicator(message, phase=phase, context_usage=context_usage):
                 response = await _invoke_with_budget(
                     model,
                     messages,

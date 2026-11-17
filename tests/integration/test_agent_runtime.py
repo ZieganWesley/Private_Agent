@@ -1615,13 +1615,14 @@ async def test_nonstreaming_response_keeps_live_status(monkeypatch):
         model_name="test-model",
         status_message="Generating",
         thinking_enabled=True,
+        context_usage=(3000, 12000),
     )
 
     assert response.content == "complete"
     assert not active["value"]
-    assert [item.message for item in created] == [
-        "[bold magenta]test-model is thinking[/bold magenta]"
-    ]
+    message = created[0].message
+    assert message.startswith("[bold magenta]test-model is thinking[/bold magenta]")
+    assert "25%" in message
     assert created[0].kwargs == {"spinner": "dots2", "spinner_style": "magenta"}
 
 

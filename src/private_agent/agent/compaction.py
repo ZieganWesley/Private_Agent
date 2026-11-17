@@ -8,6 +8,7 @@ from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
 from .prompts import _truncate_to_tokens, token_count
+from .status import SUMMARIZING, StatusIndicator, summarizing_message
 
 SUMMARY_HEADER = "Condensed summary of the earlier part of this session"
 _MAX_SOURCE_TOKENS = 6000
@@ -42,6 +43,8 @@ async def _summarize(
     transcript: str,
     max_chars: int,
     purpose: str,
+    *,
+    model_name: str = "model",
 ) -> str:
     prompt = (
         f"Condense the following {purpose} into a compact working summary of at most "
@@ -52,9 +55,10 @@ async def _summarize(
     body = (f"Existing summary:\n{prior_summary}\n\n" if prior_summary else "") + (
         f"New material:\n{transcript}"
     )
-    result = await llm.ainvoke(
-        [SystemMessage(content=prompt), HumanMessage(content=body)]
-    )
+    with StatusIndicator(summarizing_message(model_name, purpose), phase=SUMMARIZING):
+        result = await llm.ainvoke(
+            [SystemMessage(content=prompt), HumanMessage(content=body)]
+        )
     text = message_text(result).strip()
     if not text:
         raise ValueError("The model returned an empty summary.")
@@ -96,6 +100,7 @@ async def compact_history(
     max_chars: int,
     source_token_limit: int = _MAX_SOURCE_TOKENS,
     notify: Callable[[str], None] | None = None,
+    model_name: str = "model",
 ) -> tuple[list[Any], str]:
     """Fold older turns into the running summary; keep the newest messages verbatim."""
     keep = 0 if keep_recent <= 0 else max(2, keep_recent - keep_recent % 2)
@@ -116,6 +121,7 @@ async def compact_history(
             _transcript(older, source_token_limit),
             max_chars,
             "earlier conversation",
+            model_name=model_name,
         )
     except Exception as exc:
         if notify:
@@ -150,6 +156,7 @@ async def compact_loop_messages(
     threshold: float,
     max_chars: int,
     notify: Callable[[str], None] | None = None,
+    model_name: str = "model",
 ) -> bool:
     """Shrink tool output inside a running turn when the prompt nears the limit.
 
@@ -183,7 +190,14 @@ async def compact_loop_messages(
             max(100, min(_MAX_SOURCE_TOKENS, limit_tokens // 2)),
         )
         try:
-            digest = await _summarize(llm, "", transcript, max_chars, "tool results")
+            digest = await _summarize(
+                llm,
+                "",
+                transcript,
+                max_chars,
+                "tool results",
+                model_name=model_name,
+            )
         except Exception as exc:
             digest = _truncate_to_tokens(transcript, max(50, limit_tokens // 10))
             if notify:

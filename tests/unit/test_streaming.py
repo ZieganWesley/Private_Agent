@@ -246,6 +246,35 @@ async def test_hidden_reasoning_switches_the_spinner_to_thinking(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_context_usage_reaches_the_streaming_spinner(monkeypatch):
+    created = []
+
+    class RecordingIndicator(FakeIndicator):
+        def __init__(self, *args, **kwargs):
+            super().__init__()
+            created.append((args, kwargs))
+
+    monkeypatch.setattr(streaming, "StatusIndicator", RecordingIndicator)
+    monkeypatch.setattr(streaming, "STREAMING_OUTPUT", True)
+    monkeypatch.setattr(streaming, "VISIBLE_REASONING", False)
+    monkeypatch.setattr(streaming.console, "print", lambda *_a, **_k: None)
+
+    class SimpleModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(content="hello")
+
+    await streaming._invoke_with_budget(
+        SimpleModel(),
+        [],
+        time.monotonic() + 5,
+        model_name="m",
+        context_usage=(3000, 12000),
+    )
+
+    assert created[0][1]["context_usage"] == (3000, 12000)
+
+
+@pytest.mark.asyncio
 async def test_streamed_text_is_printed_only_after_the_spinner_stops(monkeypatch):
     indicator, printed = _patch_streaming(monkeypatch, visible_reasoning=False)
     active_at_print = []

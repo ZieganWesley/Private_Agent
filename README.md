@@ -73,7 +73,8 @@ presented as verified without evidence.
 **Memory.** SQLite stores chat history, episodic summaries, user-confirmed
 learned items, session-linked skills and task plans. On `exit` or `Ctrl+C` the
 session is summarized and saved with short stage messages
-(`Summary 1/3` … `3/3`); pressing `Ctrl+C` again skips the summary and exits.
+(`Summary 1/3` … `3/3`) and a blue spinner while the model works; pressing
+`Ctrl+C` again skips the summary and exits.
 
 **Failure handling.** Startup errors exit with a non-zero status; model, tool,
 network, database and sandbox errors are caught, reported concisely and the
@@ -91,7 +92,8 @@ reports that in the current session rather than restarting it.
   calls, structured output, thinking, vision, audio); toggleable thinking with
   configurable effort (`/think`, `/think-effort`, `/think-status`); streaming
   output; optional visible reasoning; a phase-aware status spinner while the
-  model loads, thinks or answers (reasoning streams as dimmed text when
+  model loads, thinks, answers or summarizes, with a context-window gauge that
+  fills as the prompt budget is used (reasoning streams as dimmed text when
   `agent.visible_reasoning` is on, otherwise a magenta thinking spinner
   replaces it); Ollama hardware-placement report (`/hardware-status`).
 - **Built-in tools**: read/edit/list/search files, text and symbol search, git
@@ -221,7 +223,11 @@ While a request runs the CLI shows one spinner: cyan while a local model is
 loaded into memory (the first request can take a while) and while an online
 request is in flight, and magenta while the model is thinking with reasoning
 hidden. With `agent.visible_reasoning` enabled the reasoning streams as dimmed
-text above the answer instead.
+text above the answer instead. A filled gauge beside the spinner
+(`Context State ▰▰▰▰▰▱▱▱▱▱ 52%`) shows how much of the model's prompt budget the
+request is using; it is green below 50%, yellow from 50% and red from 80%.
+Compacting the context or summarizing the session shows a blue spinner while
+the model condenses it.
 
 The CLI requires an interactive terminal; non-TTY startup prints a message and
 exits before opening a session. In the interactive prompt, Up/Down navigate
