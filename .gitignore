@@ -13,3 +13,4 @@ dist/
 IMPLEMENTATION_PLAN.md
 RESTRUCTRE.md
 uv.lock
+package-lock.json
