@@ -1,14 +1,10 @@
 """Pruning, integrity checks and backups."""
 
-import logging
 import os
 import pathlib
 import sqlite3
 import tempfile
 from datetime import datetime, timedelta, timezone
-
-_LOGGER = logging.getLogger("private_agent.database.memory")
-_SCHEMA_VERSION = 1
 
 
 class MaintenanceMixin:

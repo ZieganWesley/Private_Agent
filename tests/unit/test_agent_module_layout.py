@@ -102,3 +102,17 @@ def test_session_loop_stays_small_after_the_split():
     assert len(session_source.splitlines()) < 1900
     assert "_prepare_session(" in session_source
     assert "_choose_provider(" in session_source
+
+
+def test_session_statistics_reset_only_happens_at_startup():
+    """Re-entering the provider menu must not restart the session counters."""
+    import inspect
+
+    prepare_source = inspect.getsource(runtime._prepare_session)
+    choose_source = inspect.getsource(runtime._choose_provider)
+    runtime_source = pathlib.Path(inspect.getfile(runtime)).read_text()
+
+    assert "_SESSION_STATS.reset()" in prepare_source
+    assert "_SESSION_STATS.reset()" not in choose_source
+    assert "_SESSION_INFO.clear()" not in choose_source
+    assert runtime_source.count("_SESSION_STATS.reset()") == 1

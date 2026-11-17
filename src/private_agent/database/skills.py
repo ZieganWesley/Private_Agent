@@ -1,13 +1,8 @@
 """Registered skill-file bookkeeping."""
 
-import logging
-
 from ..config import (
     DEFAULT_EPISODIC_SUMMARIES,
 )
-
-_LOGGER = logging.getLogger("private_agent.database.memory")
-_SCHEMA_VERSION = 1
 
 
 class SkillMixin:

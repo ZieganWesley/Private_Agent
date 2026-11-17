@@ -2255,6 +2255,42 @@ async def test_runtime_summarizes_full_context_instead_of_dropping_it(
 
 
 @pytest.mark.asyncio
+async def test_startup_failure_still_closes_memory_and_cancels_the_lease(
+    scripted_local_cli, monkeypatch
+):
+    agent, _model, inputs, _workspace, _database_path = scripted_local_cli
+    closed: list[bool] = []
+    opened: list[object] = []
+    real_memory = PersistentMemory
+
+    class TrackingMemory(real_memory):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            opened.append(self)
+
+        def close(self):
+            closed.append(True)
+            super().close()
+
+    monkeypatch.setattr(agent, "PersistentMemory", TrackingMemory)
+    monkeypatch.setattr(
+        agent,
+        "_select_permission_mode",
+        MagicMock(side_effect=RuntimeError("permission probe failed")),
+    )
+    inputs.return_value = ""
+
+    with pytest.raises(RuntimeError, match="permission probe failed"):
+        await run_agent_cli_async()
+
+    assert len(opened) == 1
+    assert closed == [True]
+    assert opened[0].conn is not None
+    assert agent._TASK_LEASE_HEARTBEAT is None
+    assert agent._ACTIVE_MEMORY is None
+
+
+@pytest.mark.asyncio
 async def test_cli_executes_tool_and_returns_result_to_model(
     scripted_local_cli, capsys
 ):

@@ -1136,9 +1136,6 @@ async def _choose_provider(
     skills_folder_input,
 ) -> ProviderSelection | None:
     """Ask for a provider and model, initialise it and print the ready summary."""
-    global _ACTIVE_MEMORY, _SESSION_INFO, _TASK_LEASE_HEARTBEAT
-    _SESSION_STATS.reset()
-    _SESSION_INFO.clear()
     available_models: list = []
     console.print("\n[bold underline]Model Provider[/bold underline]")
     for runtime_index, runtime in enumerate(local_runtimes, 1):

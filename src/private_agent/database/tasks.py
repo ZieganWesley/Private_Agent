@@ -12,7 +12,6 @@ from ..config import (
 )
 
 _LOGGER = logging.getLogger("private_agent.database.memory")
-_SCHEMA_VERSION = 1
 
 
 class TaskMixin:

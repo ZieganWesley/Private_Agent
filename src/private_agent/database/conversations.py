@@ -1,6 +1,5 @@
 """Conversation history, summaries and retention."""
 
-import logging
 from datetime import datetime, timedelta, timezone
 
 from langchain_core.messages import (
@@ -15,9 +14,6 @@ from ..config import (
     DEFAULT_HISTORY_MESSAGES,
     MAX_SUMMARY_CHARS,
 )
-
-_LOGGER = logging.getLogger("private_agent.database.memory")
-_SCHEMA_VERSION = 1
 
 
 class ConversationMixin:

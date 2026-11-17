@@ -1,6 +1,5 @@
 """Learned-item storage, review and retrieval."""
 
-import logging
 import re
 import uuid
 from datetime import datetime
@@ -10,9 +9,6 @@ from ..config import (
     LEARNED_ITEM_REVIEW_DAYS,
     MAX_LEARNED_ITEM_CHARS,
 )
-
-_LOGGER = logging.getLogger("private_agent.database.memory")
-_SCHEMA_VERSION = 1
 
 
 class LearningMixin:
