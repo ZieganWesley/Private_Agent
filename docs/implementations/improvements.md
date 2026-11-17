@@ -1,3 +1,32 @@
+# Code Review: Known Issues, Gaps, Plans and Fix Roadmap
+
+Review date: 2026-10-28
+
+## How this was checked
+
+- **Tests:** 499 passed, 10 failed, 1 skipped (about 35s). `pytest` is not
+  installed in `.venv`, so the suite was run through `uv` with `PYTHONPATH=src`.
+- **Lint:** `ruff` 0.16.10 (the version pinned in `pyproject.toml`). The repo
+  has no ruff config, so ruff's defaults were used, plus extra rule sets where
+  noted.
+- **Line numbers** in this file were taken before the code was reformatted
+  with `ruff format`, so some (mostly in `runtime.py`) may now point a few
+  dozen lines early. Function and constant names are still correct; search for
+  those if a line number does not match.
+
+## Strengths
+
+- **Packaging:** standard `src/` layout with a `pyproject.toml`, exact
+  dependency pins, and optional `dev` and `media` extras.
+- **Security defaults:** command execution refuses to run when the sandbox
+  tools are missing. Tool calls are checked against a workspace boundary,
+  sensitive tool arguments are redacted, network calls check for private
+  addresses, and there is no `shell=True`, `eval` or `exec`.
+- **Database:** SQLite foreign keys are on, there is a busy timeout, and schema
+  versions are tracked with `user_version`.
+- **Tests and docs:** about 13k lines of tests against about 21k lines of
+  source, and a detailed README.
+
 ## Part A: Code Quality Issues
 
 ### A1. Very large modules (highest priority)
@@ -2207,3 +2236,32 @@ dependencies and are in Stage 1 of the implementation order (section L1).
 | 14.9 | Define plan limits once and use them for both the tool schemas and the database checks | K8 | 14.3 | Changing one limit changes both, with a test |
 | 14.10 | Remove `SNAPSHOT_DIR` or resolve it from the workspace at use time | K7 | 3.5 | No snapshot path is resolved at import time |
 | 14.11 | Allow the risky-command list and RAG file types to be extended in config only in the stricter direction | K10 | 14.3 | Config can add risky words but cannot remove built-in ones, with tests |
+
+
+
+### Progress tracker
+
+Track progress by stage (section L1), since that is the order of work. The
+phase list below shows coverage by topic.
+
+- [ ] Stage 2: Easy (steps 16–37)
+- [ ] Stage 3: Medium (steps 38–73)
+- [ ] Stage 4: Hard (steps 74–98)
+- [ ] Stage 5: Hardest (steps 99–140)
+
+By phase:
+
+- [ ] Phase 1: Safety net (1.1–1.6)
+- [ ] Phase 2: Quick fixes and real bugs (2.1–2.5)
+- [ ] Phase 3: Remove global state (3.1–3.5)
+- [ ] Phase 4: Restructure the core (4.1–4.7)
+- [ ] Phase 5: Improve individual features (5.1–5.9)
+- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)
+- [ ] Phase 7: Planning mode (7.1–7.10)
+- [ ] Phase 8: Role coverage (8.1–8.20)
+- [ ] Phase 9: Single combined runtime and live status (9.1–9.11)
+- [ ] Phase 10: User interface (10.1–10.10)
+- [ ] Phase 11: Platform support, POSIX only (11.1–11.12)
+- [ ] Phase 12: Local provider independence (12.1–12.13)
+- [ ] Phase 13: Performance (13.1–13.10)
+- [ ] Phase 14: Configuration (14.1–14.11)
