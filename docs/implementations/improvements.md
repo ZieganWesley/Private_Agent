@@ -1,14 +1,16 @@
 # Code Review: Known Issues, Gaps, Plans and Fix Roadmap
 
 Review date: 2026-10-28
-Re-verified: 2026-11-17, against `main` at commit `2bc0b4c`
+Re-verified: 2026-11-17, against `main` at commit `4664191` (after the
+A1 and A2 step 3.1 pull requests, #17 and #18, were merged)
 
 ## How this was checked
 
-- **Tests:** 627 passed, 1 failed, 12 skipped (about 24 s) in a fresh `.venv`
-  installed with `uv pip install -e ".[dev]"` on Python 3.12. The only failure
-  is
-  `tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it`.
+- **Tests:** 794 passed, 12 skipped (about 19 s) in a fresh `.venv` installed
+  with `uv pip install -e ".[dev]"` on Python 3.12. The failure recorded at
+  the previous re-verification
+  (`test_runtime_summarizes_full_context_instead_of_dropping_it`) now passes
+  (step 1.3).
 - **Lint:** `ruff` 0.16.10 with the repo's own `[tool.ruff]` config, which now
   exists. `ruff check .` and `ruff format --check .` both pass.
 - **Status markers:** items re-checked on 2026-11-17 are labelled **Fixed:** or
@@ -108,12 +110,10 @@ missing prerequisite (`bwrap`, `prlimit`, media libraries) now skip instead of
 failing (`pytest.mark.skipif` / `pytest.importorskip`). All eight failures from
 the review are gone.
 
-The suite now reports 627 passed, 1 failed and 12 skipped. The single failure
-is not one of the ten listed at review time:
-
-| Test | Cause |
-|---|---|
-| `tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it` | Not traced yet (step 1.3) |
+The suite now reports 794 passed and 12 skipped, so `pytest -q` is green on a
+machine without `bwrap`. The one failure recorded at review time,
+`tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it`,
+was traced and fixed in step 1.3.
 
 ### A5. Lint, format and typing are not enforced
 
@@ -1143,6 +1143,13 @@ command-line flags.
 
 **G8. No live status while working** (see F3; fixed by step 9.7).
 
+**Partly fixed:** the CLI now shows one phase-aware spinner: cyan while a
+local model is being loaded into memory or an online request is in flight,
+and magenta while the model is thinking with `visible_reasoning` off. When
+`visible_reasoning` is on, the reasoning streams as dimmed text above the
+answer. The full live panel for running and finished tools, packs and
+context use (step 9.7) is still open.
+
 **G9. No way to stop one turn** (see C12; fixed by step 6.4).
 
 **G10. No multi-line input.**
@@ -1853,11 +1860,11 @@ what each step needs first.
 | 5: Hardest | 42 | The shared agent loop and everything built on it: permission rules, session resume, hooks, planning mode, capability packs, router, overlays, orchestrator, macOS sandbox |
 
 **Status on 2026-11-17:** Stage 1 is complete apart from the second half of
-step 13.3, which is listed in Stage 2. Step 1.3 now has a single failing test
-rather than eight, and step 12.3 is done. The later stages are otherwise
-unchanged. Phase 15 (from issue #13) is recorded below the phase tables but
-is not yet sequenced into the stage order, because its steps depend on Stage 4
-work.
+step 13.3, which is listed in Stage 2. Step 1.3 is done (the last failing
+test was fixed), steps 3.1 and 12.3 are done, and step 1.5 (CI) is still open.
+The later stages are otherwise unchanged. Phase 15 (from issue #13) is
+recorded below the phase tables but is not yet sequenced into the stage
+order, because its steps depend on Stage 4 work.
 
 **Milestones along the way:**
 
@@ -1902,7 +1909,7 @@ work.
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
-| 38 | 1.3 | Fix the one remaining test failure (`test_runtime_summarizes_full_context_instead_of_dropping_it`) | Medium | — |
+| 38 | 1.3 | Done: `test_runtime_summarizes_full_context_instead_of_dropping_it` was traced and fixed, so the suite is green | Medium | — |
 | 39 | 1.5 | Add the GitHub Actions CI workflow | Easy | 1.3 |
 | 40 | 11.11 | CI matrix (Linux, arm64, macOS, core-only) | Easy | 1.5 |
 | 41 | 13.10 | Performance checks in CI | Easy | 1.5 |
@@ -2032,7 +2039,7 @@ Rules for every step:
 
 | Step | Task | Fixes | Done when |
 |---|---|---|---|
-| 1.3 | Fix the one remaining `test_agent_runtime.py` failure (`test_runtime_summarizes_full_context_instead_of_dropping_it`). The eight failures from the review are resolved | A4 | 0 failures on a machine without `bwrap` |
+| 1.3 | Done: the remaining `test_agent_runtime.py` failure (`test_runtime_summarizes_full_context_instead_of_dropping_it`) was fixed. The eight failures from the review are resolved | A4 | 0 failures on a machine without `bwrap` |
 | 1.5 | Add a GitHub Actions workflow running ruff and pytest on Python 3.10 and 3.14 | A5, A8 | CI runs on every PR |
 
 ### Phase 2: Quick fixes and real bugs
@@ -2282,7 +2289,9 @@ follow it.
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic. Last updated 2026-11-17.
+phase list below shows coverage by topic. Last updated 2026-11-17, after the
+A1 (`runtime.py` split) and A2 step 3.1 (`Settings` dataclass) pull requests
+were merged into `main` and the last recorded test failure was fixed.
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
@@ -2292,9 +2301,9 @@ phase list below shows coverage by topic. Last updated 2026-11-17.
 
 By phase:
 
-- [ ] Phase 1: Safety net — 1.1, 1.2, 1.4 and 1.6 done; 1.3 has one failure left; 1.5 (CI) open
+- [ ] Phase 1: Safety net — 1.1, 1.2, 1.3, 1.4 and 1.6 done; 1.5 (CI) open
 - [x] Phase 2: Quick fixes and real bugs (2.1–2.5)
-- [ ] Phase 3: Remove global state (3.1–3.5; 3.3 done)
+- [ ] Phase 3: Remove global state (3.1–3.5; 3.1 and 3.3 done, 3.2 and 3.4–3.5 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
 - [ ] Phase 5: Improve individual features (5.1–5.9; 5.4 done)
 - [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)

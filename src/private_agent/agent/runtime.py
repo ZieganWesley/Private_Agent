@@ -2785,6 +2785,8 @@ Runtime context:
                         deadline,
                         model_name=selected_model,
                         status_message=status_message,
+                        local_model=provider_type == "local",
+                        thinking_enabled=thinking_enabled,
                     )
                 except Exception as e:
                     error_text = str(e).lower()
@@ -2839,6 +2841,8 @@ Runtime context:
                         deadline,
                         model_name=selected_model,
                         status_message="Generating response...",
+                        local_model=provider_type == "local",
+                        thinking_enabled=thinking_enabled,
                     )
 
                 iteration = 0
@@ -3306,6 +3310,8 @@ Runtime context:
                             deadline,
                             model_name=selected_model,
                             status_message="Processing tool outputs...",
+                            local_model=provider_type == "local",
+                            thinking_enabled=thinking_enabled,
                         )
                     except Exception as exc:
                         if provider_type == "online":
@@ -3354,6 +3360,8 @@ Runtime context:
                             deadline,
                             model_name=selected_model,
                             status_message="Finalizing response...",
+                            local_model=provider_type == "local",
+                            thinking_enabled=thinking_enabled,
                         )
 
                 if (
@@ -3378,6 +3386,8 @@ Runtime context:
                         deadline,
                         model_name=selected_model,
                         status_message="Finalizing response...",
+                        local_model=provider_type == "local",
+                        thinking_enabled=thinking_enabled,
                     )
 
                 elapsed_time = time.monotonic() - start_time

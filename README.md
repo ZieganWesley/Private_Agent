@@ -90,8 +90,10 @@ reports that in the current session rather than restarting it.
   never written to disk. Automatic capability detection (tools, function
   calls, structured output, thinking, vision, audio); toggleable thinking with
   configurable effort (`/think`, `/think-effort`, `/think-status`); streaming
-  output; optional visible reasoning; Ollama hardware-placement report
-  (`/hardware-status`).
+  output; optional visible reasoning; a phase-aware status spinner while the
+  model loads, thinks or answers (reasoning streams as dimmed text when
+  `agent.visible_reasoning` is on, otherwise a magenta thinking spinner
+  replaces it); Ollama hardware-placement report (`/hardware-status`).
 - **Built-in tools**: read/edit/list/search files, text and symbol search, git
   inspection, patch preview/apply, rename/delete with snapshots, sandboxed
   shell (`run_shell_command`), SQLite history read/search/delete and schema
@@ -215,6 +217,12 @@ to attach a workspace text file as request-only context. Folder and file context
 are limited to the configured `tools.max_read_file_bytes` total; folder context
 also skips hidden paths and is limited to 100 supported text files. Attached
 contents are treated as untrusted data and are not saved in chat history.
+While a request runs the CLI shows one spinner: cyan while a local model is
+loaded into memory (the first request can take a while) and while an online
+request is in flight, and magenta while the model is thinking with reasoning
+hidden. With `agent.visible_reasoning` enabled the reasoning streams as dimmed
+text above the answer instead.
+
 The CLI requires an interactive terminal; non-TTY startup prints a message and
 exits before opening a session. In the interactive prompt, Up/Down navigate
 history and Ctrl-R searches it; prompt history is retained in memory for the
@@ -379,7 +387,7 @@ values win on conflict.
     "context_summary_chars": 1500,                    // Max size of the running session context summary
     "rag_context_results": 2,                         // RAG chunks added to each prompt
     "streaming_output": true,                         // Stream model output as it arrives
-    "visible_reasoning": false,                       // Show model reasoning when available
+    "visible_reasoning": false,                       // Stream reasoning as dimmed text (off: magenta thinking spinner)
     "system_prompt": "<packaged default>"             // System prompt (empty = packaged default)
   },
   "memory": {
