@@ -13,6 +13,7 @@ from private_agent.agent import (
     _build_bounded_user_input,
     _token_count,
     format_retrieved_citations,
+    memory_context,
     trim_history_to_context_budget,
 )
 from private_agent.database import PersistentMemory
@@ -186,11 +187,11 @@ def test_local_data_reset_requires_typed_confirmation(monkeypatch, tmp_path):
     memory = PersistentMemory(db_path=str(tmp_path / "memory.sqlite"))
     memory.save_message("session", "human", "private")
     memory.save_summary("session", "private summary")
-    monkeypatch.setattr(agent, "RAG_INDEX_PATH", str(index))
+    monkeypatch.setattr(memory_context, "RAG_INDEX_PATH", str(index))
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(agent.console, "input", MagicMock(side_effect=["3", "no"]))
 
-    agent._offer_local_data_reset(memory)
+    memory_context._offer_local_data_reset(memory)
 
     assert index.is_dir()
     assert memory.load_history("session")[0].content == "private"
@@ -208,11 +209,11 @@ def test_local_data_reset_clears_both_stores_after_confirmation(monkeypatch, tmp
     memory = PersistentMemory(db_path=str(tmp_path / "memory.sqlite"))
     memory.save_message("session", "human", "private")
     memory.save_summary("session", "private summary")
-    monkeypatch.setattr(agent, "RAG_INDEX_PATH", str(index))
+    monkeypatch.setattr(memory_context, "RAG_INDEX_PATH", str(index))
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(agent.console, "input", MagicMock(side_effect=["3", "RESET"]))
 
-    agent._offer_local_data_reset(memory)
+    memory_context._offer_local_data_reset(memory)
 
     assert not index.exists()
     assert memory.load_history("session") == []

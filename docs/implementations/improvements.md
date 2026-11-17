@@ -34,12 +34,20 @@ Re-verified: 2026-11-17, against `main` at commit `2bc0b4c`
 
 ### A1. Very large modules (highest priority)
 
-- `src/private_agent/agent/runtime.py` is 6,507 lines.
+- `src/private_agent/agent/runtime.py` was 6,507 lines.
   `_run_agent_cli_session` is still about 2,600 lines in one function.
 - `src/private_agent/database/memory.py` is 2,926 lines in one
   `PersistentMemory` class.
+- **Partly fixed:** `runtime.py` was split into focused modules that keep
+  their own behaviour and tests: `tool_display.py` (186 lines),
+  `model_selection.py` (290), `streaming.py` (456), `learning.py` (642),
+  `memory_context.py` (700), `task_commands.py` (784), `task_lease.py` (66),
+  plus the shared `console.py` and `session_state.py` singletons.
+  `runtime.py` is now about 3,550 lines and holds only the interactive
+  session loop and tool execution. `_run_agent_cli_session` is still one
+  monolithic function, and `database/memory.py` is unchanged.
 - The ruff complexity counts below were measured at review time and were not
-  re-measured; the module sizes are unchanged in shape.
+  re-measured; the `runtime.py` split above has not changed them.
 - Ruff complexity checks flag:
   - 38 overly complex functions (`C901`)
   - 22 functions with too many branches (`PLR0912`)

@@ -9,6 +9,7 @@ from rich.console import Console
 
 from private_agent.agent import (
     execute_tool_call,
+    model_selection,
 )
 from private_agent.sandbox import SandboxManager, evaluate_shell_command
 from private_agent.tools import (
@@ -979,10 +980,10 @@ def test_unavailable_ollama_returns_no_models_without_raising(monkeypatch):
             self.closed = True
 
     client = UnavailableClient()
-    monkeypatch.setattr(agent.ollama, "Client", lambda **_kwargs: client)
+    monkeypatch.setattr(model_selection.ollama, "Client", lambda **_kwargs: client)
     monkeypatch.setattr(agent.console, "print", lambda *_args, **_kwargs: None)
 
-    assert agent.fetch_local_chat_models() == []
+    assert model_selection.fetch_local_chat_models() == []
     assert client.closed
 
 
