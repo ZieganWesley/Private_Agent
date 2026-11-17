@@ -702,12 +702,31 @@ async def _execute_task_tool_call(
 
 async def _prepare_session(
     *,
-    verbose_startup: bool,
+    verbose_startup: bool = False,
 ) -> SessionSetup | None:
     """Discover local resources, open memory and build the session state."""
     global _ACTIVE_MEMORY, _SESSION_INFO, _TASK_LEASE_HEARTBEAT
     _SESSION_STATS.reset()
     _SESSION_INFO.clear()
+    if not sys.stdin.isatty():
+        console.print(
+            "[red]Private Agent requires an interactive terminal. "
+            "Run it from a terminal session.[/red]"
+        )
+        return
+
+    try:
+        return await _build_session_setup(verbose_startup=verbose_startup)
+    except BaseException:
+        # Startup owns everything it opened, including SQLite, so a failure
+        # here never leaves a connection or lease task behind.
+        await _discard_session_startup()
+        raise
+
+
+async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup:
+    """Create the memory, RAG index, skills and provider state for a session."""
+    global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     startup_started = time.monotonic()
     if not sys.stdin.isatty():
         console.print(
@@ -1115,6 +1134,18 @@ async def _prepare_session(
         permission_mode=permission_mode,
         _task_state=_task_state,
     )
+
+
+async def _discard_session_startup() -> None:
+    """Release whatever a failed startup already opened."""
+    global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
+    heartbeat, _TASK_LEASE_HEARTBEAT = _TASK_LEASE_HEARTBEAT, None
+    if heartbeat is not None:
+        heartbeat.cancel()
+        await asyncio.gather(heartbeat, return_exceptions=True)
+    memory, _ACTIVE_MEMORY = _ACTIVE_MEMORY, None
+    if memory is not None:
+        memory.close()
 
 
 async def _choose_provider(

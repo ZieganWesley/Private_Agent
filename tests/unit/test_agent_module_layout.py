@@ -82,7 +82,12 @@ def test_session_startup_and_provider_selection_are_separate_functions():
 
     from private_agent.agent import session_types
 
-    for helper in (runtime._prepare_session, runtime._choose_provider):
+    for helper in (
+        runtime._prepare_session,
+        runtime._build_session_setup,
+        runtime._discard_session_startup,
+        runtime._choose_provider,
+    ):
         assert inspect.iscoroutinefunction(helper)
         assert inspect.getmodule(helper) is runtime
 
@@ -116,3 +121,16 @@ def test_session_statistics_reset_only_happens_at_startup():
     assert "_SESSION_STATS.reset()" not in choose_source
     assert "_SESSION_INFO.clear()" not in choose_source
     assert runtime_source.count("_SESSION_STATS.reset()") == 1
+
+
+def test_startup_owns_its_cleanup_when_setup_fails():
+    import inspect
+
+    prepare_source = inspect.getsource(runtime._prepare_session)
+    assert "except BaseException:" in prepare_source
+    assert "_discard_session_startup()" in prepare_source
+    cleanup_source = inspect.getsource(runtime._discard_session_startup)
+    assert "memory.close()" in cleanup_source
+    assert "heartbeat.cancel()" in cleanup_source
+    assert "_TASK_LEASE_HEARTBEAT" in cleanup_source
+    assert "if memory is not None:" in cleanup_source

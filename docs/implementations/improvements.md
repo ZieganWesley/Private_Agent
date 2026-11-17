@@ -45,12 +45,15 @@ Re-verified: 2026-11-17, against `main` at commit `2bc0b4c`
   plus the shared `console.py` and `session_state.py` singletons.
   `runtime.py` holds only the interactive session loop and tool execution.
 - **Also fixed:** `_run_agent_cli_session` was split into
-  `_prepare_session` (about 415 lines: startup, RAG, skills, memory and
-  session setup) and `_choose_provider` (about 450 lines: the provider and
+  `_prepare_session` (a short entry point that also owns startup cleanup)
+  plus `_build_session_setup` (about 410 lines: RAG, skills, memory and
+  session setup) and `_choose_provider` (about 445 lines: the provider and
   model menu plus the ready summary). They exchange the frozen
   `SessionSetup` and `ProviderSelection` containers from
   `agent/session_types.py`, and a mutable `ProviderPreference` carries the
-  online choice across retries. `runtime.py` is now about 3,700 lines and
+  online choice across retries. A failed startup closes its own SQLite
+  connection and cancels the lease task in `_discard_session_startup`.
+  `runtime.py` is now about 3,700 lines and
   the session function about 1,880 lines; its remaining turn-loop body is
   the next candidate for extraction.
 - **Also fixed:** `PersistentMemory` (2,926 lines) is now a thin facade in

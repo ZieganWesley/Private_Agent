@@ -2291,6 +2291,37 @@ async def test_startup_failure_still_closes_memory_and_cancels_the_lease(
 
 
 @pytest.mark.asyncio
+async def test_session_setup_closes_its_memory_when_startup_fails(
+    scripted_local_cli, monkeypatch
+):
+    """Startup releases SQLite itself; it must not rely on the caller's guard."""
+    agent, _model, inputs, _workspace, _database_path = scripted_local_cli
+    closed: list[bool] = []
+    real_memory = PersistentMemory
+
+    class TrackingMemory(real_memory):
+        def close(self):
+            closed.append(True)
+            super().close()
+
+    monkeypatch.setattr(agent, "PersistentMemory", TrackingMemory)
+    # Fails after the database is open but before the lease task exists.
+    monkeypatch.setattr(
+        agent,
+        "set_active_db_path",
+        MagicMock(side_effect=RuntimeError("db path rejected")),
+    )
+    inputs.return_value = ""
+
+    with pytest.raises(RuntimeError, match="db path rejected"):
+        await agent._prepare_session()
+
+    assert closed == [True]
+    assert agent._ACTIVE_MEMORY is None
+    assert agent._TASK_LEASE_HEARTBEAT is None
+
+
+@pytest.mark.asyncio
 async def test_cli_executes_tool_and_returns_result_to_model(
     scripted_local_cli, capsys
 ):
