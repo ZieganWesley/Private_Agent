@@ -6,6 +6,11 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from ..run_logging import RUN_LOGGER, log_event
+from .model_capabilities import (
+    capabilities_from_model_entry,
+    find_model_entry,
+    merge_capabilities,
+)
 
 
 def _response_field(response: Any, key: str, default: Any = None) -> Any:
@@ -439,6 +444,7 @@ def select_online_model(
         return None
 
     model_choices: list[str] = []
+    model_listing: Any = None
     try:
         import httpx
 
@@ -450,6 +456,7 @@ def select_online_model(
             response = client.get(f"{base_url}/models")
             response.raise_for_status()
             body = response.json()
+        model_listing = body
         model_choices = [
             item["id"]
             for item in body.get("data", [])
@@ -586,7 +593,10 @@ def select_online_model(
         "share_context": share_context,
         "allow_tools": allow_tools,
         "enforce_tool_call_limits": enforce_tool_call_limits,
-        "capabilities": online_capabilities(model, allow_tools),
+        "capabilities": merge_capabilities(
+            online_capabilities(model, allow_tools),
+            capabilities_from_model_entry(find_model_entry(model_listing, model_name)),
+        ),
     }
 
 

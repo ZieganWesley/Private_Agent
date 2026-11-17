@@ -163,6 +163,7 @@ from .interactive import (
     prompt_user_input,
 )
 from .local_runtimes import LocalRuntime, discover_local_runtimes
+from .model_capabilities import detect_openai_compatible_capabilities
 from .permissions import (
     authorize_network_research as _authorize_network_research,
 )
@@ -241,7 +242,7 @@ OS_ISOLATED_TOOL_NAMES = frozenset(
         "finalize_code_task",
     }
 )
-_MODEL_CAPABILITIES_CACHE: dict[tuple[str, str], dict[str, bool | None | int]] = {}
+_MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] = {}
 
 
 def _close_ollama_client(client):
@@ -2462,6 +2463,39 @@ def inspect_model_capabilities(
     )
 
 
+def _local_endpoint_capability_overrides(base_url: str) -> dict | None:
+    """Return the configured `capabilities` override for a local endpoint."""
+    model_config = APP_CONFIG.get("models", {})
+    endpoints = (
+        model_config.get("local_openai_compatible_endpoints", [])
+        if isinstance(model_config, dict)
+        else []
+    )
+    for entry in endpoints if isinstance(endpoints, list) else []:
+        if (
+            isinstance(entry, dict)
+            and isinstance(entry.get("base_url"), str)
+            and entry["base_url"].rstrip("/") == base_url.rstrip("/")
+            and isinstance(entry.get("capabilities"), dict)
+        ):
+            return entry["capabilities"]
+    return None
+
+
+def inspect_openai_compatible_model_capabilities(
+    runtime: LocalRuntime, model_name: str
+) -> dict[str, bool | None | int]:
+    """Detect capabilities of a model served by a local OpenAI-compatible runtime."""
+    return detect_openai_compatible_capabilities(
+        model_name,
+        base_url=runtime.base_url,
+        client_factory=public_only_sync_client,
+        capability_cache=_MODEL_CAPABILITIES_CACHE,
+        max_cache_entries=MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
+        overrides=_local_endpoint_capability_overrides(runtime.base_url),
+    )
+
+
 def _effective_context_window(capabilities: dict) -> int:
     declared = capabilities.get("context_window")
     if isinstance(declared, int) and not isinstance(declared, bool) and declared > 0:
@@ -4180,15 +4214,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
             if local_runtime.kind == "ollama":
                 capabilities = inspect_model_capabilities(selected_model)
             else:
-                capabilities = {
-                    "tools": None,
-                    "function_calls": None,
-                    "structured_output": None,
-                    "thinking": None,
-                    "vision": None,
-                    "audio": None,
-                    "context_window": None,
-                }
+                capabilities = inspect_openai_compatible_model_capabilities(
+                    local_runtime, selected_model
+                )
             if local_runtime.kind == "ollama" and capabilities["tools"] is False:
                 tool_capable_model = next(
                     (
