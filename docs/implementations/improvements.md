@@ -80,6 +80,14 @@ class for each table.
   imports about 50 of them.
 - **Fixed:** the `HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` environment
   variables are now set during startup instead of at import (commit `2fec457`).
+- **Partly fixed (step 3.1):** the schema and all coercion logic now live in
+  `src/private_agent/settings.py` as a typed, frozen `Settings` dataclass
+  with one field per runtime constant, built by `Settings.from_config(...)`.
+  `config.py` keeps its public surface and re-exports the same names as
+  `NAME = SETTINGS.name`, so no importing module changed. Loading still
+  happens at import time; step 3.2 injects the object and removes the
+  aliases. Covered by `tests/unit/test_settings.py` (schema drift, coercion,
+  malformed config and a timing guard).
 - Mutable state is kept in module globals: `global` appears 16 times across
   `tools/__init__.py`, `tools/_task_state.py`, `tools/_sqlite_state.py`,
   `tools/media.py` and `run_logging.py`.
@@ -2033,9 +2041,12 @@ All steps in this phase are done.
 
 ### Phase 3: Remove global state
 
+Step 3.1 is done (the model is a frozen dataclass instead of pydantic, and
+the old constants remain as aliases until step 3.2).
+
 | Step | Task | Fixes | Done when |
 |---|---|---|---|
-| 3.1 | Create a typed `Settings` model (pydantic) that mirrors the config sections. Load it in `cli.main`, but keep the old constants as thin aliases for now | A2 | `Settings` is loaded once at startup |
+| 3.1 | Done: `Settings` in `settings.py` (frozen dataclass, one typed field per constant, `from_config`). Loaded once as `config.SETTINGS`; the old constants remain as thin aliases | A2 | `Settings` is loaded once at startup |
 | 3.2 | Move each module from the global constants to the `Settings` object, one module per PR, then delete the aliases | A2 | `config.py` does no work at import time |
 | 3.4 | Create a `ToolContext` object (database, workspace root, active task, skills, code task, approval state) and pass it to tools through `RunnableConfig` or injected arguments | A2, B3 | `set_active_*()` functions and `global` statements are gone from `tools/` |
 | 3.5 | Make the workspace root explicit: set it once at startup, and fail if the folder does not exist | B5 | `SandboxManager` has no import-time default |

@@ -5,7 +5,19 @@ import pathlib
 import tempfile
 import warnings
 
-from .hardware import normalize_acceleration_mode
+from .settings import (
+    DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_SYSTEM_PROMPT_PATH,  # noqa: F401  (re-exported for compatibility)
+    Settings,
+    configured_bool,
+    configured_float,
+    configured_int,
+    configured_int_range,
+    configured_nonnegative_int,
+    configured_path,
+    positive_float,
+    positive_int,
+)
 
 CONFIG_PATH_ENV_VAR = "PRIVATE_AGENT_CONFIG"
 
@@ -21,18 +33,6 @@ def resolve_config_path(environ=None) -> pathlib.Path:
 
 
 CONFIG_FILE_PATH = resolve_config_path()
-DEFAULT_SYSTEM_PROMPT_PATH = (
-    pathlib.Path(__file__).parent / "resources" / "default_system_prompt.md"
-)
-try:
-    DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT_PATH.read_text(
-        encoding="utf-8"
-    ).strip()
-except OSError as exc:
-    raise RuntimeError(
-        f"Could not load packaged default system prompt at "
-        f"{DEFAULT_SYSTEM_PROMPT_PATH}: {exc}"
-    ) from exc
 
 DEFAULT_CONFIG = {
     "paths": {
@@ -418,59 +418,32 @@ def load_config() -> dict:
 APP_CONFIG = load_or_create_config()
 
 
+SETTINGS = Settings.from_config(APP_CONFIG, default_paths=DEFAULT_CONFIG["paths"])
+
+
 def _configured_path(value, default: str) -> str:
     """Expand config paths and anchor relative paths to the user's home."""
-    path = pathlib.Path(str(value or default)).expanduser()
-    if not path.is_absolute():
-        path = pathlib.Path.home() / path
-    return str(path.resolve())
-
-
-DEFAULT_DB_PATH = os.path.expanduser(
-    str(APP_CONFIG.get("default_db_path", "~/.local_ai_memory.db"))
-)
-WORKSPACE_ROOT_DEFAULT = str(APP_CONFIG.get("workspace_root", "."))
-CODE_OUTPUT_ROOT = str(APP_CONFIG.get("code_output_root", "~/.private_agent/projects"))
-SKILLS_FOLDER_DEFAULT = _configured_path(
-    APP_CONFIG.get("paths", {}).get("skills"),
-    DEFAULT_CONFIG["paths"]["skills"],
-)
-RAG_DOCS_DEFAULT = _configured_path(
-    APP_CONFIG.get("paths", {}).get("rag_documents"),
-    DEFAULT_CONFIG["paths"]["rag_documents"],
-)
+    return configured_path(value, default)
 
 
 def _positive_int(key: str, default: int) -> int:
-    try:
-        value = int(APP_CONFIG.get(key, default))
-        return value if value > 0 else default
-    except (TypeError, ValueError):
-        return default
+    """Read a positive integer from the flat runtime aliases."""
+    return positive_int(APP_CONFIG, key, default)
 
 
 def _positive_float(key: str, default: float) -> float:
-    try:
-        value = float(APP_CONFIG.get(key, default))
-        return value if value > 0 else default
-    except (TypeError, ValueError):
-        return default
+    """Read a positive float from the flat runtime aliases."""
+    return positive_float(APP_CONFIG, key, default)
 
 
 def _configured_int(section: str, key: str, default: int) -> int:
-    try:
-        value = int(APP_CONFIG.get(section, {}).get(key, default))
-        return value if value > 0 else default
-    except (AttributeError, TypeError, ValueError):
-        return default
+    """Read a positive integer from a config section."""
+    return configured_int(APP_CONFIG, section, key, default)
 
 
 def _configured_nonnegative_int(section: str, key: str, default: int) -> int:
-    try:
-        value = int(APP_CONFIG.get(section, {}).get(key, default))
-        return value if value >= 0 else default
-    except (AttributeError, TypeError, ValueError):
-        return default
+    """Read a non-negative integer from a config section."""
+    return configured_nonnegative_int(APP_CONFIG, section, key, default)
 
 
 def _configured_int_range(
@@ -480,333 +453,136 @@ def _configured_int_range(
     minimum: int,
     maximum: int,
 ) -> int:
-    value = _configured_int(section, key, default)
-    return value if minimum <= value <= maximum else default
+    """Read an integer constrained to an inclusive range."""
+    return configured_int_range(APP_CONFIG, section, key, default, minimum, maximum)
 
 
 def _configured_bool(section: str, key: str, default: bool) -> bool:
-    value = APP_CONFIG.get(section, {}).get(key, default)
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes", "on"}:
-            return True
-        if normalized in {"false", "0", "no", "off"}:
-            return False
-        return default
-    return value if isinstance(value, bool) else default
+    """Read a boolean that also accepts the usual textual spellings."""
+    return configured_bool(APP_CONFIG, section, key, default)
 
 
 def _configured_float(section: str, key: str, default: float) -> float:
-    try:
-        value = float(APP_CONFIG.get(section, {}).get(key, default))
-        return value if value > 0 else default
-    except (AttributeError, TypeError, ValueError):
-        return default
+    """Read a positive float from a config section."""
+    return configured_float(APP_CONFIG, section, key, default)
 
 
-MODEL_TEMPERATURE = _configured_float("models", "temperature", 0.1)
-
-ONLINE_PERMISSION_OVERRIDE = _configured_bool(
-    "models", "online_permission_override", False
-)
-EMBEDDING_MODEL = str(APP_CONFIG.get("embedding_model", "nomic-embed-text"))
-RAG_INDEX_PATH = _configured_path(
-    APP_CONFIG.get("paths", {}).get("rag_index"),
-    DEFAULT_CONFIG["paths"]["rag_index"],
-)
-OLLAMA_BASE_URL = str(APP_CONFIG.get("ollama_base_url", "http://localhost:11434"))
-HARDWARE_ACCELERATION_MODE = normalize_acceleration_mode(
-    APP_CONFIG.get("hardware_acceleration", "auto")
-)
-PREFERRED_MODEL = APP_CONFIG.get("preferred_model")
-
-MAX_TOOL_ITERATIONS = _positive_int("max_tool_iterations", 15)
-MAX_TOOL_CALLS = _positive_int("max_tool_calls", 60)
-MAX_TASK_SECONDS = _positive_int("max_task_seconds", 600)
-MAX_TOOL_OUTPUT_CHARS = _positive_int("max_tool_output_chars", 12000)
-MAX_HISTORY_MESSAGES = _positive_int("max_history_messages", 20)
-MAX_CONTEXT_TOKENS = _positive_int("max_context_tokens", 12000)
-MAX_OUTPUT_TOKENS = _configured_int_range("agent", "max_output_tokens", 2048, 1, 32768)
-STREAMING_OUTPUT = _configured_bool("agent", "streaming_output", True)
-VISIBLE_REASONING = _configured_bool("agent", "visible_reasoning", False)
-_configured_system_prompt = APP_CONFIG.get("agent", {}).get("system_prompt")
-SYSTEM_PROMPT = (
-    _configured_system_prompt.strip()
-    if isinstance(_configured_system_prompt, str) and _configured_system_prompt.strip()
-    else DEFAULT_SYSTEM_PROMPT
-)
-CONVERSATION_RETENTION_DAYS = (
-    max(0, _positive_int("conversation_retention_days", 0))
-    if APP_CONFIG.get("conversation_retention_days", 0)
-    else 0
-)
-EPISODE_RETENTION_DAYS = (
-    max(0, _positive_int("episode_retention_days", 0))
-    if APP_CONFIG.get("episode_retention_days", 0)
-    else 0
-)
-REGISTERED_SKILL_RETENTION_DAYS = (
-    max(0, _positive_int("registered_skill_retention_days", 0))
-    if APP_CONFIG.get("registered_skill_retention_days", 0)
-    else 0
-)
-TASK_STALE_AFTER_DAYS = (
-    max(0, _positive_int("task_stale_after_days", 0))
-    if APP_CONFIG.get("task_stale_after_days", 0)
-    else 0
-)
-MAX_SUMMARY_CHARS = _positive_int("max_summary_chars", 2000)
-MAX_LEARNED_ITEM_CHARS = _configured_int_range(
-    "memory", "max_learned_item_chars", 1000, 1, 10000
-)
-MAX_RESUME_STATE_CHARS = _configured_int_range(
-    "memory", "max_resume_state_chars", 12000, 256, 100000
-)
-MAX_MEMORY_CONTEXT_TOKENS = _configured_int_range(
-    "memory", "max_memory_context_tokens", 1200, 128, 12000
-)
-MAX_RELEVANT_EPISODES = _configured_int_range(
-    "memory", "max_relevant_episodes", 3, 1, 20
-)
-LEARNED_ITEM_EXPIRY_DAYS = _configured_int_range(
-    "memory", "learned_item_expiry_days", 365, 1, 3650
-)
-LEARNED_ITEM_REVIEW_DAYS = _configured_int_range(
-    "memory", "learned_item_review_days", 180, 1, 3650
-)
-DEFAULT_HISTORY_MESSAGES = _configured_int("memory", "default_history_messages", 20)
-DEFAULT_EPISODIC_SUMMARIES = _configured_int("memory", "default_episodic_summaries", 5)
-MAX_NETWORK_CONCURRENCY = _positive_int("max_network_concurrency", 4)
-NETWORK_REQUEST_TIMEOUT = _positive_int("network_request_timeout", 30)
-RAG_MAX_FILE_BYTES = _positive_int("rag_max_file_bytes", 5 * 1024 * 1024)
-RAG_MAX_CORPUS_BYTES = _positive_int("rag_max_corpus_bytes", 25 * 1024 * 1024)
-RAG_MAX_PDF_PAGES = _positive_int("rag_max_pdf_pages", 250)
-RAG_MAX_DOCUMENTS = _positive_int("rag_max_documents", 20000)
-RAG_CHUNK_SIZE_CHARS = _configured_int("rag", "chunk_size_chars", 1200)
-RAG_CHUNK_OVERLAP_CHARS = _configured_int("rag", "chunk_overlap_chars", 200)
-CHUNKING_STRATEGY = (
-    str(APP_CONFIG.get("chunking", {}).get("strategy", "character")).strip().lower()
-)
-CHUNKING_UNIT = str(APP_CONFIG.get("chunking", {}).get("unit", "chars")).strip().lower()
-# Unset chunk_size/chunk_overlap fall back to the legacy rag.chunk_* keys.
-CHUNKING_SIZE = _configured_int("chunking", "chunk_size", RAG_CHUNK_SIZE_CHARS)
-CHUNKING_OVERLAP = _configured_nonnegative_int(
-    "chunking", "chunk_overlap", RAG_CHUNK_OVERLAP_CHARS
-)
-CHUNKING_MIN_CHUNK_CHARS = _configured_nonnegative_int("chunking", "min_chunk_chars", 0)
-_raw_separators = APP_CONFIG.get("chunking", {}).get("separators")
-CHUNKING_SEPARATORS = (
-    tuple(_raw_separators)
-    if isinstance(_raw_separators, list)
-    and _raw_separators
-    and all(isinstance(item, str) for item in _raw_separators)
-    else ("\n\n", "\n", ". ", " ")
-)
-CHUNKING_SEMANTIC_PERCENTILE = min(
-    100.0,
-    _configured_float("chunking", "semantic_breakpoint_percentile", 90.0),
-)
-CHUNKING_SEMANTIC_BUFFER = _configured_nonnegative_int(
-    "chunking", "semantic_buffer_sentences", 1
-)
-CHUNKING_SEMANTIC_MAX_SENTENCES = _configured_int(
-    "chunking", "semantic_max_sentences", 2000
-)
-RAG_SIMILARITY_RESULTS = _configured_int("rag", "similarity_results", 4)
-RAG_SQLITE_MAX_ROWS_PER_TABLE = _configured_int(
-    "rag", "sqlite_max_rows_per_table", 5000
-)
-RAG_AUTO_REFRESH_SECONDS = _configured_nonnegative_int(
-    "rag", "auto_refresh_seconds", 30
-)
-_raw_web_research = APP_CONFIG.get("enable_web_research", True)
-if isinstance(_raw_web_research, str):
-    ENABLE_WEB_RESEARCH = _raw_web_research.lower() in ("true", "1", "yes", "on")
-else:
-    ENABLE_WEB_RESEARCH = bool(_raw_web_research)
-WEB_RESEARCH_CONSENT = str(APP_CONFIG.get("web_research_consent", "ask")).lower()
-if WEB_RESEARCH_CONSENT not in {"ask", "session", "never"}:
-    WEB_RESEARCH_CONSENT = "ask"
-INTERNET_CHECK_HOST = str(APP_CONFIG.get("internet_check_host", "1.1.1.1"))
-INTERNET_CHECK_PORT = _positive_int("internet_check_port", 443)
-INTERNET_CHECK_TIMEOUT = _positive_float("internet_check_timeout", 3.0)
-
-_raw_override_tool_list = APP_CONFIG.get("tools", {}).get("override_tool_list", [])
-if isinstance(_raw_override_tool_list, list):
-    OVERRIDE_TOOL_LIST = frozenset(
-        name.strip()
-        for name in _raw_override_tool_list
-        if isinstance(name, str) and name.strip()
-    )
-else:
-    warnings.warn(
-        "tools.override_tool_list must be a list of tool names; ignoring it.",
-        RuntimeWarning,
-        stacklevel=2,
-    )
-    OVERRIDE_TOOL_LIST = frozenset()
-
-_raw_thinking = APP_CONFIG.get("thinking_toggle_default", False)
-if isinstance(_raw_thinking, str):
-    THINKING_TOGGLE_DEFAULT = _raw_thinking.lower() in ("true", "1", "yes", "on")
-else:
-    THINKING_TOGGLE_DEFAULT = bool(_raw_thinking)
-
-THINKING_EFFORT_DEFAULT = str(
-    APP_CONFIG.get("thinking_effort_default", "medium")
-).lower()
-if THINKING_EFFORT_DEFAULT not in {"low", "medium", "high"}:
-    THINKING_EFFORT_DEFAULT = "medium"
-
-AGENT_PERMISSION_MODE = str(APP_CONFIG.get("agent_permission_mode", "auto")).lower()
-if AGENT_PERMISSION_MODE not in {"manual", "auto", "full"}:
-    AGENT_PERMISSION_MODE = "auto"
-
-_debug_log_enabled = APP_CONFIG.get("DEBUG_LOG_ENABLED", 0)
-if isinstance(_debug_log_enabled, str):
-    DEBUG_LOG_ENABLED = _debug_log_enabled.strip() == "1"
-else:
-    DEBUG_LOG_ENABLED = _debug_log_enabled == 1 or _debug_log_enabled is True
-
-DEBUG_LOG_LEVEL = (
-    str((APP_CONFIG.get("logging") or {}).get("level", "INFO")).strip().upper()
-)
-if DEBUG_LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
-    DEBUG_LOG_LEVEL = "INFO"
-
-_raw_mcp = APP_CONFIG.get("mcpServers", {})
-MCP_SERVERS = _raw_mcp if isinstance(_raw_mcp, dict) else {}
-_raw_mcp_approvals = APP_CONFIG.get("mcp_auto_approve_tools", [])
-MCP_AUTO_APPROVE_TOOLS = (
-    {str(name) for name in _raw_mcp_approvals}
-    if isinstance(_raw_mcp_approvals, list)
-    else set()
-)
-
-ONLINE_REQUEST_TIMEOUT = _configured_int("models", "online_request_timeout_seconds", 60)
-ONLINE_MODEL_LIST_TIMEOUT = _configured_int(
-    "models", "online_model_list_timeout_seconds", 10
-)
-ONLINE_MAX_RETRIES = _configured_nonnegative_int("models", "online_max_retries", 1)
-ONLINE_MODEL_LIST_LIMIT = _configured_int("models", "online_model_list_limit", 30)
-MAX_MODEL_CAPABILITY_CACHE_ENTRIES = _configured_int(
-    "agent", "max_model_capability_cache_entries", 128
-)
-MAX_WEBPAGE_BYTES = _configured_int("network", "max_webpage_bytes", 2 * 1024 * 1024)
-MAX_DOWNLOAD_BYTES = _configured_int("network", "max_download_bytes", 25 * 1024 * 1024)
-MAX_HTTP_REDIRECTS = _configured_nonnegative_int("network", "max_http_redirects", 5)
-MAX_SEARCH_QUERY_CHARS = _configured_int("network", "max_search_query_chars", 2000)
-MAX_SEARCH_RESULTS = _configured_int("network", "max_search_results", 3)
-MAX_FETCHED_WEBPAGE_CHARS = _configured_int(
-    "network", "max_fetched_webpage_chars", 12000
-)
-MAX_READ_FILE_BYTES = _configured_int("tools", "max_read_file_bytes", 1024 * 1024)
-FILE_READ_CHUNK_BYTES = _configured_int("tools", "file_read_chunk_bytes", 65536)
-BINARY_PROBE_BYTES = _configured_int("tools", "binary_probe_bytes", 2048)
-SHELL_COMMAND_TIMEOUT = _configured_int("tools", "shell_command_timeout_seconds", 30)
-DEFAULT_HISTORY_READ_LIMIT = _configured_int("tools", "default_history_read_limit", 20)
-MAX_SKILL_NAME_CHARS = _configured_int("skills", "max_name_chars", 64)
-MAX_STREAM_TIMEOUT = _configured_int("network", "max_stream_timeout_seconds", 600)
-MAX_CAPTURED_IMAGE_BYTES = _configured_int(
-    "media", "max_captured_image_bytes", 2 * 1024 * 1024
-)
-MAX_DECODED_IMAGE_PIXELS = _configured_int(
-    "media", "max_decoded_image_pixels", 20_000_000
-)
-MAX_MEDIA_FILE_BYTES = _configured_int(
-    "media", "max_media_file_bytes", 25 * 1024 * 1024
-)
-MAX_IMAGES_PER_TURN = _configured_int("media", "max_images_per_turn", 3)
-MAX_MICROPHONE_SECONDS = _configured_int("media", "max_microphone_seconds", 30)
-MAX_VIDEO_SECONDS = _configured_int("media", "max_video_seconds", 120)
-DEFAULT_MICROPHONE_SECONDS = _configured_float(
-    "media", "default_microphone_seconds", 5.0
-)
-MICROPHONE_SAMPLE_RATE = _configured_int("media", "microphone_sample_rate", 16000)
-DEFAULT_CAMERA_DEVICE_INDEX = _configured_nonnegative_int(
-    "media", "default_camera_device_index", 0
-)
-MAX_CAMERA_DEVICE_INDEX = _configured_int("media", "max_camera_device_index", 32)
-MAX_MICROPHONE_DEVICE_INDEX = _configured_int(
-    "media", "max_microphone_device_index", 128
-)
-MAX_IMAGE_WIDTH = _configured_int("media", "max_image_width", 1280)
-MAX_IMAGE_HEIGHT = _configured_int("media", "max_image_height", 720)
-JPEG_QUALITY = _configured_int_range("media", "jpeg_quality", 85, 1, 100)
-MAX_SKILL_DESCRIPTION_CHARS = _configured_int("skills", "max_description_chars", 500)
-MAX_SKILL_INSTRUCTION_CHARS = _configured_int("skills", "max_instruction_chars", 20000)
-MAX_SKILL_PREVIEW_CHARS = _configured_int_range(
-    "skills", "max_preview_chars", 12000, 512, 100000
-)
-SKILL_MAX_ITERATIONS = _configured_int("skills", "max_iterations", 15)
-SKILL_DESCRIPTION_PREVIEW_CHARS = _configured_int(
-    "skills", "description_preview_chars", 100
-)
-SKILL_RELEVANCE_THRESHOLD = _configured_float("skills", "relevance_threshold", 1.5)
-SKILL_RELEVANCE_EXACT_MATCH_SCORE = _configured_float(
-    "skills", "relevance_exact_match_score", 3.0
-)
-SKILL_RELEVANCE_PREFIX_MATCH_SCORE = _configured_float(
-    "skills", "relevance_prefix_match_score", 2.0
-)
-SKILL_RELEVANCE_WORD_MATCH_SCORE = _configured_float(
-    "skills", "relevance_word_match_score", 1.0
-)
-RAG_CONTEXT_RESULTS = _configured_int("agent", "rag_context_results", 2)
-SUMMARY_PROMPT_SENTENCES = _configured_int("agent", "summary_prompt_sentences", 2)
-try:
-    CONTEXT_COMPACTION_THRESHOLD = float(
-        APP_CONFIG.get("agent", {}).get("context_compaction_threshold", 0.8)
-    )
-except (AttributeError, TypeError, ValueError):
-    CONTEXT_COMPACTION_THRESHOLD = 0.8
-if not 0 <= CONTEXT_COMPACTION_THRESHOLD <= 1:
-    CONTEXT_COMPACTION_THRESHOLD = 0.8
-CONTEXT_KEEP_RECENT_MESSAGES = _configured_int(
-    "agent", "context_keep_recent_messages", 6
-)
-CONTEXT_SUMMARY_CHARS = _configured_int("agent", "context_summary_chars", 1500)
-CODE_TASK_GIT_TIMEOUT = _configured_int("code_tasks", "git_command_timeout_seconds", 30)
-CODE_TASK_TEST_TIMEOUT = _configured_int(
-    "code_tasks", "test_command_timeout_seconds", 180
-)
-_raw_code_task_test_commands = (APP_CONFIG.get("code_tasks") or {}).get(
-    "test_commands", []
-)
-CODE_TASK_TEST_COMMANDS = []
-if isinstance(_raw_code_task_test_commands, list):
-    if len(_raw_code_task_test_commands) > 16:
-        warnings.warn(
-            "Only the first 16 code_tasks.test_commands entries will be used.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-    for _test_command in _raw_code_task_test_commands[:16]:
-        if (
-            isinstance(_test_command, list)
-            and 1 <= len(_test_command) <= 64
-            and all(
-                isinstance(argument, str) and 0 < len(argument) <= 2048
-                for argument in _test_command
-            )
-        ):
-            CODE_TASK_TEST_COMMANDS.append(_test_command)
-        else:
-            warnings.warn(
-                "Ignoring invalid code_tasks.test_commands entry; use a non-empty "
-                "array of at most 64 non-empty argument strings.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-elif _raw_code_task_test_commands:
-    warnings.warn(
-        "Ignoring invalid code_tasks.test_commands; expected an array of argument arrays.",
-        RuntimeWarning,
-        stacklevel=2,
-    )
-CODE_TASK_SUCCESS_OUTPUT_CHARS = _configured_int(
-    "code_tasks", "successful_test_output_chars", 6000
-)
-CODE_TASK_FAILURE_OUTPUT_CHARS = _configured_int(
-    "code_tasks", "failed_test_output_chars", 3000
-)
+DEFAULT_DB_PATH = SETTINGS.default_db_path
+WORKSPACE_ROOT_DEFAULT = SETTINGS.workspace_root_default
+CODE_OUTPUT_ROOT = SETTINGS.code_output_root
+SKILLS_FOLDER_DEFAULT = SETTINGS.skills_folder_default
+RAG_DOCS_DEFAULT = SETTINGS.rag_docs_default
+MODEL_TEMPERATURE = SETTINGS.model_temperature
+ONLINE_PERMISSION_OVERRIDE = SETTINGS.online_permission_override
+EMBEDDING_MODEL = SETTINGS.embedding_model
+RAG_INDEX_PATH = SETTINGS.rag_index_path
+OLLAMA_BASE_URL = SETTINGS.ollama_base_url
+HARDWARE_ACCELERATION_MODE = SETTINGS.hardware_acceleration_mode
+PREFERRED_MODEL = SETTINGS.preferred_model
+MAX_TOOL_ITERATIONS = SETTINGS.max_tool_iterations
+MAX_TOOL_CALLS = SETTINGS.max_tool_calls
+MAX_TASK_SECONDS = SETTINGS.max_task_seconds
+MAX_TOOL_OUTPUT_CHARS = SETTINGS.max_tool_output_chars
+MAX_HISTORY_MESSAGES = SETTINGS.max_history_messages
+MAX_CONTEXT_TOKENS = SETTINGS.max_context_tokens
+MAX_OUTPUT_TOKENS = SETTINGS.max_output_tokens
+STREAMING_OUTPUT = SETTINGS.streaming_output
+VISIBLE_REASONING = SETTINGS.visible_reasoning
+SYSTEM_PROMPT = SETTINGS.system_prompt
+CONVERSATION_RETENTION_DAYS = SETTINGS.conversation_retention_days
+EPISODE_RETENTION_DAYS = SETTINGS.episode_retention_days
+REGISTERED_SKILL_RETENTION_DAYS = SETTINGS.registered_skill_retention_days
+TASK_STALE_AFTER_DAYS = SETTINGS.task_stale_after_days
+MAX_SUMMARY_CHARS = SETTINGS.max_summary_chars
+MAX_LEARNED_ITEM_CHARS = SETTINGS.max_learned_item_chars
+MAX_RESUME_STATE_CHARS = SETTINGS.max_resume_state_chars
+MAX_MEMORY_CONTEXT_TOKENS = SETTINGS.max_memory_context_tokens
+MAX_RELEVANT_EPISODES = SETTINGS.max_relevant_episodes
+LEARNED_ITEM_EXPIRY_DAYS = SETTINGS.learned_item_expiry_days
+LEARNED_ITEM_REVIEW_DAYS = SETTINGS.learned_item_review_days
+DEFAULT_HISTORY_MESSAGES = SETTINGS.default_history_messages
+DEFAULT_EPISODIC_SUMMARIES = SETTINGS.default_episodic_summaries
+MAX_NETWORK_CONCURRENCY = SETTINGS.max_network_concurrency
+NETWORK_REQUEST_TIMEOUT = SETTINGS.network_request_timeout
+RAG_MAX_FILE_BYTES = SETTINGS.rag_max_file_bytes
+RAG_MAX_CORPUS_BYTES = SETTINGS.rag_max_corpus_bytes
+RAG_MAX_PDF_PAGES = SETTINGS.rag_max_pdf_pages
+RAG_MAX_DOCUMENTS = SETTINGS.rag_max_documents
+RAG_CHUNK_SIZE_CHARS = SETTINGS.rag_chunk_size_chars
+RAG_CHUNK_OVERLAP_CHARS = SETTINGS.rag_chunk_overlap_chars
+CHUNKING_STRATEGY = SETTINGS.chunking_strategy
+CHUNKING_UNIT = SETTINGS.chunking_unit
+CHUNKING_SIZE = SETTINGS.chunking_size
+CHUNKING_OVERLAP = SETTINGS.chunking_overlap
+CHUNKING_MIN_CHUNK_CHARS = SETTINGS.chunking_min_chunk_chars
+CHUNKING_SEPARATORS = SETTINGS.chunking_separators
+CHUNKING_SEMANTIC_PERCENTILE = SETTINGS.chunking_semantic_percentile
+CHUNKING_SEMANTIC_BUFFER = SETTINGS.chunking_semantic_buffer
+CHUNKING_SEMANTIC_MAX_SENTENCES = SETTINGS.chunking_semantic_max_sentences
+RAG_SIMILARITY_RESULTS = SETTINGS.rag_similarity_results
+RAG_SQLITE_MAX_ROWS_PER_TABLE = SETTINGS.rag_sqlite_max_rows_per_table
+RAG_AUTO_REFRESH_SECONDS = SETTINGS.rag_auto_refresh_seconds
+ENABLE_WEB_RESEARCH = SETTINGS.enable_web_research
+WEB_RESEARCH_CONSENT = SETTINGS.web_research_consent
+INTERNET_CHECK_HOST = SETTINGS.internet_check_host
+INTERNET_CHECK_PORT = SETTINGS.internet_check_port
+INTERNET_CHECK_TIMEOUT = SETTINGS.internet_check_timeout
+OVERRIDE_TOOL_LIST = SETTINGS.override_tool_list
+THINKING_TOGGLE_DEFAULT = SETTINGS.thinking_toggle_default
+THINKING_EFFORT_DEFAULT = SETTINGS.thinking_effort_default
+AGENT_PERMISSION_MODE = SETTINGS.agent_permission_mode
+DEBUG_LOG_ENABLED = SETTINGS.debug_log_enabled
+DEBUG_LOG_LEVEL = SETTINGS.debug_log_level
+MCP_SERVERS = SETTINGS.mcp_servers
+MCP_AUTO_APPROVE_TOOLS = SETTINGS.mcp_auto_approve_tools
+ONLINE_REQUEST_TIMEOUT = SETTINGS.online_request_timeout
+ONLINE_MODEL_LIST_TIMEOUT = SETTINGS.online_model_list_timeout
+ONLINE_MAX_RETRIES = SETTINGS.online_max_retries
+ONLINE_MODEL_LIST_LIMIT = SETTINGS.online_model_list_limit
+MAX_MODEL_CAPABILITY_CACHE_ENTRIES = SETTINGS.max_model_capability_cache_entries
+MAX_WEBPAGE_BYTES = SETTINGS.max_webpage_bytes
+MAX_DOWNLOAD_BYTES = SETTINGS.max_download_bytes
+MAX_HTTP_REDIRECTS = SETTINGS.max_http_redirects
+MAX_SEARCH_QUERY_CHARS = SETTINGS.max_search_query_chars
+MAX_SEARCH_RESULTS = SETTINGS.max_search_results
+MAX_FETCHED_WEBPAGE_CHARS = SETTINGS.max_fetched_webpage_chars
+MAX_READ_FILE_BYTES = SETTINGS.max_read_file_bytes
+FILE_READ_CHUNK_BYTES = SETTINGS.file_read_chunk_bytes
+BINARY_PROBE_BYTES = SETTINGS.binary_probe_bytes
+SHELL_COMMAND_TIMEOUT = SETTINGS.shell_command_timeout
+DEFAULT_HISTORY_READ_LIMIT = SETTINGS.default_history_read_limit
+MAX_SKILL_NAME_CHARS = SETTINGS.max_skill_name_chars
+MAX_STREAM_TIMEOUT = SETTINGS.max_stream_timeout
+MAX_CAPTURED_IMAGE_BYTES = SETTINGS.max_captured_image_bytes
+MAX_DECODED_IMAGE_PIXELS = SETTINGS.max_decoded_image_pixels
+MAX_MEDIA_FILE_BYTES = SETTINGS.max_media_file_bytes
+MAX_IMAGES_PER_TURN = SETTINGS.max_images_per_turn
+MAX_MICROPHONE_SECONDS = SETTINGS.max_microphone_seconds
+MAX_VIDEO_SECONDS = SETTINGS.max_video_seconds
+DEFAULT_MICROPHONE_SECONDS = SETTINGS.default_microphone_seconds
+MICROPHONE_SAMPLE_RATE = SETTINGS.microphone_sample_rate
+DEFAULT_CAMERA_DEVICE_INDEX = SETTINGS.default_camera_device_index
+MAX_CAMERA_DEVICE_INDEX = SETTINGS.max_camera_device_index
+MAX_MICROPHONE_DEVICE_INDEX = SETTINGS.max_microphone_device_index
+MAX_IMAGE_WIDTH = SETTINGS.max_image_width
+MAX_IMAGE_HEIGHT = SETTINGS.max_image_height
+JPEG_QUALITY = SETTINGS.jpeg_quality
+MAX_SKILL_DESCRIPTION_CHARS = SETTINGS.max_skill_description_chars
+MAX_SKILL_INSTRUCTION_CHARS = SETTINGS.max_skill_instruction_chars
+MAX_SKILL_PREVIEW_CHARS = SETTINGS.max_skill_preview_chars
+SKILL_MAX_ITERATIONS = SETTINGS.skill_max_iterations
+SKILL_DESCRIPTION_PREVIEW_CHARS = SETTINGS.skill_description_preview_chars
+SKILL_RELEVANCE_THRESHOLD = SETTINGS.skill_relevance_threshold
+SKILL_RELEVANCE_EXACT_MATCH_SCORE = SETTINGS.skill_relevance_exact_match_score
+SKILL_RELEVANCE_PREFIX_MATCH_SCORE = SETTINGS.skill_relevance_prefix_match_score
+SKILL_RELEVANCE_WORD_MATCH_SCORE = SETTINGS.skill_relevance_word_match_score
+RAG_CONTEXT_RESULTS = SETTINGS.rag_context_results
+SUMMARY_PROMPT_SENTENCES = SETTINGS.summary_prompt_sentences
+CONTEXT_COMPACTION_THRESHOLD = SETTINGS.context_compaction_threshold
+CONTEXT_KEEP_RECENT_MESSAGES = SETTINGS.context_keep_recent_messages
+CONTEXT_SUMMARY_CHARS = SETTINGS.context_summary_chars
+CODE_TASK_GIT_TIMEOUT = SETTINGS.code_task_git_timeout
+CODE_TASK_TEST_TIMEOUT = SETTINGS.code_task_test_timeout
+CODE_TASK_TEST_COMMANDS = SETTINGS.code_task_test_commands
+CODE_TASK_SUCCESS_OUTPUT_CHARS = SETTINGS.code_task_success_output_chars
+CODE_TASK_FAILURE_OUTPUT_CHARS = SETTINGS.code_task_failure_output_chars
