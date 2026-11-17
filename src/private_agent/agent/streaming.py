@@ -19,6 +19,15 @@ from ..run_logging import RUN_LOGGER, log_event
 from .console import console
 from .prompts import token_count as _token_count
 from .session_state import SESSION_STATS as _SESSION_STATS
+from .status import (
+    LOADING,
+    PROCESSING,
+    THINKING,
+    StatusIndicator,
+    reasoning_text,
+    thinking_message,
+    waiting_message,
+)
 
 
 def _supports_async_streaming(model: Any) -> bool:
@@ -126,6 +135,7 @@ async def _invoke_with_budget(
     *,
     model_name: str = "model",
     status_message: str = "Processing model response...",
+    local_model: bool = False,
 ):
     """Invoke a model within the task deadline, streaming text when supported."""
     remaining = deadline - time.monotonic()
@@ -136,19 +146,50 @@ async def _invoke_with_budget(
         model, "astream", None
     )
     if _supports_async_streaming(model) and stream_method is not None:
-        console.print(f"[dim][Processing][/dim] {status_message}")
+        indicator = StatusIndicator(
+            waiting_message(model_name, local_model=local_model),
+            phase=LOADING if local_model else PROCESSING,
+        ).start()
 
         async def collect_stream():
             aggregate = None
             first_token_at = None
             emitted_header = False
+            reasoning_open = False
             try:
                 async for chunk in stream_method(messages):
                     aggregate = chunk if aggregate is None else aggregate + chunk
+                    reasoning = reasoning_text(chunk)
                     text = _visible_chunk_text(getattr(chunk, "content", ""))
+                    if reasoning:
+                        if VISIBLE_REASONING:
+                            indicator.stop()
+                            if not reasoning_open:
+                                console.print(
+                                    f"\n[dim]Thinking ({model_name}):[/dim] ",
+                                    end="",
+                                )
+                                reasoning_open = True
+                            console.print(
+                                reasoning,
+                                end="",
+                                style="dim",
+                                markup=False,
+                                highlight=False,
+                                soft_wrap=True,
+                            )
+                        elif indicator.active and indicator.phase != THINKING:
+                            indicator.update(
+                                phase=THINKING,
+                                message=thinking_message(model_name),
+                            )
                     if text:
                         if first_token_at is None:
                             first_token_at = time.monotonic()
+                        indicator.stop()
+                        if reasoning_open:
+                            console.print()
+                            reasoning_open = False
                         if not emitted_header:
                             console.print(
                                 f"\n[bold green]AI ({model_name}):[/bold green] ",
@@ -163,6 +204,9 @@ async def _invoke_with_budget(
                             soft_wrap=True,
                         )
             finally:
+                indicator.stop()
+                if reasoning_open:
+                    console.print()
                 if emitted_header:
                     console.print()
             return aggregate, first_token_at
@@ -395,6 +439,8 @@ async def _invoke_with_status(
     *,
     model_name: str,
     status_message: str,
+    local_model: bool = False,
+    thinking_enabled: bool = False,
 ):
     """Show operation progress and report elapsed time for slow model calls."""
     started = time.monotonic()
@@ -406,6 +452,7 @@ async def _invoke_with_status(
                 deadline,
                 model_name=model_name,
                 status_message=status_message,
+                local_model=local_model,
             )
         except Exception as exc:
             reference_id = uuid.uuid4().hex[:8]
@@ -424,13 +471,20 @@ async def _invoke_with_status(
             )
             raise
     else:
+        phase = THINKING if thinking_enabled else LOADING if local_model else PROCESSING
+        message = (
+            thinking_message(model_name)
+            if thinking_enabled
+            else waiting_message(model_name, local_model=local_model)
+        )
         try:
-            with console.status(f"[bold cyan]{status_message}[/bold cyan]"):
+            with StatusIndicator(message, phase=phase):
                 response = await _invoke_with_budget(
                     model,
                     messages,
                     deadline,
                     model_name=model_name,
+                    local_model=local_model,
                 )
         except Exception as exc:
             reference_id = uuid.uuid4().hex[:8]

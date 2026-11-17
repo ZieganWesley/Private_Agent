@@ -5,7 +5,7 @@ import types
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk
 
 from private_agent.agent import streaming
 
@@ -154,3 +154,118 @@ def test_visible_reasoning_display_respects_configuration(monkeypatch):
     monkeypatch.setattr(streaming, "VISIBLE_REASONING", True)
     streaming._display_visible_reasoning(response)
     assert printed[0].title.plain == "Model rationale summary"
+
+
+class FakeIndicator:
+    """Record indicator lifecycle calls without starting a real rich Live."""
+
+    def __init__(self):
+        self.active = False
+        self.phase = streaming.PROCESSING
+        self.starts = 0
+        self.stops = 0
+        self.updates = []
+
+    def start(self):
+        self.active = True
+        self.starts += 1
+        return self
+
+    def update(self, *, phase=None, message=None):
+        if phase is not None:
+            self.phase = phase
+        self.updates.append((phase, message))
+
+    def stop(self):
+        if self.active:
+            self.stops += 1
+        self.active = False
+
+
+def _patch_streaming(monkeypatch, *, visible_reasoning):
+    indicator = FakeIndicator()
+    printed = []
+    monkeypatch.setattr(streaming, "StatusIndicator", lambda *_a, **_k: indicator)
+    monkeypatch.setattr(streaming, "VISIBLE_REASONING", visible_reasoning)
+    monkeypatch.setattr(streaming, "STREAMING_OUTPUT", True)
+    monkeypatch.setattr(
+        streaming.console,
+        "print",
+        lambda *values, **kwargs: printed.append((values, kwargs)),
+    )
+    return indicator, printed
+
+
+@pytest.mark.asyncio
+async def test_streaming_reasoning_is_rendered_as_dimmed_text(monkeypatch):
+    indicator, printed = _patch_streaming(monkeypatch, visible_reasoning=True)
+
+    class ReasoningModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(
+                content="", additional_kwargs={"reasoning_content": "weigh options"}
+            )
+            yield AIMessageChunk(content="final answer")
+
+    response = await streaming._invoke_with_budget(
+        ReasoningModel(), [], time.monotonic() + 5, model_name="m"
+    )
+
+    assert response.content == "final answer"
+    assert any(
+        values == ("weigh options",) and kwargs.get("style") == "dim"
+        for values, kwargs in printed
+    )
+    assert any("Thinking (m)" in str(values[0]) for values, _kwargs in printed)
+    assert indicator.starts == 1
+    assert indicator.stops == 1
+
+
+@pytest.mark.asyncio
+async def test_hidden_reasoning_switches_the_spinner_to_thinking(monkeypatch):
+    indicator, printed = _patch_streaming(monkeypatch, visible_reasoning=False)
+
+    class ReasoningModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(
+                content="", additional_kwargs={"reasoning_content": "weigh options"}
+            )
+            yield AIMessageChunk(
+                content="", additional_kwargs={"reasoning_content": "pick one"}
+            )
+            yield AIMessageChunk(content="final answer")
+
+    response = await streaming._invoke_with_budget(
+        ReasoningModel(), [], time.monotonic() + 5, model_name="m"
+    )
+
+    assert response.content == "final answer"
+    assert indicator.updates == [(streaming.THINKING, "m is thinking")]
+    assert not any(kwargs.get("style") == "dim" for _values, kwargs in printed)
+    assert not any("weigh options" in str(values) for values, _kwargs in printed)
+
+
+@pytest.mark.asyncio
+async def test_streamed_text_is_printed_only_after_the_spinner_stops(monkeypatch):
+    indicator, printed = _patch_streaming(monkeypatch, visible_reasoning=False)
+    active_at_print = []
+
+    monkeypatch.setattr(
+        streaming.console,
+        "print",
+        lambda *values, **kwargs: active_at_print.append((values, indicator.active)),
+    )
+
+    class SimpleModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(content="hello")
+
+    await streaming._invoke_with_budget(
+        SimpleModel(), [], time.monotonic() + 5, model_name="m"
+    )
+
+    answer_prints = [
+        active for values, active in active_at_print if values == ("hello",)
+    ]
+    assert answer_prints == [False]
+    assert indicator.stops == 1

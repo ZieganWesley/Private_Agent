@@ -1520,33 +1520,39 @@ def test_visible_reasoning_only_shows_explicit_summary_when_enabled(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_streaming_response_is_not_rendered_inside_live_status(monkeypatch):
-    from contextlib import contextmanager
-
+async def test_streaming_response_stops_the_spinner_before_rendering(monkeypatch):
     import private_agent.agent.runtime as agent
 
-    status_active = False
+    created = []
+    active = {"value": False}
     printed = []
 
-    @contextmanager
-    def status(_message):
-        nonlocal status_active
-        status_active = True
-        try:
-            yield
-        finally:
-            status_active = False
+    class RecordingStatus:
+        def __init__(self, message, **kwargs):
+            self.message = message
+            self.kwargs = kwargs
+            active["value"] = True
+            created.append(self)
+
+        def start(self):
+            return self
+
+        def update(self, message, **kwargs):
+            self.message = message
+            self.kwargs = kwargs
+
+        def stop(self):
+            active["value"] = False
 
     class StreamingModel:
         async def astream(self, _messages):
-            assert not status_active
             yield AIMessageChunk(content="visible answer")
 
-    monkeypatch.setattr(agent.console, "status", status)
+    monkeypatch.setattr(agent.console, "status", RecordingStatus)
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append((values, kwargs)),
+        lambda *values, **kwargs: printed.append((values, kwargs, active["value"])),
     )
 
     response = await agent._invoke_with_status(
@@ -1555,39 +1561,52 @@ async def test_streaming_response_is_not_rendered_inside_live_status(monkeypatch
         time.monotonic() + 5,
         model_name="test-model",
         status_message="Generating",
+        local_model=True,
     )
 
     assert response.content == "visible answer"
-    assert not status_active
-    assert any(
-        values == ("[dim][Processing][/dim] Generating",) for values, _ in printed
+    assert not active["value"]
+    assert created[0].message.startswith(
+        "[bold cyan]Waiting for test-model (loading it into memory"
     )
-    assert any(values == ("visible answer",) for values, _ in printed)
+    assert created[0].kwargs == {"spinner": "dots12", "spinner_style": "cyan"}
+    assert any(
+        values == ("visible answer",) and not was_active
+        for values, _kwargs, was_active in printed
+    )
 
 
 @pytest.mark.asyncio
 async def test_nonstreaming_response_keeps_live_status(monkeypatch):
-    from contextlib import contextmanager
-
     import private_agent.agent.runtime as agent
 
-    status_active = False
+    created = []
+    active = {"value": False}
 
-    @contextmanager
-    def status(_message):
-        nonlocal status_active
-        status_active = True
-        try:
-            yield
-        finally:
-            status_active = False
+    class RecordingStatus:
+        def __init__(self, message, **kwargs):
+            self.message = message
+            self.kwargs = kwargs
+            active["value"] = True
+            created.append(self)
+
+        def start(self):
+            return self
+
+        def update(self, message, **kwargs):
+            self.message = message
+            self.kwargs = kwargs
+
+        def stop(self):
+            active["value"] = False
 
     class NonStreamingModel:
         async def ainvoke(self, _messages):
-            assert status_active
+            assert active["value"]
             return types.SimpleNamespace(content="complete", tool_calls=[])
 
-    monkeypatch.setattr(agent.console, "status", status)
+    monkeypatch.setattr(agent.console, "status", RecordingStatus)
+    monkeypatch.setattr(agent.console, "print", lambda *_a, **_k: None)
 
     response = await agent._invoke_with_status(
         NonStreamingModel(),
@@ -1595,10 +1614,15 @@ async def test_nonstreaming_response_keeps_live_status(monkeypatch):
         time.monotonic() + 5,
         model_name="test-model",
         status_message="Generating",
+        thinking_enabled=True,
     )
 
     assert response.content == "complete"
-    assert not status_active
+    assert not active["value"]
+    assert [item.message for item in created] == [
+        "[bold magenta]test-model is thinking[/bold magenta]"
+    ]
+    assert created[0].kwargs == {"spinner": "dots2", "spinner_style": "magenta"}
 
 
 @pytest.mark.asyncio

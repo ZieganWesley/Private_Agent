@@ -6,7 +6,7 @@ A1 and A2 step 3.1 pull requests, #17 and #18, were merged)
 
 ## How this was checked
 
-- **Tests:** 776 passed, 12 skipped (about 19 s) in a fresh `.venv` installed
+- **Tests:** 794 passed, 12 skipped (about 19 s) in a fresh `.venv` installed
   with `uv pip install -e ".[dev]"` on Python 3.12. The failure recorded at
   the previous re-verification
   (`test_runtime_summarizes_full_context_instead_of_dropping_it`) now passes
@@ -110,7 +110,7 @@ missing prerequisite (`bwrap`, `prlimit`, media libraries) now skip instead of
 failing (`pytest.mark.skipif` / `pytest.importorskip`). All eight failures from
 the review are gone.
 
-The suite now reports 776 passed and 12 skipped, so `pytest -q` is green on a
+The suite now reports 794 passed and 12 skipped, so `pytest -q` is green on a
 machine without `bwrap`. The one failure recorded at review time,
 `tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it`,
 was traced and fixed in step 1.3.
@@ -1142,6 +1142,13 @@ mode, provider, URL, key, confirm), with no "remember my choices" and no
 command-line flags.
 
 **G8. No live status while working** (see F3; fixed by step 9.7).
+
+**Partly fixed:** the CLI now shows one phase-aware spinner: cyan while a
+local model is being loaded into memory or an online request is in flight,
+and magenta while the model is thinking with `visible_reasoning` off. When
+`visible_reasoning` is on, the reasoning streams as dimmed text above the
+answer. The full live panel for running and finished tools, packs and
+context use (step 9.7) is still open.
 
 **G9. No way to stop one turn** (see C12; fixed by step 6.4).
 
