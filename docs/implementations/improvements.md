@@ -1145,10 +1145,13 @@ command-line flags.
 
 **Partly fixed:** the CLI now shows one phase-aware spinner: cyan while a
 local model is being loaded into memory or an online request is in flight,
-and magenta while the model is thinking with `visible_reasoning` off. When
+magenta while the model is thinking with `visible_reasoning` off, and blue
+while older context or the session summary is being condensed. When
 `visible_reasoning` is on, the reasoning streams as dimmed text above the
-answer. The full live panel for running and finished tools, packs and
-context use (step 9.7) is still open.
+answer. A context-window gauge beside the spinner and in the
+`[Context State]` line fills with the share of the prompt budget in use
+(green below 50%, yellow from 50%, red from 80%). The full live panel for
+running and finished tools, packs and context use (step 9.7) is still open.
 
 **G9. No way to stop one turn** (see C12; fixed by step 6.4).
 

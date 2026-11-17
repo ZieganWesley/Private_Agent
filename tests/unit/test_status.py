@@ -42,11 +42,14 @@ def test_each_phase_has_a_distinct_spinner_and_colour():
     loading = status.phase_spinner(status.LOADING)
     thinking = status.phase_spinner(status.THINKING)
     processing = status.phase_spinner(status.PROCESSING)
+    summarizing = status.phase_spinner(status.SUMMARIZING)
 
     assert loading[1] == "cyan"
     assert thinking[1] == "magenta"
     assert processing[1] == "cyan"
+    assert summarizing[1] == "blue"
     assert thinking[0] != processing[0]
+    assert summarizing[0] != processing[0]
     assert status.phase_spinner("unknown") == processing
 
 
@@ -58,6 +61,14 @@ def test_messages_describe_loading_and_processing():
         "m"
     )
     assert "thinking" in status.thinking_message("m")
+
+
+def test_summarizing_message_names_the_model_and_subject():
+    assert status.summarizing_message("m") == "Summarizing the conversation with m"
+    assert (
+        status.summarizing_message("m", "tool results")
+        == "Summarizing tool results with m"
+    )
 
 
 def test_reasoning_text_reads_kwargs_and_reasoning_blocks():
@@ -197,7 +208,67 @@ def test_indicator_skips_an_empty_message():
     assert not indicator.active
 
 
-@pytest.mark.parametrize("phase", [status.LOADING, status.THINKING, status.PROCESSING])
+def test_context_bar_fills_with_the_share_of_the_window_in_use():
+    empty = status.context_bar(0, 100, width=10)
+    half = status.context_bar(50, 100, width=10)
+    full = status.context_bar(100, 100, width=10)
+
+    assert empty == "\u25b1" * 10 + " 0%"
+    assert half == "\u25b0" * 5 + "\u25b1" * 5 + " 50%"
+    assert full == "\u25b0" * 10 + " 100%"
+    assert status.context_bar(25, 100, width=4) == "\u25b0\u25b1\u25b1\u25b1 25%"
+
+
+def test_context_gauge_clamps_and_ignores_unusable_limits():
+    assert status.context_bar(300, 100, width=10) == "\u25b0" * 10 + " 100%"
+    assert status.context_bar(-5, 100, width=10).startswith("\u25b1" * 10)
+    assert status.context_bar(10, 0) == ""
+    assert status.context_bar(10, "unavailable") == ""
+    assert status.context_percent(10, 0) == 0.0
+    assert status.context_percent(5, 10) == 50.0
+
+
+def test_context_style_warns_as_the_window_fills_up():
+    assert status.context_style(10, 100) == "green"
+    assert status.context_style(60, 100) == "yellow"
+    assert status.context_style(80, 100) == "red"
+
+
+def test_context_state_line_shows_the_gauge_and_budgets():
+    line = status.context_state_line({"tokens": 3000, "max": 12000}, 2048)
+
+    assert "[Context State]" in line
+    assert "25%" in line
+    assert "3,000 / 12,000 prompt tokens" in line
+    assert "up to 2048 output tokens" in line
+    assert "[green]" in line
+    assert "[Context State]" in status.context_state_line({"tokens": 0, "max": 0}, 100)
+
+
+def test_indicator_renders_the_context_gauge_when_supplied():
+    console = FakeConsole()
+    indicator = status.StatusIndicator(
+        "Waiting", console=console, context_usage=(3000, 12000)
+    )
+
+    indicator.start()
+    indicator.update(phase=status.THINKING, message="m is thinking")
+
+    message = console.created[0].message
+    assert message.startswith(
+        "[bold magenta]m is thinking[/bold magenta] [dim]\u00b7[/dim]"
+    )
+    assert "25%" in message
+    assert "[green]" in message
+    assert status.StatusIndicator("Waiting", console=FakeConsole())._render() == (
+        "[bold cyan]Waiting[/bold cyan]"
+    )
+
+
+@pytest.mark.parametrize(
+    "phase",
+    [status.LOADING, status.THINKING, status.PROCESSING, status.SUMMARIZING],
+)
 def test_indicator_honours_every_known_phase(phase):
     console = FakeConsole()
 
