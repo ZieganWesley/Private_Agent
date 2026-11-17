@@ -11,6 +11,7 @@ from private_agent.agent import (
     _online_request_failure,
     _validate_online_base_url,
     execute_tool_call,
+    model_selection,
     select_online_model,
 )
 from private_agent.tools import (
@@ -696,14 +697,20 @@ def test_online_model_listing_uses_safe_transport_and_session_key(monkeypatch):
 
     client = FakeHttpClient()
     factory = MagicMock(return_value=client)
-    monkeypatch.setattr(agent, "public_only_sync_client", factory)
-    monkeypatch.setattr(agent, "check_internet_connection", lambda *args: True)
+    monkeypatch.setattr(model_selection, "public_only_sync_client", factory)
+    monkeypatch.setattr(
+        model_selection, "check_internet_connection", lambda *args: True
+    )
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(
-        agent, "APP_CONFIG", {"online_base_url": "https://api.example.test/v1"}
+        model_selection,
+        "APP_CONFIG",
+        {"online_base_url": "https://api.example.test/v1"},
     )
-    monkeypatch.setattr(agent, "getpass", lambda prompt: "ephemeral-test-key")
-    monkeypatch.setattr(agent, "_make_online_chat_model", lambda *args: "online-model")
+    monkeypatch.setattr(model_selection, "getpass", lambda prompt: "ephemeral-test-key")
+    monkeypatch.setattr(
+        model_selection, "_make_online_chat_model", lambda *args: "online-model"
+    )
     monkeypatch.setattr(
         agent.console,
         "input",
@@ -743,13 +750,21 @@ def test_online_model_authentication_failure_is_redacted(monkeypatch):
         def get(self, url):
             return FakeResponse()
 
-    monkeypatch.setattr(agent, "public_only_sync_client", lambda **kwargs: FakeClient())
-    monkeypatch.setattr(agent, "check_internet_connection", lambda *args: True)
+    monkeypatch.setattr(
+        model_selection, "public_only_sync_client", lambda **kwargs: FakeClient()
+    )
+    monkeypatch.setattr(
+        model_selection, "check_internet_connection", lambda *args: True
+    )
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(
-        agent, "APP_CONFIG", {"online_base_url": "https://api.example.test/v1"}
+        model_selection,
+        "APP_CONFIG",
+        {"online_base_url": "https://api.example.test/v1"},
     )
-    monkeypatch.setattr(agent, "getpass", lambda prompt: "secret-should-not-leak")
+    monkeypatch.setattr(
+        model_selection, "getpass", lambda prompt: "secret-should-not-leak"
+    )
     prompt = MagicMock(side_effect=["", "y"])
     monkeypatch.setattr(agent.console, "input", prompt)
     output = []
@@ -935,19 +950,23 @@ def _configured_online_setup(monkeypatch, answers):
         seen["headers"] = kwargs["headers"]
         return FakeClient()
 
-    monkeypatch.setattr(agent, "public_only_sync_client", factory)
-    monkeypatch.setattr(agent, "check_internet_connection", lambda *args: True)
+    monkeypatch.setattr(model_selection, "public_only_sync_client", factory)
+    monkeypatch.setattr(
+        model_selection, "check_internet_connection", lambda *args: True
+    )
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(
-        agent,
+        model_selection,
         "APP_CONFIG",
         {
             "online_base_url": "https://saved.example.test/v1",
             "online_api_key": "saved-key",
         },
     )
-    monkeypatch.setattr(agent, "getpass", lambda prompt: "typed-key")
-    monkeypatch.setattr(agent, "_make_online_chat_model", lambda *args: "online-model")
+    monkeypatch.setattr(model_selection, "getpass", lambda prompt: "typed-key")
+    monkeypatch.setattr(
+        model_selection, "_make_online_chat_model", lambda *args: "online-model"
+    )
     monkeypatch.setattr(agent.console, "input", MagicMock(side_effect=answers))
     return agent, seen
 
@@ -966,7 +985,7 @@ def test_online_selection_explicitly_uses_saved_details_without_key_prompt(
 ):
     agent, seen = _configured_online_setup(monkeypatch, ["1", "", "n", "n"])
     key_prompt = MagicMock(side_effect=AssertionError("Saved key should be reused."))
-    monkeypatch.setattr(agent, "getpass", key_prompt)
+    monkeypatch.setattr(model_selection, "getpass", key_prompt)
 
     selected = agent.select_online_model()
 
@@ -979,7 +998,7 @@ def test_online_selection_loads_nested_saved_config_without_config_prompt(
     monkeypatch,
 ):
     agent, seen = _configured_online_setup(monkeypatch, ["", "n", "n"])
-    agent.APP_CONFIG = {
+    model_selection.APP_CONFIG = {
         "models": {
             "online_base_url": "https://nested.example.test/v1",
             "online_api_key": "nested-config-key",
@@ -989,7 +1008,7 @@ def test_online_selection_loads_nested_saved_config_without_config_prompt(
     key_prompt = MagicMock(
         side_effect=AssertionError("Saved key must be used directly.")
     )
-    monkeypatch.setattr(agent, "getpass", key_prompt)
+    monkeypatch.setattr(model_selection, "getpass", key_prompt)
     input_prompt = agent.console.input
     input_prompt.side_effect = ["", "n", "n"]
 
@@ -1017,7 +1036,7 @@ def test_online_permission_override_can_consent_to_tool_call_limits(monkeypatch)
     assert DEFAULT_CONFIG["models"]["online_permission_override"] is False
     # Prompts: share-context n, model id handled by listing "model-a" -> "" ; no tool prompt.
     agent_mod, seen = _configured_online_setup(monkeypatch, ["", "", "n", "y"])
-    monkeypatch.setattr(agent_mod, "ONLINE_PERMISSION_OVERRIDE", True)
+    monkeypatch.setattr(model_selection, "ONLINE_PERMISSION_OVERRIDE", True)
     selected = agent_mod.select_online_model()
     assert selected["allow_tools"] is True
     assert selected["enforce_tool_call_limits"] is True
@@ -1025,7 +1044,7 @@ def test_online_permission_override_can_consent_to_tool_call_limits(monkeypatch)
 
 def test_online_permission_override_can_decline_tool_call_limits(monkeypatch):
     agent_mod, _seen = _configured_online_setup(monkeypatch, ["", "", "n", "n"])
-    monkeypatch.setattr(agent_mod, "ONLINE_PERMISSION_OVERRIDE", True)
+    monkeypatch.setattr(model_selection, "ONLINE_PERMISSION_OVERRIDE", True)
 
     selected = agent_mod.select_online_model()
 

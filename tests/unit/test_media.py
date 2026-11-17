@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.console import Console
 
+from private_agent.agent import tool_display
+
 try:
     from private_agent.agent import get_robust_chat_model
 except ImportError:
@@ -322,8 +324,6 @@ def test_workspace_video_rejects_oversized_frame_before_decoding(
 def test_runtime_attaches_every_transient_video_frame(monkeypatch):
     from langchain_core.messages import HumanMessage, ToolMessage
 
-    import private_agent.agent.runtime as agent
-
     references = [f"video-image:{index:032x}" for index in range(3)]
     attached = []
 
@@ -331,9 +331,9 @@ def test_runtime_attaches_every_transient_video_frame(monkeypatch):
         attached.append(reference)
         return HumanMessage(content=reference)
 
-    monkeypatch.setattr(agent, "captured_image_message", capture)
+    monkeypatch.setattr(tool_display, "captured_image_message", capture)
     messages = []
-    agent._append_captured_images_from_tool_results(
+    tool_display._append_captured_images_from_tool_results(
         messages,
         [
             ToolMessage(

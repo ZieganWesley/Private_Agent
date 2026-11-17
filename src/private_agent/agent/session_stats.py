@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
 from rich.table import Table
@@ -85,6 +85,12 @@ class SessionStats:
         self.model_seconds += max(0.0, elapsed)
         if model_name:
             self.models[model_name] += 1
+
+    def reset(self) -> None:
+        """Clear the accumulators in place so shared references stay valid."""
+        fresh = type(self)()
+        for spec in fields(self):
+            setattr(self, spec.name, getattr(fresh, spec.name))
 
     def record_tool_call(self, name: str) -> None:
         self.tool_calls += 1

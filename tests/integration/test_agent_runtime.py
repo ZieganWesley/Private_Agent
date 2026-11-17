@@ -18,7 +18,11 @@ from private_agent.agent import (
     _invoke_with_budget,
     authorize_network_research,
     execute_tool_call,
+    memory_context,
+    model_selection,
     run_agent_cli_async,
+    streaming,
+    tool_display,
 )
 from private_agent.database import PersistentMemory
 from private_agent.sandbox import SandboxManager
@@ -77,25 +81,27 @@ def scripted_local_cli(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "MCP_SERVERS", {})
     monkeypatch.setattr(agent, "AGENT_PERMISSION_MODE", "auto")
     monkeypatch.setattr(agent, "APP_CONFIG", {})
-    monkeypatch.setattr(agent, "_offer_local_data_reset", lambda memory: None)
+    monkeypatch.setattr(memory_context, "_offer_local_data_reset", lambda memory: None)
     monkeypatch.setattr(agent, "set_active_db_path", lambda path: None)
     from private_agent.tools import _sqlite_state
 
     monkeypatch.setattr(_sqlite_state, "ACTIVE_DB_PATH", str(database_path))
-    monkeypatch.setattr(agent, "fetch_local_chat_models", lambda: ["local-model"])
+    monkeypatch.setattr(
+        model_selection, "fetch_local_chat_models", lambda: ["local-model"]
+    )
     monkeypatch.setattr(
         agent,
         "_discover_available_local_runtimes",
         lambda: (
             [
-                agent.LocalRuntime(
+                model_selection.LocalRuntime(
                     "Ollama",
                     "ollama",
-                    agent.OLLAMA_BASE_URL,
-                    tuple(agent.fetch_local_chat_models()),
+                    model_selection.OLLAMA_BASE_URL,
+                    tuple(model_selection.fetch_local_chat_models()),
                 )
             ]
-            if agent.fetch_local_chat_models()
+            if model_selection.fetch_local_chat_models()
             else []
         ),
     )
@@ -112,7 +118,9 @@ def scripted_local_cli(monkeypatch, tmp_path):
             "context_window": None,
         },
     )
-    monkeypatch.setattr(agent, "_make_chat_model", lambda *args, **kwargs: model)
+    monkeypatch.setattr(
+        model_selection, "_make_chat_model", lambda *args, **kwargs: model
+    )
     monkeypatch.setattr(agent, "inspect_ollama_hardware", lambda *args, **kwargs: {})
     monkeypatch.setattr(agent, "format_hardware_status", lambda status: "test")
     monkeypatch.setattr(agent, "initialize_knowledge_base", lambda path, **kwargs: None)
@@ -224,7 +232,7 @@ async def test_missing_local_runtimes_keeps_online_provider_available(
         SimpleNamespace(platform=runtime_platform, stdin=agent.sys.stdin),
     )
     monkeypatch.setattr(agent, "_discover_available_local_runtimes", list)
-    monkeypatch.setattr(agent, "fetch_local_chat_models", list)
+    monkeypatch.setattr(model_selection, "fetch_local_chat_models", list)
     hardware_status = MagicMock()
     monkeypatch.setattr(
         agent,
@@ -360,7 +368,7 @@ async def test_local_openai_compatible_runtime_can_be_selected(
         agent,
         "_discover_available_local_runtimes",
         lambda: [
-            agent.LocalRuntime(
+            model_selection.LocalRuntime(
                 runtime_name,
                 "openai-compatible",
                 base_url,
@@ -371,7 +379,7 @@ async def test_local_openai_compatible_runtime_can_be_selected(
     make_local_model = MagicMock(return_value=model)
     hardware_status = MagicMock()
     monkeypatch.setattr(
-        agent,
+        model_selection,
         "_make_local_openai_compatible_chat_model",
         make_local_model,
     )
@@ -407,7 +415,9 @@ async def test_preferred_local_model_is_listed_first_and_marked(
     scripted_local_cli, monkeypatch
 ):
     agent, _model, inputs, _workspace, _database_path = scripted_local_cli
-    monkeypatch.setattr(agent, "fetch_local_chat_models", lambda: ["a", "pref", "b"])
+    monkeypatch.setattr(
+        model_selection, "fetch_local_chat_models", lambda: ["a", "pref", "b"]
+    )
     monkeypatch.setattr(agent, "PREFERRED_MODEL", "pref")
     monkeypatch.setattr(agent, "prompt_user_input", AsyncMock(side_effect=["exit"]))
     inputs.side_effect = ["", "", "", "1", ""]
@@ -1361,7 +1371,7 @@ def test_tool_request_is_visible_and_redacts_secrets(monkeypatch):
         lambda *values, **kwargs: printed.append((values, kwargs)),
     )
 
-    agent._display_tool_request(
+    tool_display._display_tool_request(
         {
             "name": "web_search",
             "args": {
@@ -1389,15 +1399,17 @@ def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
         lambda *values, **kwargs: printed.append((values, kwargs)),
     )
 
-    agent._display_tool_result(
+    tool_display._display_tool_result(
         "search_workspace",
-        "x" * (agent.TOOL_RESULT_PREVIEW_CHARS + 20),
+        "x" * (tool_display.TOOL_RESULT_PREVIEW_CHARS + 20),
     )
 
     panel = printed[0][0][0]
-    assert isinstance(panel, agent.Panel)
+    assert isinstance(panel, tool_display.Panel)
     assert panel.title.plain == "Tool output: search_workspace"
-    assert panel.renderable.plain.startswith("x" * agent.TOOL_RESULT_PREVIEW_CHARS)
+    assert panel.renderable.plain.startswith(
+        "x" * tool_display.TOOL_RESULT_PREVIEW_CHARS
+    )
     assert "Preview truncated" in panel.renderable.plain
 
 
@@ -1426,10 +1438,10 @@ async def test_empty_nonstreaming_response_retries_without_restarting_session(
             AIMessage(content="recovered response"),
         ]
     )
-    monkeypatch.setattr(agent, "STREAMING_OUTPUT", False)
+    monkeypatch.setattr(streaming, "STREAMING_OUTPUT", False)
     monkeypatch.setattr(agent.console, "print", lambda *_args, **_kwargs: None)
 
-    response = await agent._invoke_with_budget(
+    response = await streaming._invoke_with_budget(
         model,
         [],
         time.monotonic() + 5,
@@ -1442,13 +1454,12 @@ async def test_empty_nonstreaming_response_retries_without_restarting_session(
 
 @pytest.mark.asyncio
 async def test_streaming_can_be_disabled_by_configuration(monkeypatch):
-    import private_agent.agent.runtime as agent
 
     model = MagicMock()
     expected = types.SimpleNamespace(content="complete", tool_calls=[])
     model.ainvoke = AsyncMock(return_value=expected)
     model.astream = AsyncMock()
-    monkeypatch.setattr(agent, "STREAMING_OUTPUT", False)
+    monkeypatch.setattr(streaming, "STREAMING_OUTPUT", False)
 
     response = await _invoke_with_budget(model, [], time.monotonic() + 5)
 
@@ -1467,7 +1478,7 @@ def test_generation_rate_prefers_provider_token_usage(monkeypatch):
         lambda *values, **kwargs: printed.append((values, kwargs)),
     )
 
-    agent._display_generation_rate(
+    streaming._display_generation_rate(
         types.SimpleNamespace(
             content="visible output",
             usage_metadata={"output_tokens": 10},
@@ -1494,15 +1505,15 @@ def test_visible_reasoning_only_shows_explicit_summary_when_enabled(monkeypatch)
         response_metadata={"reasoning_summary": "Compared two available options."},
     )
 
-    monkeypatch.setattr(agent, "VISIBLE_REASONING", False)
-    agent._display_visible_reasoning(response)
+    monkeypatch.setattr(streaming, "VISIBLE_REASONING", False)
+    streaming._display_visible_reasoning(response)
     assert not printed
 
-    monkeypatch.setattr(agent, "VISIBLE_REASONING", True)
-    agent._display_visible_reasoning(response)
+    monkeypatch.setattr(streaming, "VISIBLE_REASONING", True)
+    streaming._display_visible_reasoning(response)
 
     panel = printed[0][0][0]
-    assert isinstance(panel, agent.Panel)
+    assert isinstance(panel, tool_display.Panel)
     assert panel.title.plain == "Model rationale summary"
     assert panel.renderable.plain == "Compared two available options."
     assert "private chain of thought" not in panel.renderable.plain
@@ -1600,14 +1611,14 @@ async def test_model_failure_shows_reference_without_exposing_exception(
 
     events = []
     printed = []
-    monkeypatch.setattr(agent, "_supports_async_streaming", lambda _model: False)
+    monkeypatch.setattr(streaming, "_supports_async_streaming", lambda _model: False)
     monkeypatch.setattr(
-        agent,
+        streaming,
         "_invoke_with_budget",
         AsyncMock(side_effect=RuntimeError("private endpoint details")),
     )
     monkeypatch.setattr(
-        agent,
+        streaming,
         "log_event",
         lambda *_args, **kwargs: events.append(kwargs),
     )
@@ -1753,15 +1764,17 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
     monkeypatch.setattr(agent, "WORKSPACE_ROOT_DEFAULT", str(workspace))
     monkeypatch.setattr(agent, "MCP_SERVERS", {})
     monkeypatch.setattr(agent, "set_active_db_path", lambda path: None)
-    monkeypatch.setattr(agent, "fetch_local_chat_models", lambda: ["local-model"])
+    monkeypatch.setattr(
+        model_selection, "fetch_local_chat_models", lambda: ["local-model"]
+    )
     monkeypatch.setattr(
         agent,
         "_discover_available_local_runtimes",
         lambda: [
-            agent.LocalRuntime(
+            model_selection.LocalRuntime(
                 "Ollama",
                 "ollama",
-                agent.OLLAMA_BASE_URL,
+                model_selection.OLLAMA_BASE_URL,
                 ("local-model",),
             )
         ],
@@ -1778,7 +1791,9 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
             "audio": False,
         },
     )
-    monkeypatch.setattr(agent, "_make_chat_model", lambda *args, **kwargs: mock_model)
+    monkeypatch.setattr(
+        model_selection, "_make_chat_model", lambda *args, **kwargs: mock_model
+    )
     monkeypatch.setattr(agent, "inspect_ollama_hardware", lambda *args, **kwargs: {})
     monkeypatch.setattr(agent, "format_hardware_status", lambda status: "test")
     monkeypatch.setattr(agent, "initialize_knowledge_base", lambda path, **kwargs: None)
@@ -1842,7 +1857,7 @@ async def test_runtime_rag_citations_are_prompted_and_shown(
     class FakeRetriever:
         def similarity_search(self, query, k):
             assert query == "How is the local index protected?"
-            assert k == agent.RAG_CONTEXT_RESULTS
+            assert k == memory_context.RAG_CONTEXT_RESULTS
             return [document]
 
     monkeypatch.setattr(
@@ -2204,7 +2219,7 @@ async def test_runtime_summarizes_full_context_instead_of_dropping_it(
             "thinking": False,
             "vision": False,
             "audio": False,
-            "context_window": 1800,
+            "context_window": 4096,
         },
     )
     monkeypatch.setattr(
@@ -2226,12 +2241,84 @@ async def test_runtime_summarizes_full_context_instead_of_dropping_it(
     )
     await run_agent_cli_async()
 
-    summarizing, answering = model.calls[0], model.calls[1]
-    assert token_count("\n".join(str(m.content) for m in summarizing)) <= 1800 - 200
+    summarizing = model.calls[0]
+    answering = next(
+        call
+        for call in model.calls
+        if "new question" in "\n".join(str(message.content) for message in call)
+    )
+    assert token_count("\n".join(str(m.content) for m in summarizing)) <= 4096 - 200
     assembled = "\n".join(str(m.content) for m in answering)
     assert "EARLIER-WORK-SUMMARY" in assembled
     assert "new question" in assembled
-    assert token_count(assembled) <= 1800 - 200
+    assert token_count(assembled) <= 4096 - 200
+
+
+@pytest.mark.asyncio
+async def test_startup_failure_still_closes_memory_and_cancels_the_lease(
+    scripted_local_cli, monkeypatch
+):
+    agent, _model, inputs, _workspace, _database_path = scripted_local_cli
+    closed: list[bool] = []
+    opened: list[object] = []
+    real_memory = PersistentMemory
+
+    class TrackingMemory(real_memory):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            opened.append(self)
+
+        def close(self):
+            closed.append(True)
+            super().close()
+
+    monkeypatch.setattr(agent, "PersistentMemory", TrackingMemory)
+    monkeypatch.setattr(
+        agent,
+        "_select_permission_mode",
+        MagicMock(side_effect=RuntimeError("permission probe failed")),
+    )
+    inputs.return_value = ""
+
+    with pytest.raises(RuntimeError, match="permission probe failed"):
+        await run_agent_cli_async()
+
+    assert len(opened) == 1
+    assert closed == [True]
+    assert opened[0].conn is not None
+    assert agent._TASK_LEASE_HEARTBEAT is None
+    assert agent._ACTIVE_MEMORY is None
+
+
+@pytest.mark.asyncio
+async def test_session_setup_closes_its_memory_when_startup_fails(
+    scripted_local_cli, monkeypatch
+):
+    """Startup releases SQLite itself; it must not rely on the caller's guard."""
+    agent, _model, inputs, _workspace, _database_path = scripted_local_cli
+    closed: list[bool] = []
+    real_memory = PersistentMemory
+
+    class TrackingMemory(real_memory):
+        def close(self):
+            closed.append(True)
+            super().close()
+
+    monkeypatch.setattr(agent, "PersistentMemory", TrackingMemory)
+    # Fails after the database is open but before the lease task exists.
+    monkeypatch.setattr(
+        agent,
+        "set_active_db_path",
+        MagicMock(side_effect=RuntimeError("db path rejected")),
+    )
+    inputs.return_value = ""
+
+    with pytest.raises(RuntimeError, match="db path rejected"):
+        await agent._prepare_session()
+
+    assert closed == [True]
+    assert agent._ACTIVE_MEMORY is None
+    assert agent._TASK_LEASE_HEARTBEAT is None
 
 
 @pytest.mark.asyncio
@@ -2379,7 +2466,7 @@ async def test_local_model_switch_preserves_thinking_and_hardware_settings(
         constructor_calls.append((model, kwargs, agent.HARDWARE_ACCELERATION_MODE))
         return model_instances.setdefault(model, FakeModel(model))
 
-    monkeypatch.setattr(agent, "fetch_local_chat_models", lambda: model_names)
+    monkeypatch.setattr(model_selection, "fetch_local_chat_models", lambda: model_names)
     monkeypatch.setattr(
         agent,
         "inspect_model_capabilities",
@@ -2389,6 +2476,7 @@ async def test_local_model_switch_preserves_thinking_and_hardware_settings(
     monkeypatch.setattr(agent, "THINKING_EFFORT_DEFAULT", "high")
     monkeypatch.setattr(agent, "HARDWARE_ACCELERATION_MODE", "cpu")
     monkeypatch.setattr(agent, "_make_chat_model", make_model)
+    monkeypatch.setattr(model_selection, "_make_chat_model", make_model)
     monkeypatch.setattr(
         agent,
         "prompt_user_input",
@@ -2502,7 +2590,7 @@ async def test_local_workspace_image_requires_vision_and_explicit_approval(
         ]
     )
     monkeypatch.setattr(
-        agent,
+        tool_display,
         "captured_image_message",
         lambda reference: (
             image_attachment if reference.startswith("workspace-image:") else None
@@ -2613,11 +2701,13 @@ async def test_online_runtime_never_invokes_local_microphone_tool(
             return "3"
         return ""
 
-    monkeypatch.setattr(agent, "check_internet_connection", lambda *_args: True)
-    monkeypatch.setattr(agent, "getpass", lambda _prompt: "session-key")
-    monkeypatch.setattr(agent, "_make_online_chat_model", lambda *args: model)
     monkeypatch.setattr(
-        agent,
+        model_selection, "check_internet_connection", lambda *_args: True
+    )
+    monkeypatch.setattr(model_selection, "getpass", lambda _prompt: "session-key")
+    monkeypatch.setattr(model_selection, "_make_online_chat_model", lambda *args: model)
+    monkeypatch.setattr(
+        model_selection,
         "public_only_sync_client",
         lambda **kwargs: FakeModelListClient(),
     )
@@ -2865,7 +2955,7 @@ async def test_local_tool_incompatibility_fallback_preserves_task_context_and_po
 
     fallback = CompatibleFallback()
     monkeypatch.setattr(
-        agent,
+        model_selection,
         "fetch_local_chat_models",
         lambda: ["primary-model", "fallback-model"],
     )
@@ -2882,13 +2972,12 @@ async def test_local_tool_incompatibility_fallback_preserves_task_context_and_po
             "context_window": 4096 if name == "fallback-model" else 2048,
         },
     )
-    monkeypatch.setattr(
-        agent,
-        "_make_chat_model",
-        lambda name, **kwargs: (
-            IncompatiblePrimary() if name == "primary-model" else fallback
-        ),
-    )
+
+    def make_fallback_model(name, **kwargs):
+        return IncompatiblePrimary() if name == "primary-model" else fallback
+
+    monkeypatch.setattr(agent, "_make_chat_model", make_fallback_model)
+    monkeypatch.setattr(model_selection, "_make_chat_model", make_fallback_model)
     monkeypatch.setattr(
         agent,
         "prompt_user_input",
@@ -2944,7 +3033,7 @@ async def test_local_runtime_does_not_fallback_on_unrecognized_request_failure(
 
     primary = FailingPrimary()
     monkeypatch.setattr(
-        agent,
+        model_selection,
         "fetch_local_chat_models",
         lambda: ["primary-model", "fallback-model"],
     )
@@ -3230,7 +3319,7 @@ async def test_online_model_applies_consented_tool_limits(
 ):
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
     monkeypatch.setattr(agent, "APP_CONFIG", {})
-    monkeypatch.setattr(agent, "fetch_local_chat_models", list)
+    monkeypatch.setattr(model_selection, "fetch_local_chat_models", list)
     monkeypatch.setattr(agent, "MAX_TOOL_ITERATIONS", round_limit)
     monkeypatch.setattr(agent, "MAX_TOOL_CALLS", call_limit)
     selection = {
@@ -3530,7 +3619,8 @@ async def test_ready_summary_is_compact_and_shows_local_hardware_only_for_local(
     assert "local-model (1.00 GiB VRAM)" in rendered
     assert hardware_status.call_count == 2
     assert all(
-        call.args[0] == agent.OLLAMA_BASE_URL for call in hardware_status.call_args_list
+        call.args[0] == model_selection.OLLAMA_BASE_URL
+        for call in hardware_status.call_args_list
     )
 
 
@@ -3545,7 +3635,7 @@ async def test_maintenance_data_reset_clears_active_rag_and_session_context(
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     memory.save_message("session", "human", "previous session content")
     inputs = iter(["data reset", "3", "RESET", "done"])
-    monkeypatch.setattr(runtime, "RAG_INDEX_PATH", str(index_path))
+    monkeypatch.setattr(memory_context, "RAG_INDEX_PATH", str(index_path))
     monkeypatch.setattr(runtime.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(inputs))
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
@@ -3944,16 +4034,21 @@ async def test_online_cli_uses_mock_http_boundary_without_unapproved_history(
     thread.start()
     endpoint = f"http://127.0.0.1:{server.server_port}/v1"
     if post_status == "timeout":
-        monkeypatch.setattr(agent, "ONLINE_REQUEST_TIMEOUT", 0.1)
-        monkeypatch.setattr(agent, "ONLINE_MAX_RETRIES", 0)
+        monkeypatch.setattr(model_selection, "ONLINE_REQUEST_TIMEOUT", 0.1)
+        monkeypatch.setattr(model_selection, "ONLINE_MAX_RETRIES", 0)
     monkeypatch.setattr(agent, "MAX_OUTPUT_TOKENS", 37)
+    monkeypatch.setattr(model_selection, "MAX_OUTPUT_TOKENS", 37)
     monkeypatch.setattr(
         agent,
         "APP_CONFIG",
         {"online_base_url": endpoint},
     )
-    monkeypatch.setattr(agent, "check_internet_connection", lambda *_args: True)
-    monkeypatch.setattr(agent, "getpass", lambda _prompt: "test-session-api-key")
+    monkeypatch.setattr(
+        model_selection, "check_internet_connection", lambda *_args: True
+    )
+    monkeypatch.setattr(
+        model_selection, "getpass", lambda _prompt: "test-session-api-key"
+    )
     monkeypatch.setattr(
         agent,
         "prompt_user_input",
@@ -4380,7 +4475,7 @@ async def test_concurrent_tool_execution_with_edge_case_exceptions():
     assert isinstance(results[1], ValueError)
 
 
-@patch("private_agent.agent.runtime.ChatOllama")
+@patch("private_agent.agent.model_selection.ChatOllama")
 def test_model_fallback_on_tool_incompatibility(mock_chat_ollama):
     mock_primary = MagicMock()
     mock_primary.bind_tools.side_effect = Exception("Model does not support tools")
@@ -4392,7 +4487,7 @@ def test_model_fallback_on_tool_incompatibility(mock_chat_ollama):
     assert model is not None
 
 
-@patch("private_agent.agent.runtime.ChatOllama")
+@patch("private_agent.agent.model_selection.ChatOllama")
 def test_model_fallback_total_failure_edge_case(mock_chat_ollama):
     mock_primary = MagicMock()
     mock_primary.bind_tools.side_effect = Exception("Primary fails")
@@ -4408,7 +4503,7 @@ def test_model_fallback_total_failure_edge_case(mock_chat_ollama):
         pass
 
 
-@patch("private_agent.agent.runtime.ChatOllama")
+@patch("private_agent.agent.model_selection.ChatOllama")
 def test_model_fallback_does_not_hide_unrecognized_configuration_error(
     mock_chat_ollama,
 ):
@@ -4417,11 +4512,11 @@ def test_model_fallback_does_not_hide_unrecognized_configuration_error(
     mock_chat_ollama.assert_called_once()
 
 
-@patch("private_agent.agent.runtime.ollama.Client")
+@patch("private_agent.agent.model_selection.ollama.Client")
 def test_model_capabilities_are_read_from_ollama_metadata(mock_client):
     from private_agent.agent import runtime as agent
 
-    agent._MODEL_CAPABILITIES_CACHE.clear()
+    model_selection._MODEL_CAPABILITIES_CACHE.clear()
 
     mock_client.return_value.show.return_value = {
         "capabilities": ["completion", "tools", "vision", "thinking"],
@@ -4438,7 +4533,7 @@ def test_model_capabilities_are_read_from_ollama_metadata(mock_client):
     cached_capabilities = agent.inspect_model_capabilities("local-model")
     assert cached_capabilities["tools"] is True
     mock_client.assert_called_once()
-    agent._MODEL_CAPABILITIES_CACHE.clear()
+    model_selection._MODEL_CAPABILITIES_CACHE.clear()
 
 
 @pytest.mark.asyncio

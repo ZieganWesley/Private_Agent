@@ -58,8 +58,10 @@ def test_local_chat_model_applies_configured_acceleration_mode():
         ("cpu", {"num_gpu": 0}),
     ):
         with (
-            patch("private_agent.agent.runtime.HARDWARE_ACCELERATION_MODE", mode),
-            patch("private_agent.agent.runtime.ChatOllama") as chat_model,
+            patch(
+                "private_agent.agent.model_selection.HARDWARE_ACCELERATION_MODE", mode
+            ),
+            patch("private_agent.agent.model_selection.ChatOllama") as chat_model,
         ):
             agent._make_chat_model(
                 "test-model",
@@ -80,8 +82,8 @@ def test_local_chat_model_applies_configured_acceleration_mode():
         )
 
     with (
-        patch("private_agent.agent.runtime.HARDWARE_ACCELERATION_MODE", "auto"),
-        patch("private_agent.agent.runtime.ChatOllama") as chat_model,
+        patch("private_agent.agent.model_selection.HARDWARE_ACCELERATION_MODE", "auto"),
+        patch("private_agent.agent.model_selection.ChatOllama") as chat_model,
     ):
         agent._make_chat_model(
             "test-model",

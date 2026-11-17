@@ -7,7 +7,7 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 
-from private_agent.agent import interactive
+from private_agent.agent import interactive, learning, memory_context, task_commands
 from private_agent.agent.interactive import (
     SLASH_COMMANDS,
     AgentCompleter,
@@ -199,8 +199,8 @@ async def test_rag_maintenance_reindexes_and_returns_active_vectorstore(
     source_path.mkdir()
     refreshed_store = object()
     initialize = MagicMock(return_value=refreshed_store)
-    monkeypatch.setattr(runtime, "RAG_INDEX_PATH", str(index_path))
-    monkeypatch.setattr(runtime, "initialize_knowledge_base", initialize)
+    monkeypatch.setattr(memory_context, "RAG_INDEX_PATH", str(index_path))
+    monkeypatch.setattr(memory_context, "initialize_knowledge_base", initialize)
     commands = iter(["rag reindex", "reindex rag", "done"])
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(commands))
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
@@ -227,8 +227,8 @@ async def test_rag_maintenance_declined_reset_preserves_active_vectorstore(
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     active_store = object()
     reset = MagicMock()
-    monkeypatch.setattr(runtime, "RAG_INDEX_PATH", str(tmp_path / "rag-index"))
-    monkeypatch.setattr(runtime, "reset_knowledge_base", reset)
+    monkeypatch.setattr(memory_context, "RAG_INDEX_PATH", str(tmp_path / "rag-index"))
+    monkeypatch.setattr(memory_context, "reset_knowledge_base", reset)
     commands = iter(["rag reset", "no", "done"])
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(commands))
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
@@ -286,7 +286,7 @@ async def test_rag_maintenance_lists_tracked_sources(tmp_path, monkeypatch):
     )
     printed = []
     commands = iter(["rag status", "rag list", "done"])
-    monkeypatch.setattr(runtime, "RAG_INDEX_PATH", str(index_path))
+    monkeypatch.setattr(memory_context, "RAG_INDEX_PATH", str(index_path))
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(commands))
     monkeypatch.setattr(
         runtime.console,
@@ -596,13 +596,13 @@ def test_learning_maintenance_requires_explicit_consent_and_can_correct_items(
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(commands))
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
 
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         "learn add coding Prefer small isolated changes",
     )
     item = memory.list_learned_items()[0]
     assert item["statement"] == "Prefer small isolated changes"
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         f"learn correct {item['item_id']} global Prefer small, tested changes",
     )
@@ -675,7 +675,7 @@ def test_task_derived_learning_requires_verified_validation_preview_and_save(
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runtime.sys, "stdin", SimpleNamespace(isatty=lambda: True))
 
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         f"learn propose {completed['task_id']} coding Prefer focused tests first",
     )
@@ -692,7 +692,7 @@ def test_task_derived_learning_requires_verified_validation_preview_and_save(
         "input",
         lambda _prompt: pytest.fail("unvalidated task must not prompt for learning"),
     )
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         f"learn propose {incomplete['task_id']} coding Prefer this approach",
     )
@@ -703,28 +703,28 @@ def test_task_derived_learning_requires_verified_validation_preview_and_save(
         validated=True,
         skip_all=True,
     )
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         f"learn propose {skipped_only['task_id']} coding Learn from skipped work",
     )
     assert len(memory.list_learned_items()) == 1
 
     memory.set_learning_enabled(False)
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         f"learn propose {completed['task_id']} coding Do not save while disabled",
     )
     assert len(memory.list_learned_items()) == 1
     memory.set_learning_enabled(True)
 
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         f"learn propose {completed['task_id']} global My email is person@example.com",
     )
     assert len(memory.list_learned_items()) == 1
 
     monkeypatch.setattr(runtime.sys, "stdin", SimpleNamespace(isatty=lambda: False))
-    runtime._run_learning_maintenance(
+    learning._run_learning_maintenance(
         memory,
         f"learn propose {completed['task_id']} coding Require interactive consent",
     )
@@ -779,7 +779,7 @@ async def test_model_learning_suggestion_is_local_verified_and_user_confirmed(
 
     memory.set_learning_enabled(False)
     disabled_llm = SimpleNamespace(ainvoke=AsyncMock())
-    await runtime._run_learning_suggestion(
+    await learning._run_learning_suggestion(
         memory,
         f"learn suggest {task['task_id']} coding",
         disabled_llm,
@@ -788,7 +788,7 @@ async def test_model_learning_suggestion_is_local_verified_and_user_confirmed(
     disabled_llm.ainvoke.assert_not_awaited()
     memory.set_learning_enabled(True)
 
-    await runtime._run_learning_suggestion(
+    await learning._run_learning_suggestion(
         memory,
         f"learn suggest {task['task_id']} coding",
         llm,
@@ -808,7 +808,7 @@ async def test_model_learning_suggestion_is_local_verified_and_user_confirmed(
     assert learned[0]["provenance"] == "task-proposed"
 
     online_llm = SimpleNamespace(ainvoke=AsyncMock())
-    await runtime._run_learning_suggestion(
+    await learning._run_learning_suggestion(
         memory,
         f"learn suggest {task['task_id']} coding",
         online_llm,
@@ -821,7 +821,7 @@ async def test_model_learning_suggestion_is_local_verified_and_user_confirmed(
             return_value=AIMessage(content="Contact person@example.com for review.")
         )
     )
-    await runtime._run_learning_suggestion(
+    await learning._run_learning_suggestion(
         memory,
         f"learn suggest {task['task_id']} coding",
         unsafe_llm,
@@ -843,9 +843,9 @@ def test_startup_memory_budget_reports_omitted_episode_counts(
             f"session-{index}",
             f"Episode {index}: " + ("project implementation detail " * 45),
         )
-    monkeypatch.setattr(runtime, "MAX_MEMORY_CONTEXT_TOKENS", 180)
+    monkeypatch.setattr(memory_context, "MAX_MEMORY_CONTEXT_TOKENS", 180)
 
-    context = runtime._build_startup_memory_context(memory, None)
+    context = memory_context._build_startup_memory_context(memory, None)
 
     assert runtime._token_count(context) <= 180
     assert "[Memory context budget: omitted" in context
@@ -857,7 +857,6 @@ def test_relevant_episode_context_reports_omitted_matches(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "episode-retrieval-budget.sqlite"))
     for index in range(12):
@@ -865,9 +864,9 @@ def test_relevant_episode_context_reports_omitted_matches(
             f"session-{index}",
             f"Distinctive nebula parser token {index} workflow.",
         )
-    monkeypatch.setattr(runtime, "MAX_RELEVANT_EPISODES", 2)
+    monkeypatch.setattr(memory_context, "MAX_RELEVANT_EPISODES", 2)
 
-    context = runtime._build_relevant_episode_context(
+    context = memory_context._build_relevant_episode_context(
         memory,
         "Distinctive nebula parser",
     )
@@ -878,10 +877,9 @@ def test_relevant_episode_context_reports_omitted_matches(
 
 
 def test_task_age_label_is_bounded_and_handles_invalid_timestamps():
-    from private_agent.agent import runtime
 
-    assert runtime._task_age_label("not-a-date") == "age unavailable"
-    assert runtime._task_age_label("2000-01-01 00:00:00").endswith("d old")
+    assert task_commands._task_age_label("not-a-date") == "age unavailable"
+    assert task_commands._task_age_label("2000-01-01 00:00:00").endswith("d old")
 
 
 def test_learned_prompt_context_respects_scope_and_global_opt_out(tmp_path):
@@ -1287,7 +1285,7 @@ def test_skill_registration_failure_rolls_back_created_skill_file(
 
     monkeypatch.setattr(memory, "register_skill_file", fail_registration)
 
-    runtime._offer_skill_capture(memory, completed, "session", str(skills_directory))
+    learning._offer_skill_capture(memory, completed, "session", str(skills_directory))
 
     assert list(skills_directory.iterdir()) == []
     assert memory.count_registered_skill_files() == 0
@@ -1330,7 +1328,7 @@ def test_single_step_task_does_not_offer_skill_capture(tmp_path, monkeypatch):
         lambda _prompt: pytest.fail("single-step task must not request skill consent"),
     )
 
-    runtime._offer_skill_capture(
+    learning._offer_skill_capture(
         memory,
         completed,
         "session",
@@ -1383,7 +1381,7 @@ def test_skill_capture_needs_validation_and_non_five_rating_stays_feedback_only(
     rated = complete_task("Rated research task", validated=True)
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: "4")
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
-    runtime._offer_skill_capture(memory, rated, "session", str(tmp_path / "skills"))
+    learning._offer_skill_capture(memory, rated, "session", str(tmp_path / "skills"))
     assert memory.get_task(rated["task_id"])["user_rating"] == 4
     assert not (tmp_path / "skills").exists()
 
@@ -1393,7 +1391,7 @@ def test_skill_capture_needs_validation_and_non_five_rating_stays_feedback_only(
         "input",
         lambda _prompt: pytest.fail("skill feedback requires task validation"),
     )
-    runtime._offer_skill_capture(
+    learning._offer_skill_capture(
         memory, unvalidated, "session", str(tmp_path / "skills")
     )
     assert memory.get_task(unvalidated["task_id"])["user_rating"] is None
@@ -1515,9 +1513,8 @@ async def test_code_rag_retrieval_also_searches_and_deduplicates_local_guidance(
 
 
 def test_skill_capture_preview_respects_configured_budget(monkeypatch):
-    from private_agent.agent import runtime
 
-    monkeypatch.setattr(runtime, "MAX_SKILL_PREVIEW_CHARS", 512)
+    monkeypatch.setattr(learning, "MAX_SKILL_PREVIEW_CHARS", 512)
     task = {
         "task_id": "task-id",
         "task_type": "coding",
@@ -1535,11 +1532,10 @@ def test_skill_capture_preview_respects_configured_budget(monkeypatch):
     }
 
     with pytest.raises(ValueError, match="preview exceeds the configured"):
-        runtime._build_skill_capture_draft(task, "parser-skill")
+        learning._build_skill_capture_draft(task, "parser-skill")
 
 
 def test_skill_capture_redacts_credentials_contact_details_and_one_off_paths():
-    from private_agent.agent import runtime
 
     source = (
         "token=secret-value contact=user@example.com phone=(415) 555-0134 "
@@ -1547,7 +1543,7 @@ def test_skill_capture_redacts_credentials_contact_details_and_one_off_paths():
         "relative=../private/config Windows=C:\\Users\\Alice\\project "
         "source=https://example.com/docs"
     )
-    redacted = runtime._skill_safe_text(source)
+    redacted = learning._skill_safe_text(source)
 
     for sensitive in (
         "secret-value",
@@ -1588,7 +1584,6 @@ def test_planning_search_citations_only_keep_result_titles_and_https_urls():
 def test_startup_memory_context_includes_bounded_local_episode_and_skill(
     tmp_path,
 ):
-    from private_agent.agent import runtime
 
     skills_root = tmp_path / "skills"
     skills_root.mkdir()
@@ -1630,7 +1625,7 @@ def test_startup_memory_context_includes_bounded_local_episode_and_skill(
         "skill-session", str(skill_path), "Research with source verification"
     )
 
-    context = runtime._build_startup_memory_context(memory, str(skills_root))
+    context = memory_context._build_startup_memory_context(memory, str(skills_root))
     episodes = memory.get_recent_episodic_memories(5)
     skills = memory.get_recent_skill_files(5)
 
