@@ -1,18 +1,21 @@
 # Code Review: Known Issues, Gaps, Plans and Fix Roadmap
 
 Review date: 2026-10-28
+Re-verified: 2026-11-17, against `main` at commit `2bc0b4c`
 
 ## How this was checked
 
-- **Tests:** 499 passed, 10 failed, 1 skipped (about 35s). `pytest` is not
-  installed in `.venv`, so the suite was run through `uv` with `PYTHONPATH=src`.
-- **Lint:** `ruff` 0.16.10 (the version pinned in `pyproject.toml`). The repo
-  has no ruff config, so ruff's defaults were used, plus extra rule sets where
-  noted.
-- **Line numbers** in this file were taken before the code was reformatted
-  with `ruff format`, so some (mostly in `runtime.py`) may now point a few
-  dozen lines early. Function and constant names are still correct; search for
-  those if a line number does not match.
+- **Tests:** 627 passed, 1 failed, 12 skipped (about 24 s) in a fresh `.venv`
+  installed with `uv pip install -e ".[dev]"` on Python 3.12. The only failure
+  is
+  `tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it`.
+- **Lint:** `ruff` 0.16.10 with the repo's own `[tool.ruff]` config, which now
+  exists. `ruff check .` and `ruff format --check .` both pass.
+- **Status markers:** items re-checked on 2026-11-17 are labelled **Fixed:** or
+  **Partly fixed:**. Unlabelled items were still true on that date unless a note
+  says otherwise.
+- **Line numbers** are from the review date and may have drifted; search for
+  function and constant names if a line number does not match.
 
 ## Strengths
 
@@ -31,11 +34,12 @@ Review date: 2026-10-28
 
 ### A1. Very large modules (highest priority)
 
-- `src/private_agent/agent/runtime.py` is 6,445 lines.
-  `_run_agent_cli_session` (lines 3594–6227) is about 2,600 lines in one
-  function.
-- `src/private_agent/database/memory.py` is 2,929 lines in one
+- `src/private_agent/agent/runtime.py` is 6,507 lines.
+  `_run_agent_cli_session` is still about 2,600 lines in one function.
+- `src/private_agent/database/memory.py` is 2,926 lines in one
   `PersistentMemory` class.
+- The ruff complexity counts below were measured at review time and were not
+  re-measured; the module sizes are unchanged in shape.
 - Ruff complexity checks flag:
   - 38 overly complex functions (`C901`)
   - 22 functions with too many branches (`PLR0912`)
@@ -51,9 +55,9 @@ class for each table.
 - `config.py` reads `~/.private_agent.conf` and builds `APP_CONFIG` as soon as
   it is imported, then exposes dozens of module-level constants. `runtime.py`
   imports about 50 of them.
-- On import, `config.py` also sets `HF_HUB_OFFLINE` and `TRANSFORMERS_OFFLINE`,
-  which affects anything that imports the package.
-- Mutable state is kept in module globals: `global` appears 17 times across
+- **Fixed:** the `HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` environment
+  variables are now set during startup instead of at import (commit `2fec457`).
+- Mutable state is kept in module globals: `global` appears 16 times across
   `tools/__init__.py`, `tools/_task_state.py`, `tools/_sqlite_state.py`,
   `tools/media.py` and `run_logging.py`.
 
@@ -62,64 +66,45 @@ model), loaded once at startup and passed to the code that needs it.
 
 ### A3. Test-only logic inside production code
 
-- `src/private_agent/config.py:384`: `sys_modules_safe()` checks whether
-  `"pytest" in sys.modules` and changes behaviour if so.
-
-**Standard practice:** handle this in tests with fixtures or monkeypatching.
+**Fixed.** `sys_modules_safe()` and its `"pytest" in sys.modules` check were
+removed, so behaviour no longer depends on the test runner.
 
 ### A4. The test environment is not standard
 
-- `pytest` is listed under the `dev` extras but is not installed in `.venv`.
-- Plain `pytest` fails with `ModuleNotFoundError: No module named
-  'private_agent'` because `[tool.pytest.ini_options] pythonpath = ["."]`
-  should be `["src"]`.
-- `.vscode/settings.json` turns pytest off and enables unittest with the
-  pattern `*test.py`, which does not match the `test_*.py` files.
-- The 10 failing tests:
+**Fixed.** `pytest` installs from the `dev` extras, the pytest `pythonpath` is
+`["src", "."]`, `.vscode/settings.json` enables pytest, and tests that need a
+missing prerequisite (`bwrap`, `prlimit`, media libraries) now skip instead of
+failing (`pytest.mark.skipif` / `pytest.importorskip`). All eight failures from
+the review are gone.
 
-  | Test | Cause |
-  |---|---|
-  | `tests/unit/test_tools.py::test_shell_command_tool` | Environmental: `bwrap` is not installed |
-  | `tests/unit/test_tools.py::test_workspace_image_input_validates_path_and_size` | Environmental: `media` extras are not installed |
-  | `tests/unit/test_code_tasks.py::test_code_workspace_isolated_git_and_test_gated_checkpoint` | Git-related, possibly a real bug (not traced) |
-  | `tests/unit/test_code_tasks.py::test_existing_code_workspace_copy_excludes_git_secrets_and_caches` | Git-related, possibly a real bug (not traced) |
-  | `tests/unit/test_code_tasks.py::test_project_runner_rejects_ignored_test_files` | Git-related, possibly a real bug: `RuntimeError: Could not determine whether project test 'ignored_test.py' is ignored` |
-  | `tests/integration/test_agent_runtime.py::test_repeated_cli_runs_remove_mcp_tools_and_sandboxes` | Not traced |
-  | `tests/integration/test_agent_runtime.py::test_mcp_startup_failure_does_not_skip_other_servers_or_shutdown` | Not traced |
-  | `tests/integration/test_agent_runtime.py::test_cli_code_task_keeps_failed_final_verification_visible` | Not traced |
-  | `tests/integration/test_agent_runtime.py::test_cli_code_task_retries_checkpoint_after_test_failure` | Not traced |
-  | `tests/integration/test_agent_runtime.py::test_cli_code_task_workspace_creation_failure_keeps_session_available` | Not traced |
+The suite now reports 627 passed, 1 failed and 12 skipped. The single failure
+is not one of the ten listed at review time:
 
-**Standard practice:** tests that need a missing prerequisite (`bwrap`,
-`prlimit`, media libraries) should skip, using `pytest.mark.skipif` or
-`pytest.importorskip`, not fail.
+| Test | Cause |
+|---|---|
+| `tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it` | Not traced yet (step 1.3) |
 
 ### A5. Lint, format and typing are not enforced
 
-- With ruff's default rules: 378 lines over 88 characters (`E501`).
-- `ruff format --check` would reformat 51 of 74 files. (Update: since the
-  review, the code has been reformatted and all 74 files now pass; the lint
-  warnings below and the missing ruff config remain.)
-- With extra rule sets turned on, there are 608 warnings. The main ones:
+**Partly fixed.** The repo now has a `[tool.ruff]` config (`E`, `F`, `W`, `I`,
+`B`, `UP`, `SIM`) and a `.pre-commit-config.yaml` running `ruff-check` and
+`ruff-format`. The source was reformatted and auto-fixed, so `ruff check .` and
+`ruff format --check .` both pass on 80 files. The import-order,
+`typing`-modernisation, nested-`with`, closure (`B023`) and `subprocess`
+(`PLW1510`) counts from the review no longer apply.
 
-  | Count | Rule | Issue |
-  |---|---|---|
-  | 93 | `BLE001` | Blind `except Exception` (103 broad catches in total) |
-  | 64 | `I001` | Unsorted imports |
-  | 55 | `UP006` | Old-style `typing` annotations (`List`, `Dict`) |
-  | 41 | `SIM117` | Nested `with` statements that can be combined |
-  | 30 | `UP035` | Deprecated `typing` imports |
-  | 19 | `ISC004` | Implicit string concatenation inside collection literals |
-  | 7 | `B023` | Loop variable captured in a closure (a real bug class) |
-  | 3 | `PLW1510` | `subprocess.run` without `check` |
+Still open:
 
-- There is no `[tool.ruff]` or `[tool.mypy]` config, no pre-commit hooks, and
-  no CI workflow under `.github/workflows/`.
+- `BLE001` is not enabled and 105 blind `except Exception` blocks remain
+  (step 5.3).
+- There is no `[tool.mypy]` config or other type checking.
+- There is still no CI workflow under `.github/workflows/` (step 1.5).
 
 ### A6. Logging
 
-- There are about 720 `print()` / `console.print` calls but only 8 uses of the
-  `logging` module. User output and diagnostics are mixed together, which
+- There are 369 `print()` / `console.print` calls and 14 uses of the `logging`
+  module (about 720 and 8 at review time). User output and diagnostics are
+  mixed together, which
   makes problems hard to trace afterwards.
 
 **Standard practice:** use `rich` for user-facing output and the `logging`
@@ -137,16 +122,17 @@ module (with module-level loggers) for diagnostics.
 
 ### A8. Smaller issues
 
-- `agent/__init__.py` re-exports every name in `runtime.py`, including private
-  ones, so there is no real public API.
-- The constant name `VISIBILE_REASONING` (`config.py:212`, `config.py:506`) is
-  misspelled. A correct alias exists, but the typo is still used.
-- `main.py` edits `sys.path` by hand, which is not needed once the package is
-  installed.
-- Dependencies are kept in both `requirements.txt` and `pyproject.toml`,
-  synced by `scripts/sync_requirements.py`, so there are two sources of truth.
-- `.github/copilot-instructions.md` still points to `IMPLEMENTATION_ROADMAP.md`
-  and `structured implementation.md`, which are deleted in the working tree.
+- `agent/__init__.py` still re-exports every name in `runtime.py` through a
+  generated `__all__`, including private ones, so there is no real public API
+  (step 4.6).
+- **Fixed:** the `VISIBILE_REASONING` typo. The runtime uses
+  `VISIBLE_REASONING`; the misspelling survives only as a backward-compatible
+  config-key mapping in `config.py`.
+- **Fixed:** `main.py` was removed, along with its hand-edited `sys.path`.
+- **Fixed:** `requirements.txt` and `scripts/sync_requirements.py` were removed,
+  so `pyproject.toml` is the only dependency source.
+- **Fixed:** `.github/copilot-instructions.md` no longer points at the deleted
+  roadmap files.
 
 
 ---
@@ -224,14 +210,10 @@ through LangChain's `RunnableConfig` or injected tool arguments.
 
 #### B4. The risky-command check matches text fragments
 
-- `evaluate_shell_command` in `sandbox/linux.py` looks for substrings such as
-  `"rm -r"` and `"/usr"`.
-- `echo /usr` is flagged as risky, but `rm -fr` is not.
-- This only adds a warning to the approval prompt, and Bubblewrap is the real
-  protection, so it is not a security hole. It does give a misleading signal.
-
-**Standard practice:** parse the command with `shlex` and check it against an
-allow-list or deny-list of programs and flags.
+**Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead
+of matching substrings (commit `9726bd5`), and `tests/unit/test_shell_risk.py`
+covers the cases above. The check still only adds a warning to the approval
+prompt; Bubblewrap remains the real protection.
 
 #### B5. The workspace root is decided at import time
 
@@ -344,10 +326,11 @@ commands on macOS (Seatbelt) and Linux, and Codex also on Windows.
 **C5. A limited shell tool.**
 - The default timeout is 30 seconds (`config.py:698`), too short for many
   builds and test runs.
-- Commands are run with `shell=False` from a single string, so pipes, `&&`
-  and redirects probably do not work (not confirmed).
-- It cannot run background processes such as dev servers or watchers, and the
-  shell does not keep state between calls.
+- **Fixed:** commands with pipes, `&&`, `||`, redirects and `cd` now run
+  through `/bin/bash -c` inside the sandbox (commit `3296c63`).
+- It still cannot run background processes such as dev servers or watchers, the
+  timeout cannot be set per call, and the shell does not keep state between
+  calls.
 
 #### Medium impact
 
@@ -1359,6 +1342,12 @@ back to the same choice prompt.
 | I1h | `scripts/benchmark_rag.py` | The RAG benchmark requires Ollama | The benchmark cannot run with other providers |
 | I1i | `config.py:37` | One `ollama_base_url`; Ollama is always probed first and listed first | Cannot list two Ollama servers; Ollama always appears as option 1 |
 
+**Fixed:** I1b, I1c and I1d. `agent/model_capabilities.py` (commit `7ff2016`)
+reads capabilities from llama.cpp `/props`, LM Studio `/api/v1/models` and the
+`/v1/models` entries many servers extend, merges per-endpoint config overrides,
+and the tool-capable model fallback now applies to every provider. I1l is still
+true: embedding-model filtering only runs for Ollama.
+
 **Discovery and selection gaps:**
 
 - **I1j. Only running servers are found.** Discovery detects servers that
@@ -1554,26 +1543,12 @@ background while the user picks a provider.
 
 ### J3. Tokenizer downloaded at run time
 
-`agent/prompts.py:41` loads `tiktoken.get_encoding("cl100k_base")`. tiktoken
-does not ship this vocabulary; on first use it downloads 1.7 MB from
-`openaipublic.blob.core.windows.net` and caches it in the system temp folder
-(`/tmp/data-gym-cache`). On this machine `/tmp` is a RAM disk (`tmpfs`), so the
-cache is lost on every reboot.
-
-- **Performance:** the first token count of each run after a reboot took about
-  0.44 s, mostly the download.
-- **Privacy:** an outbound request to a Microsoft-hosted server, without
-  consent, in a program whose goal is "nothing leaves the machine". The code
-  already forces `HF_HUB_OFFLINE` and `TRANSFORMERS_OFFLINE`, but not this.
-- **Offline:** without internet, the download fails and every count silently
-  falls back to `len(text) // 4`, which can be off by a large margin. That
-  affects context trimming and compaction.
-
-**Fix:** ship the vocabulary file with the package (or download it once at
-install time with consent), set `TIKTOKEN_CACHE_DIR` to a folder under
-`~/.private_agent/`, and log a visible warning when falling back. Counting
-tokens with the selected model's own tokenizer, where the provider offers it,
-would also be more accurate for local models.
+**Fixed.** The `cl100k_base` vocabulary ships in
+`src/private_agent/resources/tiktoken/`, and `agent/prompts.py` points
+`TIKTOKEN_CACHE_DIR` at it before loading the encoding (commit `4eddf57`), so
+there is no download, no temp-folder cache to lose, and no outbound request.
+The silent character-estimate fallback and the model-specific tokenizer
+suggestion remain open (step 14.8).
 
 ### J4. Tool definitions sent with every request
 
@@ -1671,17 +1646,16 @@ fits the core-only install plan (step 11.6).
 
 ### J10. Database settings and blocking calls
 
-- SQLite uses the default `delete` journal mode with `synchronous=FULL`.
-  Single writes are fast (0.2 ms), but WAL mode lets reads and writes overlap,
-  which helps when tool calls run in parallel. WAL with `synchronous=NORMAL`
-  took 0.1 ms per write.
+- **Fixed:** SQLite now uses WAL mode with `synchronous=NORMAL` (commit
+  `47d5547`), so reads and writes can overlap. A write took 0.1 ms in WAL
+  mode.
 - The async runtime makes about 75 direct `memory.*` calls on the event loop,
   and only 1 goes through `asyncio.to_thread`. Each is fast, but the slower
   ones (episode search, task listing, retention pruning) block streaming and
   the live overlay while they run.
 
-**Fix:** turn on WAL mode (and keep `busy_timeout`), and move the slower
-queries off the event loop. This fits step 4.7.
+**Remaining:** move the slower queries off the event loop (step 13.8). WAL
+mode and `busy_timeout` are done.
 
 ---
 
@@ -1693,14 +1667,14 @@ defined twice, and values that should stay in code on purpose.
 
 ### K1. Read from config but missing from the defaults
 
-These keys work if set by hand, but they are not in `DEFAULT_CONFIG`, so they
-never appear in the generated `~/.private_agent.conf` or the README.
+**Fixed** (commit `fc6bfde`). These keys are now in `DEFAULT_CONFIG`, so they
+appear in the generated `~/.private_agent.conf` and in the README.
 
-| Key | Default | Where |
-|---|---|---|
-| `media.max_decoded_image_pixels` | 20,000,000 | `config.py:706` |
-| `media.max_media_file_bytes` | 25 MB | `config.py:709` |
-| `media.max_video_seconds` | 120 | `config.py:713` |
+| Key | Default |
+|---|---|
+| `media.max_decoded_image_pixels` | 20,000,000 |
+| `media.max_media_file_bytes` | 25 MB |
+| `media.max_video_seconds` | 120 |
 
 ### K2. Sandbox resource limits
 
@@ -1774,7 +1748,7 @@ swappable, for example for a self-hosted SearXNG or Nominatim.
 
 | Value | Where |
 |---|---|
-| Config file always `~/.private_agent.conf`; no environment variable or `--config` flag | `config.py:13` |
+| ~~Config file always `~/.private_agent.conf`; no environment variable or `--config` flag~~ **Fixed:** `PRIVATE_AGENT_CONFIG` and `--config` work (commit `f8f0256`) | `config.py:13` |
 | `SNAPSHOT_DIR` resolved against the current folder at import time, not the workspace (it is exported but not used elsewhere) | `sandbox/linux.py:8` |
 
 ### K8. Plan limits defined twice
@@ -1813,7 +1787,7 @@ allowing a subset of file types.
 
 ## Part L: Fix Roadmap
 
-The steps are grouped into phases by topic (Phases 1–14 below). **Do not work
+The steps are grouped into phases by topic (Phases 1–15 below). **Do not work
 through the phases in number order.** Follow the implementation order in
 section L1, which runs from the easiest step to the hardest while respecting
 what each step needs first.
@@ -1835,7 +1809,7 @@ what each step needs first.
 - Every step needs step 1.1 (a working `pytest`), which is not repeated in the
   "Needs first" column.
 - Struck-out steps (6.14, 6.15, 8.1, 8.9) were replaced by other steps and are
-  left out. 140 steps remain.
+  left out. Stage 1 is complete; the tables below list the remaining work.
 
 **Summary:**
 
@@ -1846,6 +1820,13 @@ what each step needs first.
 | 3: Medium | 36 | The remaining test failures and CI, the `Settings` model and everything configurable, logging, search and RAG improvements, lazy imports |
 | 4: Hard | 25 | `ToolContext`, splitting commands and memory, async tools, the sandbox interface, provider adapters |
 | 5: Hardest | 42 | The shared agent loop and everything built on it: permission rules, session resume, hooks, planning mode, capability packs, router, overlays, orchestrator, macOS sandbox |
+
+**Status on 2026-11-17:** Stage 1 is complete apart from the second half of
+step 13.3, which is listed in Stage 2. Step 1.3 now has a single failing test
+rather than eight, and step 12.3 is done. The later stages are otherwise
+unchanged. Phase 15 (from issue #13) is recorded below the phase tables but
+is not yet sequenced into the stage order, because its steps depend on Stage 4
+work.
 
 **Milestones along the way:**
 
@@ -1862,7 +1843,7 @@ what each step needs first.
 
 #### Stage 2: Easy, independent fixes
 
-16 steps remaining (6 of 22 are done).
+16 steps remaining, plus the second half of step 13.3. Stage 1 is complete.
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
@@ -1890,7 +1871,7 @@ what each step needs first.
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
-| 38 | 1.3 | Investigate and fix the 8 remaining test failures | Medium | — |
+| 38 | 1.3 | Fix the one remaining test failure (`test_runtime_summarizes_full_context_instead_of_dropping_it`) | Medium | — |
 | 39 | 1.5 | Add the GitHub Actions CI workflow | Easy | 1.3 |
 | 40 | 11.11 | CI matrix (Linux, arm64, macOS, core-only) | Easy | 1.5 |
 | 41 | 13.10 | Performance checks in CI | Easy | 1.5 |
@@ -1929,7 +1910,7 @@ what each step needs first.
 
 #### Stage 4: Hard (core refactors and what they unlock)
 
-25 steps.
+24 steps (step 12.3 is done; see Phase 12).
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
@@ -1952,7 +1933,7 @@ what each step needs first.
 | 90 | 12.2 | Make Ollama packages optional | Easy | 11.5, 12.1 |
 | 91 | 12.6 | Filter embedding models; several servers per type | Easy | 12.1 |
 | 92 | 13.5 | Lazy imports and background indexing | Easy | 11.5, 12.2 |
-| 93 | 12.3 | Capability detection for every provider | Medium | 12.1 |
+| 93 | ~~12.3~~ | ~~Capability detection for every provider~~ **Done** (commit `7ff2016`); only the cached probe call remains | Medium | 12.1 |
 | 94 | 12.4 | Provider presets | Medium | 12.1 |
 | 95 | 12.5 | Detect installed-but-stopped providers | Medium | 12.4 |
 | 96 | 12.7 | New provider selection rules | Medium | 10.4, 12.5 |
@@ -2020,7 +2001,7 @@ Rules for every step:
 
 | Step | Task | Fixes | Done when |
 |---|---|---|---|
-| 1.3 | Investigate the 3 git failures in `test_code_tasks.py` and the 5 failures in `test_agent_runtime.py`. Fix the code, or fix the tests if they are wrong | A4 | 0 failures on a machine without `bwrap` |
+| 1.3 | Fix the one remaining `test_agent_runtime.py` failure (`test_runtime_summarizes_full_context_instead_of_dropping_it`). The eight failures from the review are resolved | A4 | 0 failures on a machine without `bwrap` |
 | 1.5 | Add a GitHub Actions workflow running ruff and pytest on Python 3.10 and 3.14 | A5, A8 | CI runs on every PR |
 
 ### Phase 2: Quick fixes and real bugs
@@ -2067,7 +2048,7 @@ For when to do each step, see the implementation order in section L1.
 |---|---|---|---|---|
 | 6.1 | Load a project instruction file (`AGENTS.md`, with an optional project-specific name set in config) from the workspace root and add it to the system prompt | C1 | 3.1 | Instructions in `AGENTS.md` show up in the model's context, with a test |
 | 6.2 | Add `offset` and `limit` (line-based) to `read_local_file`, and report the total line count so the model can page through large files | C10 | — | Large files can be read in chunks |
-| 6.3 | Shell improvements: make the timeout configurable per call (with a maximum), support pipes and `&&` by running `bash -c` inside the Bubblewrap sandbox, and add background processes with tools to read output and stop them | C5 | 4.3, 5.1 | `pytest \| tail`, a 5-minute build and a dev server all work inside the sandbox |
+| 6.3 | **Partly done:** pipes, `&&`, `||` and redirects now run through `bash -c` inside the sandbox (commit `3296c63`). Remaining: a per-call timeout (with a maximum) and background processes with tools to read output and stop them | C5 | 4.3, 5.1 | `pytest \| tail`, a 5-minute build and a dev server all work inside the sandbox |
 | 6.4 | Add an Esc / single Ctrl+C handler that cancels the current turn and keeps the session; keep double Ctrl+C for exit | C12 | 4.2 | Stopping a turn does not end the session |
 | 6.5 | Add permission rules in config (`allow` / `deny` lists matching tool names, commands and paths, for example `run_shell_command(pytest *)` or `read_local_file(.env)`) | C8 | 4.3 | Allowed commands run in Auto mode without a prompt; denied ones are refused |
 | 6.6 | Save full conversations per session and add `--continue` (last session) and `--resume` (pick a session). Provider fallback on resume is step 12.9 | C3 | 4.2, 4.5 | A resumed session continues with its full message history |
@@ -2192,7 +2173,7 @@ resume (6.6) first. This phase replaces step 8.9 (embedding providers).
 |---|---|---|---|---|
 | 12.1 | Add the provider adapter interface and move the current Ollama and OpenAI-compatible code behind it, with no change in behaviour | I1b, I1d, I1g | 3.1 | Existing provider tests pass through the new adapters |
 | 12.2 | Import `ollama` and `langchain_ollama` only inside the Ollama adapter, and make them an optional `ollama` extra | I1e | 12.1, 11.5 | The app starts with no Ollama packages installed |
-| 12.3 | Capability detection for OpenAI-compatible servers: server-reported data, known model families, a cached test call, and config overrides. Extend the tool-capable model redirect to all adapters | I1b, I1c | 12.1 | An LM Studio model gets real tool, vision and context values, with tests |
+| 12.3 | ~~Capability detection for OpenAI-compatible servers~~ **Done** (commit `7ff2016`): server-reported data from llama.cpp, LM Studio and `/v1/models`, config overrides, and the tool-capable redirect for all adapters. Only the cached test call and the known-model-family table are missing | I1b, I1c | 12.1 | An LM Studio model gets real tool, vision and context values, with tests |
 | 12.4 | Add presets (LM Studio, llama.cpp, vLLM, Jan, KoboldCpp, GPT4All, LocalAI, llamafile, MLX-LM), each with verified default port, install check and start hint. Identify the server from its responses, not only its port | I1k | 12.1 | Each preset is detected when running, with recorded test responses |
 | 12.5 | Detect installed-but-not-running providers, and offer to start them after consent | I1j | 12.4 | An installed, stopped Ollama is listed as "installed · not running" and can be started from the prompt |
 | 12.6 | Filter embedding models from chat lists for every adapter, and allow several servers of the same type (a list of Ollama URLs) | I1i, I1l | 12.1 | Two Ollama servers are both listed, and embedding models are not offered as chat models |
@@ -2237,31 +2218,226 @@ dependencies and are in Stage 1 of the implementation order (section L1).
 | 14.10 | Remove `SNAPSHOT_DIR` or resolve it from the workspace at use time | K7 | 3.5 | No snapshot path is resolved at import time |
 | 14.11 | Allow the risky-command list and RAG file types to be extended in config only in the stricter direction | K10 | 14.3 | Config can add risky words but cannot remove built-in ones, with tests |
 
+### Phase 15: Repository intelligence, architecture memory and metrics
+
+Recorded from issue #13 (Part M). Priorities are the issue's own. These steps
+are not yet placed in the L1 stage order: most need Stage 4 work first, so they
+follow it.
+
+| Step | Task | Fixes | Priority | Depends on |
+|---|---|---|---|---|
+| 15.1 | Add Tree-sitter parsing and a project-scoped symbol and dependency index in SQLite | M1a | HIGH | 3.1 |
+| 15.2 | Incremental re-indexing, repository version awareness and symbol-change tracking | M1a | HIGH | 15.1 |
+| 15.3 | Symbol retrieval tools (`find_symbol`, `find_definition`, `find_references`, `find_callers`, `find_callees`, `find_dependencies`, `trace_execution_flow`) and symbol-first ranking | M1b | HIGH | 15.1, 3.4 |
+| 15.4 | Repository knowledge graph with traversal, impact analysis and architectural path tracing | M1c | HIGH | 15.1 |
+| 15.5 | Persistent repository maps and structure snapshots for context-efficient prompts | M1d | HIGH | 15.1 |
+| 15.6 | Architecture memory subsystem and automatic architecture extraction | M2 | HIGH | 15.1, 4.5 |
+| 15.7 | Architectural decision records with cross-session recall | M2 | MEDIUM-HIGH | 15.6 |
+| 15.8 | Cross-project awareness and architecture recall inside planning | M2 | HIGH | 15.6, 7.5 |
+| 15.9 | Typed memory classification and a ranking engine (frequency, recency, importance, relevance, confidence, feedback) | M3a, M3b | HIGH | 4.5 |
+| 15.10 | Memory promotion, decay, archival and compression policies | M3c | MEDIUM | 15.9 |
+| 15.11 | Task, tool and retrieval metrics collected from the event bus and task events | M4 | HIGH | 9.1, 4.5 |
+| 15.12 | Agent health reports, performance summaries and dashboard export | M4 | MEDIUM | 15.11 |
+| 15.13 | OpenVINO NPU-accelerated embeddings for document, memory and repository indexes | M5 | FUTURE | 11.5, 12.11 |
+| 15.14 | Local STT and TTS with optional NPU acceleration | M5 | FUTURE | 11.5, 9.2 |
+| 15.15 | Hardware-aware CPU/GPU/NPU detection and inference routing | M5 | FUTURE | 12.1, 15.13 |
+
+
 
 
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic.
+phase list below shows coverage by topic. Last updated 2026-11-17.
 
+- [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
 - [ ] Stage 3: Medium (steps 38–73)
-- [ ] Stage 4: Hard (steps 74–98)
+- [ ] Stage 4: Hard (steps 74–98; 12.3 done)
 - [ ] Stage 5: Hardest (steps 99–140)
 
 By phase:
 
-- [ ] Phase 1: Safety net (1.1–1.6)
-- [ ] Phase 2: Quick fixes and real bugs (2.1–2.5)
-- [ ] Phase 3: Remove global state (3.1–3.5)
+- [ ] Phase 1: Safety net — 1.1, 1.2, 1.4 and 1.6 done; 1.3 has one failure left; 1.5 (CI) open
+- [x] Phase 2: Quick fixes and real bugs (2.1–2.5)
+- [ ] Phase 3: Remove global state (3.1–3.5; 3.3 done)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
-- [ ] Phase 5: Improve individual features (5.1–5.9)
+- [ ] Phase 5: Improve individual features (5.1–5.9; 5.4 done)
 - [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)
 - [ ] Phase 7: Planning mode (7.1–7.10)
-- [ ] Phase 8: Role coverage (8.1–8.20)
+- [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)
 - [ ] Phase 9: Single combined runtime and live status (9.1–9.11)
-- [ ] Phase 10: User interface (10.1–10.10)
-- [ ] Phase 11: Platform support, POSIX only (11.1–11.12)
-- [ ] Phase 12: Local provider independence (12.1–12.13)
-- [ ] Phase 13: Performance (13.1–13.10)
-- [ ] Phase 14: Configuration (14.1–14.11)
+- [ ] Phase 10: User interface (10.1–10.10; 10.6 done)
+- [ ] Phase 11: Platform support, POSIX only (11.1–11.12; 11.1 done)
+- [ ] Phase 12: Local provider independence (12.1–12.13; 12.3 done)
+- [ ] Phase 13: Performance (13.1–13.10; 13.1 and 13.4 done, 13.3 partly)
+- [ ] Phase 14: Configuration (14.1–14.11; 14.1 and 14.2 done)
+- [ ] Phase 15: Repository intelligence, architecture memory and metrics (15.1–15.15)
+
+---
+
+## Part M: Repository Intelligence, Architecture Memory and Engineering Metrics
+
+This part records the enhancement proposal in
+[issue #13](https://github.com/ZieganWesley/Private_Agent/issues/13),
+"Implement Repository Knowledge Graph, Architecture Memory and Agent
+Intelligence Layer", opened 2026-11-12 and labelled `enhancement`. Unlike Parts
+A–K it is a forward-looking feature set rather than a defect list, so it is
+categorised the same way here: what it asks for, what exists today, what is
+missing, and the priority the issue assigns.
+
+The issue's own status marks are kept throughout: `[x]` implemented, `[/]`
+partial or in progress, `[ ]` not implemented, `[!]` implemented but needing
+enhancement, a refactor or fixes.
+
+### M1. Repository intelligence and code understanding
+
+Turns the repository from text in a vector index into a structured model of
+files, symbols and their relationships.
+
+#### M1a. Tree-sitter repository indexing (priority: HIGH)
+
+| Requested | Status |
+|---|---|
+| Tree-sitter parsing and a project-scoped repository-intelligence SQLite database | `[ ]` |
+| Extract classes, interfaces, functions, methods, imports, dependencies, call relationships, inheritance relationships, entry points and configuration files | `[ ]` |
+| Incremental re-indexing of modified files only, repository version awareness, symbol-change tracking between runs | `[/]` |
+
+What exists today: project-scoped memory in SQLite, and RAG indexing with
+fingerprint-based change detection (J7), so unchanged files are not re-parsed.
+There is no parser: `tree-sitter` is not a dependency and nothing extracts
+symbols or relationships automatically. The nearest existing feature is the
+regex-based `search_workspace_symbols` declaration search (E16).
+
+#### M1b. Symbol-aware retrieval (priority: HIGH)
+
+| Requested API | Status |
+|---|---|
+| `find_symbol`, `find_definition` | `[/]` (exact declaration search only) |
+| `find_references`, `find_callers`, `find_callees` | `[ ]` |
+| `find_dependencies`, `trace_execution_flow` | `[ ]` |
+| Symbol-aware ranking before vector retrieval, and symbol retrieval inside planning | `[ ]` |
+
+Retrieval today is hybrid BM25 plus vector over documents (B9, E6–E10). It has
+no notion of a definition, a reference or a call edge, so "who calls this"
+cannot be answered from the index.
+
+#### M1c. Repository knowledge graph (priority: HIGH)
+
+- A graph of files, symbols, components, services, modules and APIs, stored in
+  SQLite.
+- Traversal, impact analysis, architectural path tracing and visual dependency
+  graphs.
+
+Status: `[ ]`. There is no graph data model; document retrieval and memory
+retrieval are independent of each other.
+
+#### M1d. Repository mapping (priority: HIGH)
+
+- Aider-style repository maps, lightweight repository summaries, stored
+  structure snapshots, context-efficient abstractions.
+
+Status: `[/]`. The agent can summarise a repository on request, and RAG can
+retrieve code and documents, but nothing is stored: there are no persistent
+maps or structure snapshots.
+
+### M2. Architecture memory
+
+Keeps an understanding of the system itself, separately from conversations.
+
+| Capability | Status | Notes |
+|---|---|---|
+| Dedicated architecture memory subsystem, independent of chat history | `[ ]` | Long-term session memory exists (A1, Part F) but is conversation-shaped |
+| Automatic extraction of application architecture, layer and domain boundaries, services, APIs, data flows, event workflows, infrastructure dependencies and technology stack | `[/]` | Only on demand, through model reasoning; no extraction pipeline or architecture registry |
+| Architectural decision records (decisions, tradeoffs, rejected alternatives, migrations, operational constraints) with recall across sessions | `[ ]` | Not available |
+| Cross-session project awareness, architecture-aware onboarding, architecture recall injected into planning | `[/]` | Project memory and session persistence exist; no comparison between projects and no injection into plans (D5 drops most plan context) |
+
+### M3. Memory ranking and lifecycle management
+
+#### M3a. Memory classification (priority: MEDIUM)
+
+| Memory type | Status |
+|---|---|
+| Working memory | `[/]` |
+| Long-term memory | `[/]` |
+| Episodic memory | `[ ]` as a typed class (episodic summaries exist) |
+| Project memory classification | `[ ]` |
+| Architecture memory | `[ ]` |
+| User memory classification | `[ ]` (learned facts exist, untyped) |
+
+The database stores chat history, session summaries, learned items and task
+plans, but memory is not strongly typed, so ranking and lifecycle rules cannot
+be applied per type.
+
+#### M3b. Ranking engine (priority: HIGH)
+
+- Dimensions: frequency, recency, importance, relevance, confidence and user
+  feedback.
+
+Status: `[/]`. Retrieval exists through RAG and FTS5 episode search, but there
+is no explicit score, no weighting between dimensions and no prioritised
+recall.
+
+#### M3c. Promotion, decay and compression (priority: MEDIUM)
+
+- Promote important memories, archive stale ones, apply decay policies and
+  compress memories automatically.
+
+Status: `[/]` in a narrow form only. Retention and expiry settings exist
+(`conversation_retention_days`, `episode_retention_days`,
+`registered_skill_retention_days`, `task_stale_after_days`,
+`learned_item_expiry_days`), which prune old rows. There is no promotion path,
+no decay scoring, and no compression beyond context compaction.
+
+#### M3d. Intelligent context selection (priority: HIGH)
+
+- Dynamic memory prioritisation, context budgeting and ranking strategies.
+
+Status: `[/]`. RAG already reduces what is sent, and fixed per-field caps apply
+(K4), but there is no per-source token budget (planned in 9.5) and no ranking
+strategy.
+
+### M4. Agent metrics and observability
+
+| Metric group | Requested | Status |
+|---|---|---|
+| Tasks | Completed, failed, abandoned, retried, completion duration | `[/]`: the task workflow and `agent_task_events` exist, but there is no historical telemetry |
+| Tools | Usage count, success rate, error rate, duration, reliability | `[ ]`: the run log records individual tool events, but nothing aggregates them |
+| Retrieval | Retrieval effectiveness, memory hit rate, symbol retrieval success, graph utilisation, context relevance | `[ ]`: only `scripts/benchmark_rag.py` measures recall@k and MRR |
+| Agent performance | Planning success rate, verification success rate, human intervention rate, autonomous completion rate, confidence scoring | `[/]`: the planning and verification workflow exists, but it is not measurable |
+| Reporting | Metrics database, agent health reports, performance summaries, dashboards | `[ ]` |
+
+`agent/session_stats.py` reports per-session tokens, speed and elapsed time at
+exit. That is the whole of the current telemetry.
+
+### M5. Intel AI-PC support
+
+| Item | Status | Notes |
+|---|---|---|
+| OpenVINO NPU-accelerated embeddings for memory, repository and vector indexing | `[ ]` | Priority FUTURE; embeddings are Ollama-only today (I1a) |
+| Local speech-to-text with OpenVINO/NPU execution | `[ ]` | The `media` extra already transcribes locally with `faster-whisper` on CPU |
+| Local text-to-speech providers and voice interaction | `[ ]` | — |
+| CPU/GPU/NPU detection and hardware-aware inference routing | `[/]` | Capability detection and `/hardware-status` exist but are Ollama-only; no NPU orchestration |
+
+### M6. Overall status in issue #13
+
+The issue's own summary, mapped to the sections above:
+
+| Bucket | Items | Sections |
+|---|---|---|
+| Already implemented | SQLite persistent memory; hybrid BM25 + vector RAG; session persistence; project-scoped memory; planning and task workflows; MCP; sandboxed tools; capability detection; coding workflow | Parts B, D, E, I |
+| Partially implemented | Repository summarisation; cross-session memory; context reduction through RAG; project awareness; verification and planning workflows | M1d, M2, M3, D6 |
+| Needs enhancement or refactor | Memory ranking and prioritisation; architecture persistence; context selection strategy; repository abstraction layer; planning observability; task execution telemetry | M2, M3, M4 |
+| Not yet implemented | Tree-sitter indexing; symbol graph; repository knowledge graph; architectural decision memory; agent metrics and dashboards; memory lifecycle management; NPU/OpenVINO acceleration; STT/TTS subsystems | M1, M2c, M3c, M4, M5 |
+
+### M7. How Part M relates to the existing roadmap
+
+- **New capability, not a duplicate:** M1 has no equivalent in Parts A–K,
+  though it extends E16 (language tooling, step 8.15) and would strengthen D1
+  by giving planning mode structured repository knowledge.
+- **Depends on existing refactors:** M1 and M2 need `ToolContext` (3.4) and the
+  memory repositories (4.5); M4 needs the typed event bus (9.1) and step
+  timings (9.8); M5 needs lazy imports (11.5) and provider adapters (12.1).
+- **Roadmap:** the proposal is captured as Phase 15 in Part L. It is a large body
+  of work and should not start before Stage 4, because every item depends on
+  the shared loop, `ToolContext` or the memory split.
