@@ -400,13 +400,6 @@ def load_or_create_config() -> dict:
             stacklevel=2,
         )
         return _merge_config(DEFAULT_CONFIG)
-    except (ValueError, OSError) as e:
-        warnings.warn(
-            f"Unexpected error reading configuration file {CONFIG_FILE_PATH}: {e}. Falling back to default configuration.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-        return _merge_config(DEFAULT_CONFIG)
 
 
 def load_config() -> dict:

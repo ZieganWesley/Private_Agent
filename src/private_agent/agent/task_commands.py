@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-
-logger = logging.getLogger(__name__)
-
 import ipaddress
 import json
+import logging
 import pathlib
 import re
 import sqlite3
@@ -29,6 +26,8 @@ from .permissions import coding_allows_command_network as _coding_allows_command
 from .permissions import coding_uses_isolated_copy as _coding_uses_isolated_copy
 from .permissions import select_coding_access_level as _select_coding_access_level
 from .task_lease import TASK_LEASE_SECONDS
+
+logger = logging.getLogger(__name__)
 
 
 def _task_age_label(created_at: str) -> str:

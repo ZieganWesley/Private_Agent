@@ -590,6 +590,44 @@ async def _get_limited_response(client, url: str, max_bytes: int) -> tuple[bytes
         _network_slots.release()
 
 
+def _get_limited_response_sync(client, url: str, max_bytes: int) -> tuple[bytes, str]:
+    """Synchronous counterpart of ``_get_limited_response``."""
+    acquired = _network_slots.acquire(timeout=NETWORK_REQUEST_TIMEOUT)
+    if not acquired:
+        raise TimeoutError("Outbound request concurrency limit wait timed out.")
+    try:
+        current_url = validate_outbound_url(url)
+        for redirect_count in range(MAX_HTTP_REDIRECTS + 1):
+            with client.stream("GET", current_url) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location or redirect_count == MAX_HTTP_REDIRECTS:
+                        raise ValueError(
+                            "HTTP redirect limit exceeded or redirect target missing."
+                        )
+                    current_url = validate_outbound_url(
+                        urllib.parse.urljoin(current_url, location)
+                    )
+                    continue
+                response.raise_for_status()
+                declared_size = response.headers.get("content-length")
+                if declared_size and int(declared_size) > max_bytes:
+                    raise ValueError(
+                        f"Response exceeds the {max_bytes}-byte size limit."
+                    )
+                body = bytearray()
+                for chunk in response.iter_bytes():
+                    body.extend(chunk)
+                    if len(body) > max_bytes:
+                        raise ValueError(
+                            f"Response exceeds the {max_bytes}-byte size limit."
+                        )
+                return bytes(body), response.encoding or "utf-8"
+        raise ValueError("HTTP redirect limit exceeded.")
+    finally:
+        _network_slots.release()
+
+
 def search_duckduckgo(query: str, client_factory=public_only_sync_client) -> str:
     if not query.strip() or len(query) > MAX_SEARCH_QUERY_CHARS:
         raise ValueError(
