@@ -162,7 +162,7 @@ from .permissions import (
     select_permission_mode as _select_permission_mode_impl,
 )
 from .permissions import (
-    tool_needs_permission as _tool_needs_permission_impl,
+    tool_needs_permission as _tool_needs_permission,
 )
 from .project_paths import discover_project_resources
 from .prompts import (
@@ -908,22 +908,6 @@ async def _execute_tool_batch(
     return response, False
 
 
-def _tool_needs_permission(
-    name: str,
-    permission_mode: str,
-    *,
-    network_authorized: bool = False,
-) -> bool:
-    return _tool_needs_permission_impl(
-        name,
-        permission_mode,
-        network_authorized=network_authorized,
-        network_tool_names=NETWORK_TOOL_NAMES,
-        mcp_tool_names=MCP_TOOL_NAMES,
-        mcp_auto_approve_tools=MCP_AUTO_APPROVE_TOOLS,
-    )
-
-
 def _select_permission_mode() -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
@@ -1033,6 +1017,9 @@ async def execute_tool_call(
         name,
         permission_mode,
         network_authorized=network_authorized,
+        network_tool_names=NETWORK_TOOL_NAMES,
+        mcp_tool_names=MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=MCP_AUTO_APPROVE_TOOLS,
     ) and not (name in LOCAL_MEDIA_TOOL_NAMES and media_capture_authorized):
         if not sys.stdin.isatty():
             result = "Error: This tool requires interactive approval and was not run."

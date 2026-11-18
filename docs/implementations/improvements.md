@@ -314,6 +314,11 @@ for approval itself; approval is handled solely by the runtime's
 context). Direct/unapproved invocations now return an explicit error instead
 of prompting. Covered by `test_shell_command_requires_explicit_approval`.
 
+**Partly fixed (B2 step 2):** runtime's `_tool_needs_permission` wrapper was
+removed; `execute_tool_call` now calls `agent.permissions.tool_needs_permission`
+directly, so the permission policy lives in one place. `test_permission_mode_policy_matrix`
+updated to pass the policy inputs explicitly.
+
 #### B3. Tool state lives in module globals
 
 - The active database, task, skill folder and code task are global variables
