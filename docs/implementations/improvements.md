@@ -354,6 +354,9 @@ skill directory/registry/session and DB/task state via `get_tool_context()`.
 task through `set_tool_context()` instead of writing `code_tasks.ACTIVE_CODE_TASK`
 directly.
 
+**Partly fixed (B3 step 6):** `agent/task_commands.py` now updates the active
+task session/id through `set_tool_context()` instead of `set_active_task_context()`.
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead

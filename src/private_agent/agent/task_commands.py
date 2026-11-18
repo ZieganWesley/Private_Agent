@@ -19,7 +19,7 @@ from rich.table import Table
 from ..config import CODE_OUTPUT_ROOT
 from ..database import PersistentMemory
 from ..sandbox import SandboxManager
-from ..tools import set_active_task_context
+from ..tools import get_tool_context, set_tool_context
 from .console import console
 from .learning import _offer_skill_capture
 from .permissions import coding_allows_command_network as _coding_allows_command_network
@@ -492,7 +492,10 @@ def _run_task_management(
                     raise
                 active_task_id = task_id
                 approved_for_execution_id = task_id
-                set_active_task_context(session_id, task_id)
+                _tool_context = get_tool_context()
+                _tool_context.task_session_id = session_id
+                _tool_context.task_id = task_id
+                set_tool_context(_tool_context)
                 console.print(
                     "[green]This plan revision is approved and active. "
                     "Existing tool permissions and confirmations still apply.[/green]"
@@ -550,7 +553,10 @@ def _run_task_management(
                 )
                 if active_task_id == task_id:
                     active_task_id = None
-                    set_active_task_context(session_id, None)
+                    _tool_context = get_tool_context()
+                    _tool_context.task_session_id = session_id
+                    _tool_context.task_id = None
+                    set_tool_context(_tool_context)
                 console.print(f"[green]Task status saved as {target_status}.[/green]")
             elif action == "verify":
                 if len(parts) != 4:
@@ -662,7 +668,10 @@ def _run_task_management(
                     )
                 if active_task_id == task_id:
                     active_task_id = None
-                    set_active_task_context(session_id, None)
+                    _tool_context = get_tool_context()
+                    _tool_context.task_session_id = session_id
+                    _tool_context.task_id = None
+                    set_tool_context(_tool_context)
             elif action == "delete":
                 if task["status"] == "active":
                     console.print(
@@ -718,7 +727,10 @@ def _run_task_management(
                         )
                 if active_task_id == task_id:
                     active_task_id = None
-                    set_active_task_context(session_id, None)
+                    _tool_context = get_tool_context()
+                    _tool_context.task_session_id = session_id
+                    _tool_context.task_id = None
+                    set_tool_context(_tool_context)
                 console.print(
                     "[green]Task records deleted: "
                     f"{deleted['episodes_deleted']} linked episode(s), "
