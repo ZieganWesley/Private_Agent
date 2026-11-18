@@ -290,7 +290,8 @@ Remaining B1 sub-tasks (planned, not yet implemented):
      `_invoke_initial_model_with_fallback`.
   3. ✅ Extract per-turn tool preflight/filtering into
      `_preflight_tool_calls` (with `_PreflightState`).
-  4. Extract tool-batch execution and result handling into a helper.
+  4. ✅ Extract tool-batch execution and result handling into
+     `_execute_tool_batch`.
   5. Extract the outer turn loop into a reusable `_run_agent_turn`.
   6. Update planning/coding/skills paths to call the shared loop.
 

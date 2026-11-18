@@ -752,6 +752,162 @@ async def _preflight_tool_calls(
             )
 
 
+async def _execute_tool_batch(
+    *,
+    response,
+    session_id,
+    tool_tasks,
+    blocked_tool_messages,
+    declined_media_calls,
+    authorized_planning_searches,
+    planning_research_citations,
+    messages,
+    provider_type,
+    planning_only,
+    deadline,
+    console,
+):
+    if tool_tasks:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            tool_messages = [
+                ToolMessage(
+                    content="Error: Task time budget exhausted; completion is unknown.",
+                    tool_call_id=call.get("id"),
+                )
+                for call in response.tool_calls
+                if call.get("name") not in NETWORK_TOOL_NAMES
+                or call.get("id")
+                not in {message.tool_call_id for message in blocked_tool_messages}
+            ]
+        else:
+            tool_batch_started = time.monotonic()
+            console.print(
+                f"[dim][Processing][/dim] Running "
+                f"{len(tool_tasks)} tool action(s); approval "
+                "prompts may appear."
+            )
+            try:
+                tool_messages = await asyncio.wait_for(
+                    asyncio.gather(*tool_tasks),
+                    timeout=remaining,
+                )
+            except asyncio.TimeoutError:
+                timed_out_calls = [
+                    {
+                        "tool": str(call.get("name") or "unknown"),
+                        "call_id": str(call.get("id") or ""),
+                    }
+                    for call in response.tool_calls
+                    if call.get("id")
+                    not in {message.tool_call_id for message in blocked_tool_messages}
+                ]
+                log_event(
+                    RUN_LOGGER,
+                    "tool.batch_timeout",
+                    level=logging.ERROR,
+                    session_id=session_id,
+                    turn_index=_SESSION_STATS.turns + 1,
+                    tool_calls=timed_out_calls,
+                )
+                tool_messages = [
+                    ToolMessage(
+                        content=(
+                            "Error: Tool execution exceeded the task time budget. "
+                            "Its final side effects may be unknown; verify before retrying."
+                        ),
+                        tool_call_id=call.get("id"),
+                    )
+                    for call in response.tool_calls
+                    if call.get("id")
+                    not in {message.tool_call_id for message in blocked_tool_messages}
+                ]
+            tool_batch_elapsed = time.monotonic() - tool_batch_started
+            if tool_batch_elapsed >= 2:
+                console.print(
+                    f"[dim][Completed][/dim] Tool actions in {tool_batch_elapsed:.1f}s."
+                )
+    else:
+        tool_messages = []
+    for tool_message in tool_messages:
+        result_text = _visible_chunk_text(tool_message.content)
+        if not _tool_result_is_error(result_text):
+            tool_call = next(
+                (
+                    call
+                    for call in response.tool_calls
+                    if call.get("id") == tool_message.tool_call_id
+                ),
+                None,
+            )
+            if tool_call is not None:
+                _display_tool_result(
+                    str(tool_call.get("name", "unknown")),
+                    result_text,
+                )
+    if planning_only and authorized_planning_searches:
+        for tool_result in tool_messages:
+            if tool_result.tool_call_id not in authorized_planning_searches:
+                continue
+            result_text = _visible_chunk_text(tool_result.content)
+            if result_text.casefold().startswith(("error", "web search failed")):
+                continue
+            for citation in _planning_search_citations(result_text):
+                if (
+                    citation not in planning_research_citations
+                    and len(planning_research_citations) < 10
+                ):
+                    planning_research_citations.append(citation)
+    messages.extend(blocked_tool_messages + tool_messages)
+    if declined_media_calls:
+        console.print(
+            "Local media access was not permitted; no capture or file load occurred."
+        )
+        if len(declined_media_calls) == len(response.tool_calls):
+            devices = " and ".join(
+                sorted(
+                    {
+                        {
+                            "capture_webcam_image": "webcam",
+                            "load_workspace_image": "workspace image",
+                            "load_workspace_video": "workspace video",
+                            "transcribe_workspace_audio": "workspace audio",
+                            "record_microphone_audio": "microphone",
+                        }.get(name, "local media")
+                        for name in declined_media_calls
+                    }
+                )
+            )
+            response = AIMessage(
+                content=(
+                    f"I did not access the {devices} because "
+                    "permission was not granted. No capture was made."
+                )
+            )
+            return response, True
+    webcam_error = _local_image_input_error(
+        response.tool_calls,
+        blocked_tool_messages + tool_messages,
+    )
+    if webcam_error is not None:
+        response = AIMessage(content=f"Local image input failed: {webcam_error}")
+        return response, True
+    if provider_type == "local":
+        _append_captured_images_from_tool_results(
+            messages,
+            tool_messages,
+        )
+    if time.monotonic() >= deadline:
+        response = AIMessage(
+            content="The task execution budget was exhausted. "
+            "Tool results may be incomplete; the requested outcome "
+            "was not verified."
+        )
+        return response, True
+
+    return response, False
+
+
 def _tool_needs_permission(
     name: str,
     permission_mode: str,
@@ -3235,160 +3391,21 @@ Runtime context:
                     authorized_planning_searches = state.authorized_planning_searches
                     tool_call_count = state.tool_call_count
 
-                    if tool_tasks:
-                        remaining = deadline - time.monotonic()
-                        if remaining <= 0:
-                            tool_messages = [
-                                ToolMessage(
-                                    content="Error: Task time budget exhausted; completion is unknown.",
-                                    tool_call_id=call.get("id"),
-                                )
-                                for call in response.tool_calls
-                                if call.get("name") not in NETWORK_TOOL_NAMES
-                                or call.get("id")
-                                not in {
-                                    message.tool_call_id
-                                    for message in blocked_tool_messages
-                                }
-                            ]
-                        else:
-                            tool_batch_started = time.monotonic()
-                            console.print(
-                                f"[dim][Processing][/dim] Running "
-                                f"{len(tool_tasks)} tool action(s); approval "
-                                "prompts may appear."
-                            )
-                            try:
-                                tool_messages = await asyncio.wait_for(
-                                    asyncio.gather(*tool_tasks),
-                                    timeout=remaining,
-                                )
-                            except asyncio.TimeoutError:
-                                timed_out_calls = [
-                                    {
-                                        "tool": str(call.get("name") or "unknown"),
-                                        "call_id": str(call.get("id") or ""),
-                                    }
-                                    for call in response.tool_calls
-                                    if call.get("id")
-                                    not in {
-                                        message.tool_call_id
-                                        for message in blocked_tool_messages
-                                    }
-                                ]
-                                log_event(
-                                    RUN_LOGGER,
-                                    "tool.batch_timeout",
-                                    level=logging.ERROR,
-                                    session_id=session_id,
-                                    turn_index=_SESSION_STATS.turns + 1,
-                                    tool_calls=timed_out_calls,
-                                )
-                                tool_messages = [
-                                    ToolMessage(
-                                        content=(
-                                            "Error: Tool execution exceeded the task time budget. "
-                                            "Its final side effects may be unknown; verify before retrying."
-                                        ),
-                                        tool_call_id=call.get("id"),
-                                    )
-                                    for call in response.tool_calls
-                                    if call.get("id")
-                                    not in {
-                                        message.tool_call_id
-                                        for message in blocked_tool_messages
-                                    }
-                                ]
-                            tool_batch_elapsed = time.monotonic() - tool_batch_started
-                            if tool_batch_elapsed >= 2:
-                                console.print(
-                                    f"[dim][Completed][/dim] Tool actions in "
-                                    f"{tool_batch_elapsed:.1f}s."
-                                )
-                    else:
-                        tool_messages = []
-                    for tool_message in tool_messages:
-                        result_text = _visible_chunk_text(tool_message.content)
-                        if not _tool_result_is_error(result_text):
-                            tool_call = next(
-                                (
-                                    call
-                                    for call in response.tool_calls
-                                    if call.get("id") == tool_message.tool_call_id
-                                ),
-                                None,
-                            )
-                            if tool_call is not None:
-                                _display_tool_result(
-                                    str(tool_call.get("name", "unknown")),
-                                    result_text,
-                                )
-                    if planning_only and authorized_planning_searches:
-                        for tool_result in tool_messages:
-                            if (
-                                tool_result.tool_call_id
-                                not in authorized_planning_searches
-                            ):
-                                continue
-                            result_text = _visible_chunk_text(tool_result.content)
-                            if result_text.casefold().startswith(
-                                ("error", "web search failed")
-                            ):
-                                continue
-                            for citation in _planning_search_citations(result_text):
-                                if (
-                                    citation not in planning_research_citations
-                                    and len(planning_research_citations) < 10
-                                ):
-                                    planning_research_citations.append(citation)
-                    messages.extend(blocked_tool_messages + tool_messages)
-                    if declined_media_calls:
-                        console.print(
-                            "Local media access was not permitted; no capture "
-                            "or file load occurred."
-                        )
-                        if len(declined_media_calls) == len(response.tool_calls):
-                            devices = " and ".join(
-                                sorted(
-                                    {
-                                        {
-                                            "capture_webcam_image": "webcam",
-                                            "load_workspace_image": "workspace image",
-                                            "load_workspace_video": "workspace video",
-                                            "transcribe_workspace_audio": "workspace audio",
-                                            "record_microphone_audio": "microphone",
-                                        }.get(name, "local media")
-                                        for name in declined_media_calls
-                                    }
-                                )
-                            )
-                            response = AIMessage(
-                                content=(
-                                    f"I did not access the {devices} because "
-                                    "permission was not granted. No capture was made."
-                                )
-                            )
-                            break
-                    webcam_error = _local_image_input_error(
-                        response.tool_calls,
-                        blocked_tool_messages + tool_messages,
+                    response, stop = await _execute_tool_batch(
+                        response=response,
+                        session_id=session_id,
+                        tool_tasks=tool_tasks,
+                        blocked_tool_messages=blocked_tool_messages,
+                        declined_media_calls=declined_media_calls,
+                        authorized_planning_searches=authorized_planning_searches,
+                        planning_research_citations=planning_research_citations,
+                        messages=messages,
+                        provider_type=provider_type,
+                        planning_only=planning_only,
+                        deadline=deadline,
+                        console=console,
                     )
-                    if webcam_error is not None:
-                        response = AIMessage(
-                            content=f"Local image input failed: {webcam_error}"
-                        )
-                        break
-                    if provider_type == "local":
-                        _append_captured_images_from_tool_results(
-                            messages,
-                            tool_messages,
-                        )
-                    if time.monotonic() >= deadline:
-                        response = AIMessage(
-                            content="The task execution budget was exhausted. "
-                            "Tool results may be incomplete; the requested outcome "
-                            "was not verified."
-                        )
+                    if stop:
                         break
 
                     await compact_loop_messages(
