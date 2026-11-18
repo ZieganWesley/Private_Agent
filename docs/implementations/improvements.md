@@ -347,6 +347,9 @@ path via `get_tool_context().db_path` instead of `_sqlite_state.ACTIVE_DB_PATH`.
 path and task session/id via `get_tool_context()` instead of the module globals
 (schema-read tracking still uses `_task_state`).
 
+**Partly fixed (B3 step 4):** `tools/__init__.py`'s `create_skill` now reads
+skill directory/registry/session and DB/task state via `get_tool_context()`.
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead

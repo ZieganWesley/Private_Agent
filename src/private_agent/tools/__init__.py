@@ -435,10 +435,11 @@ def create_skill(name: str, description: str, instructions: str) -> str:
     from ..skills import AgentSkill, create_skill_file
 
     try:
-        if _ACTIVE_SKILL_DIRECTORY is None:
+        context = get_tool_context()
+        if context.skill_directory is None:
             return "Error creating skill: No skills directory is configured."
         if (
-            _ACTIVE_SKILL_SESSION_ID
+            context.skill_session_id
             and "chat_history" not in _task_state.SCHEMA_READ_TABLES
         ):
             return (
@@ -447,7 +448,7 @@ def create_skill(name: str, description: str, instructions: str) -> str:
                 "destination schema."
             )
         target = create_skill_file(
-            _ACTIVE_SKILL_DIRECTORY, name, description, instructions
+            context.skill_directory, name, description, instructions
         )
         skill_key = target.stem
         display_name = name.strip()
@@ -460,19 +461,19 @@ def create_skill(name: str, description: str, instructions: str) -> str:
             system_prompt=f"[Skill Markdown Profile: {display_name}]\n"
             f"{target.read_text(encoding='utf-8')}",
         )
-        if isinstance(_ACTIVE_SKILL_REGISTRY, dict):
-            _ACTIVE_SKILL_REGISTRY[skill_key] = skill
-        if _ACTIVE_SKILL_SESSION_ID:
+        if isinstance(context.skill_registry, dict):
+            context.skill_registry[skill_key] = skill
+        if context.skill_session_id:
             from ..database import PersistentMemory
 
             with _sqlite_lock:
-                memory = PersistentMemory(_sqlite_state.ACTIVE_DB_PATH)
+                memory = PersistentMemory(context.db_path)
                 try:
                     memory.register_skill_file(
-                        _ACTIVE_SKILL_SESSION_ID,
+                        context.skill_session_id,
                         str(target),
                         description.strip(),
-                        source_task_id=_task_state.ACTIVE_TASK_ID,
+                        source_task_id=context.task_id,
                     )
                 finally:
                     memory.close()
