@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 
 from ..config import MAX_SUMMARY_CHARS
 from ..database import PersistentMemory
-from . import _sqlite_state, _task_state
+from . import _task_state, get_tool_context
 from .schemas import (
     CreateTaskPlanInput,
     InspectTaskPlanInput,
@@ -19,9 +19,9 @@ from .schemas import (
 
 
 def _open_memory() -> PersistentMemory:
-    if not _sqlite_state.ACTIVE_DB_PATH:
+    if not get_tool_context().db_path:
         raise RuntimeError("Planner database is not configured for this session.")
-    return PersistentMemory(_sqlite_state.ACTIVE_DB_PATH)
+    return PersistentMemory(get_tool_context().db_path)
 
 
 def _format_task(task: dict) -> str:
@@ -62,7 +62,7 @@ def read_table_schema(table_name: str) -> str:
     """Read approved SQLite table metadata before preparing a database write."""
     if table_name not in _SCHEMA_WRITE_GROUPS:
         return "Error: Schema inspection is restricted to approved agent tables."
-    database_path = _sqlite_state.ACTIVE_DB_PATH
+    database_path = get_tool_context().db_path
     if not database_path:
         return "Error: Planner database is not configured for this session."
     if database_path == ":memory:":
@@ -145,7 +145,7 @@ def create_task_plan(
     research_references: list[str] | None = None,
 ) -> str:
     """Persist an executable plan with dependencies and validation criteria."""
-    session_id = _task_state.ACTIVE_TASK_SESSION_ID
+    session_id = get_tool_context().task_session_id
     if not session_id:
         return "Error: Planner session is not initialized."
     try:
@@ -177,8 +177,8 @@ def create_task_plan(
 @tool(args_schema=InspectTaskPlanInput)
 def inspect_task_plan(task_id: str | None = None) -> str:
     """Inspect the current SQLite task plan and its persisted todo progress."""
-    session_id = _task_state.ACTIVE_TASK_SESSION_ID
-    selected_id = task_id or _task_state.ACTIVE_TASK_ID
+    session_id = get_tool_context().task_session_id
+    selected_id = task_id or get_tool_context().task_id
     if not session_id or not selected_id:
         return "No active task plan is selected."
     memory = _open_memory()
@@ -188,7 +188,7 @@ def inspect_task_plan(task_id: str | None = None) -> str:
             return "Error: Task plan was not found."
         if (
             task["session_id"] != session_id
-            and selected_id != _task_state.ACTIVE_TASK_ID
+            and selected_id != get_tool_context().task_id
         ):
             return "Error: Task plan is not linked to the active session."
         return _format_task(task)
@@ -199,8 +199,8 @@ def inspect_task_plan(task_id: str | None = None) -> str:
 @tool(args_schema=UpdateTodoStepInput)
 def update_todo_step(step_id: str, status: str, evidence: str = "") -> str:
     """Record progress for a step in the approved active task plan."""
-    session_id = _task_state.ACTIVE_TASK_SESSION_ID
-    task_id = _task_state.ACTIVE_TASK_ID
+    session_id = get_tool_context().task_session_id
+    task_id = get_tool_context().task_id
     if not session_id or not task_id:
         return "Error: No task plan is selected. Create or resume one first."
     try:
@@ -211,7 +211,7 @@ def update_todo_step(step_id: str, status: str, evidence: str = "") -> str:
     try:
         task = memory.get_task(task_id)
         if task is None or (
-            task["session_id"] != session_id and task_id != _task_state.ACTIVE_TASK_ID
+            task["session_id"] != session_id and task_id != get_tool_context().task_id
         ):
             return "Error: Active task plan is unavailable."
         updated = memory.update_task_step(
@@ -241,8 +241,8 @@ def revise_task_plan(
     research_references: list[str] | None = None,
 ) -> str:
     """Create a new immutable plan revision; prior approval is invalidated."""
-    session_id = _task_state.ACTIVE_TASK_SESSION_ID
-    task_id = _task_state.ACTIVE_TASK_ID
+    session_id = get_tool_context().task_session_id
+    task_id = get_tool_context().task_id
     if not session_id or not task_id:
         return "Error: No active task plan is selected."
     try:

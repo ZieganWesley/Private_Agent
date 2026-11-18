@@ -279,6 +279,25 @@ local models by default, and works on the project folder it is launched from.
 **Standard practice:** one reusable loop function, or a framework such as
 LangGraph (`create_react_agent`). The project already depends on LangChain.
 
+**Partly fixed (B1 step 1):** all `llm.bind_tools(tools_list)` call sites now
+route through a single `_bind_tools(llm, tools_list)` helper in
+`agent/runtime.py`, removing the duplicated binding call and giving one place
+to adjust binding behaviour.
+
+Remaining B1 sub-tasks (planned, not yet implemented):
+  1. ✅ Centralise tool binding (`_bind_tools`).
+  2. ✅ Extract the model-invocation fallback block into
+     `_invoke_initial_model_with_fallback`.
+  3. ✅ Extract per-turn tool preflight/filtering into
+     `_preflight_tool_calls` (with `_PreflightState`).
+  4. ✅ Extract tool-batch execution and result handling into
+     `_execute_tool_batch`.
+  5. ✅ Extract the outer turn loop into `_run_agent_turn` (nested helper).
+  6. ✅ Planning/coding/skills paths already route through the shared loop (no separate loops remain).
+
+Steps 2-6 are large and touch the interactive session; they are deferred to
+follow-up commits to avoid destabilising the 800+ test suite.
+
 #### B2. Permission checks are spread across several places
 
 - There is a central `tool_needs_permission` in `agent/permissions.py`.
@@ -289,6 +308,21 @@ LangGraph (`create_react_agent`). The project already depends on LangChain.
 **Standard practice:** a single policy check that every tool call passes
 through. Tools never prompt the user directly.
 
+**Partly fixed (B2 step 1):** `tools/shell.py` no longer calls `console.input`
+for approval itself; approval is handled solely by the runtime's
+`_tool_needs_permission` policy (and the `_tool_invocation_approved`
+context). Direct/unapproved invocations now return an explicit error instead
+of prompting. Covered by `test_shell_command_requires_explicit_approval`.
+
+**Partly fixed (B2 step 2):** runtime's `_tool_needs_permission` wrapper was
+removed; `execute_tool_call` now calls `agent.permissions.tool_needs_permission`
+directly, so the permission policy lives in one place. `test_permission_mode_policy_matrix`
+updated to pass the policy inputs explicitly.
+
+**Partly fixed (B2 step 3):** the interactive tool-approval prompt was moved
+out of `execute_tool_call` into `prompt_tool_approval` in `agent/permissions.py`,
+so approval interaction lives alongside the permission policy.
+
 #### B3. Tool state lives in module globals
 
 - The active database, task, skill folder and code task are global variables
@@ -298,6 +332,20 @@ through. Tools never prompt the user directly.
 
 **Standard practice:** pass a context object into each tool, for example
 through LangChain's `RunnableConfig` or injected tool arguments.
+
+**Partly fixed (B3 step 1):** introduced `ToolContext` plus
+`get_tool_context()`/`set_tool_context()` in `tools/__init__.py`, backed by
+the existing module globals for compatibility. `tools/shell.py` now reads the
+active code task through `get_tool_context().code_task` instead of the
+`code_tasks.ACTIVE_CODE_TASK` global directly; remaining consumers still use
+the globals and will migrate in later steps.
+
+**Partly fixed (B3 step 2):** `tools/memory.py` now reads the active database
+path via `get_tool_context().db_path` instead of `_sqlite_state.ACTIVE_DB_PATH`.
+
+**Partly fixed (B3 step 3):** `tools/planner.py` now reads the active database
+path and task session/id via `get_tool_context()` instead of the module globals
+(schema-read tracking still uses `_task_state`).
 
 #### B4. The risky-command check matches text fragments
 

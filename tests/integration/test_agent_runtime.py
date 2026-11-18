@@ -1138,24 +1138,134 @@ def test_permission_mode_policy_matrix(monkeypatch):
 
     monkeypatch.setattr(agent, "MCP_TOOL_NAMES", {"mcp_read"})
     monkeypatch.setattr(agent, "MCP_AUTO_APPROVE_TOOLS", {"mcp_trusted"})
-    assert not agent._tool_needs_permission("read_local_file", "auto")
-    assert not agent._tool_needs_permission("web_search", "auto")
-    assert agent._tool_needs_permission("edit_local_file", "auto")
-    assert agent._tool_needs_permission("apply_workspace_patch", "auto")
-    assert agent._tool_needs_permission("rename_workspace_file", "auto")
-    assert agent._tool_needs_permission("delete_workspace_file", "auto")
-    assert not agent._tool_needs_permission("search_workspace_text", "auto")
-    assert not agent._tool_needs_permission("inspect_workspace_git", "auto")
-    assert agent._tool_needs_permission("mcp_read", "auto")
-    assert not agent._tool_needs_permission("mcp_trusted", "auto")
-    assert agent._tool_needs_permission("read_local_file", "manual")
     assert not agent._tool_needs_permission(
-        "web_search", "manual", network_authorized=True
+        "read_local_file",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
     )
-    assert not agent._tool_needs_permission("run_shell_command", "full")
-    assert agent._tool_needs_permission("run_shell_command", "monitored")
-    assert agent._tool_needs_permission("run_project_unit_tests", "monitored")
-    assert not agent._tool_needs_permission("edit_local_file", "monitored")
+    assert not agent._tool_needs_permission(
+        "web_search",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "edit_local_file",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "apply_workspace_patch",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "rename_workspace_file",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "delete_workspace_file",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert not agent._tool_needs_permission(
+        "search_workspace_text",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert not agent._tool_needs_permission(
+        "inspect_workspace_git",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "mcp_read",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert not agent._tool_needs_permission(
+        "mcp_trusted",
+        "auto",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "read_local_file",
+        "manual",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert not agent._tool_needs_permission(
+        "web_search",
+        "manual",
+        network_authorized=True,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert not agent._tool_needs_permission(
+        "run_shell_command",
+        "full",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "run_shell_command",
+        "monitored",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert agent._tool_needs_permission(
+        "run_project_unit_tests",
+        "monitored",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
+    assert not agent._tool_needs_permission(
+        "edit_local_file",
+        "monitored",
+        network_authorized=False,
+        network_tool_names=agent.NETWORK_TOOL_NAMES,
+        mcp_tool_names=agent.MCP_TOOL_NAMES,
+        mcp_auto_approve_tools=agent.MCP_AUTO_APPROVE_TOOLS,
+    )
 
 
 @pytest.mark.asyncio
