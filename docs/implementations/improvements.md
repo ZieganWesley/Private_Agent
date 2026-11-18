@@ -200,6 +200,10 @@ from sync tool functions by converting them to fully synchronous HTTP clients:
   via `asyncio.to_thread`, so they no longer block the event loop.
 - Logger placement fixed (E402) in `tools/shell.py`, `agent/learning.py`,
   `agent/task_commands.py` so `ruff check .` passes.
+- Re-verified on 2026-11-18: no remaining `asyncio.run` outside `cli.main`;
+  all subprocess/HTTP calls are either synchronous or awaited via
+  `asyncio.create_subprocess_exec`/`httpx.AsyncClient`. Boundary exception
+  handlers restored to appropriate breadth (see A5).
 
 ### A8. Smaller issues
 
@@ -217,6 +221,9 @@ from sync tool functions by converting them to fully synchronous HTTP clients:
   so `pyproject.toml` is the only dependency source.
 - **Fixed:** `.github/copilot-instructions.md` no longer points at the deleted
   roadmap files.
+- Re-verified on 2026-11-18: `agent/__init__.py` `__all__` still excludes
+  private names; config has no unreachable duplicate except; no `main.py`,
+  `requirements.txt` or sync script; typo mapping preserved for compatibility.
 
 
 ---
