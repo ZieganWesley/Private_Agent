@@ -10,6 +10,7 @@ import sqlite3
 import sys
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 import ollama
@@ -479,6 +480,276 @@ async def _invoke_initial_model_with_fallback(
             thinking_enabled=thinking_enabled,
         )
         return llm, llm_with_tools, selected_model, capabilities, response
+
+
+@dataclass
+class _PreflightState:
+    tool_tasks: list
+    blocked_tool_messages: list
+    declined_media_calls: list
+    planning_tool_seen: bool
+    authorized_planning_searches: dict
+    task_action_seen: bool
+    tool_call_count: int
+
+
+async def _preflight_tool_calls(
+    *,
+    response,
+    state: _PreflightState,
+    _task_state,
+    network_consent_state,
+    provider_type,
+    capabilities,
+    planning_only,
+    turn_permission_mode,
+    tool_call_limit,
+    start_time,
+    deadline,
+    memory,
+    planning_research_citations,
+    console,
+) -> None:
+    schema_read_in_batch = any(
+        call.get("name") == "read_table_schema" for call in response.tool_calls
+    )
+    for tool_call in response.tool_calls:
+        call_name = tool_call.get("name")
+        if _task_state.ACTIVE_TASK_ID and state.task_action_seen:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Only one action for the active task "
+                        "may run per model step. Wait for this "
+                        "action's result before proposing another."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if schema_read_in_batch and call_name in {
+            "create_task_plan",
+            "revise_task_plan",
+            "update_todo_step",
+            "create_skill",
+        }:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Schema reads and database writes "
+                        "must be separate model steps. Read the "
+                        "destination schema first, then prepare and "
+                        "submit the write in a later step."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if time.monotonic() - start_time >= MAX_TASK_SECONDS:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content="Error: Task time budget exhausted; this tool was not run.",
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if tool_call_limit is not None and state.tool_call_count >= tool_call_limit:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Maximum tool-call budget exhausted; "
+                        "this tool was not run."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        state.tool_call_count += 1
+        _SESSION_STATS.record_tool_call(str(tool_call.get("name") or "unknown"))
+        network_authorized = False
+        media_capture_authorized = False
+        if planning_only:
+            if state.planning_tool_seen:
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=(
+                            "Error: Use one planner operation per "
+                            "model step so task selection remains "
+                            "deterministic."
+                        ),
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            state.planning_tool_seen = True
+        if call_name in {"create_task_plan", "revise_task_plan"} and not planning_only:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Task plans may only be created or "
+                        "revised in the user's explicit /plan mode."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if planning_only and call_name not in {
+            "read_table_schema",
+            "create_task_plan",
+            "inspect_task_plan",
+            "revise_task_plan",
+            "web_search",
+        }:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Planning mode permits planner tools "
+                        "and consented web searches only; no other "
+                        "research or execution tool ran."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if call_name in LOCAL_MEDIA_TOOL_NAMES:
+            if not _device_tools_allowed(provider_type):
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=(
+                            "Error: Media device tools are local-only and "
+                            "cannot be used with an Online provider."
+                        ),
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            if (
+                call_name
+                in {
+                    "capture_webcam_image",
+                    "load_workspace_image",
+                    "load_workspace_video",
+                }
+                and capabilities["vision"] is not True
+            ):
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=(
+                            "Error: The selected local model does not "
+                            "declare vision support."
+                        ),
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            if call_name != "list_microphone_devices":
+                media_capture_authorized = (
+                    turn_permission_mode == "full"
+                    or approve_local_capture(
+                        call_name,
+                        tool_call.get("args", {}),
+                    )
+                )
+                if not media_capture_authorized:
+                    state.declined_media_calls.append(call_name)
+                    state.blocked_tool_messages.append(
+                        ToolMessage(
+                            content=(
+                                "Error: Media capture was declined; "
+                                "the device was not accessed."
+                            ),
+                            tool_call_id=tool_call.get("id"),
+                        )
+                    )
+                    continue
+        location_refusal = _local_location_refusal(
+            call_name,
+            tool_call.get("args", {}),
+            _device_tools_allowed(provider_type),
+        )
+        if location_refusal:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=location_refusal,
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if call_name in NETWORK_TOOL_NAMES:
+            tool_args = tool_call.get("args", {})
+            planning_search = planning_only and call_name == "web_search"
+            (
+                network_authorized,
+                refusal,
+            ) = await authorize_network_research(
+                call_name,
+                tool_args,
+                permission_mode=("manual" if planning_search else turn_permission_mode),
+                session_consent_state=network_consent_state,
+            )
+            if not network_authorized:
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=refusal,
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            if planning_search:
+                state.authorized_planning_searches[str(tool_call.get("id") or "")] = (
+                    str(tool_args.get("query") or "")
+                )
+        execution_options = {
+            "network_authorized": network_authorized,
+            "local_media_allowed": _device_tools_allowed(provider_type),
+            "media_capture_authorized": media_capture_authorized,
+            "vision_supported": capabilities["vision"] is True,
+            "permission_mode": turn_permission_mode,
+        }
+        execution_tool_call = tool_call
+        if planning_only and call_name in {
+            "create_task_plan",
+            "revise_task_plan",
+        }:
+            prior_references = []
+            if call_name == "revise_task_plan":
+                active_plan = (
+                    memory.get_task(_task_state.ACTIVE_TASK_ID)
+                    if _task_state.ACTIVE_TASK_ID
+                    else None
+                )
+                if active_plan:
+                    prior_references = active_plan["plan"].get(
+                        "research_references",
+                        [],
+                    )
+            execution_tool_call = {
+                **tool_call,
+                "args": {
+                    **tool_call.get("args", {}),
+                    "research_references": list(
+                        dict.fromkeys(prior_references + planning_research_citations)
+                    )[:10],
+                },
+            }
+        if _task_state.ACTIVE_TASK_ID:
+            state.task_action_seen = True
+            state.tool_tasks.append(
+                _execute_task_tool_call(
+                    memory,
+                    _task_state.ACTIVE_TASK_ID,
+                    _task_state.RUNTIME_OWNER_ID,
+                    execution_tool_call,
+                    **execution_options,
+                )
+            )
+        else:
+            state.tool_tasks.append(
+                execute_tool_call(
+                    execution_tool_call,
+                    **execution_options,
+                )
+            )
 
 
 def _tool_needs_permission(
@@ -2932,267 +3203,37 @@ Runtime context:
                     tool_tasks = []
                     blocked_tool_messages = []
                     declined_media_calls = []
-                    planning_tool_seen = False
                     authorized_planning_searches = {}
-                    task_action_seen = False
-                    schema_read_in_batch = any(
-                        call.get("name") == "read_table_schema"
-                        for call in response.tool_calls
+                    state = _PreflightState(
+                        tool_tasks=[],
+                        blocked_tool_messages=[],
+                        declined_media_calls=[],
+                        planning_tool_seen=False,
+                        authorized_planning_searches={},
+                        task_action_seen=False,
+                        tool_call_count=tool_call_count,
                     )
-                    for tool_call in response.tool_calls:
-                        call_name = tool_call.get("name")
-                        if _task_state.ACTIVE_TASK_ID and task_action_seen:
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content=(
-                                        "Error: Only one action for the active task "
-                                        "may run per model step. Wait for this "
-                                        "action's result before proposing another."
-                                    ),
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        if schema_read_in_batch and call_name in {
-                            "create_task_plan",
-                            "revise_task_plan",
-                            "update_todo_step",
-                            "create_skill",
-                        }:
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content=(
-                                        "Error: Schema reads and database writes "
-                                        "must be separate model steps. Read the "
-                                        "destination schema first, then prepare and "
-                                        "submit the write in a later step."
-                                    ),
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        if time.monotonic() - start_time >= MAX_TASK_SECONDS:
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content="Error: Task time budget exhausted; this tool was not run.",
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        if (
-                            tool_call_limit is not None
-                            and tool_call_count >= tool_call_limit
-                        ):
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content=(
-                                        "Error: Maximum tool-call budget exhausted; "
-                                        "this tool was not run."
-                                    ),
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        tool_call_count += 1
-                        _SESSION_STATS.record_tool_call(
-                            str(tool_call.get("name") or "unknown")
-                        )
-                        network_authorized = False
-                        media_capture_authorized = False
-                        if planning_only:
-                            if planning_tool_seen:
-                                blocked_tool_messages.append(
-                                    ToolMessage(
-                                        content=(
-                                            "Error: Use one planner operation per "
-                                            "model step so task selection remains "
-                                            "deterministic."
-                                        ),
-                                        tool_call_id=tool_call.get("id"),
-                                    )
-                                )
-                                continue
-                            planning_tool_seen = True
-                        if (
-                            call_name in {"create_task_plan", "revise_task_plan"}
-                            and not planning_only
-                        ):
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content=(
-                                        "Error: Task plans may only be created or "
-                                        "revised in the user's explicit /plan mode."
-                                    ),
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        if planning_only and call_name not in {
-                            "read_table_schema",
-                            "create_task_plan",
-                            "inspect_task_plan",
-                            "revise_task_plan",
-                            "web_search",
-                        }:
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content=(
-                                        "Error: Planning mode permits planner tools "
-                                        "and consented web searches only; no other "
-                                        "research or execution tool ran."
-                                    ),
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        if call_name in LOCAL_MEDIA_TOOL_NAMES:
-                            if not _device_tools_allowed(provider_type):
-                                blocked_tool_messages.append(
-                                    ToolMessage(
-                                        content=(
-                                            "Error: Media device tools are local-only and "
-                                            "cannot be used with an Online provider."
-                                        ),
-                                        tool_call_id=tool_call.get("id"),
-                                    )
-                                )
-                                continue
-                            if (
-                                call_name
-                                in {
-                                    "capture_webcam_image",
-                                    "load_workspace_image",
-                                    "load_workspace_video",
-                                }
-                                and capabilities["vision"] is not True
-                            ):
-                                blocked_tool_messages.append(
-                                    ToolMessage(
-                                        content=(
-                                            "Error: The selected local model does not "
-                                            "declare vision support."
-                                        ),
-                                        tool_call_id=tool_call.get("id"),
-                                    )
-                                )
-                                continue
-                            if call_name != "list_microphone_devices":
-                                media_capture_authorized = (
-                                    turn_permission_mode == "full"
-                                    or approve_local_capture(
-                                        call_name,
-                                        tool_call.get("args", {}),
-                                    )
-                                )
-                                if not media_capture_authorized:
-                                    declined_media_calls.append(call_name)
-                                    blocked_tool_messages.append(
-                                        ToolMessage(
-                                            content=(
-                                                "Error: Media capture was declined; "
-                                                "the device was not accessed."
-                                            ),
-                                            tool_call_id=tool_call.get("id"),
-                                        )
-                                    )
-                                    continue
-                        location_refusal = _local_location_refusal(
-                            call_name,
-                            tool_call.get("args", {}),
-                            _device_tools_allowed(provider_type),
-                        )
-                        if location_refusal:
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content=location_refusal,
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        if call_name in NETWORK_TOOL_NAMES:
-                            tool_args = tool_call.get("args", {})
-                            planning_search = (
-                                planning_only and call_name == "web_search"
-                            )
-                            (
-                                network_authorized,
-                                refusal,
-                            ) = await authorize_network_research(
-                                call_name,
-                                tool_args,
-                                permission_mode=(
-                                    "manual"
-                                    if planning_search
-                                    else turn_permission_mode
-                                ),
-                                session_consent_state=network_consent_state,
-                            )
-                            if not network_authorized:
-                                blocked_tool_messages.append(
-                                    ToolMessage(
-                                        content=refusal,
-                                        tool_call_id=tool_call.get("id"),
-                                    )
-                                )
-                                continue
-                            if planning_search:
-                                authorized_planning_searches[
-                                    str(tool_call.get("id") or "")
-                                ] = str(tool_args.get("query") or "")
-                        execution_options = {
-                            "network_authorized": network_authorized,
-                            "local_media_allowed": _device_tools_allowed(provider_type),
-                            "media_capture_authorized": media_capture_authorized,
-                            "vision_supported": capabilities["vision"] is True,
-                            "permission_mode": turn_permission_mode,
-                        }
-                        execution_tool_call = tool_call
-                        if planning_only and call_name in {
-                            "create_task_plan",
-                            "revise_task_plan",
-                        }:
-                            prior_references = []
-                            if call_name == "revise_task_plan":
-                                active_plan = (
-                                    memory.get_task(_task_state.ACTIVE_TASK_ID)
-                                    if _task_state.ACTIVE_TASK_ID
-                                    else None
-                                )
-                                if active_plan:
-                                    prior_references = active_plan["plan"].get(
-                                        "research_references",
-                                        [],
-                                    )
-                            execution_tool_call = {
-                                **tool_call,
-                                "args": {
-                                    **tool_call.get("args", {}),
-                                    "research_references": list(
-                                        dict.fromkeys(
-                                            prior_references
-                                            + planning_research_citations
-                                        )
-                                    )[:10],
-                                },
-                            }
-                        if _task_state.ACTIVE_TASK_ID:
-                            task_action_seen = True
-                            tool_tasks.append(
-                                _execute_task_tool_call(
-                                    memory,
-                                    _task_state.ACTIVE_TASK_ID,
-                                    _task_state.RUNTIME_OWNER_ID,
-                                    execution_tool_call,
-                                    **execution_options,
-                                )
-                            )
-                        else:
-                            tool_tasks.append(
-                                execute_tool_call(
-                                    execution_tool_call,
-                                    **execution_options,
-                                )
-                            )
+                    await _preflight_tool_calls(
+                        response=response,
+                        state=state,
+                        _task_state=_task_state,
+                        network_consent_state=network_consent_state,
+                        provider_type=provider_type,
+                        capabilities=capabilities,
+                        planning_only=planning_only,
+                        turn_permission_mode=turn_permission_mode,
+                        tool_call_limit=tool_call_limit,
+                        start_time=start_time,
+                        deadline=deadline,
+                        memory=memory,
+                        planning_research_citations=planning_research_citations,
+                        console=console,
+                    )
+                    tool_tasks = state.tool_tasks
+                    blocked_tool_messages = state.blocked_tool_messages
+                    declined_media_calls = state.declined_media_calls
+                    authorized_planning_searches = state.authorized_planning_searches
+                    tool_call_count = state.tool_call_count
 
                     if tool_tasks:
                         remaining = deadline - time.monotonic()
