@@ -266,7 +266,7 @@ async def _invoke_with_budget(
                         retry_response,
                         timeout=retry_remaining,
                     )
-                except Exception as retry_error:
+                except (ValueError, OSError) as retry_error:
                     log_event(
                         RUN_LOGGER,
                         "model.stream.empty_retry_failed",
@@ -335,7 +335,7 @@ async def _invoke_with_budget(
                 exc_info=True,
             )
             raise
-        except Exception:
+        except (ValueError, OSError):
             log_event(
                 RUN_LOGGER,
                 "model.invoke.failed",
@@ -349,7 +349,7 @@ async def _invoke_with_budget(
 
     try:
         response = await asyncio.wait_for(model.ainvoke(messages), timeout=remaining)
-    except Exception:
+    except (ValueError, OSError):
         log_event(
             RUN_LOGGER,
             "model.invoke.failed",
@@ -386,7 +386,7 @@ async def _invoke_with_budget(
                 model.ainvoke(messages),
                 timeout=retry_remaining,
             )
-        except Exception as retry_error:
+        except (ValueError, OSError) as retry_error:
             log_event(
                 RUN_LOGGER,
                 "model.invoke.empty_retry_failed",
@@ -458,7 +458,7 @@ async def _invoke_with_status(
                 local_model=local_model,
                 context_usage=context_usage,
             )
-        except Exception as exc:
+        except (ValueError, OSError) as exc:
             reference_id = uuid.uuid4().hex[:8]
             log_event(
                 RUN_LOGGER,
@@ -490,7 +490,7 @@ async def _invoke_with_status(
                     model_name=model_name,
                     local_model=local_model,
                 )
-        except Exception as exc:
+        except (ValueError, OSError) as exc:
             reference_id = uuid.uuid4().hex[:8]
             log_event(
                 RUN_LOGGER,

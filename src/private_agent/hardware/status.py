@@ -67,7 +67,7 @@ def inspect_ollama_hardware(
     try:
         client = factory(host=base_url)
         response = client.ps()
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         result["error"] = (
             f"Could not query Ollama runtime status ({type(exc).__name__})."
         )
@@ -77,7 +77,7 @@ def inspect_ollama_hardware(
         if callable(close):
             try:
                 close()
-            except Exception as exc:
+            except (ValueError, OSError) as exc:
                 result["error"] = (
                     f"Could not close Ollama runtime client ({type(exc).__name__})."
                 )

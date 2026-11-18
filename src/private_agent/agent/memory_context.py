@@ -254,7 +254,7 @@ async def _retrieve_rag_documents(
             ),
             k=RAG_CONTEXT_RESULTS,
         )
-    except Exception as exc:
+    except (ValueError, RuntimeError) as exc:
         console.print(
             "[yellow][RAG guidance][/yellow] Could not retrieve coding manuals "
             f"or standards: {exc}"
@@ -445,7 +445,7 @@ async def _run_memory_maintenance(
                             f"[green]Removed local RAG index at {reset_path}. "
                             "Original documents were not changed.[/green]"
                         )
-                    except Exception as exc:
+                    except (ValueError, RuntimeError) as exc:
                         console.print(
                             f"[red][RAG reset error] {type(exc).__name__}: {exc}[/red]"
                         )
@@ -486,7 +486,7 @@ async def _run_memory_maintenance(
                         )
                     else:
                         console.print("[green]RAG reindex completed.[/green]")
-                except Exception as exc:
+                except (ValueError, RuntimeError) as exc:
                     console.print(
                         f"[red][RAG reindex error] {type(exc).__name__}: {exc}[/red]"
                     )
@@ -562,7 +562,7 @@ async def _run_memory_maintenance(
                         ]
                     )
                     console.print(Panel(str(response.content), title="Episode answer"))
-                except Exception as exc:
+                except (ValueError, RuntimeError) as exc:
                     console.print(
                         f"[yellow][Memory question failed] "
                         f"{type(exc).__name__}: {exc}[/yellow]"
@@ -597,7 +597,7 @@ async def _run_memory_maintenance(
                 f"{result['integrity']}; page count "
                 f"{result['pages_before']} → {result['pages_after']}."
             )
-        except Exception as exc:
+        except (ValueError, RuntimeError) as exc:
             console.print(
                 f"[red][SQLite maintenance error] {type(exc).__name__}: {exc}[/red]"
             )

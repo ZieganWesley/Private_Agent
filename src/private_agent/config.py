@@ -360,7 +360,7 @@ def load_or_create_config() -> dict:
                 config_file.write(json.dumps(DEFAULT_CONFIG, indent=4))
         except FileExistsError:
             pass
-        except Exception as e:
+        except (ValueError, OSError) as e:
             warnings.warn(
                 f"Failed to create default configuration file at {CONFIG_FILE_PATH}: {e}",
                 RuntimeWarning,
@@ -400,7 +400,7 @@ def load_or_create_config() -> dict:
             stacklevel=2,
         )
         return _merge_config(DEFAULT_CONFIG)
-    except Exception as e:
+    except (ValueError, OSError) as e:
         warnings.warn(
             f"Unexpected error reading configuration file {CONFIG_FILE_PATH}: {e}. Falling back to default configuration.",
             RuntimeWarning,

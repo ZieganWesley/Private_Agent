@@ -110,7 +110,7 @@ def list_microphone_devices() -> str:
             if available
             else "No microphone input devices were found."
         )
-    except Exception as exc:
+    except OSError as exc:
         return f"Could not list microphone devices ({type(exc).__name__}): {exc}"
 
 
@@ -309,9 +309,6 @@ def load_workspace_video(file_path: str) -> str:
         )
     except (OSError, ValueError) as exc:
         return f"Error loading workspace video: {exc}"
-    except Exception as exc:
-        return f"Video processing failed ({type(exc).__name__}): {exc}"
-    finally:
         if capture is not None:
             capture.release()
 
@@ -395,8 +392,6 @@ def transcribe_workspace_audio(file_path: str) -> str:
         return f"Offline workspace audio transcript ({duration:.1f}s): {transcript}"
     except (OSError, ValueError, RuntimeError) as exc:
         return f"Offline audio-file transcription unavailable: {exc}"
-    except Exception as exc:
-        return f"Offline audio-file transcription failed ({type(exc).__name__}): {exc}"
 
 
 @tool(args_schema=WebcamCaptureInput)
@@ -450,7 +445,7 @@ def capture_webcam_image(device_index: int = DEFAULT_CAMERA_DEVICE_INDEX) -> str
             f"Image captured in memory as camera-image:{reference}. "
             "Analyze the attached frame; it is not saved to disk."
         )
-    except Exception as exc:
+    except ValueError as exc:
         return f"Camera capture failed ({type(exc).__name__}): {exc}"
     finally:
         if capture is not None:
@@ -498,7 +493,7 @@ def load_workspace_image(file_path: str) -> str:
         try:
             with Image.open(io.BytesIO(image_bytes)) as image_header:
                 source_width, source_height = image_header.size
-        except Exception as exc:
+        except ValueError as exc:
             return f"Error: File could not be decoded as an image ({exc})."
         if (
             source_width < 1
@@ -552,7 +547,7 @@ def load_workspace_image(file_path: str) -> str:
         )
     except (OSError, PermissionError, ValueError) as exc:
         return f"Error loading workspace image: {exc}"
-    except Exception as exc:
+    except RuntimeError as exc:
         return f"Image processing failed ({type(exc).__name__}): {exc}"
 
 
@@ -593,7 +588,7 @@ def record_microphone_audio(
             device=device_index,
         )
         sd.wait()
-    except Exception as exc:
+    except RuntimeError as exc:
         return f"Microphone recording failed ({type(exc).__name__}): {exc}"
 
     try:
@@ -608,5 +603,5 @@ def record_microphone_audio(
         if not transcript:
             return "No speech was recognized in the recording."
         return f"Offline microphone transcript ({duration_seconds:.1f}s): {transcript}"
-    except Exception as exc:
+    except RuntimeError as exc:
         return f"Offline transcription failed ({type(exc).__name__}): {exc}"

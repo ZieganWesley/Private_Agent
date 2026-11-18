@@ -94,7 +94,7 @@ def _probe_endpoint(
                 if not any(marker in model.lower() for marker in embedding_markers)
             )
         return LocalRuntime(name, kind, base_url.rstrip("/"), models)
-    except Exception as exc:
+    except (ValueError, ConnectionError, OSError) as exc:
         log_event(
             RUN_LOGGER,
             "provider.local_discovery_failed",
@@ -108,7 +108,7 @@ def _probe_endpoint(
         if client is not None and not getattr(client, "is_closed", True):
             try:
                 client.close()
-            except Exception as exc:
+            except (ValueError, OSError) as exc:
                 log_event(
                     RUN_LOGGER,
                     "provider.local_discovery_client_close_failed",

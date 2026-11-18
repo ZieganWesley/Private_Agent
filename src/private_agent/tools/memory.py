@@ -39,7 +39,7 @@ def read_chat_history_from_sqlite(limit: int = DEFAULT_HISTORY_READ_LIMIT) -> st
             f"[{timestamp}] Session: {session_id} | {role}: {content}"
             for session_id, role, content, timestamp in reversed(rows)
         )
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error reading SQLite history: {exc}"
 
 
@@ -69,7 +69,7 @@ def delete_chat_history_from_sqlite(session_id: str | None = None) -> str:
             return (
                 "Success: Wiped all chat history rows from SQLite persistent database."
             )
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error deleting SQLite history: {exc}"
 
 
@@ -109,7 +109,7 @@ def search_chat_history_in_sqlite(
             f"{str(content)[:1200]}"
             for entry_id, row_session_id, role, timestamp, content in rows
         )
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error searching SQLite history: {exc}"
 
 
@@ -134,5 +134,5 @@ def delete_chat_history_entry_from_sqlite(entry_id: int, session_id: str) -> str
         return (
             "No matching SQLite history entry was deleted; verify its ID and session."
         )
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error deleting SQLite history entry: {exc}"

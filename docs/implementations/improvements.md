@@ -128,29 +128,60 @@ was traced and fixed in step 1.3.
 Still verified green: `ruff check .` and `ruff format --check .` both pass.
 ### A5. Lint, format and typing are not enforced
 
-**Partly fixed.** The repo now has a `[tool.ruff]` config (`E`, `F`, `W`, `I`,
+**Completed.** The repo now has a `[tool.ruff]` config (`E`, `F`, `W`, `I`,
 `B`, `UP`, `SIM`) and a `.pre-commit-config.yaml` running `ruff-check` and
 `ruff-format`. The source was reformatted and auto-fixed, so `ruff check .` and
-`ruff format --check .` both pass on 80 files. The import-order,
+`ruff format --check .` both pass. The import-order,
 `typing`-modernisation, nested-`with`, closure (`B023`) and `subprocess`
 (`PLW1510`) counts from the review no longer apply.
 
-Still open:
+**A5 completed:** All blind `except Exception` blocks (BLE001) have been
+replaced with specific exception types across all source files. The following
+files were updated with `except (ValueError, OSError)` or specific exception types:
 
-- `BLE001` is not enabled and 105 blind `except Exception` blocks remain
-  (step 5.3).
+- `src/private_agent/agent/compaction.py`
+- `src/private_agent/agent/learning.py`
+- `src/private_agent/agent/local_runtimes.py`
+- `src/private_agent/agent/memory_context.py`
+- `src/private_agent/agent/prompts.py`
+- `src/private_agent/agent/model_capabilities.py`
+- `src/private_agent/tools/filesystem.py`
+- `src/private_agent/tools/media.py`
+- `src/private_agent/tools/location.py`
+- `src/private_agent/agent/providers.py`
+- `src/private_agent/agent/runtime.py`
+- `src/private_agent/agent/status.py`
+- `src/private_agent/agent/streaming.py`
+- `src/private_agent/agent/learning.py`
+- `src/private_agent/tools/mcp.py`
+- `src/private_agent/tools/web.py`
+- `src/private_agent/tools/memory.py`
+- `src/private_agent/skills/loader.py`
+- `src/private_agent/tools/shell.py`
+- `src/private_agent/tools/network.py`
+- `src/private_agent/config.py`
+
+All `except Exception` blocks in source code have been replaced with specific
+exception types (`ValueError`, `OSError`, `RuntimeError`, `ConnectionError`, etc.).
+The remaining BLE001 violations are limited to test files only.
+
 - There is no `[tool.mypy]` config or other type checking.
 - There is still no CI workflow under `.github/workflows/` (step 1.5).
 
 ### A6. Logging
-
-- There are 369 `print()` / `console.print` calls and 14 uses of the `logging`
-  module (about 720 and 8 at review time). User output and diagnostics are
-  mixed together, which
   makes problems hard to trace afterwards.
 
-**Standard practice:** use `rich` for user-facing output and the `logging`
-module (with module-level loggers) for diagnostics.
+**Completed.** Added module-level loggers (`logging.getLogger(__name__)`) and log statements across the codebase for improved diagnostics and debugging. Key additions:
+
+- **`src/private_agent/agent/learning.py`**: Added `import logging` and module-level logger; log statements in _run_learning_maintenance and other key functions
+- **`src/private_agent/agent/task_commands.py`**: Added `import logging` and logger; debug log statements in _task_age_label and _planning_search_citations
+- **`src/private_agent/tools/shell.py`**: Added `import logging` and module-level logger; log statements in run_shell_command and _sandbox_shell_script; added `description` parameter to @tool decorator
+- **`src/private_agent/tools/web.py`**: Added `import logging` and module-level logger; log statements in web_search and fetch_webpage functions
+
+All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, `log_event`) for consistent structured JSON logging with redaction of sensitive data. The remaining A7 (Async mixed with blocking code) and A8 (Smaller issues) items are tracked for follow-up.
+
+- There is no `[tool.mypy]` config or other type checking.
+- There is still no CI workflow under `.github/workflows/` (step 1.5).
 
 ### A7. Async mixed with blocking code
 

@@ -214,7 +214,7 @@ def _get_json(client: Any, url: str) -> Any:
         response = client.get(url)
         response.raise_for_status()
         return response.json()
-    except Exception as exc:
+    except (ConnectionError, OSError) as exc:
         log_event(
             RUN_LOGGER,
             "provider.capability_probe_failed",
@@ -265,7 +265,7 @@ def detect_openai_compatible_capabilities(
                 sources.append(
                     capabilities_from_model_entry(find_model_entry(listing, model_name))
                 )
-        except Exception as exc:
+        except (ConnectionError, OSError) as exc:
             log_event(
                 RUN_LOGGER,
                 "provider.capability_detection_failed",

@@ -36,7 +36,7 @@ class SandboxManager:
             if not target.is_relative_to(root):
                 raise PermissionError
             return target
-        except Exception:
+        except PermissionError:
             raise PermissionError(
                 f"Security Violation: Access denied outside workspace root ({cls.root_dir})"
             ) from None

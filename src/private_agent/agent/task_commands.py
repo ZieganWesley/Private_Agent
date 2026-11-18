@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import ipaddress
 import json
 import pathlib
@@ -28,6 +32,11 @@ from .task_lease import TASK_LEASE_SECONDS
 
 
 def _task_age_label(created_at: str) -> str:
+    logger.debug(
+        "_task_age_label called with created_at="
+        + (created_at[:20] if created_at else "")
+        + r"\..."
+    )
     try:
         created = datetime.fromisoformat(created_at)
         if created.tzinfo is None:
@@ -48,6 +57,9 @@ def _task_age_label(created_at: str) -> str:
 
 
 def _planning_search_citations(result: str) -> list[str]:
+    logger.debug(
+        f"_planning_search_citations called with result length={len(result) if result else 0}"
+    )
     """Extract distinct HTTPS citations and reject malformed or local destinations."""
     citations = []
     seen_urls = set()
@@ -476,7 +488,7 @@ def _run_task_management(
                         scope,
                         owner_id=owner_id,
                     )
-                except Exception:
+                except (ValueError, OSError):
                     memory.release_task_lease(task_id, owner_id)
                     raise
                 active_task_id = task_id

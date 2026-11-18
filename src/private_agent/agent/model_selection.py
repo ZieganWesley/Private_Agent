@@ -58,7 +58,7 @@ _MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] =
 def _close_ollama_client(client):
     try:
         client.close()
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         log_event(
             RUN_LOGGER,
             "provider.ollama_client_close_failed",
@@ -282,7 +282,7 @@ def fetch_local_chat_models() -> list[str]:
                 continue
             chat_models.append(model_name)
         return chat_models
-    except Exception as e:
+    except (ValueError, OSError) as e:
         console.print(f"[red][Warning] Could not connect to Ollama: {e}[/red]")
         return []
     finally:

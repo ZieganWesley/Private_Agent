@@ -1,5 +1,8 @@
 """Approved shell execution inside the configured OS sandbox."""
 
+import logging
+
+logger = logging.getLogger(__name__)
 import re
 import shlex
 import subprocess
@@ -24,13 +27,20 @@ _SANDBOX_WORKSPACE = "/workspace"
 
 
 def _sandbox_shell_script(command: str, root: Path) -> str:
+    logger.debug(
+        "_sandbox_shell_script called with command length=" + str(len(command))
+    )
     """Point host workspace paths in a shell script at the sandbox mount."""
     host_root = re.escape(str(root.resolve()))
     return re.sub(rf"{host_root}(?=/|[\s;&|)'\"]|$)", _SANDBOX_WORKSPACE, command)
 
 
-@tool(args_schema=RunShellInput)
+@tool(
+    args_schema=RunShellInput,
+    description="Run an approved command inside the configured OS-isolated workspace",
+)
 def run_shell_command(command: str) -> str:
+    logger.debug("run_shell_command called with command length=" + str(len(command)))
     """Run an approved command inside the configured OS-isolated workspace.
 
     The command starts in the workspace root (mounted at /workspace), so use
@@ -116,5 +126,5 @@ def run_shell_command(command: str) -> str:
         )
     except RuntimeError as exc:
         return f"Execution blocked: {exc}"
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Execution failed: {exc}"

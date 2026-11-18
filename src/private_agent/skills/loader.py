@@ -40,7 +40,7 @@ def load_skills_from_folder(folder_path: str) -> dict[str, AgentSkill]:
                 system_prompt=f"[Skill Markdown Profile: {skill_name}]\n{content}",
                 max_iterations=SKILL_MAX_ITERATIONS,
             )
-        except Exception as exc:
+        except (ValueError, OSError) as exc:
             console.print(
                 f"[red][Warning] Failed loading markdown skill file "
                 f"{markdown_file.name}: {exc}[/red]"
