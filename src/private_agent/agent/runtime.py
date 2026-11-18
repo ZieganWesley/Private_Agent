@@ -159,6 +159,9 @@ from .permissions import (
     coding_uses_isolated_copy as _coding_uses_isolated_copy,
 )
 from .permissions import (
+    prompt_tool_approval as _prompt_tool_approval,
+)
+from .permissions import (
     select_permission_mode as _select_permission_mode_impl,
 )
 from .permissions import (
@@ -1025,15 +1028,13 @@ async def execute_tool_call(
             result = "Error: This tool requires interactive approval and was not run."
         else:
             description = getattr(tool_func, "description", "") if tool_func else ""
-            approval = (
-                console.input(
-                    f"[yellow]Approve tool '{name}'? {description}\n"
-                    f"Arguments: {safe_args}\nRun? \\[y/N]: [/yellow]"
-                )
-                .strip()
-                .lower()
+            approved = _prompt_tool_approval(
+                console=console,
+                name=name,
+                description=description,
+                safe_args=safe_args,
             )
-            if approval != "y":
+            if not approved:
                 result = "Error: Tool invocation was declined; no action was taken."
             else:
                 try:

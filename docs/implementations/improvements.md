@@ -319,6 +319,10 @@ removed; `execute_tool_call` now calls `agent.permissions.tool_needs_permission`
 directly, so the permission policy lives in one place. `test_permission_mode_policy_matrix`
 updated to pass the policy inputs explicitly.
 
+**Partly fixed (B2 step 3):** the interactive tool-approval prompt was moved
+out of `execute_tool_call` into `prompt_tool_approval` in `agent/permissions.py`,
+so approval interaction lives alongside the permission policy.
+
 #### B3. Tool state lives in module globals
 
 - The active database, task, skill folder and code task are global variables
