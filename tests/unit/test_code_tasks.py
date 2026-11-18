@@ -286,11 +286,9 @@ def test_code_task_blocks_manual_git_shell_commands(monkeypatch):
     from private_agent import code_tasks
 
     monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", object())
-    from private_agent.tools import approved_tool_invocation
-
     with (
-        approved_tool_invocation(),
         patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("private_agent.tools.shell.console.input", return_value="y"),
     ):
         result = run_shell_command.invoke({"command": "git status"})
     assert "manual Git commands are disabled" in result
