@@ -282,9 +282,18 @@ LangGraph (`create_react_agent`). The project already depends on LangChain.
 **Partly fixed (B1 step 1):** all `llm.bind_tools(tools_list)` call sites now
 route through a single `_bind_tools(llm, tools_list)` helper in
 `agent/runtime.py`, removing the duplicated binding call and giving one place
-to adjust binding behaviour. Remaining work: extract the model-invocation
-fallback and the per-turn tool preflight/execution blocks into reusable
-helpers.
+to adjust binding behaviour.
+
+Remaining B1 sub-tasks (planned, not yet implemented):
+  1. ✅ Centralise tool binding (`_bind_tools`).
+  2. Extract the model-invocation fallback block into a helper.
+  3. Extract per-turn tool preflight/filtering into a helper.
+  4. Extract tool-batch execution and result handling into a helper.
+  5. Extract the outer turn loop into a reusable `_run_agent_turn`.
+  6. Update planning/coding/skills paths to call the shared loop.
+
+Steps 2-6 are large and touch the interactive session; they are deferred to
+follow-up commits to avoid destabilising the 800+ test suite.
 
 #### B2. Permission checks are spread across several places
 
