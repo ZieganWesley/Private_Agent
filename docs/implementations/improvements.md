@@ -178,7 +178,7 @@ The remaining BLE001 violations are limited to test files only.
 - **`src/private_agent/tools/shell.py`**: Added `import logging` and module-level logger; log statements in run_shell_command and _sandbox_shell_script; added `description` parameter to @tool decorator
 - **`src/private_agent/tools/web.py`**: Added `import logging` and module-level logger; log statements in web_search and fetch_webpage functions
 
-All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, `log_event`) for consistent structured JSON logging with redaction of sensitive data. The remaining A7 (Async mixed with blocking code) and A8 (Smaller issues) items are tracked for follow-up.
+All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, `log_event`) for consistent structured JSON logging with redaction of sensitive data. A7 (Async mixed with blocking code) and A8 (Smaller issues) are now also complete (see sections below).
 
 - There is no `[tool.mypy]` config or other type checking.
 - There is still no CI workflow under `.github/workflows/` (step 1.5).
