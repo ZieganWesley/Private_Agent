@@ -119,11 +119,13 @@ missing prerequisite (`bwrap`, `prlimit`, media libraries) now skip instead of
 failing (`pytest.mark.skipif` / `pytest.importorskip`). All eight failures from
 the review are gone.
 
-The suite now reports 794 passed and 12 skipped, so `pytest -q` is green on a
-machine without `bwrap`. The one failure recorded at review time,
-`tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it`,
+Re-verified on 2026-11-18 against `main` at `5b64e1b`: `pytest -q` reports
+805 passed and 12 skipped (the additional 11 tests are the A3 source-hygiene
+guard). No production module branches on the test runner. The one failure
+recorded at review time, `tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it`,
 was traced and fixed in step 1.3.
 
+Still verified green: `ruff check .` and `ruff format --check .` both pass.
 ### A5. Lint, format and typing are not enforced
 
 **Partly fixed.** The repo now has a `[tool.ruff]` config (`E`, `F`, `W`, `I`,
