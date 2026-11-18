@@ -458,7 +458,7 @@ async def _invoke_with_status(
                 local_model=local_model,
                 context_usage=context_usage,
             )
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, RuntimeError) as exc:
             reference_id = uuid.uuid4().hex[:8]
             log_event(
                 RUN_LOGGER,
@@ -490,7 +490,7 @@ async def _invoke_with_status(
                     model_name=model_name,
                     local_model=local_model,
                 )
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, RuntimeError) as exc:
             reference_id = uuid.uuid4().hex[:8]
             log_event(
                 RUN_LOGGER,

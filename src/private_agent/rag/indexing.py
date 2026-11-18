@@ -520,7 +520,7 @@ def initialize_knowledge_base(
 
         # Return Hybrid RAG retriever wrapper
         return HybridRAGRetriever(vectorstore, all_parsed_docs)
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, RuntimeError) as e:
         if (
             db_exists
             and not state_write_started
@@ -551,7 +551,7 @@ def initialize_knowledge_base(
                     )
                 _write_index_state_atomic(state_file_path, updated_state)
                 return HybridRAGRetriever(vectorstore, all_parsed_docs)
-            except (ValueError, OSError) as recovery_error:
+            except (ValueError, OSError, RuntimeError) as recovery_error:
                 console.print(
                     f"[red][RAG recovery error] Rebuild failed after preserving "
                     f"the previous index: {recovery_error}[/red]"

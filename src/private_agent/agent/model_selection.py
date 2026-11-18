@@ -58,7 +58,7 @@ _MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] =
 def _close_ollama_client(client):
     try:
         client.close()
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, RuntimeError) as exc:
         log_event(
             RUN_LOGGER,
             "provider.ollama_client_close_failed",

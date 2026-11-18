@@ -49,7 +49,7 @@ def inspect_local_model_capabilities(
     try:
         client = client_factory(host=base_url, **client_kwargs())
         details = client.show(model_name)
-    except (ValueError, OSError) as exc:
+    except Exception as exc:
         log_event(
             RUN_LOGGER,
             "provider.local_capabilities_failed",
@@ -214,7 +214,7 @@ def create_robust_local_chat_model(
                 context_window=context_window,
             )
             return model.bind_tools(list(tools)) if tools is not None else model
-        except (ValueError, OSError) as exc:
+        except Exception as exc:
             last_error = exc
             log_event(
                 RUN_LOGGER,
@@ -480,7 +480,7 @@ def select_online_model(
             f"[yellow]Could not list provider models (HTTP "
             f"{exc.response.status_code}); you can enter a model identifier manually.[/yellow]"
         )
-    except (ValueError, OSError) as exc:
+    except Exception as exc:
         log_event(
             RUN_LOGGER,
             "provider.online_model_listing_failed",
@@ -573,7 +573,7 @@ def select_online_model(
 
     try:
         model = model_factory(base_url, model_name, api_key)
-    except (ValueError, OSError) as exc:
+    except Exception as exc:
         log_event(
             RUN_LOGGER,
             "provider.online_model_initialization_failed",
@@ -609,7 +609,7 @@ def online_capabilities(model, allow_tools: bool) -> dict:
     """
     try:
         profile = getattr(model, "profile", None)
-    except (ValueError, OSError) as exc:
+    except Exception as exc:
         log_event(
             RUN_LOGGER,
             "provider.capability_profile_unavailable",

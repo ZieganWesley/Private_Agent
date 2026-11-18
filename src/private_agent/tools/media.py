@@ -309,6 +309,7 @@ def load_workspace_video(file_path: str) -> str:
         )
     except (OSError, ValueError) as exc:
         return f"Error loading workspace video: {exc}"
+    finally:
         if capture is not None:
             capture.release()
 

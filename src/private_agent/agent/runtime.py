@@ -535,7 +535,7 @@ async def execute_tool_call(
                             if hasattr(tool_func, "ainvoke")
                             else await asyncio.to_thread(tool_func.invoke, args)
                         )
-                except (ValueError, OSError) as exc:
+                except (ValueError, OSError, RuntimeError) as exc:
                     reference_id = uuid.uuid4().hex[:8]
                     log_event(
                         RUN_LOGGER,
@@ -559,7 +559,7 @@ async def execute_tool_call(
                     result = await tool_func.ainvoke(args)
                 else:
                     result = await asyncio.to_thread(tool_func.invoke, args)
-        except (ValueError, OSError) as exc:
+        except (ValueError, OSError, RuntimeError) as exc:
             reference_id = uuid.uuid4().hex[:8]
             log_event(
                 RUN_LOGGER,
@@ -928,7 +928,7 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                     f"[green][MCP][/green] Loaded {len(discovered_tools)} "
                     f"tool(s) from '{server_name}'."
                 )
-        except (ValueError, OSError) as exc:
+        except Exception as exc:
             reference_id = uuid.uuid4().hex[:8]
             console.print(
                 f"[red][MCP error][/red] Could not load {server_name} "
@@ -983,7 +983,7 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                     == "REBUILD"
                 ),
             )
-    except (ValueError, OSError) as exc:
+    except Exception as exc:
         vectorstore = None
         reference_id = uuid.uuid4().hex[:8]
         console.print(
@@ -1271,7 +1271,7 @@ async def _choose_provider(
         if preference.online_selection["allow_tools"]:
             try:
                 llm_with_tools = llm.bind_tools(tools_list)
-            except (ValueError, OSError) as exc:
+            except Exception as exc:
                 console.print(
                     f"[yellow]The selected endpoint/model does not accept tool calls "
                     f"({type(exc).__name__}); continuing without tools.[/yellow]"
@@ -1365,7 +1365,7 @@ async def _choose_provider(
                 thinking_effort=thinking_effort,
                 capabilities=capabilities,
             )
-        except (ValueError, OSError) as exc:
+        except Exception as exc:
             log_event(
                 RUN_LOGGER,
                 "provider.local_model_initialization_failed",
@@ -1391,7 +1391,7 @@ async def _choose_provider(
         else:
             try:
                 llm_with_tools = llm.bind_tools(tools_list)
-            except (ValueError, OSError) as exc:
+            except Exception as exc:
                 fallback_model = (
                     next(
                         (
@@ -1711,7 +1711,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
             if capabilities["tools"] is not False:  # noqa: B023
                 try:
                     llm_with_tools = llm.bind_tools(tools_list)  # noqa: B023
-                except (ValueError, OSError) as exc:
+                except Exception as exc:
                     console.print(
                         f"[yellow]Could not restore the base tool set "
                         f"({type(exc).__name__}); tool calls are disabled for this model.[/yellow]"
@@ -2172,7 +2172,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         continue
                     try:
                         llm_with_tools = llm.bind_tools(tools_list)
-                    except (ValueError, OSError) as exc:
+                    except Exception as exc:
                         console.print(
                             f"[red]Could not bind planner tools "
                             f"({type(exc).__name__}); no task was planned.[/red]"
@@ -2185,7 +2185,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     tools_list = list(base_tools_list)
                     try:
                         llm_with_tools = llm.bind_tools(tools_list)
-                    except (ValueError, OSError) as exc:
+                    except Exception as exc:
                         console.print(
                             f"[yellow]Could not bind the session tools "
                             f"({type(exc).__name__}); continuing without tool calls.[/yellow]"
@@ -2291,7 +2291,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             direct_source=not _coding_uses_isolated_copy(access_level),
                             allow_network=_coding_allows_command_network(access_level),
                         )
-                    except (ValueError, OSError) as exc:
+                    except Exception as exc:
                         try:
                             memory.finish_task_action(
                                 workspace_action_id,
@@ -2355,7 +2355,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
 
                     try:
                         llm_with_tools = llm.bind_tools(tools_list)
-                    except (ValueError, OSError) as exc:
+                    except Exception as exc:
                         console.print(
                             f"[red]Could not bind the code-task tools ({type(exc).__name__}); "
                             "no code was written.[/red]"
@@ -2528,7 +2528,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                                     "[yellow][RAG] Update failed; keeping the "
                                     "previous index.[/yellow]"
                                 )
-                    except (ValueError, OSError) as exc:
+                    except Exception as exc:
                         reference_id = uuid.uuid4().hex[:8]
                         console.print(
                             f"[yellow][RAG] Auto-update skipped "
@@ -2575,7 +2575,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             console.print(
                                 f"[cyan][RAG State][/cyan] Retrieved {len(relevant_docs)} document/episodic chunks."
                             )
-                    except (ValueError, OSError) as exc:
+                    except Exception as exc:
                         reference_id = uuid.uuid4().hex[:8]
                         console.print(
                             "[yellow][RAG][/yellow] Local search failed; "
@@ -2795,7 +2795,7 @@ Runtime context:
                         thinking_enabled=thinking_enabled,
                         context_usage=usage,
                     )
-                except (ValueError, OSError) as e:
+                except Exception as e:
                     error_text = str(e).lower()
                     tool_unsupported = any(
                         marker in error_text
@@ -3323,7 +3323,7 @@ Runtime context:
                             thinking_enabled=thinking_enabled,
                             context_usage=usage,
                         )
-                    except (ValueError, OSError) as exc:
+                    except Exception as exc:
                         if provider_type == "online":
                             raise RuntimeError(
                                 "Online model failed after tool execution. "
@@ -3632,7 +3632,7 @@ async def _summarize_and_save_session(
         return True
     except (KeyboardInterrupt, asyncio.CancelledError):
         console_obj.print("[yellow][Summary] Skipped; no summary was saved.[/yellow]")
-    except (ValueError, OSError) as exc:
+    except Exception as exc:
         log_event(
             RUN_LOGGER,
             "session.summary_failed",
@@ -3698,7 +3698,7 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
                             f"task interruption: {exc}[/yellow]"
                         )
                 _ACTIVE_MEMORY.close()
-            except (ValueError, OSError) as exc:
+            except Exception as exc:
                 log_event(
                     RUN_LOGGER,
                     "memory.shutdown_failed",

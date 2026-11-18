@@ -228,7 +228,7 @@ class StatusIndicator:
                 self._render(), spinner=spinner, spinner_style=style
             )
             status.start()
-        except (ValueError, OSError):
+        except (ValueError, OSError, RuntimeError):
             self._status = None
             return self
         self._status = status
@@ -245,7 +245,7 @@ class StatusIndicator:
         spinner, style = phase_spinner(self.phase)
         try:
             self._status.update(self._render(), spinner=spinner, spinner_style=style)
-        except (ValueError, OSError):
+        except (ValueError, OSError, RuntimeError):
             self._status = None
 
     def stop(self) -> None:
@@ -255,7 +255,7 @@ class StatusIndicator:
             return
         try:
             status.stop()
-        except (ValueError, OSError):
+        except (ValueError, OSError, RuntimeError):
             return
 
     def __enter__(self) -> StatusIndicator:
