@@ -350,6 +350,10 @@ path and task session/id via `get_tool_context()` instead of the module globals
 **Partly fixed (B3 step 4):** `tools/__init__.py`'s `create_skill` now reads
 skill directory/registry/session and DB/task state via `get_tool_context()`.
 
+**Partly fixed (B3 step 5):** `agent/runtime.py` now updates the active code
+task through `set_tool_context()` instead of writing `code_tasks.ACTIVE_CODE_TASK`
+directly.
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead

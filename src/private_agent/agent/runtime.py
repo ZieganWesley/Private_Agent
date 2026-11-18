@@ -100,6 +100,7 @@ from ..tools import (
     close_mcp_sandbox_dirs,
     close_outbound_http_clients,
     describe_tool_catalog,
+    get_tool_context,
     has_internet_connection,
     load_configured_mcp_tools,
     ollama_client_kwargs,
@@ -107,6 +108,7 @@ from ..tools import (
     set_active_skill_runtime,
     set_active_skill_session,
     set_active_task_context,
+    set_tool_context,
 )
 from ..tools.media import (
     approve_local_capture,
@@ -2212,7 +2214,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     f"{type(exc).__name__}: {exc}[/yellow]"
                 )
             SandboxManager.set_root(str(previous_workspace_root))  # noqa: B023
-            code_tasks_module.ACTIVE_CODE_TASK = None
+            _tool_context = get_tool_context()
+            _tool_context.code_task = None
+            set_tool_context(_tool_context)
             AVAILABLE_TOOLS.pop("run_project_unit_tests", None)
             AVAILABLE_TOOLS.pop("checkpoint_code_task", None)
             AVAILABLE_TOOLS.pop("finalize_code_task", None)
@@ -2845,7 +2849,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         continue
 
                     SandboxManager.set_root(str(active_code_workspace.root))
-                    code_tasks_module.ACTIVE_CODE_TASK = active_code_workspace
+                    _tool_context = get_tool_context()
+                    _tool_context.code_task = active_code_workspace
+                    set_tool_context(_tool_context)
                     AVAILABLE_TOOLS["run_project_unit_tests"] = run_project_unit_tests
                     AVAILABLE_TOOLS["checkpoint_code_task"] = checkpoint_code_task
                     AVAILABLE_TOOLS["finalize_code_task"] = finalize_code_task
@@ -3826,7 +3832,9 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
             AVAILABLE_TOOLS.pop(tool_name, None)
         set_active_skill_session(None)
         set_active_task_context(None)
-        code_tasks_module.ACTIVE_CODE_TASK = None
+        _tool_context = get_tool_context()
+        _tool_context.code_task = None
+        set_tool_context(_tool_context)
         SandboxManager.set_root(str(original_workspace_root))
         await close_outbound_http_clients()
         close_mcp_sandbox_dirs()
