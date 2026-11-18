@@ -387,6 +387,11 @@ async def authorize_network_research(
     )
 
 
+def _bind_tools(llm, tools_list):
+    """Bind the active tool set to an LLM (B1 step 1 helper)."""
+    return llm.bind_tools(tools_list)
+
+
 def _tool_needs_permission(
     name: str,
     permission_mode: str,
@@ -1270,7 +1275,7 @@ async def _choose_provider(
             ]
         if preference.online_selection["allow_tools"]:
             try:
-                llm_with_tools = llm.bind_tools(tools_list)
+                llm_with_tools = _bind_tools(llm, tools_list)
             except Exception as exc:
                 console.print(
                     f"[yellow]The selected endpoint/model does not accept tool calls "
@@ -1390,7 +1395,7 @@ async def _choose_provider(
             llm_with_tools = llm
         else:
             try:
-                llm_with_tools = llm.bind_tools(tools_list)
+                llm_with_tools = _bind_tools(llm, tools_list)
             except Exception as exc:
                 fallback_model = (
                     next(
@@ -1424,7 +1429,7 @@ async def _choose_provider(
                         thinking_effort=thinking_effort,
                         capabilities=capabilities,
                     )
-                    llm_with_tools = llm.bind_tools(tools_list)
+                    llm_with_tools = _bind_tools(llm, tools_list)
         log_event(
             RUN_LOGGER,
             "providers.local_runtime_selected",
@@ -1710,7 +1715,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
             tools_list = list(base_tools_list)  # noqa: B023
             if capabilities["tools"] is not False:  # noqa: B023
                 try:
-                    llm_with_tools = llm.bind_tools(tools_list)  # noqa: B023
+                    llm_with_tools = _bind_tools(llm, tools_list)  # noqa: B023
                 except Exception as exc:
                     console.print(
                         f"[yellow]Could not restore the base tool set "
@@ -2000,7 +2005,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             capabilities=capabilities,
                         )
                         llm_with_tools = (
-                            llm.bind_tools(tools_list)
+                            _bind_tools(llm, tools_list)
                             if capabilities["tools"] is not False
                             else llm
                         )
@@ -2030,7 +2035,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             capabilities=capabilities,
                         )
                         llm_with_tools = (
-                            llm.bind_tools(tools_list)
+                            _bind_tools(llm, tools_list)
                             if capabilities["tools"] is not False
                             else llm
                         )
@@ -2171,7 +2176,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         )
                         continue
                     try:
-                        llm_with_tools = llm.bind_tools(tools_list)
+                        llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:
                         console.print(
                             f"[red]Could not bind planner tools "
@@ -2184,7 +2189,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                 ):
                     tools_list = list(base_tools_list)
                     try:
-                        llm_with_tools = llm.bind_tools(tools_list)
+                        llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:
                         console.print(
                             f"[yellow]Could not bind the session tools "
@@ -2354,7 +2359,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     tools_list = list(tools_by_name.values())
 
                     try:
-                        llm_with_tools = llm.bind_tools(tools_list)
+                        llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:
                         console.print(
                             f"[red]Could not bind the code-task tools ({type(exc).__name__}); "
@@ -2841,7 +2846,7 @@ Runtime context:
                         supports_thinking=capabilities["thinking"],
                         context_window=capabilities.get("context_window"),
                     )
-                    llm_with_tools = llm.bind_tools(tools_list)
+                    llm_with_tools = _bind_tools(llm, tools_list)
                     response = await _invoke_with_status(
                         llm_with_tools,
                         messages,
