@@ -286,7 +286,8 @@ to adjust binding behaviour.
 
 Remaining B1 sub-tasks (planned, not yet implemented):
   1. ✅ Centralise tool binding (`_bind_tools`).
-  2. Extract the model-invocation fallback block into a helper.
+  2. ✅ Extract the model-invocation fallback block into
+     `_invoke_initial_model_with_fallback`.
   3. Extract per-turn tool preflight/filtering into a helper.
   4. Extract tool-batch execution and result handling into a helper.
   5. Extract the outer turn loop into a reusable `_run_agent_turn`.
