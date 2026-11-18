@@ -3329,185 +3329,191 @@ Runtime context:
                     console=console,
                 )
 
-                iteration = 0
-                tool_call_count = 0
-                while getattr(response, "tool_calls", None) and (
-                    tool_iteration_limit is None or iteration < tool_iteration_limit
-                ):
-                    iteration += 1
-                    if (
-                        iteration == 1
-                        and response.content
-                        and not isinstance(response, AIMessageChunk)
+                async def _run_agent_turn(response) -> Any:
+                    iteration = 0
+                    tool_call_count = 0
+                    while getattr(response, "tool_calls", None) and (
+                        tool_iteration_limit is None or iteration < tool_iteration_limit  # noqa: B023
                     ):
-                        plan_text = str(response.content).strip()
-                        if plan_text:
-                            console.print(f"[cyan][Plan][/cyan] {plan_text}")
-                    iteration_label = (
-                        f"{iteration} of {tool_iteration_limit}"
-                        if tool_iteration_limit is not None
-                        else str(iteration)
-                    )
-                    console.print(
-                        f"[cyan][Agent Loop] Plan/act/verify step "
-                        f"{iteration_label}...[/cyan]"
-                    )
-                    for tool_call in response.tool_calls:
-                        _display_tool_request(tool_call)
-                    messages.append(response)
-
-                    tool_tasks = []
-                    blocked_tool_messages = []
-                    declined_media_calls = []
-                    authorized_planning_searches = {}
-                    state = _PreflightState(
-                        tool_tasks=[],
-                        blocked_tool_messages=[],
-                        declined_media_calls=[],
-                        planning_tool_seen=False,
-                        authorized_planning_searches={},
-                        task_action_seen=False,
-                        tool_call_count=tool_call_count,
-                    )
-                    await _preflight_tool_calls(
-                        response=response,
-                        state=state,
-                        _task_state=_task_state,
-                        network_consent_state=network_consent_state,
-                        provider_type=provider_type,
-                        capabilities=capabilities,
-                        planning_only=planning_only,
-                        turn_permission_mode=turn_permission_mode,
-                        tool_call_limit=tool_call_limit,
-                        start_time=start_time,
-                        deadline=deadline,
-                        memory=memory,
-                        planning_research_citations=planning_research_citations,
-                        console=console,
-                    )
-                    tool_tasks = state.tool_tasks
-                    blocked_tool_messages = state.blocked_tool_messages
-                    declined_media_calls = state.declined_media_calls
-                    authorized_planning_searches = state.authorized_planning_searches
-                    tool_call_count = state.tool_call_count
-
-                    response, stop = await _execute_tool_batch(
-                        response=response,
-                        session_id=session_id,
-                        tool_tasks=tool_tasks,
-                        blocked_tool_messages=blocked_tool_messages,
-                        declined_media_calls=declined_media_calls,
-                        authorized_planning_searches=authorized_planning_searches,
-                        planning_research_citations=planning_research_citations,
-                        messages=messages,
-                        provider_type=provider_type,
-                        planning_only=planning_only,
-                        deadline=deadline,
-                        console=console,
-                    )
-                    if stop:
-                        break
-
-                    await compact_loop_messages(
-                        llm,
-                        messages,
-                        context_stats["max"],
-                        threshold=CONTEXT_COMPACTION_THRESHOLD,
-                        max_chars=CONTEXT_SUMMARY_CHARS,
-                        notify=lambda text: console.print(
-                            f"[cyan][Context][/cyan] {text}"
-                        ),
-                        model_name=selected_model,
-                    )
-                    usage = (messages_tokens(messages), context_stats["max"])
-                    try:
-                        response = await _invoke_with_status(
-                            llm_with_tools,
-                            messages,
-                            deadline,
-                            model_name=selected_model,
-                            status_message="Processing tool outputs...",
-                            local_model=provider_type == "local",
-                            thinking_enabled=thinking_enabled,
-                            context_usage=usage,
+                        iteration += 1
+                        if (
+                            iteration == 1
+                            and response.content
+                            and not isinstance(response, AIMessageChunk)
+                        ):
+                            plan_text = str(response.content).strip()
+                            if plan_text:
+                                console.print(f"[cyan][Plan][/cyan] {plan_text}")
+                        iteration_label = (
+                            f"{iteration} of {tool_iteration_limit}"  # noqa: B023
+                            if tool_iteration_limit is not None  # noqa: B023
+                            else str(iteration)
                         )
-                    except Exception as exc:
-                        if provider_type == "online":
+                        console.print(
+                            f"[cyan][Agent Loop] Plan/act/verify step "
+                            f"{iteration_label}...[/cyan]"
+                        )
+                        for tool_call in response.tool_calls:
+                            _display_tool_request(tool_call)
+                        messages.append(response)  # noqa: B023
+
+                        tool_tasks = []
+                        blocked_tool_messages = []
+                        declined_media_calls = []
+                        authorized_planning_searches = {}
+                        state = _PreflightState(
+                            tool_tasks=[],
+                            blocked_tool_messages=[],
+                            declined_media_calls=[],
+                            planning_tool_seen=False,
+                            authorized_planning_searches={},
+                            task_action_seen=False,
+                            tool_call_count=tool_call_count,
+                        )
+                        await _preflight_tool_calls(
+                            response=response,
+                            state=state,
+                            _task_state=_task_state,
+                            network_consent_state=network_consent_state,
+                            provider_type=provider_type,  # noqa: B023
+                            capabilities=capabilities,  # noqa: B023
+                            planning_only=planning_only,  # noqa: B023
+                            turn_permission_mode=turn_permission_mode,  # noqa: B023
+                            tool_call_limit=tool_call_limit,  # noqa: B023
+                            start_time=start_time,  # noqa: B023
+                            deadline=deadline,  # noqa: B023
+                            memory=memory,
+                            planning_research_citations=planning_research_citations,  # noqa: B023
+                            console=console,
+                        )
+                        tool_tasks = state.tool_tasks
+                        blocked_tool_messages = state.blocked_tool_messages
+                        declined_media_calls = state.declined_media_calls
+                        authorized_planning_searches = (
+                            state.authorized_planning_searches
+                        )
+                        tool_call_count = state.tool_call_count
+
+                        response, stop = await _execute_tool_batch(
+                            response=response,
+                            session_id=session_id,
+                            tool_tasks=tool_tasks,
+                            blocked_tool_messages=blocked_tool_messages,
+                            declined_media_calls=declined_media_calls,
+                            authorized_planning_searches=authorized_planning_searches,
+                            planning_research_citations=planning_research_citations,  # noqa: B023
+                            messages=messages,  # noqa: B023
+                            provider_type=provider_type,  # noqa: B023
+                            planning_only=planning_only,  # noqa: B023
+                            deadline=deadline,  # noqa: B023
+                            console=console,
+                        )
+                        if stop:
+                            break
+
+                        await compact_loop_messages(
+                            llm,  # noqa: B023
+                            messages,  # noqa: B023
+                            context_stats["max"],  # noqa: B023
+                            threshold=CONTEXT_COMPACTION_THRESHOLD,
+                            max_chars=CONTEXT_SUMMARY_CHARS,
+                            notify=lambda text: console.print(
+                                f"[cyan][Context][/cyan] {text}"
+                            ),
+                            model_name=selected_model,  # noqa: B023
+                        )
+                        usage = (messages_tokens(messages), context_stats["max"])  # noqa: B023
+                        try:
+                            response = await _invoke_with_status(
+                                llm_with_tools,  # noqa: B023
+                                messages,  # noqa: B023
+                                deadline,  # noqa: B023
+                                model_name=selected_model,  # noqa: B023
+                                status_message="Processing tool outputs...",
+                                local_model=provider_type == "local",  # noqa: B023
+                                thinking_enabled=thinking_enabled,  # noqa: B023
+                                context_usage=usage,
+                            )
+                        except Exception as exc:
+                            if provider_type == "online":  # noqa: B023
+                                raise RuntimeError(
+                                    "Online model failed after tool execution. "
+                                    + _online_request_failure(exc)
+                                ) from None
                             raise RuntimeError(
-                                "Online model failed after tool execution. "
-                                + _online_request_failure(exc)
-                            ) from None
-                        raise RuntimeError(
-                            f"Model failed after tool execution: {exc}"
-                        ) from exc
+                                f"Model failed after tool execution: {exc}"
+                            ) from exc
 
-                if getattr(response, "tool_calls", None):
-                    messages.append(response)
-                    limit_message = (
-                        "Error: The configured tool-call limit was reached. "
-                        "The requested task is not verified complete."
-                        if enforce_tool_call_limits
-                        else (
-                            "Error: The request time budget was reached. "
+                    if getattr(response, "tool_calls", None):
+                        messages.append(response)  # noqa: B023
+                        limit_message = (
+                            "Error: The configured tool-call limit was reached. "
                             "The requested task is not verified complete."
+                            if enforce_tool_call_limits  # noqa: B023
+                            else (
+                                "Error: The request time budget was reached. "
+                                "The requested task is not verified complete."
+                            )
                         )
-                    )
-                    messages.extend(
-                        ToolMessage(
-                            content=limit_message,
-                            tool_call_id=call.get("id"),
+                        messages.extend(  # noqa: B023
+                            ToolMessage(
+                                content=limit_message,
+                                tool_call_id=call.get("id"),
+                            )
+                            for call in response.tool_calls
                         )
-                        for call in response.tool_calls
-                    )
-                    if deadline <= time.monotonic():
-                        response = AIMessage(
-                            content="The task execution budget was exhausted. "
-                            "Some work may be complete, but the requested outcome "
-                            "was not verified."
+                        if deadline <= time.monotonic():  # noqa: B023
+                            response = AIMessage(
+                                content="The task execution budget was exhausted. "
+                                "Some work may be complete, but the requested outcome "
+                                "was not verified."
+                            )
+                        else:
+                            response = await _invoke_with_status(
+                                llm,  # noqa: B023
+                                messages  # noqa: B023
+                                + [
+                                    SystemMessage(
+                                        content="Stop requesting tools. Report what was completed, "
+                                        "what remains unverified, and that the execution budget ended."
+                                    )
+                                ],
+                                deadline,  # noqa: B023
+                                model_name=selected_model,  # noqa: B023
+                                status_message="Finalizing response...",
+                                local_model=provider_type == "local",  # noqa: B023
+                                thinking_enabled=thinking_enabled,  # noqa: B023
+                            )
+
+                    if (
+                        not getattr(response, "tool_calls", None)
+                        and not message_text(response).strip()
+                        and any(isinstance(m, ToolMessage) for m in messages)  # noqa: B023
+                        and deadline > time.monotonic()  # noqa: B023
+                    ):
+                        console.print(
+                            "[cyan][Context][/cyan] The model gave no answer after the tool "
+                            "results; asking it once to answer from them..."
                         )
-                    else:
                         response = await _invoke_with_status(
-                            llm,
-                            messages
+                            llm,  # noqa: B023
+                            messages  # noqa: B023
                             + [
                                 SystemMessage(
-                                    content="Stop requesting tools. Report what was completed, "
-                                    "what remains unverified, and that the execution budget ended."
+                                    content="Answer the user's request now in plain text, "
+                                    "using the tool results above."
                                 )
                             ],
-                            deadline,
-                            model_name=selected_model,
+                            deadline,  # noqa: B023
+                            model_name=selected_model,  # noqa: B023
                             status_message="Finalizing response...",
-                            local_model=provider_type == "local",
-                            thinking_enabled=thinking_enabled,
+                            local_model=provider_type == "local",  # noqa: B023
+                            thinking_enabled=thinking_enabled,  # noqa: B023
                         )
 
-                if (
-                    not getattr(response, "tool_calls", None)
-                    and not message_text(response).strip()
-                    and any(isinstance(m, ToolMessage) for m in messages)
-                    and deadline > time.monotonic()
-                ):
-                    console.print(
-                        "[cyan][Context][/cyan] The model gave no answer after the tool "
-                        "results; asking it once to answer from them..."
-                    )
-                    response = await _invoke_with_status(
-                        llm,
-                        messages
-                        + [
-                            SystemMessage(
-                                content="Answer the user's request now in plain text, "
-                                "using the tool results above."
-                            )
-                        ],
-                        deadline,
-                        model_name=selected_model,
-                        status_message="Finalizing response...",
-                        local_model=provider_type == "local",
-                        thinking_enabled=thinking_enabled,
-                    )
+                    return response
 
+                response = await _run_agent_turn(response)
                 elapsed_time = time.monotonic() - start_time
 
                 content = response.content
