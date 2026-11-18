@@ -1,6 +1,5 @@
 """Built-in current-location and weather tools (internet required)."""
 
-import asyncio
 import json
 import re
 import urllib.parse
@@ -11,7 +10,7 @@ from langchain_core.tools import tool
 
 from ..config import NETWORK_REQUEST_TIMEOUT
 from . import has_internet_connection
-from .network import _get_limited_response, _public_only_async_client
+from .network import _get_limited_response_sync, public_only_sync_client
 from .schemas import GetWeatherInput
 
 MAX_API_RESPONSE_BYTES = 1_048_576
@@ -60,34 +59,16 @@ WEATHER_CODES = {
 }
 
 
-def _run(coroutine):
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-    if loop and loop.is_running():
-        import concurrent.futures
-
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(asyncio.run, coroutine).result()
-    return asyncio.run(coroutine)
-
-
-async def _get_json_async(url: str, params: dict | None = None) -> Any:
+def _get_json(url: str, params: dict | None = None) -> Any:
     if params:
         url = f"{url}?{urllib.parse.urlencode(params)}"
-    async with _public_only_async_client(
+    with public_only_sync_client(
         headers={"User-Agent": "private-agent"},
         timeout=NETWORK_REQUEST_TIMEOUT,
+        track=False,
     ) as client:
-        body, encoding = await _get_limited_response(
-            client, url, MAX_API_RESPONSE_BYTES
-        )
+        body, encoding = _get_limited_response_sync(client, url, MAX_API_RESPONSE_BYTES)
     return json.loads(body.decode(encoding, errors="replace"))
-
-
-def _get_json(url: str, params: dict | None = None) -> Any:
-    return _run(_get_json_async(url, params))
 
 
 def _number(value: Any) -> float | None:

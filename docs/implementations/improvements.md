@@ -185,19 +185,30 @@ All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, 
 
 ### A7. Async mixed with blocking code
 
-- `tools/web.py` (lines 65–66, 129–130) and `tools/location.py` (lines 52–53)
-  call `asyncio.run` inside a thread pool to run async code from sync tool
-  functions.
-- `subprocess.run` is called from async code paths (ruff `ASYNC221`), which
-  blocks the event loop.
-- `database/memory.py:51` shares one SQLite connection across threads with
-  `check_same_thread=False` and no visible lock.
+**Completed.** Removed the `asyncio.run`-inside-ThreadPoolExecutor anti-pattern
+from sync tool functions by converting them to fully synchronous HTTP clients:
+
+- **`src/private_agent/tools/web.py`**: `fetch_webpage` and `download_web_file`
+  now use `public_only_sync_client` and a new synchronous
+  `_get_limited_response_sync` helper instead of spawning a thread pool to run
+  `asyncio.run`. Added `_get_limited_response_sync` to `tools/network.py`.
+- **`src/private_agent/tools/location.py`**: `_get_json` now uses the sync HTTP
+  client; removed `_run` and `_get_json_async`.
+- **`database/memory.py`**: connection already guarded by `threading.Lock`;
+  verified by `test_sqlite_concurrent_read_write_locking`.
+- `subprocess.run`/`Popen` usages are confined to synchronous functions invoked
+  via `asyncio.to_thread`, so they no longer block the event loop.
+- Logger placement fixed (E402) in `tools/shell.py`, `agent/learning.py`,
+  `agent/task_commands.py` so `ruff check .` passes.
 
 ### A8. Smaller issues
 
-- `agent/__init__.py` still re-exports every name in `runtime.py` through a
-  generated `__all__`, including private ones, so there is no real public API
-  (step 4.6).
+- **Fixed:** `agent/__init__.py` now excludes private (underscore-prefixed)
+  names from the generated `__all__`, so the public API no longer leaks private
+  helpers. Private names remain importable via `__getattr__` for backwards
+  compatibility.
+- **Fixed:** redundant unreachable `except (ValueError, OSError)` block removed
+  from `config.py` (B025 duplicate-exception).
 - **Fixed:** the `VISIBILE_REASONING` typo. The runtime uses
   `VISIBLE_REASONING`; the misspelling survives only as a backward-compatible
   config-key mapping in `config.py`.

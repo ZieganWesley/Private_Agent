@@ -577,22 +577,24 @@ def test_failed_download_preserves_existing_destination(temp_workspace, monkeypa
     destination.write_text("original", encoding="utf-8")
 
     class FakeClient:
-        async def __aenter__(self):
+        def __enter__(self):
             return self
 
-        async def __aexit__(self, *args):
-            pass
+        def __exit__(self, *args):
+            return False
 
     monkeypatch.setattr("private_agent.tools.web.has_internet_connection", lambda: True)
     monkeypatch.setattr(
-        "private_agent.tools.web._public_only_async_client",
+        "private_agent.tools.web.public_only_sync_client",
         lambda **kwargs: FakeClient(),
     )
 
-    async def fail_fetch(*args, **kwargs):
+    def fail_fetch(*args, **kwargs):
         raise OSError("network dropped")
 
-    monkeypatch.setattr("private_agent.tools.web._get_limited_response", fail_fetch)
+    monkeypatch.setattr(
+        "private_agent.tools.web._get_limited_response_sync", fail_fetch
+    )
     result = download_web_file.invoke(
         {
             "url": "https://public.example.test/file.txt",

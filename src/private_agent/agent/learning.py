@@ -8,8 +8,6 @@ import sqlite3
 import sys
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from langchain_core.messages import HumanMessage, SystemMessage
 from rich.panel import Panel
 from rich.table import Table
@@ -22,6 +20,8 @@ from ..config import (
 from ..database import PersistentMemory
 from ..skills import create_skill_file
 from .console import console
+
+logger = logging.getLogger(__name__)
 
 
 def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:

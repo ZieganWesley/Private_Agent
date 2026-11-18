@@ -1,6 +1,5 @@
 """Built-in web search, fetch, and download tools."""
 
-import asyncio
 import contextlib
 import os
 import tempfile
@@ -15,7 +14,10 @@ from ..config import (
 )
 from ..sandbox import SandboxManager
 from . import _search_duckduckgo, has_internet_connection, require_internet
-from .network import _get_limited_response, _public_only_async_client
+from .network import (
+    _get_limited_response_sync,
+    public_only_sync_client,
+)
 from .schemas import DownloadWebFileInput, FetchWebpageInput, WebSearchInput
 
 
@@ -34,14 +36,15 @@ def web_search(query: str) -> str:
 def fetch_webpage(url: str) -> str:
     """Fetch, clean, and read article or documentation text from a URL."""
 
-    async def _async_fetch():
+    try:
         from bs4 import BeautifulSoup
 
-        async with _public_only_async_client(
+        with public_only_sync_client(
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=NETWORK_REQUEST_TIMEOUT,
+            track=False,
         ) as client:
-            body, encoding = await _get_limited_response(
+            body, encoding = _get_limited_response_sync(
                 client,
                 url,
                 MAX_WEBPAGE_BYTES,
@@ -55,18 +58,6 @@ def fetch_webpage(url: str) -> str:
             if len(text) > MAX_FETCHED_WEBPAGE_CHARS
             else text
         )
-
-    try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        if loop and loop.is_running():
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, _async_fetch()).result()
-        return asyncio.run(_async_fetch())
     except ImportError:
         return "Failed to fetch webpage: Required package 'httpx' or 'beautifulsoup4' is not installed."
     except (ValueError, OSError) as exc:
@@ -88,16 +79,16 @@ def download_web_file(url: str, save_path: str) -> str:
     if not has_internet_connection():
         return "Error: Network unavailable. Please check your internet connection and try again."
 
-    async def _async_download():
-        target = SandboxManager.validate_path(save_path)
+    try:
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary_path = None
         try:
-            async with _public_only_async_client(
+            with public_only_sync_client(
                 headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"},
                 timeout=NETWORK_REQUEST_TIMEOUT,
+                track=False,
             ) as client:
-                body, _ = await _get_limited_response(
+                body, _ = _get_limited_response_sync(
                     client,
                     url,
                     MAX_DOWNLOAD_BYTES,
@@ -117,17 +108,5 @@ def download_web_file(url: str, save_path: str) -> str:
                     os.unlink(temporary_path)
             raise
         return f"Success: File downloaded and saved to '{save_path}'."
-
-    try:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-        if loop and loop.is_running():
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(asyncio.run, _async_download()).result()
-        return asyncio.run(_async_download())
     except (ValueError, OSError) as exc:
         return f"Failed to download file: {exc}"

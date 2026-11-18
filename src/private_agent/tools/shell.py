@@ -1,8 +1,6 @@
 """Approved shell execution inside the configured OS sandbox."""
 
 import logging
-
-logger = logging.getLogger(__name__)
 import re
 import shlex
 import subprocess
@@ -21,6 +19,8 @@ from ..sandbox import (
 )
 from . import _tool_invocation_approved, console
 from .schemas import RunShellInput
+
+logger = logging.getLogger(__name__)
 
 _SANDBOX_SHELL = "/bin/bash"
 _SANDBOX_WORKSPACE = "/workspace"
