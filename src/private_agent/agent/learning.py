@@ -367,7 +367,7 @@ async def _run_learning_suggestion(
                 HumanMessage(content=prompt),
             ]
         )
-    except Exception as exc:
+    except (ValueError, RuntimeError) as exc:
         console.print(
             f"[red][Learning suggestion error] {type(exc).__name__}: {exc}[/red]"
         )
@@ -599,7 +599,7 @@ def _offer_skill_capture(
                 description,
                 source_task_id=task.get("task_id"),
             )
-        except Exception:
+        except (ValueError, OSError):
             skill_path.unlink(missing_ok=True)
             raise
     except (OSError, ValueError, sqlite3.Error) as exc:

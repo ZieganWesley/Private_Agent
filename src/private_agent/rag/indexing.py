@@ -351,7 +351,7 @@ def initialize_knowledge_base(
             **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
         )
         track_ollama_http_clients(embeddings)
-    except Exception as e:
+    except (ValueError, OSError) as e:
         console.print(f"[red][Error] Could not bind embedding model: {e}[/red]")
         return None
 
@@ -455,7 +455,7 @@ def initialize_knowledge_base(
                     or index_state[file_key] != source_fingerprint
                 ):
                     changed_docs.extend(file_docs)
-        except Exception as e:
+        except (ValueError, OSError) as e:
             failed_sources.add(str(file_path))
             console.print(
                 f"[yellow][Warning] Failed parsing {file_path.name}: {e}[/yellow]"
@@ -520,7 +520,7 @@ def initialize_knowledge_base(
 
         # Return Hybrid RAG retriever wrapper
         return HybridRAGRetriever(vectorstore, all_parsed_docs)
-    except Exception as e:
+    except (ValueError, OSError) as e:
         if (
             db_exists
             and not state_write_started
@@ -551,7 +551,7 @@ def initialize_knowledge_base(
                     )
                 _write_index_state_atomic(state_file_path, updated_state)
                 return HybridRAGRetriever(vectorstore, all_parsed_docs)
-            except Exception as recovery_error:
+            except (ValueError, OSError) as recovery_error:
                 console.print(
                     f"[red][RAG recovery error] Rebuild failed after preserving "
                     f"the previous index: {recovery_error}[/red]"

@@ -115,7 +115,7 @@ class CodeTaskWorkspace:
                     symlinks=True,
                 )
                 _remove_copied_symlinks(destination)
-            except Exception:
+            except (ValueError, OSError):
                 shutil.rmtree(destination)
                 raise
             from . import console

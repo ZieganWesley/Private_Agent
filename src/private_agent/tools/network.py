@@ -435,7 +435,7 @@ async def close_outbound_http_clients():
                 await client.aclose()
             else:
                 await asyncio.to_thread(client.close)
-        except Exception as exc:
+        except (ValueError, OSError) as exc:
             log_event(
                 RUN_LOGGER,
                 "network.client_close_failed",

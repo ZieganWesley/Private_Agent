@@ -123,7 +123,7 @@ async def compact_history(
             "earlier conversation",
             model_name=model_name,
         )
-    except Exception as exc:
+    except (ValueError, RuntimeError) as exc:
         if notify:
             notify(
                 f"Context summary failed ({type(exc).__name__}); falling back to "
@@ -198,7 +198,7 @@ async def compact_loop_messages(
                 "tool results",
                 model_name=model_name,
             )
-        except Exception as exc:
+        except (ValueError, RuntimeError) as exc:
             digest = _truncate_to_tokens(transcript, max(50, limit_tokens // 10))
             if notify:
                 notify(

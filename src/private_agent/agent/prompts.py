@@ -55,7 +55,7 @@ def _get_tokenizer():
 
         os.environ["TIKTOKEN_CACHE_DIR"] = str(_BUNDLED_TIKTOKEN_DIR)
         return tiktoken.get_encoding("cl100k_base")
-    except Exception as exc:
+    except ImportError as exc:
         _report_tokenizer_fallback("load", exc)
         return None
 
@@ -88,7 +88,7 @@ def estimate_context_window(
                     + "".join(str(message.content) for message in chat_history)
                 )
             )
-        except Exception as exc:
+        except ValueError as exc:
             _report_tokenizer_fallback("estimate", exc)
             estimated_tokens = int(total_chars / 3.5)
     else:
@@ -114,7 +114,7 @@ def trim_history_to_context_budget(
         def count(text: str) -> int:
             try:
                 return len(encoding.encode(text))
-            except Exception as exc:
+            except ValueError as exc:
                 _report_tokenizer_fallback("trim", exc)
                 return max(1, len(text) // 4)
     else:
@@ -145,7 +145,7 @@ def token_count(text: str) -> int:
         return max(1, len(text) // 4)
     try:
         return len(encoding.encode(text))
-    except Exception as exc:
+    except ValueError as exc:
         _report_tokenizer_fallback("count", exc)
         return max(1, len(text) // 4)
 
@@ -172,7 +172,7 @@ def _truncate_to_tokens(text: str, budget: int) -> str:
     if encoding is not None:
         try:
             return encoding.decode(encoding.encode(text)[:budget])
-        except Exception as exc:
+        except ValueError as exc:
             _report_tokenizer_fallback("truncate", exc)
             return text[: budget * 4]
     return text[: budget * 4]

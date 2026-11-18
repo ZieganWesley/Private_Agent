@@ -25,7 +25,7 @@ def web_search(query: str) -> str:
     """Search the web for up-to-date info, technical documentation, or code references."""
     try:
         return _search_duckduckgo(query)
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Web search failed: {type(exc).__name__}: {exc}"
 
 
@@ -69,7 +69,7 @@ def fetch_webpage(url: str) -> str:
         return asyncio.run(_async_fetch())
     except ImportError:
         return "Failed to fetch webpage: Required package 'httpx' or 'beautifulsoup4' is not installed."
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Failed to fetch webpage: {exc}"
 
 
@@ -78,7 +78,7 @@ def download_web_file(url: str, save_path: str) -> str:
     """Download a file securely inside the workspace."""
     try:
         target = SandboxManager.validate_path(save_path)
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Failed to download file: {exc}"
     if target.suffix.lower() in {".sh", ".exe", ".bat", ".cmd", ".msi"}:
         return (
@@ -111,7 +111,7 @@ def download_web_file(url: str, save_path: str) -> str:
                 temporary_path = output.name
                 output.write(body)
             os.replace(temporary_path, target)
-        except Exception:
+        except (ValueError, OSError):
             if temporary_path:
                 with contextlib.suppress(FileNotFoundError):
                     os.unlink(temporary_path)
@@ -129,5 +129,5 @@ def download_web_file(url: str, save_path: str) -> str:
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 return pool.submit(asyncio.run, _async_download()).result()
         return asyncio.run(_async_download())
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Failed to download file: {exc}"

@@ -476,7 +476,7 @@ def _run_task_management(
                         scope,
                         owner_id=owner_id,
                     )
-                except Exception:
+                except (ValueError, OSError):
                     memory.release_task_lease(task_id, owner_id)
                     raise
                 active_task_id = task_id

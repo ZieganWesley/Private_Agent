@@ -116,5 +116,5 @@ def run_shell_command(command: str) -> str:
         )
     except RuntimeError as exc:
         return f"Execution blocked: {exc}"
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Execution failed: {exc}"

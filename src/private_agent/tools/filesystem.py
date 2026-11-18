@@ -258,7 +258,7 @@ def _open_workspace_parent(file_path: str, *, create: bool = False):
             os.close(parent_fd)
             parent_fd = child_fd
         return parent_fd, relative.name
-    except Exception:
+    except (ValueError, OSError):
         os.close(parent_fd)
         raise
 
@@ -276,7 +276,7 @@ def _open_workspace_file(file_path: str):
             os.close(file_fd)
             raise ValueError("Only regular workspace files can be modified.")
         return parent_fd, name, file_fd, file_stat
-    except Exception:
+    except (ValueError, OSError):
         os.close(parent_fd)
         raise
 
@@ -330,7 +330,7 @@ def _snapshot_file_descriptor(
                     or current_stat.st_ctime_ns != source_stat.st_ctime_ns
                 ):
                     raise OSError("Workspace file changed while creating its snapshot.")
-            except Exception:
+            except (ValueError, OSError):
                 os.close(backup_fd)
                 backup_fd_closed = True
                 os.unlink(snapshot_name, dir_fd=snapshot_fd)
@@ -391,7 +391,7 @@ def _write_workspace_replacement(
             written = os.write(temporary_fd, view)
             view = view[written:]
         os.fsync(temporary_fd)
-    except Exception:
+    except (ValueError, OSError):
         os.close(temporary_fd)
         os.unlink(temporary_name, dir_fd=parent_fd)
         raise
@@ -436,7 +436,7 @@ def _write_workspace_replacement(
                 src_dir_fd=parent_fd,
                 dst_dir_fd=parent_fd,
             )
-    except Exception:
+    except (ValueError, OSError):
         with contextlib.suppress(FileNotFoundError):
             os.unlink(temporary_name, dir_fd=parent_fd)
         raise
@@ -589,7 +589,7 @@ def _rename_workspace_file_safely(source_path: str, destination_path: str) -> st
             ) != (source_stat.st_dev, source_stat.st_ino):
                 raise OSError("Source file changed during the rename.")
             os.unlink(source_name, dir_fd=source_parent_fd)
-        except Exception:
+        except (ValueError, OSError):
             os.unlink(destination_name, dir_fd=destination_parent_fd)
             raise
         return f"Success: Renamed '{source_path}' to '{destination_path}'."
@@ -629,7 +629,7 @@ def read_local_file(file_path: str) -> str:
             while chunk := source.read(FILE_READ_CHUNK_BYTES):
                 chunks.append(chunk)
         return b"".join(chunks).decode("utf-8", errors="replace")
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error reading file: {exc}"
 
 
@@ -642,7 +642,7 @@ def edit_local_file(file_path: str, content: str) -> str:
         SandboxManager.validate_path(file_path)
         _write_workspace_file_safely(file_path, content.encode("utf-8"))
         return f"Success: File '{file_path}' written securely (HITL checkpoint snapshot created)."
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error writing file: {exc}"
 
 
@@ -661,7 +661,7 @@ def list_directory(dir_path: str = ".") -> str:
             relative_path = child.relative_to(SandboxManager.root_dir)
             items.append(f"{prefix} {relative_path}")
         return "\n".join(sorted(items)) if items else "Directory is empty."
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error listing directory: {exc}"
 
 
@@ -691,7 +691,7 @@ def search_workspace_files(
         if len(result) > _MAX_SEARCH_OUTPUT_CHARS:
             result = result[:_MAX_SEARCH_OUTPUT_CHARS] + "\n[Search output truncated.]"
         return result
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error searching workspace files: {exc}"
 
 
@@ -751,7 +751,7 @@ def search_workspace_text(
         if len(result) > _MAX_SEARCH_OUTPUT_CHARS:
             result = result[:_MAX_SEARCH_OUTPUT_CHARS] + "\n[Search output truncated.]"
         return result
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error searching workspace text: {exc}"
 
 
@@ -819,7 +819,7 @@ def search_workspace_symbols(
         if len(result) > _MAX_SEARCH_OUTPUT_CHARS:
             result = result[:_MAX_SEARCH_OUTPUT_CHARS] + "\n[Search output truncated.]"
         return result
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error searching workspace symbols: {exc}"
 
 
@@ -899,7 +899,7 @@ def preview_workspace_patch(file_path: str, old_text: str, new_text: str) -> str
         target = SandboxManager.validate_path(file_path)
         _, _, diff = _exact_patch(target, file_path, old_text, new_text)
         return diff or "Patch preview: no changes."
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error previewing patch: {exc}"
 
 
@@ -911,7 +911,7 @@ def apply_workspace_patch(file_path: str, old_text: str, new_text: str) -> str:
             return "Error applying patch: Symlink paths are not modified."
         SandboxManager.validate_path(file_path)
         return _apply_workspace_patch_safely(file_path, old_text, new_text)
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error applying patch: {exc}"
 
 
@@ -926,7 +926,7 @@ def rename_workspace_file(source_path: str, destination_path: str) -> str:
         SandboxManager.validate_path(source_path)
         SandboxManager.validate_path(destination_path)
         return _rename_workspace_file_safely(source_path, destination_path)
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error renaming workspace file: {exc}"
 
 
@@ -939,5 +939,5 @@ def delete_workspace_file(file_path: str) -> str:
         SandboxManager.validate_path(file_path)
         _delete_workspace_file_safely(file_path)
         return f"Success: Deleted '{file_path}' after creating a recoverable snapshot."
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         return f"Error deleting workspace file: {exc}"

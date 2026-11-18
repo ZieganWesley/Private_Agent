@@ -295,7 +295,7 @@ def _split_semantic(
     ]
     try:
         vectors = embed(windows)
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         log_event(
             RUN_LOGGER,
             "rag.semantic_chunking_failed",

@@ -534,7 +534,7 @@ async def load_mcp_tools(*args, **kwargs) -> list:
             for tool in getattr(response, "tools", []):
                 tools.append(tool)
             return tools
-    except Exception as exc:
+    except (ValueError, OSError) as exc:
         console.print(f"[red][MCP error] Unable to discover tools: {exc}[/red]")
         return []
 
