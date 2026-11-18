@@ -357,6 +357,11 @@ directly.
 **Partly fixed (B3 step 6):** `agent/task_commands.py` now updates the active
 task session/id through `set_tool_context()` instead of `set_active_task_context()`.
 
+**Partly fixed (B3 step 7):** `agent/runtime.py` now updates database, skill
+runtime/session and task context through `set_tool_context()` (with
+`set_active_db_path` retained as a compatibility entry point for failure
+injection).
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead

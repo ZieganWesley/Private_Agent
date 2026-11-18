@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 import logging
+import os
 import pathlib
 import platform
 import re
@@ -104,10 +105,6 @@ from ..tools import (
     has_internet_connection,
     load_configured_mcp_tools,
     ollama_client_kwargs,
-    set_active_db_path,
-    set_active_skill_runtime,
-    set_active_skill_session,
-    set_active_task_context,
     set_tool_context,
 )
 from ..tools.media import (
@@ -1394,6 +1391,9 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                 "use `/tasks` to review or proceed."
             )
     set_active_db_path(DEFAULT_DB_PATH)
+    _tool_context = get_tool_context()
+    _tool_context.db_path = DEFAULT_DB_PATH
+    set_tool_context(_tool_context)
     for server_name, server_config in MCP_SERVERS.items():
         if server_config.get("transport", "stdio") == "stdio" and isolation_warning:
             console.print(
@@ -1549,7 +1549,14 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
     loaded_skills = (
         load_skills_from_folder(skills_folder_input) if skills_folder_input else {}
     )
-    set_active_skill_runtime(skills_folder_input or None, loaded_skills)
+    _tool_context = get_tool_context()
+    _tool_context.skill_directory = (
+        os.path.abspath(os.path.expanduser(skills_folder_input))
+        if skills_folder_input
+        else None
+    )
+    _tool_context.skill_registry = loaded_skills
+    set_tool_context(_tool_context)
     if loaded_skills and verbose_startup:
         console.print(
             f"[bold green][Skills Loaded][/bold green] Successfully loaded {len(loaded_skills)} markdown skill profile(s)."
@@ -1617,11 +1624,16 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
         )
     else:
         session_id = f"session_{uuid.uuid4().hex}"
-    set_active_skill_session(session_id)
+    _tool_context = get_tool_context()
+    _tool_context.skill_session_id = session_id
+    set_tool_context(_tool_context)
     from ..tools import _task_state
 
     _task_state.set_runtime_owner()
-    set_active_task_context(session_id)
+    _tool_context = get_tool_context()
+    _tool_context.task_session_id = session_id
+    _tool_context.task_id = None
+    set_tool_context(_tool_context)
     network_consent_state: dict[str, bool] = {}
     _TASK_LEASE_HEARTBEAT = asyncio.create_task(
         _maintain_task_lease(memory, session_id)
@@ -2451,10 +2463,14 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         if skills_folder_input
                         else {}
                     )
-                    set_active_skill_runtime(
-                        skills_folder_input or None,
-                        loaded_skills,
+                    _tool_context = get_tool_context()
+                    _tool_context.skill_directory = (
+                        os.path.abspath(os.path.expanduser(skills_folder_input))
+                        if skills_folder_input
+                        else None
                     )
+                    _tool_context.skill_registry = loaded_skills
+                    set_tool_context(_tool_context)
                     if approved_task_id:
                         approved_task = memory.get_task(approved_task_id)
                         if not (
@@ -3830,9 +3846,10 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
             "finalize_code_task",
         ):
             AVAILABLE_TOOLS.pop(tool_name, None)
-        set_active_skill_session(None)
-        set_active_task_context(None)
         _tool_context = get_tool_context()
+        _tool_context.skill_session_id = None
+        _tool_context.task_session_id = None
+        _tool_context.task_id = None
         _tool_context.code_task = None
         set_tool_context(_tool_context)
         SandboxManager.set_root(str(original_workspace_root))
@@ -3843,3 +3860,29 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
 
 def run_agent_cli(*, verbose_startup: bool = False):
     asyncio.run(run_agent_cli_async(verbose_startup=verbose_startup))
+
+
+# Compatibility wrappers retained for existing callers/tests (B3). Runtime code
+# now updates state through ToolContext; these delegate to the tool setters.
+def set_active_db_path(path):
+    from ..tools import set_active_db_path as _set_active_db_path
+
+    _set_active_db_path(path)
+
+
+def set_active_skill_runtime(folder_path, loaded_skills):
+    from ..tools import set_active_skill_runtime as _set_active_skill_runtime
+
+    _set_active_skill_runtime(folder_path, loaded_skills)
+
+
+def set_active_skill_session(session_id):
+    from ..tools import set_active_skill_session as _set_active_skill_session
+
+    _set_active_skill_session(session_id)
+
+
+def set_active_task_context(session_id, task_id=None):
+    from ..tools import set_active_task_context as _set_active_task_context
+
+    _set_active_task_context(session_id, task_id)
