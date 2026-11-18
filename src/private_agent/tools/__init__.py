@@ -5,8 +5,10 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
+from typing import Any
 
 from langchain_core.tools import tool
 from rich.console import Console
@@ -99,6 +101,45 @@ def approved_tool_invocation():
         yield
     finally:
         _tool_invocation_approved.reset(token)
+
+
+@dataclass
+class ToolContext:
+    """Snapshot of the mutable runtime state tools depend on (B3 step 1)."""
+
+    db_path: str
+    task_session_id: str | None = None
+    task_id: str | None = None
+    skill_directory: str | None = None
+    skill_registry: dict | None = None
+    skill_session_id: str | None = None
+    code_task: Any = None
+
+
+def get_tool_context() -> ToolContext:
+    """Build a context object from the current module-global state."""
+    from .. import code_tasks
+
+    return ToolContext(
+        db_path=_sqlite_state.ACTIVE_DB_PATH,
+        task_session_id=_task_state.ACTIVE_TASK_SESSION_ID,
+        task_id=_task_state.ACTIVE_TASK_ID,
+        skill_directory=_ACTIVE_SKILL_DIRECTORY,
+        skill_registry=_ACTIVE_SKILL_REGISTRY,
+        skill_session_id=_ACTIVE_SKILL_SESSION_ID,
+        code_task=code_tasks.ACTIVE_CODE_TASK,
+    )
+
+
+def set_tool_context(context: ToolContext) -> None:
+    """Apply a context object back to the module-global state (compatibility)."""
+    from .. import code_tasks
+
+    set_active_db_path(context.db_path)
+    set_active_task_context(context.task_session_id, context.task_id)
+    set_active_skill_runtime(context.skill_directory, context.skill_registry or {})
+    set_active_skill_session(context.skill_session_id)
+    code_tasks.ACTIVE_CODE_TASK = context.code_task
 
 
 def set_active_db_path(path: str):

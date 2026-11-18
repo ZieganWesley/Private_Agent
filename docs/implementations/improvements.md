@@ -289,6 +289,12 @@ LangGraph (`create_react_agent`). The project already depends on LangChain.
 **Standard practice:** a single policy check that every tool call passes
 through. Tools never prompt the user directly.
 
+**Partly fixed (B2 step 1):** `tools/shell.py` no longer calls `console.input`
+for approval itself; approval is handled solely by the runtime's
+`_tool_needs_permission` policy (and the `_tool_invocation_approved`
+context). Direct/unapproved invocations now return an explicit error instead
+of prompting. Covered by `test_shell_command_requires_explicit_approval`.
+
 #### B3. Tool state lives in module globals
 
 - The active database, task, skill folder and code task are global variables
@@ -298,6 +304,13 @@ through. Tools never prompt the user directly.
 
 **Standard practice:** pass a context object into each tool, for example
 through LangChain's `RunnableConfig` or injected tool arguments.
+
+**Partly fixed (B3 step 1):** introduced `ToolContext` plus
+`get_tool_context()`/`set_tool_context()` in `tools/__init__.py`, backed by
+the existing module globals for compatibility. `tools/shell.py` now reads the
+active code task through `get_tool_context().code_task` instead of the
+`code_tasks.ACTIVE_CODE_TASK` global directly; remaining consumers still use
+the globals and will migrate in later steps.
 
 #### B4. The risky-command check matches text fragments
 
