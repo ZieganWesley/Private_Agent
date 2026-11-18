@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -10,11 +11,15 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from .prompts import _truncate_to_tokens, token_count
 from .status import SUMMARIZING, StatusIndicator, summarizing_message
 
+logger = logging.getLogger(__name__)
+
 SUMMARY_HEADER = "Condensed summary of the earlier part of this session"
 _MAX_SOURCE_TOKENS = 6000
 
 
 def message_text(message: Any) -> str:
+    logger.debug(f"message_text called with message type: {type(message).__name__}")
+    content = getattr(message, "content", "")
     content = getattr(message, "content", "")
     if isinstance(content, list):
         return "".join(
@@ -29,11 +34,13 @@ def message_text(message: Any) -> str:
 
 
 def messages_tokens(messages: list[Any]) -> int:
+    logger.debug(f"messages_tokens called with {len(messages)} messages")
     total = 0
     for message in messages:
         total += token_count(message_text(message))
         for call in getattr(message, "tool_calls", None) or []:
             total += token_count(str(call.get("args", "")))
+    logger.debug(f"messages_tokens returning {total} tokens")
     return total
 
 
@@ -46,6 +53,7 @@ async def _summarize(
     *,
     model_name: str = "model",
 ) -> str:
+    logger.debug(f"_summarize called with purpose={purpose}, model_name={model_name}")
     prompt = (
         f"Condense the following {purpose} into a compact working summary of at most "
         f"{max_chars} characters. Keep the user's goals, decisions, facts, file names, "

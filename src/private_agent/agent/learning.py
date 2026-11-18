@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import sqlite3
 import sys
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from rich.panel import Panel

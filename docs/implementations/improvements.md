@@ -171,8 +171,17 @@ The remaining BLE001 violations are limited to test files only.
 ### A6. Logging
   makes problems hard to trace afterwards.
 
-**Standard practice:** use `rich` for user-facing output and the `logging`
-module (with module-level loggers) for diagnostics.
+**Completed.** Added module-level loggers (`logging.getLogger(__name__)`) and log statements across the codebase for improved diagnostics and debugging. Key additions:
+
+- **`src/private_agent/agent/learning.py`**: Added `import logging` and module-level logger; log statements in _run_learning_maintenance and other key functions
+- **`src/private_agent/agent/task_commands.py`**: Added `import logging` and logger; debug log statements in _task_age_label and _planning_search_citations
+- **`src/private_agent/tools/shell.py`**: Added `import logging` and module-level logger; log statements in run_shell_command and _sandbox_shell_script; added `description` parameter to @tool decorator
+- **`src/private_agent/tools/web.py`**: Added `import logging` and module-level logger; log statements in web_search and fetch_webpage functions
+
+All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, `log_event`) for consistent structured JSON logging with redaction of sensitive data. The remaining A7 (Async mixed with blocking code) and A8 (Smaller issues) items are tracked for follow-up.
+
+- There is no `[tool.mypy]` config or other type checking.
+- There is still no CI workflow under `.github/workflows/` (step 1.5).
 
 ### A7. Async mixed with blocking code
 
