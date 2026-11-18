@@ -100,7 +100,16 @@ model), loaded once at startup and passed to the code that needs it.
 ### A3. Test-only logic inside production code
 
 **Fixed.** `sys_modules_safe()` and its `"pytest" in sys.modules` check were
-removed, so behaviour no longer depends on the test runner.
+removed in step 2.3 (commit `aa8e9fb`), so behaviour no longer depends on the
+test runner: a malformed config file always warns, and the test asserts that
+warning with `pytest.warns`.
+
+Re-verified on 2026-11-18 against `main` at `5b64e1b`: no production module
+branches on the test runner. There are no `sys.modules` checks,
+`PYTEST_CURRENT_TEST` reads or test-only flags under `src/private_agent/`.
+A guard test
+(`tests/unit/test_source_hygiene.py::test_production_sources_never_branch_on_the_test_runner`)
+fails if one is reintroduced.
 
 ### A4. The test environment is not standard
 
