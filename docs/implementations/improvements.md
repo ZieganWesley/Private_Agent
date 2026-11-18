@@ -293,7 +293,7 @@ Remaining B1 sub-tasks (planned, not yet implemented):
   4. ✅ Extract tool-batch execution and result handling into
      `_execute_tool_batch`.
   5. ✅ Extract the outer turn loop into `_run_agent_turn` (nested helper).
-  6. Update planning/coding/skills paths to call the shared loop.
+  6. ✅ Planning/coding/skills paths already route through the shared loop (no separate loops remain).
 
 Steps 2-6 are large and touch the interactive session; they are deferred to
 follow-up commits to avoid destabilising the 800+ test suite.
