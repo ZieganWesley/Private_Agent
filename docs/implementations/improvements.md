@@ -279,6 +279,13 @@ local models by default, and works on the project folder it is launched from.
 **Standard practice:** one reusable loop function, or a framework such as
 LangGraph (`create_react_agent`). The project already depends on LangChain.
 
+**Partly fixed (B1 step 1):** all `llm.bind_tools(tools_list)` call sites now
+route through a single `_bind_tools(llm, tools_list)` helper in
+`agent/runtime.py`, removing the duplicated binding call and giving one place
+to adjust binding behaviour. Remaining work: extract the model-invocation
+fallback and the per-turn tool preflight/execution blocks into reusable
+helpers.
+
 #### B2. Permission checks are spread across several places
 
 - There is a central `tool_needs_permission` in `agent/permissions.py`.
