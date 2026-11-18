@@ -5,7 +5,7 @@ import sqlite3
 from langchain_core.tools import tool
 
 from ..config import DEFAULT_HISTORY_READ_LIMIT
-from . import _sqlite_lock, _sqlite_state
+from . import _sqlite_lock, get_tool_context
 from .schemas import (
     DeleteSqliteHistoryEntryInput,
     DeleteSqliteHistoryInput,
@@ -22,7 +22,7 @@ def read_chat_history_from_sqlite(limit: int = DEFAULT_HISTORY_READ_LIMIT) -> st
         with (
             _sqlite_lock,
             sqlite3.connect(
-                _sqlite_state.ACTIVE_DB_PATH,
+                get_tool_context().db_path,
                 check_same_thread=False,
             ) as conn,
         ):
@@ -50,7 +50,7 @@ def delete_chat_history_from_sqlite(session_id: str | None = None) -> str:
         with (
             _sqlite_lock,
             sqlite3.connect(
-                _sqlite_state.ACTIVE_DB_PATH,
+                get_tool_context().db_path,
                 check_same_thread=False,
             ) as conn,
         ):
@@ -84,7 +84,7 @@ def search_chat_history_in_sqlite(
         with (
             _sqlite_lock,
             sqlite3.connect(
-                _sqlite_state.ACTIVE_DB_PATH,
+                get_tool_context().db_path,
                 check_same_thread=False,
             ) as conn,
         ):
@@ -120,7 +120,7 @@ def delete_chat_history_entry_from_sqlite(entry_id: int, session_id: str) -> str
         with (
             _sqlite_lock,
             sqlite3.connect(
-                _sqlite_state.ACTIVE_DB_PATH,
+                get_tool_context().db_path,
                 check_same_thread=False,
             ) as conn,
         ):

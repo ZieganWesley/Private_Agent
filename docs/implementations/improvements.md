@@ -340,6 +340,9 @@ active code task through `get_tool_context().code_task` instead of the
 `code_tasks.ACTIVE_CODE_TASK` global directly; remaining consumers still use
 the globals and will migrate in later steps.
 
+**Partly fixed (B3 step 2):** `tools/memory.py` now reads the active database
+path via `get_tool_context().db_path` instead of `_sqlite_state.ACTIVE_DB_PATH`.
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead
