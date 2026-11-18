@@ -343,6 +343,10 @@ the globals and will migrate in later steps.
 **Partly fixed (B3 step 2):** `tools/memory.py` now reads the active database
 path via `get_tool_context().db_path` instead of `_sqlite_state.ACTIVE_DB_PATH`.
 
+**Partly fixed (B3 step 3):** `tools/planner.py` now reads the active database
+path and task session/id via `get_tool_context()` instead of the module globals
+(schema-read tracking still uses `_task_state`).
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead
