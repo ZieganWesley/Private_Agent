@@ -102,8 +102,9 @@ def test_code_workspace_isolated_git_and_test_gated_checkpoint(tmp_path, monkeyp
     assert "Tests passed:" in workspace.last_test_result
 
     from private_agent import code_tasks
+    from private_agent.tools import get_tool_context
 
-    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", workspace)
+    monkeypatch.setattr(get_tool_context(), "code_task", workspace)
     final = code_tasks.finalize_code_task.invoke({})
     assert "final tests passed" in final
     assert not subprocess.check_output(
@@ -283,9 +284,9 @@ def test_code_workspace_removes_symlinks_added_during_copy(tmp_path, monkeypatch
 
 
 def test_code_task_blocks_manual_git_shell_commands(monkeypatch):
-    from private_agent import code_tasks
+    from private_agent.tools import get_tool_context
 
-    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", object())
+    monkeypatch.setattr(get_tool_context(), "code_task", object())
     from private_agent.tools import approved_tool_invocation
 
     with (

@@ -1808,7 +1808,7 @@ async def test_agent_shutdown_closes_resources_and_restores_dynamic_tools(
         agent.AVAILABLE_TOOLS["temporary_mcp_tool"] = object()
         agent.AVAILABLE_TOOLS["checkpoint_code_task"] = object()
         SandboxManager.set_root(str(session_root))
-        agent.code_tasks_module.ACTIVE_CODE_TASK = object()
+        agent.get_tool_context().code_task = object()
         raise failure
 
     monkeypatch.setattr(agent, "_ACTIVE_MEMORY", None)
@@ -1834,7 +1834,7 @@ async def test_agent_shutdown_closes_resources_and_restores_dynamic_tools(
     assert cleanup_calls == ["http", "mcp", "images"]
     assert "temporary_mcp_tool" not in agent.MCP_TOOL_NAMES
     assert "temporary_mcp_tool" not in agent.AVAILABLE_TOOLS
-    assert agent.code_tasks_module.ACTIVE_CODE_TASK is None
+    assert agent.get_tool_context().code_task is None
     assert agent._ACTIVE_MEMORY is None
     assert SandboxManager.root_dir == initial_root.resolve()
     assert "checkpoint_code_task" not in agent.AVAILABLE_TOOLS
@@ -4496,7 +4496,7 @@ async def test_cli_code_task_retries_checkpoint_after_test_failure(
     )
     assert "tests did not pass" in first_tool_result.content
     assert "Checkpoint committed locally" in second_tool_result.content
-    assert not agent.code_tasks_module.ACTIVE_CODE_TASK
+    assert not agent.get_tool_context().code_task
 
 
 @pytest.mark.requires_sandbox
@@ -4548,7 +4548,7 @@ async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
         for call in model.calls
         for message in call
     )
-    assert agent.code_tasks_module.ACTIVE_CODE_TASK is None
+    assert agent.get_tool_context().code_task is None
     assert "isolated workspace could not be created" in "\n".join(printed)
     assert "Code task cancelled" in "\n".join(printed)
 
@@ -4562,7 +4562,9 @@ async def test_checkpoint_system_failure_is_returned_to_runtime_call(monkeypatch
         def checkpoint(self, label, paths):
             raise RuntimeError("Git status could not be inspected")
 
-    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", BrokenCheckpointWorkspace())
+    monkeypatch.setattr(
+        agent.get_tool_context(), "code_task", BrokenCheckpointWorkspace()
+    )
     monkeypatch.setitem(
         agent.AVAILABLE_TOOLS, "checkpoint_code_task", code_tasks.checkpoint_code_task
     )
@@ -4580,7 +4582,7 @@ async def test_checkpoint_system_failure_is_returned_to_runtime_call(monkeypatch
     )
 
     assert "Git status could not be inspected" in result.content
-    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", None)
+    monkeypatch.setattr(agent.get_tool_context(), "code_task", None)
 
 
 @pytest.mark.asyncio

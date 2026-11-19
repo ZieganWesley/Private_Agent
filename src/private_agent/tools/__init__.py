@@ -134,18 +134,11 @@ _TOOL_CONTEXT = ToolContext(
 
 def get_tool_context() -> ToolContext:
     """Return the process-local tool context (single source of truth)."""
-    from .. import code_tasks
-
-    # Code-task state historically lives in code_tasks; mirror it into the
-    # context so legacy writers and ToolContext readers stay consistent.
-    _TOOL_CONTEXT.code_task = code_tasks.ACTIVE_CODE_TASK
     return _TOOL_CONTEXT
 
 
 def set_tool_context(context: ToolContext) -> None:
     """Copy a context object into the process-local tool context."""
-    from .. import code_tasks
-
     _TOOL_CONTEXT.db_path = context.db_path
     _TOOL_CONTEXT.task_session_id = context.task_session_id
     _TOOL_CONTEXT.task_id = context.task_id
@@ -153,7 +146,6 @@ def set_tool_context(context: ToolContext) -> None:
     _TOOL_CONTEXT.skill_registry = context.skill_registry
     _TOOL_CONTEXT.skill_session_id = context.skill_session_id
     _TOOL_CONTEXT.code_task = context.code_task
-    code_tasks.ACTIVE_CODE_TASK = context.code_task
     if context.runtime_owner_id is not None:
         _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:

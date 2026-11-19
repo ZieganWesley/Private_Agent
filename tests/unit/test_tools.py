@@ -1528,9 +1528,9 @@ def test_shell_script_host_workspace_paths_point_at_sandbox_mount(temp_workspace
 
 
 def test_code_task_blocks_git_inside_compound_command(monkeypatch, temp_workspace):
-    from private_agent import code_tasks
+    from private_agent.tools import get_tool_context
 
-    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", object())
+    monkeypatch.setattr(get_tool_context(), "code_task", object())
     result, isolated, _run = _run_shell_with_fake_sandbox("cd src && git status")
     assert "manual Git commands are disabled" in result
     assert isolated == []
