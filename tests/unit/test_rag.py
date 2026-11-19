@@ -47,6 +47,7 @@ from private_agent.rag.indexing import (
     _split_into_chunks,
     _write_index_state_atomic,
 )
+from private_agent.rag.retrieval import _tokenize
 
 console = Console()
 
@@ -618,18 +619,20 @@ def test_rag_enforces_pdf_page_and_document_chunk_limits(tmp_path, monkeypatch):
     assert _read_index_state(index / ".index_state.json") == {}
 
 
+def _hybrid_document(index):
+    return types.SimpleNamespace(
+        page_content=f"document {index}",
+        metadata={"source": f"source-{index}", "chunk": index},
+    )
+
+
 def test_hybrid_rag_selects_top_bm25_candidates_without_full_sort():
     class FakeBM25:
         def get_scores(self, query):
+            assert query == ["query"]
             return [0.4, 0.9, 0.9, 0.2, 0.7]
 
-    documents = [
-        types.SimpleNamespace(
-            page_content=f"document {index}",
-            metadata={"source": f"source-{index}", "chunk": index},
-        )
-        for index in range(5)
-    ]
+    documents = [_hybrid_document(index) for index in range(5)]
     retriever = HybridRAGRetriever.__new__(HybridRAGRetriever)
     retriever.documents = documents
     retriever.bm25 = FakeBM25()
@@ -639,6 +642,52 @@ def test_hybrid_rag_selects_top_bm25_candidates_without_full_sort():
     results = retriever.similarity_search("query", k=2)
 
     assert results == [documents[1], documents[2]]
+
+
+def test_hybrid_rag_rrf_rewards_documents_ranked_by_both_backends():
+    documents = [_hybrid_document(index) for index in range(3)]
+
+    class FakeBM25:
+        def get_scores(self, query):
+            return [0.5, 0.9, 0.7]
+
+    retriever = HybridRAGRetriever.__new__(HybridRAGRetriever)
+    retriever.documents = documents
+    retriever.bm25 = FakeBM25()
+    retriever.vectorstore = MagicMock()
+    retriever.vectorstore.similarity_search.return_value = documents
+
+    results = retriever.similarity_search("query", k=3)
+
+    assert results == [documents[1], documents[0], documents[2]]
+    assert len({id(document) for document in results}) == 3
+
+
+def test_hybrid_rag_tokenizer_lowercases_and_strips_punctuation():
+    assert _tokenize("Error, ERROR! state-of-the-art don't v1.2") == [
+        "error",
+        "error",
+        "state-of-the-art",
+        "don't",
+        "v1.2",
+    ]
+
+
+def test_hybrid_rag_falls_back_when_documents_have_no_tokens():
+    vectorstore = MagicMock()
+    vectorstore.similarity_search.return_value = [
+        types.SimpleNamespace(page_content="!!!", metadata={"source": "noise"})
+    ]
+
+    retriever = HybridRAGRetriever(
+        vectorstore,
+        [types.SimpleNamespace(page_content="!!!", metadata={"source": "noise"})],
+    )
+
+    assert retriever.bm25 is None
+    assert retriever.similarity_search("???", k=4) == [
+        vectorstore.similarity_search.return_value[0]
+    ]
 
 
 def _capture_indexing(monkeypatch):
