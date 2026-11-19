@@ -1390,9 +1390,6 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                 "use `/tasks` to review or proceed."
             )
     set_active_db_path(DEFAULT_DB_PATH)
-    _tool_context = get_tool_context()
-    _tool_context.db_path = DEFAULT_DB_PATH
-    set_tool_context(_tool_context)
     for server_name, server_config in MCP_SERVERS.items():
         if server_config.get("transport", "stdio") == "stdio" and isolation_warning:
             console.print(

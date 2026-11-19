@@ -448,7 +448,7 @@ def test_task_management_requires_confirmation_to_reconcile_unknown_action(
     monkeypatch,
 ):
     from private_agent.agent import runtime
-    from private_agent.tools import _task_state
+    from private_agent.tools import get_tool_context
 
     memory = PersistentMemory(str(tmp_path / "reconcile-task.sqlite"))
     task = memory.create_task_plan(
@@ -457,7 +457,7 @@ def test_task_management_requires_confirmation_to_reconcile_unknown_action(
         "research",
         [{"step_id": "inspect", "description": "Inspect the source"}],
     )
-    owner_id = _task_state.RUNTIME_OWNER_ID
+    owner_id = get_tool_context().runtime_owner_id
     assert memory.acquire_task_lease(
         task["task_id"],
         owner_id,

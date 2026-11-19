@@ -83,9 +83,9 @@ def scripted_local_cli(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "APP_CONFIG", {})
     monkeypatch.setattr(memory_context, "_offer_local_data_reset", lambda memory: None)
     monkeypatch.setattr(agent, "set_active_db_path", lambda path: None)
-    from private_agent.tools import _sqlite_state
+    from private_agent.tools import get_tool_context
 
-    monkeypatch.setattr(_sqlite_state, "ACTIVE_DB_PATH", str(database_path))
+    get_tool_context().db_path = str(database_path)
     monkeypatch.setattr(
         model_selection, "fetch_local_chat_models", lambda: ["local-model"]
     )
@@ -131,7 +131,7 @@ def scripted_local_cli(monkeypatch, tmp_path):
 
 
 def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
-    from private_agent.tools import _task_state
+    from private_agent.tools import get_tool_context
 
     memory = PersistentMemory(db_path=str(db_path))
     task = memory.create_task_plan(
@@ -153,11 +153,11 @@ def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
         if task_type == "coding"
         else f"{task_type}: goal={goal}"
     )
-    owner_id = _task_state.RUNTIME_OWNER_ID
+    owner_id = get_tool_context().runtime_owner_id
     monkeypatch.setattr(
-        _task_state,
-        "set_runtime_owner",
-        lambda owner_id=owner_id: owner_id,
+        agent.uuid,
+        "uuid4",
+        lambda: type("U", (), {"hex": owner_id})(),
     )
     assert memory.acquire_task_lease(
         task["task_id"],
@@ -2179,12 +2179,12 @@ async def test_cli_history_search_and_reviewed_entry_deletion_flow(
     scripted_local_cli, monkeypatch
 ):
     agent, model, inputs, _workspace, database_path = scripted_local_cli
-    from private_agent.tools import _sqlite_state
+    from private_agent.tools import get_tool_context
 
     monkeypatch.setattr(
         agent,
         "set_active_db_path",
-        lambda path: setattr(_sqlite_state, "ACTIVE_DB_PATH", path),
+        lambda path: setattr(get_tool_context(), "db_path", path),
     )
     memory = PersistentMemory(db_path=str(database_path))
     memory.save_message("review-session", "human", "Juniper local memory entry")

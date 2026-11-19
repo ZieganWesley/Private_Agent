@@ -3,6 +3,7 @@ import os
 import socket
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from langchain_core.tools import tool
 from rich.console import Console
 
 from ..config import (
+    DEFAULT_DB_PATH,
     INTERNET_CHECK_HOST,
     INTERNET_CHECK_PORT,
     INTERNET_CHECK_TIMEOUT,
@@ -21,7 +23,7 @@ from ..config import (
     SKILL_DESCRIPTION_PREVIEW_CHARS,
     SKILLS_FOLDER_DEFAULT,
 )
-from . import _sqlite_state, _task_state
+from . import _sqlite_state
 from .media import (
     capture_webcam_image,
     list_microphone_devices,
@@ -118,40 +120,49 @@ class ToolContext:
     schema_read_tables: set | None = None
 
 
+_TOOL_CONTEXT = ToolContext(
+    db_path=os.path.abspath(DEFAULT_DB_PATH),
+    skill_directory=(
+        os.path.abspath(os.path.expanduser(SKILLS_FOLDER_DEFAULT))
+        if SKILLS_FOLDER_DEFAULT
+        else None
+    ),
+    runtime_owner_id=uuid.uuid4().hex,
+    schema_read_tables=set(),
+)
+
+
 def get_tool_context() -> ToolContext:
-    """Build a context object from the current module-global state."""
+    """Return the process-local tool context (single source of truth)."""
     from .. import code_tasks
 
-    return ToolContext(
-        db_path=_sqlite_state.ACTIVE_DB_PATH,
-        task_session_id=_task_state.ACTIVE_TASK_SESSION_ID,
-        task_id=_task_state.ACTIVE_TASK_ID,
-        skill_directory=_ACTIVE_SKILL_DIRECTORY,
-        skill_registry=_ACTIVE_SKILL_REGISTRY,
-        skill_session_id=_ACTIVE_SKILL_SESSION_ID,
-        code_task=code_tasks.ACTIVE_CODE_TASK,
-        runtime_owner_id=_task_state.RUNTIME_OWNER_ID,
-        schema_read_tables=_task_state.SCHEMA_READ_TABLES,
-    )
+    # Code-task state historically lives in code_tasks; mirror it into the
+    # context so legacy writers and ToolContext readers stay consistent.
+    _TOOL_CONTEXT.code_task = code_tasks.ACTIVE_CODE_TASK
+    return _TOOL_CONTEXT
 
 
 def set_tool_context(context: ToolContext) -> None:
-    """Apply a context object back to the module-global state (compatibility)."""
+    """Copy a context object into the process-local tool context."""
     from .. import code_tasks
 
-    set_active_db_path(context.db_path)
-    set_active_task_context(context.task_session_id, context.task_id)
-    set_active_skill_runtime(context.skill_directory, context.skill_registry or {})
-    set_active_skill_session(context.skill_session_id)
+    _TOOL_CONTEXT.db_path = context.db_path
+    _TOOL_CONTEXT.task_session_id = context.task_session_id
+    _TOOL_CONTEXT.task_id = context.task_id
+    _TOOL_CONTEXT.skill_directory = context.skill_directory
+    _TOOL_CONTEXT.skill_registry = context.skill_registry
+    _TOOL_CONTEXT.skill_session_id = context.skill_session_id
+    _TOOL_CONTEXT.code_task = context.code_task
     code_tasks.ACTIVE_CODE_TASK = context.code_task
     if context.runtime_owner_id is not None:
-        _task_state.RUNTIME_OWNER_ID = context.runtime_owner_id
+        _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:
-        _task_state.SCHEMA_READ_TABLES = context.schema_read_tables
+        _TOOL_CONTEXT.schema_read_tables = context.schema_read_tables
 
 
 def set_active_db_path(path: str):
-    _sqlite_state.set_active_db_path(path)
+    """Compatibility shim: write the DB path into ToolContext."""
+    _TOOL_CONTEXT.db_path = os.path.abspath(path)
 
 
 # --- NETWORK CONNECTIVITY UTILITY ---
@@ -193,41 +204,33 @@ LOCAL_MEDIA_TOOL_NAMES = frozenset(
 MCP_TOOL_NAMES = set()
 MCP_TOOL_SOURCES = {}
 MCP_TOOL_TRANSPORTS = {}
-_ACTIVE_SKILL_DIRECTORY = (
-    os.path.abspath(os.path.expanduser(SKILLS_FOLDER_DEFAULT))
-    if SKILLS_FOLDER_DEFAULT
-    else None
-)
-_ACTIVE_SKILL_REGISTRY = None
-_ACTIVE_SKILL_SESSION_ID = None
 
 
 def set_active_skill_runtime(folder_path: str | None, loaded_skills: dict) -> None:
-    """Set the configured destination and in-memory registry for skill creation."""
-    global _ACTIVE_SKILL_DIRECTORY, _ACTIVE_SKILL_REGISTRY
-    _ACTIVE_SKILL_DIRECTORY = (
+    """Compatibility shim: set skill destination/registry on ToolContext."""
+    _TOOL_CONTEXT.skill_directory = (
         os.path.abspath(os.path.expanduser(folder_path)) if folder_path else None
     )
-    _ACTIVE_SKILL_REGISTRY = loaded_skills
+    _TOOL_CONTEXT.skill_registry = loaded_skills
 
 
 def set_active_skill_session(session_id: str | None) -> None:
-    """Associate newly created skills with the current conversation session."""
-    global _ACTIVE_SKILL_SESSION_ID
-    _ACTIVE_SKILL_SESSION_ID = session_id
+    """Compatibility shim: bind skill creation to the current session."""
+    _TOOL_CONTEXT.skill_session_id = session_id
 
 
 def set_active_task_context(
     session_id: str | None,
     task_id: str | None = None,
 ) -> None:
-    """Bind planner tools to the current session and optionally resumed task."""
-    _task_state.set_active_task_context(session_id, task_id)
+    """Compatibility shim: bind planner tools to a session/task."""
+    _TOOL_CONTEXT.task_session_id = session_id
+    _TOOL_CONTEXT.task_id = task_id
 
 
 def clear_schema_reads() -> None:
     """Require the model to inspect write-target schemas for each user turn."""
-    _task_state.clear_schema_reads()
+    _TOOL_CONTEXT.schema_read_tables.clear()
 
 
 def describe_tool_catalog() -> list[dict[str, str]]:

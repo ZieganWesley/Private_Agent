@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 
 from ..config import MAX_SUMMARY_CHARS
 from ..database import PersistentMemory
-from . import _task_state, get_tool_context, set_tool_context
+from . import get_tool_context, set_tool_context
 from .schemas import (
     CreateTaskPlanInput,
     InspectTaskPlanInput,
@@ -83,7 +83,7 @@ def read_table_schema(table_name: str) -> str:
             PersistentMemory.describe_table_schema(connection, name)
             for name in table_names
         ]
-        _task_state.record_schema_read(set(table_names))
+        get_tool_context().schema_read_tables.update(table_names)
         return json.dumps(
             {
                 "database": "configured local SQLite database",
