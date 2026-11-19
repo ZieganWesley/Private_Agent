@@ -8,7 +8,6 @@ import sys
 from pathlib import Path
 
 from langchain_core.tools import tool
-from rich.markup import escape
 
 from ..config import SHELL_COMMAND_TIMEOUT
 from ..sandbox import (
@@ -17,7 +16,7 @@ from ..sandbox import (
     requires_shell_interpreter,
     shell_command_programs,
 )
-from . import _tool_invocation_approved, console
+from . import _tool_invocation_approved, console, get_tool_context
 from .schemas import RunShellInput
 
 logger = logging.getLogger(__name__)
@@ -68,25 +67,18 @@ def run_shell_command(command: str) -> str:
             "[yellow]Commands run in a Linux OS sandbox with "
             + (
                 "network access enabled by the approved coding access level, "
-                if code_tasks.ACTIVE_CODE_TASK is not None
-                and getattr(code_tasks.ACTIVE_CODE_TASK, "allow_network", False)
+                if get_tool_context().code_task is not None
+                and getattr(get_tool_context().code_task, "allow_network", False)
                 else "network disabled, "
             )
             + f"workspace-only writes, and resource limits.{risk_notice}[/yellow]"
         )
         if not _tool_invocation_approved.get():
-            approval = (
-                console.input(
-                    f"[yellow]Approve command "
-                    f"{escape(command if use_shell else shlex.join(command_args))}? "
-                    "\\[y/N]: [/yellow]"
-                )
-                .strip()
-                .lower()
+            return (
+                "Error: Command execution requires explicit approval through the "
+                "central permission policy; no command was run."
             )
-            if approval != "y":
-                return "Error: Command execution was not approved; no command was run."
-        if code_tasks.ACTIVE_CODE_TASK is not None and "git" in (
+        if get_tool_context().code_task is not None and "git" in (
             shell_command_programs(command)
         ):
             return (
@@ -94,9 +86,9 @@ def run_shell_command(command: str) -> str:
                 "manual Git commands are disabled."
             )
         sandbox_root = (
-            code_tasks.ACTIVE_CODE_TASK.root
-            if code_tasks.ACTIVE_CODE_TASK is not None
-            else SandboxManager.root_dir
+            get_tool_context().code_task.root
+            if get_tool_context().code_task is not None
+            else SandboxManager.get_root()
         )
         if use_shell:
             command_args = [
@@ -108,8 +100,8 @@ def run_shell_command(command: str) -> str:
             command_args,
             sandbox_root,
             allow_network=(
-                code_tasks.ACTIVE_CODE_TASK is not None
-                and getattr(code_tasks.ACTIVE_CODE_TASK, "allow_network", False)
+                get_tool_context().code_task is not None
+                and getattr(get_tool_context().code_task, "allow_network", False)
             ),
         )
         result = subprocess.run(

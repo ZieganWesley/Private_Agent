@@ -145,7 +145,7 @@ def _workspace_files(root: Path, directory: Path):
 
 
 def _validate_search_directory(directory: str) -> tuple[Path, Path]:
-    root = SandboxManager.root_dir.resolve()
+    root = SandboxManager.get_root().resolve()
     target = SandboxManager.validate_path(directory)
     if not target.is_dir():
         raise ValueError(f"'{directory}' is not a workspace directory.")
@@ -153,7 +153,7 @@ def _validate_search_directory(directory: str) -> tuple[Path, Path]:
 
 
 def _path_contains_symlink(path: str) -> bool:
-    root = SandboxManager.root_dir.resolve()
+    root = SandboxManager.get_root().resolve()
     raw_path = Path(path)
     candidate = raw_path if raw_path.is_absolute() else root / raw_path
     try:
@@ -233,7 +233,7 @@ def _open_workspace_parent(file_path: str, *, create: bool = False):
             "Secure workspace mutations require descriptor-relative filesystem "
             "operations, which are unavailable on this platform."
         )
-    root = SandboxManager.root_dir.resolve()
+    root = SandboxManager.get_root().resolve()
     raw_path = Path(file_path)
     candidate = raw_path if raw_path.is_absolute() else root / raw_path
     candidate = Path(os.path.abspath(candidate))
@@ -288,7 +288,7 @@ def _snapshot_file_descriptor(
     max_bytes: int | None = None,
 ) -> None:
     root_fd = os.open(
-        SandboxManager.root_dir.resolve(),
+        SandboxManager.get_root().resolve(),
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
     )
     try:
@@ -658,7 +658,7 @@ def list_directory(dir_path: str = ".") -> str:
             if child.name.startswith("."):
                 continue
             prefix = "[DIR]  " if child.is_dir() else "[FILE] "
-            relative_path = child.relative_to(SandboxManager.root_dir)
+            relative_path = child.relative_to(SandboxManager.get_root())
             items.append(f"{prefix} {relative_path}")
         return "\n".join(sorted(items)) if items else "Directory is empty."
     except (ValueError, OSError) as exc:

@@ -111,7 +111,10 @@ def temp_workspace():
         original_root = SandboxManager.root_dir
         SandboxManager.set_root(temporary_directory)
         yield pathlib.Path(temporary_directory)
-        SandboxManager.set_root(str(original_root))
+        if original_root is None:
+            SandboxManager.root_dir = None
+        else:
+            SandboxManager.set_root(str(original_root))
 
 
 def _sandbox_skip_reason():

@@ -332,7 +332,7 @@ def include_folder_context(
     if not folder.is_dir():
         raise ValueError(f"Folder '{display_path}' is not a directory.")
 
-    workspace_root = SandboxManager.root_dir.resolve()
+    workspace_root = SandboxManager.get_root().resolve()
     relative_folder = folder.relative_to(workspace_root).as_posix() or "."
     total_bytes = 0
     file_count = 0

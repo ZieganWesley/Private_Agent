@@ -446,6 +446,9 @@ def resolve_config_values(
     SKILL_RELEVANCE_WORD_MATCH_SCORE = configured_float(
         config, "skills", "relevance_word_match_score", 1.0
     )
+    SKILL_RELEVANCE_EMBEDDING_THRESHOLD = configured_float(
+        config, "skills", "relevance_embedding_threshold", 0.55
+    )
     RAG_CONTEXT_RESULTS = configured_int(config, "agent", "rag_context_results", 2)
     SUMMARY_PROMPT_SENTENCES = configured_int(
         config, "agent", "summary_prompt_sentences", 2
@@ -627,6 +630,7 @@ class Settings:
     skill_relevance_exact_match_score: float
     skill_relevance_prefix_match_score: float
     skill_relevance_word_match_score: float
+    skill_relevance_embedding_threshold: float
     rag_context_results: int
     summary_prompt_sentences: int
     context_compaction_threshold: float
