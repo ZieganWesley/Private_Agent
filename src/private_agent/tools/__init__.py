@@ -114,6 +114,8 @@ class ToolContext:
     skill_registry: dict | None = None
     skill_session_id: str | None = None
     code_task: Any = None
+    runtime_owner_id: str | None = None
+    schema_read_tables: set | None = None
 
 
 def get_tool_context() -> ToolContext:
@@ -128,6 +130,8 @@ def get_tool_context() -> ToolContext:
         skill_registry=_ACTIVE_SKILL_REGISTRY,
         skill_session_id=_ACTIVE_SKILL_SESSION_ID,
         code_task=code_tasks.ACTIVE_CODE_TASK,
+        runtime_owner_id=_task_state.RUNTIME_OWNER_ID,
+        schema_read_tables=_task_state.SCHEMA_READ_TABLES,
     )
 
 
@@ -140,6 +144,10 @@ def set_tool_context(context: ToolContext) -> None:
     set_active_skill_runtime(context.skill_directory, context.skill_registry or {})
     set_active_skill_session(context.skill_session_id)
     code_tasks.ACTIVE_CODE_TASK = context.code_task
+    if context.runtime_owner_id is not None:
+        _task_state.RUNTIME_OWNER_ID = context.runtime_owner_id
+    if context.schema_read_tables is not None:
+        _task_state.SCHEMA_READ_TABLES = context.schema_read_tables
 
 
 def set_active_db_path(path: str):
@@ -438,9 +446,8 @@ def create_skill(name: str, description: str, instructions: str) -> str:
         context = get_tool_context()
         if context.skill_directory is None:
             return "Error creating skill: No skills directory is configured."
-        if (
-            context.skill_session_id
-            and "chat_history" not in _task_state.SCHEMA_READ_TABLES
+        if context.skill_session_id and "chat_history" not in (
+            context.schema_read_tables or set()
         ):
             return (
                 "Error creating skill: call read_table_schema for chat_history "

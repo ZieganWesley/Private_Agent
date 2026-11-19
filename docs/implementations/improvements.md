@@ -362,6 +362,10 @@ runtime/session and task context through `set_tool_context()` (with
 `set_active_db_path` retained as a compatibility entry point for failure
 injection).
 
+**Partly fixed (B3 step 8):** `ToolContext` now carries `runtime_owner_id`
+and `schema_read_tables`; `tools/planner.py` and `create_skill` read them via
+`get_tool_context()` instead of `_task_state` globals.
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead
