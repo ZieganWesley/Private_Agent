@@ -14,12 +14,13 @@ from ..config import (
     NETWORK_REQUEST_TIMEOUT,
 )
 from ..sandbox import SandboxManager
-from . import _search_duckduckgo, has_internet_connection, require_internet
+from . import has_internet_connection, require_internet
 from .network import (
     _get_limited_response_sync,
     public_only_sync_client,
 )
 from .schemas import DownloadWebFileInput, FetchWebpageInput, WebSearchInput
+from .search import search_web
 
 
 @tool(args_schema=WebSearchInput)
@@ -27,7 +28,7 @@ from .schemas import DownloadWebFileInput, FetchWebpageInput, WebSearchInput
 def web_search(query: str) -> str:
     """Search the web for up-to-date info, technical documentation, or code references."""
     try:
-        return _search_duckduckgo(query)
+        return search_web(query)
     except (httpx.HTTPError, ValueError, OSError) as exc:
         return f"Web search failed: {type(exc).__name__}: {exc}"
 

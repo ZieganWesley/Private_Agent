@@ -276,6 +276,16 @@ def test_permission_mode_and_effort_are_normalised():
     assert build({"logging": {"level": "silly"}}).debug_log_level == "INFO"
 
 
+def test_search_fallback_defaults_on_and_can_be_switched_off():
+    defaults = build({})
+    assert defaults.search_provider == "auto"
+    assert defaults.searxng_url == ""
+    assert defaults.search_fallback is True
+    assert build({"network": {"search_fallback": "false"}}).search_fallback is False
+    assert build({"network": {"search_fallback": False}}).search_fallback is False
+    assert build({"network": {"search_fallback": "bogus"}}).search_fallback is True
+
+
 def test_boolean_flags_accept_textual_spellings():
     assert build({"enable_web_research": "no"}).enable_web_research is False
     assert build({"enable_web_research": "yes"}).enable_web_research is True

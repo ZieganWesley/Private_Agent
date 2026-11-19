@@ -31,6 +31,29 @@ def config_section(config: Mapping[str, Any], name: str) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
 
+def configured_str(
+    config: Mapping[str, Any],
+    section: str,
+    key: str,
+    default: str,
+) -> str:
+    """Return a stripped string setting, tolerating missing or malformed values."""
+    raw = config_section(config, section).get(key, default)
+    return str(raw).strip()
+
+
+def configured_choice(
+    config: Mapping[str, Any],
+    section: str,
+    key: str,
+    default: str,
+    choices: tuple[str, ...],
+) -> str:
+    """Return a lower-cased setting, falling back to `default` when unknown."""
+    value = configured_str(config, section, key, default).lower()
+    return value if value in choices else default
+
+
 def configured_path(value: Any, default: str) -> str:
     """Expand config paths and anchor relative paths to the user's home."""
     path = pathlib.Path(str(value or default)).expanduser()
@@ -369,6 +392,15 @@ def resolve_config_values(
         config, "network", "max_search_query_chars", 2000
     )
     MAX_SEARCH_RESULTS = configured_int(config, "network", "max_search_results", 3)
+    SEARCH_PROVIDER = configured_choice(
+        config,
+        "network",
+        "search_provider",
+        "auto",
+        ("auto", "searxng", "duckduckgo"),
+    )
+    SEARXNG_URL = configured_str(config, "network", "searxng_url", "")
+    SEARCH_FALLBACK = configured_bool(config, "network", "search_fallback", True)
     MAX_FETCHED_WEBPAGE_CHARS = configured_int(
         config, "network", "max_fetched_webpage_chars", 12000
     )
@@ -599,6 +631,9 @@ class Settings:
     max_http_redirects: int
     max_search_query_chars: int
     max_search_results: int
+    search_provider: str
+    searxng_url: str
+    search_fallback: bool
     max_fetched_webpage_chars: int
     max_read_file_bytes: int
     file_read_chunk_bytes: int
