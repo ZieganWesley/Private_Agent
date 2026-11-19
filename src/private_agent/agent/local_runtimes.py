@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpx
+
 from ..run_logging import RUN_LOGGER, log_event
 
 MAX_DISCOVERY_ENDPOINTS = 8
@@ -94,7 +96,7 @@ def _probe_endpoint(
                 if not any(marker in model.lower() for marker in embedding_markers)
             )
         return LocalRuntime(name, kind, base_url.rstrip("/"), models)
-    except (ValueError, ConnectionError, OSError) as exc:
+    except (httpx.HTTPError, ValueError, ConnectionError, OSError) as exc:
         log_event(
             RUN_LOGGER,
             "provider.local_discovery_failed",
@@ -108,7 +110,7 @@ def _probe_endpoint(
         if client is not None and not getattr(client, "is_closed", True):
             try:
                 client.close()
-            except (ValueError, OSError) as exc:
+            except (httpx.HTTPError, ValueError, OSError) as exc:
                 log_event(
                     RUN_LOGGER,
                     "provider.local_discovery_client_close_failed",
@@ -189,5 +191,16 @@ def discover_local_runtimes(
             )
             for name, kind, base_url, path in unique_endpoints
         ]
-        results = [future.result() for future in futures]
+        results = []
+        for future in futures:
+            try:
+                results.append(future.result())
+            except (httpx.HTTPError, ValueError, ConnectionError, OSError) as exc:
+                log_event(
+                    RUN_LOGGER,
+                    "provider.local_discovery_task_failed",
+                    level=logging.DEBUG,
+                    error_type=type(exc).__name__,
+                    exc_info=True,
+                )
     return [runtime for runtime in results if runtime is not None]
