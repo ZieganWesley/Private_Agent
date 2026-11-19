@@ -71,7 +71,7 @@ class CodeTaskWorkspace:
                 )
             from ..sandbox import SandboxManager
 
-            allowed_root = SandboxManager.root_dir.resolve()
+            allowed_root = SandboxManager.get_root().resolve()
             if not source.is_relative_to(allowed_root):
                 raise PermissionError(
                     "Direct workspace access must stay inside the workspace "

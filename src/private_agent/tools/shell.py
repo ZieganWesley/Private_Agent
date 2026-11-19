@@ -88,7 +88,7 @@ def run_shell_command(command: str) -> str:
         sandbox_root = (
             get_tool_context().code_task.root
             if get_tool_context().code_task is not None
-            else SandboxManager.root_dir
+            else SandboxManager.get_root()
         )
         if use_shell:
             command_args = [

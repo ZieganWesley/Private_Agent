@@ -1591,12 +1591,13 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                 "(Press Enter for current dir): [/cyan]"
             ).strip()
         )
-    if workspace_input:
-        SandboxManager.set_root(workspace_input)
+    if not workspace_input:
+        workspace_input = "."
+    SandboxManager.set_root(workspace_input)
     if verbose_startup:
         console.print(
             f"[bold green][Security][/bold green] Workspace root locked to: "
-            f"{SandboxManager.root_dir}"
+            f"{SandboxManager.get_root()}"
         )
     log_event(
         RUN_LOGGER,
@@ -2019,7 +2020,7 @@ async def _choose_provider(
             "Thinking": (
                 f"{'on' if thinking_enabled else 'off'} (effort: {thinking_effort})"
             ),
-            "Workspace": str(SandboxManager.root_dir),
+            "Workspace": str(SandboxManager.get_root()),
             "Local RAG": "active" if is_rag_active else "off",
             "Skills loaded": len(loaded_skills),
             "Resumed history messages": len(chat_history),
@@ -2058,7 +2059,7 @@ async def _choose_provider(
     startup_summary.add_row("Permission", permission_mode.title())
     startup_summary.add_row(
         "Workspace",
-        str(SandboxManager.root_dir),
+        str(SandboxManager.get_root()),
     )
     startup_summary.add_row(
         "Local RAG",
@@ -2180,7 +2181,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
         online_selection = provider_preference.online_selection
         model_selection_failed = False
         active_code_workspace: CodeTaskWorkspace | None = None
-        previous_workspace_root = SandboxManager.root_dir
+        previous_workspace_root = SandboxManager.get_root()
         base_tools_list = list(tools_list)
         planning_mode_armed = False
         selected_skill_key: str | None = None
@@ -2245,7 +2246,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     user_input = (
                         await prompt_user_input(
                             console,
-                            SandboxManager.root_dir,
+                            SandboxManager.get_root(),
                             prompt_message="User: ",
                             skills=loaded_skills,
                             history=cli_input_history,
@@ -2314,7 +2315,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     )
                     table.add_row("Model", selected_model)
                     table.add_row("Permission mode", permission_mode.title())
-                    table.add_row("Workspace", str(SandboxManager.root_dir))
+                    table.add_row("Workspace", str(SandboxManager.get_root()))
                     table.add_row(
                         "RAG",
                         (
@@ -3839,7 +3840,8 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
         _tool_context.task_id = None
         _tool_context.code_task = None
         set_tool_context(_tool_context)
-        SandboxManager.set_root(str(original_workspace_root))
+        if original_workspace_root is not None:
+            SandboxManager.set_root(str(original_workspace_root))
         await close_outbound_http_clients()
         close_mcp_sandbox_dirs()
         clear_captured_images()

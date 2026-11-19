@@ -358,12 +358,15 @@ prompt; Bubblewrap remains the real protection.
 
 #### B5. The workspace root is decided at import time
 
-- `SandboxManager.root_dir` is set to `Path.cwd()` when the class is first
-  loaded.
-- `SandboxManager.set_root` creates the folder if it does not exist.
+**Fixed.** `SandboxManager.root_dir` now starts as `None`; no path is chosen at
+import time. `SandboxManager.set_root()` runs once during startup with the
+configured/project workspace (or the current directory for an empty prompt) and
+rejects missing paths, non-directories, and empty values instead of creating
+them. `SandboxManager.get_root()` is the checked accessor used by all tools and
+runtime code, and fails clearly if startup never configured a root.
 
-**Standard practice:** set the root once, explicitly, at startup, and fail if
-the folder does not exist.
+Coverage lives in `tests/unit/test_sandbox_root.py` for the unconfigured,
+missing, non-directory, empty and valid-root paths.
 
 #### B6. Skill matching uses keyword overlap
 
@@ -2169,7 +2172,7 @@ the old constants remain as aliases until step 3.2).
 | 3.1 | Done: `Settings` in `settings.py` (frozen dataclass, one typed field per constant, `from_config`). Loaded once as `config.SETTINGS`; the old constants remain as thin aliases | A2 | `Settings` is loaded once at startup |
 | 3.2 | Move each module from the global constants to the `Settings` object, one module per PR, then delete the aliases | A2 | `config.py` does no work at import time |
 | 3.4 | Create a `ToolContext` object (database, workspace root, active task, skills, code task, approval state) and pass it to tools through `RunnableConfig` or injected arguments | A2, B3 | `set_active_*()` functions and `global` statements are gone from `tools/` |
-| 3.5 | Make the workspace root explicit: set it once at startup, and fail if the folder does not exist | B5 | `SandboxManager` has no import-time default |
+| 3.5 | Done: `SandboxManager.set_root()` validates an existing directory during startup and `get_root()` is the checked accessor | B5 | `SandboxManager` has no import-time default |
 
 ### Phase 4: Restructure the core
 

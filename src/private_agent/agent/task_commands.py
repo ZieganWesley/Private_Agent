@@ -366,7 +366,7 @@ def _run_task_management(
                             "isolated output workspace (Enter for a new project): [/cyan]"
                         ).strip()
                     else:
-                        allowed_root = SandboxManager.root_dir.resolve()
+                        allowed_root = SandboxManager.get_root().resolve()
                         source_input = console.input(
                             "[cyan]Project directory to edit directly (Enter for "
                             f"the selected workspace {allowed_root}): [/cyan]"
@@ -793,7 +793,7 @@ def _approved_coding_task_scope(
         try:
             selected_source = pathlib.Path(scope["source_path"]).resolve()
             if not selected_source.is_dir() or not selected_source.is_relative_to(
-                SandboxManager.root_dir.resolve()
+                SandboxManager.get_root().resolve()
             ):
                 return None
         except (KeyError, OSError, RuntimeError, TypeError):
