@@ -285,8 +285,7 @@ execution and outer turn loop now live in `_invoke_initial_model_with_fallback`,
 `_preflight_tool_calls`, `_execute_tool_batch` and `_run_agent_turn` in
 `agent/runtime.py`; planning, coding and skills paths share that loop.
 
-Verified with the full suite: 809 passed, 12 skipped, plus the two pre-existing
-LM Studio/llama.cpp environment failures.
+Verified with the full suite: 812 passed, 12 skipped, 0 failed.
 
 #### B2. Permission checks are spread across several places
 
@@ -340,6 +339,12 @@ shared-instance, copy, schema-read and code-task tool cases.
 
 Performance note: `get_tool_context()` returns the shared context object and
 performs no SQLite work, so hot tool paths add no database round trips.
+
+Final green run: `812 passed, 12 skipped`. The two previously red
+OpenAI-compatible runtime tests exposed an uncaught `httpx.ConnectError` in the
+capability probe; `model_capabilities` now treats it as an unknown endpoint
+(same as other transport failures), with unit coverage in
+`tests/unit/test_model_capabilities.py`.
 
 Residual follow-up: none identified for B3. The `set_active_*` shims remain
 only for external callers/tests and can be removed in a later cleanup.
@@ -2398,8 +2403,8 @@ follow it.
 
 Track progress by stage (section L1), since that is the order of work. The
 phase list below shows coverage by topic. Last updated 2026-11-19, after the
-B1/B2/B3 refactors were completed on `b1-b2-b3` (all 809 tests pass; the only
-failures are the two pre-existing LM Studio/llama.cpp environment checks).
+B1/B2/B3 refactors were completed on `b1-b2-b3` (all 812 tests pass, 12 skipped,
+0 failed).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)

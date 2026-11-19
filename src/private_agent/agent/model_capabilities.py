@@ -24,6 +24,8 @@ from collections.abc import Callable, Iterable
 from typing import Any
 from urllib.parse import quote
 
+import httpx
+
 from ..run_logging import RUN_LOGGER, log_event
 from .local_runtimes import DISCOVERY_TIMEOUT_SECONDS, _is_loopback_url
 
@@ -214,7 +216,7 @@ def _get_json(client: Any, url: str) -> Any:
         response = client.get(url)
         response.raise_for_status()
         return response.json()
-    except (ConnectionError, OSError) as exc:
+    except (httpx.HTTPError, ConnectionError, OSError) as exc:
         log_event(
             RUN_LOGGER,
             "provider.capability_probe_failed",
@@ -265,7 +267,7 @@ def detect_openai_compatible_capabilities(
                 sources.append(
                     capabilities_from_model_entry(find_model_entry(listing, model_name))
                 )
-        except (ConnectionError, OSError) as exc:
+        except (httpx.HTTPError, ConnectionError, OSError) as exc:
             log_event(
                 RUN_LOGGER,
                 "provider.capability_detection_failed",
