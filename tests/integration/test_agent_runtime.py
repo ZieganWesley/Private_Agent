@@ -82,7 +82,6 @@ def scripted_local_cli(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "AGENT_PERMISSION_MODE", "auto")
     monkeypatch.setattr(agent, "APP_CONFIG", {})
     monkeypatch.setattr(memory_context, "_offer_local_data_reset", lambda memory: None)
-    monkeypatch.setattr(agent, "set_active_db_path", lambda path: None)
     from private_agent.tools import get_tool_context
 
     get_tool_context().db_path = str(database_path)
@@ -173,15 +172,14 @@ def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
         owner_id=owner_id,
     )
     memory.close()
-    original_set_context = agent.set_active_task_context
-    monkeypatch.setattr(
-        agent,
-        "set_active_task_context",
-        lambda session_id, task_id=None: original_set_context(
-            session_id,
-            task_id or task["task_id"],
-        ),
-    )
+    original_set_context = agent.set_tool_context
+
+    def force_approved_task(context):
+        if context.task_id is None:
+            context.task_id = task["task_id"]
+        original_set_context(context)
+
+    monkeypatch.setattr(agent, "set_tool_context", force_approved_task)
     return task
 
 
@@ -1898,7 +1896,6 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
     monkeypatch.setattr(agent, "SKILLS_FOLDER_DEFAULT", "")
     monkeypatch.setattr(agent, "WORKSPACE_ROOT_DEFAULT", str(workspace))
     monkeypatch.setattr(agent, "MCP_SERVERS", {})
-    monkeypatch.setattr(agent, "set_active_db_path", lambda path: None)
     monkeypatch.setattr(
         model_selection, "fetch_local_chat_models", lambda: ["local-model"]
     )
@@ -2179,13 +2176,6 @@ async def test_cli_history_search_and_reviewed_entry_deletion_flow(
     scripted_local_cli, monkeypatch
 ):
     agent, model, inputs, _workspace, database_path = scripted_local_cli
-    from private_agent.tools import get_tool_context
-
-    monkeypatch.setattr(
-        agent,
-        "set_active_db_path",
-        lambda path: setattr(get_tool_context(), "db_path", path),
-    )
     memory = PersistentMemory(db_path=str(database_path))
     memory.save_message("review-session", "human", "Juniper local memory entry")
     entry_id = memory.conn.execute(
@@ -2443,7 +2433,7 @@ async def test_session_setup_closes_its_memory_when_startup_fails(
     # Fails after the database is open but before the lease task exists.
     monkeypatch.setattr(
         agent,
-        "set_active_db_path",
+        "set_tool_context",
         MagicMock(side_effect=RuntimeError("db path rejected")),
     )
     inputs.return_value = ""

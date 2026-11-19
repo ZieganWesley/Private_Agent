@@ -942,9 +942,8 @@ def test_table_schema_reports_constraints_and_blocks_uninspected_planner_writes(
 ):
     from private_agent.tools import (
         clear_schema_reads,
+        get_tool_context,
         read_table_schema,
-        set_active_db_path,
-        set_active_task_context,
     )
     from private_agent.tools import (
         create_task_plan as create_plan_tool,
@@ -961,7 +960,7 @@ def test_table_schema_reports_constraints_and_blocks_uninspected_planner_writes(
     memory.close()
 
     clear_schema_reads()
-    set_active_task_context("schema-session")
+    get_tool_context().task_session_id = "schema-session"
     result = create_plan_tool.invoke(
         {
             "goal": "Create a schema-aware plan",
@@ -983,15 +982,16 @@ def test_table_schema_reports_constraints_and_blocks_uninspected_planner_writes(
         }
     )
     assert "Plan saved in SQLite" in saved
-    set_active_task_context(None)
+    get_tool_context().task_session_id = None
+    get_tool_context().task_id = None
     clear_schema_reads()
 
     missing_database = str(Path(temp_db).with_name("must-not-be-created.sqlite"))
-    set_active_db_path(missing_database)
+    get_tool_context().db_path = str(Path(missing_database).resolve())
     failed_read = read_table_schema.invoke({"table_name": "agent_tasks"})
     assert "Error reading SQLite schema" in failed_read
     assert not Path(missing_database).exists()
-    set_active_db_path(temp_db)
+    get_tool_context().db_path = str(Path(temp_db).resolve())
 
 
 def test_completed_task_accepts_every_documented_subjective_rating(temp_db):

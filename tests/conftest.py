@@ -6,7 +6,7 @@ from collections import Counter
 import pytest
 
 from private_agent.sandbox import SandboxManager
-from private_agent.tools import set_active_db_path
+from private_agent.tools import get_tool_context
 
 _TEST_CATEGORIES = {
     "test_agent_runtime": "Agent runtime",
@@ -98,7 +98,7 @@ def pytest_terminal_summary(terminalreporter):
 def temp_db():
     with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as temporary_file:
         db_path = temporary_file.name
-    set_active_db_path(db_path)
+    get_tool_context().db_path = str(pathlib.Path(db_path).resolve())
     yield db_path
     path = pathlib.Path(db_path)
     if path.exists():

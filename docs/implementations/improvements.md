@@ -327,9 +327,9 @@ registry and session, code task, and schema-read set. `tools/memory.py`,
 `set_tool_context()`.
 
 `tools/_task_state.py` was removed. `tools/_sqlite_state.py` is reduced to the
-shared `SQLITE_LOCK`; the active DB path no longer lives there. The remaining
-`set_active_*` functions in `tools/__init__.py` are documented compatibility
-shims that write into `ToolContext`, kept for existing callers/tests.
+shared `SQLITE_LOCK`; the active DB path no longer lives there. The
+`set_active_*` compatibility shims were removed: callers and tests now write
+directly through `get_tool_context()` / `set_tool_context()`.
 
 `code_tasks.ACTIVE_CODE_TASK` was removed; `run_project_unit_tests`,
 `checkpoint_code_task` and `finalize_code_task` now read the active code task
@@ -346,8 +346,8 @@ capability probe; `model_capabilities` now treats it as an unknown endpoint
 (same as other transport failures), with unit coverage in
 `tests/unit/test_model_capabilities.py`.
 
-Residual follow-up: none identified for B3. The `set_active_*` shims remain
-only for external callers/tests and can be removed in a later cleanup.
+Residual follow-up: none identified for B3. `ToolContext` is the only
+tool-state write path.
 
 #### B4. The risky-command check matches text fragments
 

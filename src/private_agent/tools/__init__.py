@@ -152,11 +152,6 @@ def set_tool_context(context: ToolContext) -> None:
         _TOOL_CONTEXT.schema_read_tables = context.schema_read_tables
 
 
-def set_active_db_path(path: str):
-    """Compatibility shim: write the DB path into ToolContext."""
-    _TOOL_CONTEXT.db_path = os.path.abspath(path)
-
-
 # --- NETWORK CONNECTIVITY UTILITY ---
 def check_internet_connection(
     host: str = INTERNET_CHECK_HOST,
@@ -196,28 +191,6 @@ LOCAL_MEDIA_TOOL_NAMES = frozenset(
 MCP_TOOL_NAMES = set()
 MCP_TOOL_SOURCES = {}
 MCP_TOOL_TRANSPORTS = {}
-
-
-def set_active_skill_runtime(folder_path: str | None, loaded_skills: dict) -> None:
-    """Compatibility shim: set skill destination/registry on ToolContext."""
-    _TOOL_CONTEXT.skill_directory = (
-        os.path.abspath(os.path.expanduser(folder_path)) if folder_path else None
-    )
-    _TOOL_CONTEXT.skill_registry = loaded_skills
-
-
-def set_active_skill_session(session_id: str | None) -> None:
-    """Compatibility shim: bind skill creation to the current session."""
-    _TOOL_CONTEXT.skill_session_id = session_id
-
-
-def set_active_task_context(
-    session_id: str | None,
-    task_id: str | None = None,
-) -> None:
-    """Compatibility shim: bind planner tools to a session/task."""
-    _TOOL_CONTEXT.task_session_id = session_id
-    _TOOL_CONTEXT.task_id = task_id
 
 
 def clear_schema_reads() -> None:

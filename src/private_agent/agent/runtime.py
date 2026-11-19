@@ -1389,7 +1389,9 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                 f"{task_plans - approved_task_plans} not approved — "
                 "use `/tasks` to review or proceed."
             )
-    set_active_db_path(DEFAULT_DB_PATH)
+    _tool_context = get_tool_context()
+    _tool_context.db_path = os.path.abspath(DEFAULT_DB_PATH)
+    set_tool_context(_tool_context)
     for server_name, server_config in MCP_SERVERS.items():
         if server_config.get("transport", "stdio") == "stdio" and isolation_warning:
             console.print(
@@ -3845,29 +3847,3 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
 
 def run_agent_cli(*, verbose_startup: bool = False):
     asyncio.run(run_agent_cli_async(verbose_startup=verbose_startup))
-
-
-# Compatibility wrappers retained for existing callers/tests (B3). Runtime code
-# now updates state through ToolContext; these delegate to the tool setters.
-def set_active_db_path(path):
-    from ..tools import set_active_db_path as _set_active_db_path
-
-    _set_active_db_path(path)
-
-
-def set_active_skill_runtime(folder_path, loaded_skills):
-    from ..tools import set_active_skill_runtime as _set_active_skill_runtime
-
-    _set_active_skill_runtime(folder_path, loaded_skills)
-
-
-def set_active_skill_session(session_id):
-    from ..tools import set_active_skill_session as _set_active_skill_session
-
-    _set_active_skill_session(session_id)
-
-
-def set_active_task_context(session_id, task_id=None):
-    from ..tools import set_active_task_context as _set_active_task_context
-
-    _set_active_task_context(session_id, task_id)
