@@ -123,9 +123,7 @@ def _run_task_management(
     skills_directory: str | None = None,
 ) -> str | None:
     """Review and control durable SQLite task plans from the interactive CLI."""
-    from ..tools import _task_state
-
-    active_task_id = _task_state.ACTIVE_TASK_ID
+    active_task_id = get_tool_context().task_id
     approved_for_execution_id: str | None = None
 
     def progress_summary(task: dict) -> str:
@@ -445,7 +443,7 @@ def _run_task_management(
                         "leave Tasks and submit the updated request with /plan.[/yellow]"
                     )
                     continue
-                owner_id = _task_state.RUNTIME_OWNER_ID
+                owner_id = get_tool_context().runtime_owner_id
                 lease = memory.get_task_lease(task_id)
                 takeover = False
                 if lease and lease["owner_id"] != owner_id:
@@ -523,7 +521,7 @@ def _run_task_management(
                 memory.set_task_status(
                     task_id,
                     "awaiting_approval",
-                    owner_id=_task_state.RUNTIME_OWNER_ID,
+                    owner_id=get_tool_context().runtime_owner_id,
                 )
                 console.print(
                     "[cyan]Task restored from SQLite and returned to approval. "
@@ -549,7 +547,7 @@ def _run_task_management(
                 memory.set_task_status(
                     task_id,
                     target_status,
-                    owner_id=_task_state.RUNTIME_OWNER_ID,
+                    owner_id=get_tool_context().runtime_owner_id,
                 )
                 if active_task_id == task_id:
                     active_task_id = None
@@ -569,7 +567,7 @@ def _run_task_management(
                     task["revision"],
                     parts[2],
                     parts[3],
-                    owner_id=_task_state.RUNTIME_OWNER_ID,
+                    owner_id=get_tool_context().runtime_owner_id,
                 )
                 console.print("[green]Step verification saved in SQLite.[/green]")
             elif action == "validate":
@@ -609,7 +607,7 @@ def _run_task_management(
                     task_id,
                     task["revision"],
                     " ".join(parts[2:]),
-                    owner_id=_task_state.RUNTIME_OWNER_ID,
+                    owner_id=get_tool_context().runtime_owner_id,
                 )
                 console.print(
                     "[green]Task validation saved for revision "
@@ -644,7 +642,7 @@ def _run_task_management(
                 memory.resolve_task_action(
                     action_matches[0]["action_id"],
                     resolution,
-                    owner_id=_task_state.RUNTIME_OWNER_ID,
+                    owner_id=get_tool_context().runtime_owner_id,
                 )
                 console.print("[green]Action reconciliation saved in SQLite.[/green]")
             elif action == "complete":
@@ -656,7 +654,7 @@ def _run_task_management(
                     continue
                 completed_task = memory.complete_task(
                     task_id,
-                    owner_id=_task_state.RUNTIME_OWNER_ID,
+                    owner_id=get_tool_context().runtime_owner_id,
                 )
                 console.print("[green]Verified task marked complete.[/green]")
                 if completed_task:
@@ -753,9 +751,7 @@ def _approved_coding_task_scope(
     memory: PersistentMemory,
     requested_goal: str,
 ) -> dict | None:
-    from ..tools import _task_state
-
-    task_id = _task_state.ACTIVE_TASK_ID
+    task_id = get_tool_context().task_id
     if not task_id:
         return None
     task = memory.get_task(task_id)

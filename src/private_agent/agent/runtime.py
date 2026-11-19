@@ -499,7 +499,6 @@ async def _preflight_tool_calls(
     *,
     response,
     state: _PreflightState,
-    _task_state,
     network_consent_state,
     provider_type,
     capabilities,
@@ -517,7 +516,7 @@ async def _preflight_tool_calls(
     )
     for tool_call in response.tool_calls:
         call_name = tool_call.get("name")
-        if _task_state.ACTIVE_TASK_ID and state.task_action_seen:
+        if get_tool_context().task_id and state.task_action_seen:
             state.blocked_tool_messages.append(
                 ToolMessage(
                     content=(
@@ -716,8 +715,8 @@ async def _preflight_tool_calls(
             prior_references = []
             if call_name == "revise_task_plan":
                 active_plan = (
-                    memory.get_task(_task_state.ACTIVE_TASK_ID)
-                    if _task_state.ACTIVE_TASK_ID
+                    memory.get_task(get_tool_context().task_id)
+                    if get_tool_context().task_id
                     else None
                 )
                 if active_plan:
@@ -734,13 +733,13 @@ async def _preflight_tool_calls(
                     )[:10],
                 },
             }
-        if _task_state.ACTIVE_TASK_ID:
+        if get_tool_context().task_id:
             state.task_action_seen = True
             state.tool_tasks.append(
                 _execute_task_tool_call(
                     memory,
-                    _task_state.ACTIVE_TASK_ID,
-                    _task_state.RUNTIME_OWNER_ID,
+                    get_tool_context().task_id,
+                    get_tool_context().runtime_owner_id,
                     execution_tool_call,
                     **execution_options,
                 )
@@ -1627,10 +1626,8 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
     _tool_context = get_tool_context()
     _tool_context.skill_session_id = session_id
     set_tool_context(_tool_context)
-    from ..tools import _task_state
-
-    _task_state.set_runtime_owner()
     _tool_context = get_tool_context()
+    _tool_context.runtime_owner_id = uuid.uuid4().hex
     _tool_context.task_session_id = session_id
     _tool_context.task_id = None
     set_tool_context(_tool_context)
@@ -1661,7 +1658,6 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
         thinking_enabled=thinking_enabled,
         thinking_effort=thinking_effort,
         permission_mode=permission_mode,
-        _task_state=_task_state,
     )
 
 
@@ -2147,7 +2143,6 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
     thinking_enabled = setup.thinking_enabled
     thinking_effort = setup.thinking_effort
     permission_mode = setup.permission_mode
-    _task_state = setup._task_state
 
     provider_preference = ProviderPreference()
     while True:
@@ -2215,9 +2210,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
             try:
                 _record_code_task_validation(
                     memory,
-                    _task_state.ACTIVE_TASK_ID,
+                    get_tool_context().task_id,
                     result,
-                    _task_state.RUNTIME_OWNER_ID,
+                    get_tool_context().runtime_owner_id,
                 )
             except (ValueError, sqlite3.Error, OSError) as exc:
                 console.print(
@@ -2787,8 +2782,8 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     workspace_action_id = None
                     try:
                         workspace_action_id = memory.begin_task_action(
-                            _task_state.ACTIVE_TASK_ID,
-                            _task_state.RUNTIME_OWNER_ID,
+                            get_tool_context().task_id,
+                            get_tool_context().runtime_owner_id,
                             f"runtime-workspace-{uuid.uuid4().hex}",
                             (
                                 "create_isolated_code_workspace"
@@ -2987,11 +2982,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     else "other"
                 )
                 if include_private_context:
-                    from ..tools import _task_state
-
                     selected_task = (
-                        memory.get_task(_task_state.ACTIVE_TASK_ID)
-                        if _task_state.ACTIVE_TASK_ID
+                        memory.get_task(get_tool_context().task_id)
+                        if get_tool_context().task_id
                         else None
                     )
                     if selected_task and selected_task["status"] == "active":
@@ -3179,9 +3172,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 )
                 active_task_instruction = ""
                 if include_private_context:
-                    from ..tools import _task_state
-
-                    active_task_id = _task_state.ACTIVE_TASK_ID
+                    active_task_id = get_tool_context().task_id
                     active_task = (
                         memory.get_task(active_task_id) if active_task_id else None
                     )
@@ -3383,7 +3374,6 @@ Runtime context:
                         await _preflight_tool_calls(
                             response=response,
                             state=state,
-                            _task_state=_task_state,
                             network_consent_state=network_consent_state,
                             provider_type=provider_type,  # noqa: B023
                             capabilities=capabilities,  # noqa: B023
@@ -3804,9 +3794,7 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
             _TASK_LEASE_HEARTBEAT = None
         if _ACTIVE_MEMORY is not None:
             try:
-                from ..tools import _task_state
-
-                active_task_id = _task_state.ACTIVE_TASK_ID
+                active_task_id = get_tool_context().task_id
                 if active_task_id:
                     try:
                         task = _ACTIVE_MEMORY.get_task(active_task_id)
@@ -3814,7 +3802,7 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
                             _ACTIVE_MEMORY.set_task_status(
                                 active_task_id,
                                 "interrupted",
-                                owner_id=_task_state.RUNTIME_OWNER_ID,
+                                owner_id=get_tool_context().runtime_owner_id,
                             )
                     except (ValueError, sqlite3.Error, OSError) as exc:
                         console.print(
