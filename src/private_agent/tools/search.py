@@ -1,4 +1,4 @@
-"""Configurable web search providers, with the scraper as a fallback."""
+"""Configurable web search providers, with an explicit scraper fallback."""
 
 import logging
 
@@ -14,19 +14,28 @@ PROVIDERS = ("auto", "searxng", "duckduckgo")
 # errors derive from Exception rather than OSError, so they are listed here.
 _SEARCH_FAILURES = (httpx.HTTPError, ValueError, OSError)
 
+FALLBACK_NOTICE = (
+    "Warning: your SearXNG instance failed ({error}), so these results come "
+    "from DuckDuckGo scraping instead. Set [network] search_fallback = false "
+    "to fail rather than fall back."
+)
+
 
 def search_web(
     query: str,
     *,
     provider: str | None = None,
     searxng_url: str | None = None,
+    fallback: bool | None = None,
 ) -> str:
     """Run the configured search provider and return formatted results.
 
     ``auto`` uses a configured SearXNG instance and otherwise scrapes
-    DuckDuckGo, so a default install needs no extra service. An explicitly
-    chosen SearXNG that fails falls back to the scraper and logs why, so a
-    transient outage does not remove web search for the rest of the session.
+    DuckDuckGo, so a default install needs no extra service. When SearXNG is
+    the chosen provider and it fails, the scraper answers only if
+    ``[network] search_fallback`` allows it: the returned text then starts with
+    an explicit notice, and with the fallback disabled the failure is raised
+    instead, so privacy is never downgraded without the user being told.
     """
     chosen = str(config.SEARCH_PROVIDER if provider is None else provider)
     chosen = chosen.strip().lower()
@@ -50,6 +59,8 @@ def search_web(
             "Web search provider 'searxng' requires network.searxng_url to be set."
         )
 
+    allow_fallback = bool(config.SEARCH_FALLBACK if fallback is None else fallback)
+
     try:
         return searxng_search(query, base_url=url)
     except _SEARCH_FAILURES as exc:
@@ -58,6 +69,13 @@ def search_web(
             "search.searxng_failed",
             level=logging.WARNING,
             error_type=type(exc).__name__,
+            fallback="duckduckgo" if allow_fallback else "disabled",
             exc_info=True,
         )
-        return search_duckduckgo(query)
+        if not allow_fallback:
+            raise ValueError(
+                "SearXNG search failed and the scraper fallback is disabled "
+                f"([network] search_fallback = false): {type(exc).__name__}: {exc}"
+            ) from exc
+        results = search_duckduckgo(query)
+        return f"{FALLBACK_NOTICE.format(error=type(exc).__name__)}\n\n{results}"

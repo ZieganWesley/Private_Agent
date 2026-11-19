@@ -447,6 +447,9 @@ values win on conflict.
     "max_http_redirects": 5,                          // Redirects followed
     "max_search_query_chars": 2000,                   // Max search query length
     "max_search_results": 3,                          // Search results returned
+    "search_provider": "auto",                        // auto | searxng | duckduckgo
+    "searxng_url": "",                                // Self-hosted SearXNG base URL (enables it for auto)
+    "search_fallback": true,                          // Scrape DuckDuckGo when SearXNG fails (false = fail instead)
     "max_fetched_webpage_chars": 12000                // Page text kept in context
   },
   "tools": {

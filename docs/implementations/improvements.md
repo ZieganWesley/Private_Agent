@@ -468,9 +468,13 @@ set and otherwise keeps scraping, so a default install behaves exactly as
 before. `searxng_search` in `tools/network.py` queries the instance's JSON API
 (`?q=...&format=json`) and formats results identically to the scraper, reusing
 the existing redirect limit, response-size cap and concurrency semaphore. When
-an explicitly chosen SearXNG fails for any reason (transport, HTML instead of
-JSON, size cap), the failure is logged and the scraper answers, so an outage
-costs the instance's speed rather than all web search.
+a chosen SearXNG fails for any reason (transport, HTML instead of JSON, size
+cap), the failure is logged and, unless `[network] search_fallback` is
+`false`, the scraper answers. The returned text then opens with a warning that
+names the failed provider and the setting, so privacy is never downgraded
+silently; with the fallback disabled the failure is raised as a `ValueError`
+and DuckDuckGo is never contacted. `auto` without a configured instance
+scrapes directly and adds no warning, because nothing was downgraded.
 
 The instance URL is operator configuration, never model- or page-supplied, so a
 loopback instance such as `127.0.0.1:8080` is reachable: `_get_limited_response_sync`
@@ -478,13 +482,14 @@ now takes an opt-in validator, and only the SearXNG call relaxes the public-only
 DNS policy to scheme/credential checks. Every other caller, including
 `fetch_webpage`, keeps the strict default (guarded by a test).
 
-Coverage lives in `tests/unit/test_search.py` (19 tests): JSON parsing and
+Coverage lives in `tests/unit/test_search.py` (23 tests): JSON parsing and
 formatting, the result cap, malformed entries, unconfigured and non-HTTP
 endpoints, the provider-selection matrix, unknown providers, the configuration
-error for `searxng` without a URL, fallback for transport/parse/OS failures, and
-the `web_search` tool wiring. The transport itself was exercised against a
-local HTTP server serving SearXNG-shaped JSON; no live SearXNG or internet
-search was available here.
+error for `searxng` without a URL, fallback for transport/parse/OS failures with
+its notice, the setting that disables the fallback (asserting the scraper is
+never called), and the `web_search` tool wiring end to end. The transport
+itself was exercised against a local HTTP server serving SearXNG-shaped JSON;
+no live SearXNG or internet search was available here.
 
 #### B8. Sync and async code are mixed
 
@@ -2305,7 +2310,7 @@ pydantic, and the old constants remain as aliases until step 3.2. Steps 3.2 and
 | 5.3 | Done: the 29 broad handlers left in `src/` are all genuine boundaries (third-party backends, cancellation-safe cleanup, re-raise wrappers); each carries `# noqa: BLE001 - <reason>`, and `BLE` is selected in ruff so a new blind catch fails lint unless it is justified | A5 | `ruff check .` passes with `BLE` selected, and `tests/unit/test_source_hygiene.py` fails without a written reason |
 | 5.5 | Done (unit-verified): `HybridRAGRetriever` uses reciprocal rank fusion and a punctuation-aware BM25 tokenizer; `scripts/benchmark_rag.py` reports recall@k and MRR | B9 | RRF/tokenizer tests pass; live benchmark pending an Ollama endpoint |
 | 5.6 | Done: skills support `name`/`description` front matter, use RAG embeddings when available, and fall back to keyword matching | B6, C9 | Old skills still load, and new skills use front matter |
-| 5.7 | Done: web search runs through `tools/search.py`, which selects `auto`/`searxng`/`duckduckgo` from `[network] search_provider`, queries a self-hosted SearXNG JSON API when `searxng_url` is set, and falls back to the scraper when the instance fails | B7, E18 | `tests/unit/test_search.py` covers selection, parsing and fallback, and the transport was exercised against a local HTTP server |
+| 5.7 | Done: web search runs through `tools/search.py`, which selects `auto`/`searxng`/`duckduckgo` from `[network] search_provider`, queries a self-hosted SearXNG JSON API when `searxng_url` is set, and falls back to the scraper when the instance fails; the fallback is announced in the returned text and `[network] search_fallback = false` refuses it instead | B7, E18 | `tests/unit/test_search.py` covers selection, parsing, the announced fallback and the refusal, and the transport was exercised against a local HTTP server |
 
 ### Phase 6: Features from Claude Code and Codex
 

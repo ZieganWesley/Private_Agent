@@ -142,6 +142,7 @@ DEFAULT_CONFIG = {
         "max_search_results": 3,
         "search_provider": "auto",
         "searxng_url": "",
+        "search_fallback": True,
         "max_fetched_webpage_chars": 12000,
     },
     "tools": {
@@ -542,6 +543,7 @@ MAX_SEARCH_QUERY_CHARS = SETTINGS.max_search_query_chars
 MAX_SEARCH_RESULTS = SETTINGS.max_search_results
 SEARCH_PROVIDER = SETTINGS.search_provider
 SEARXNG_URL = SETTINGS.searxng_url
+SEARCH_FALLBACK = SETTINGS.search_fallback
 MAX_FETCHED_WEBPAGE_CHARS = SETTINGS.max_fetched_webpage_chars
 MAX_READ_FILE_BYTES = SETTINGS.max_read_file_bytes
 FILE_READ_CHUNK_BYTES = SETTINGS.file_read_chunk_bytes

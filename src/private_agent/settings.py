@@ -400,6 +400,7 @@ def resolve_config_values(
         ("auto", "searxng", "duckduckgo"),
     )
     SEARXNG_URL = configured_str(config, "network", "searxng_url", "")
+    SEARCH_FALLBACK = configured_bool(config, "network", "search_fallback", True)
     MAX_FETCHED_WEBPAGE_CHARS = configured_int(
         config, "network", "max_fetched_webpage_chars", 12000
     )
@@ -632,6 +633,7 @@ class Settings:
     max_search_results: int
     search_provider: str
     searxng_url: str
+    search_fallback: bool
     max_fetched_webpage_chars: int
     max_read_file_bytes: int
     file_read_chunk_bytes: int

@@ -199,7 +199,7 @@ def test_explicit_searxng_without_a_url_is_a_configuration_error():
         OSError("network dropped"),
     ],
 )
-def test_a_failing_searxng_falls_back_to_the_scraper(monkeypatch, failure):
+def test_a_failing_searxng_falls_back_with_an_explicit_notice(monkeypatch, failure):
     def failing_searxng(query, *, base_url):
         raise failure
 
@@ -212,7 +212,60 @@ def test_a_failing_searxng_falls_back_to_the_scraper(monkeypatch, failure):
         searxng_url="http://127.0.0.1:8080",
     )
 
-    assert result == "scraped:q"
+    notice, results = result.split("\n\n")
+    assert results == "scraped:q"
+    assert notice.startswith("Warning: your SearXNG instance failed (")
+    assert type(failure).__name__ in notice
+    assert "DuckDuckGo scraping" in notice
+    assert "[network] search_fallback = false" in notice
+
+
+def test_the_fallback_can_be_disabled(monkeypatch):
+    def failing_searxng(query, *, base_url):
+        raise httpx.ConnectError("connection refused")
+
+    scraped = []
+    monkeypatch.setattr(search, "searxng_search", failing_searxng)
+    monkeypatch.setattr(
+        search, "search_duckduckgo", lambda query: scraped.append(query) or "scraped"
+    )
+
+    with pytest.raises(ValueError, match="scraper fallback is disabled"):
+        search.search_web(
+            "q",
+            provider="searxng",
+            searxng_url="http://127.0.0.1:8080",
+            fallback=False,
+        )
+
+    assert scraped == []
+
+
+def test_the_fallback_setting_applies_when_no_override_is_passed(monkeypatch):
+    def failing_searxng(query, *, base_url):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(search, "searxng_search", failing_searxng)
+    monkeypatch.setattr(search, "search_duckduckgo", lambda query: f"scraped:{query}")
+    monkeypatch.setattr(search.config, "SEARCH_FALLBACK", False)
+
+    with pytest.raises(ValueError, match="scraper fallback is disabled"):
+        search.search_web("q", provider="searxng", searxng_url="http://127.0.0.1:8080")
+
+    monkeypatch.setattr(search.config, "SEARCH_FALLBACK", True)
+    assert search.search_web(
+        "q", provider="searxng", searxng_url="http://127.0.0.1:8080"
+    ).endswith("\n\nscraped:q")
+
+
+def test_the_notice_is_not_added_when_searxng_answers(monkeypatch):
+    monkeypatch.setattr(search, "searxng_search", lambda query, *, base_url: "clean")
+    monkeypatch.setattr(search, "search_duckduckgo", lambda query: "scraped")
+
+    assert (
+        search.search_web("q", provider="searxng", searxng_url="http://127.0.0.1:8080")
+        == "clean"
+    )
 
 
 def test_web_search_tool_uses_the_provider_layer(monkeypatch):
@@ -220,6 +273,28 @@ def test_web_search_tool_uses_the_provider_layer(monkeypatch):
     monkeypatch.setattr(web, "search_web", lambda query: f"result:{query}")
 
     assert web.web_search.invoke({"query": "python"}) == "result:python"
+
+
+def test_web_search_tool_shows_the_fallback_notice_and_refuses_it_when_disabled(
+    monkeypatch,
+):
+    def failing_searxng(query, *, base_url):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(web, "has_internet_connection", lambda: True)
+    monkeypatch.setattr(search, "searxng_search", failing_searxng)
+    monkeypatch.setattr(search, "search_duckduckgo", lambda query: f"scraped:{query}")
+    monkeypatch.setattr(search.config, "SEARCH_PROVIDER", "searxng")
+    monkeypatch.setattr(search.config, "SEARXNG_URL", "http://127.0.0.1:8080")
+
+    assert web.web_search.invoke({"query": "python"}).startswith(
+        "Warning: your SearXNG"
+    )
+
+    monkeypatch.setattr(search.config, "SEARCH_FALLBACK", False)
+    refused = web.web_search.invoke({"query": "python"})
+    assert refused.startswith("Web search failed: ValueError:")
+    assert "scraper fallback is disabled" in refused
 
 
 def test_web_search_tool_reports_configuration_errors(monkeypatch):
