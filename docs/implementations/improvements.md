@@ -569,9 +569,15 @@ not run in an interactive terminal. There is no JSON output and no way to pass
 a prompt as an argument.
 
 **C3. No session resume and no undo.**
-- Both tools can continue a past conversation (`--continue` / `--resume`).
-  Here, past sessions only come back as summaries; the conversation itself
-  cannot be resumed. Only plans can be resumed.
+- **Resume done (step 6.6):** `private-agent --continue` reopens the most recent
+  session, `--resume <session_id>` reopens a named one and `--list-sessions`
+  shows the ids, all with the saved message history. A resumed session now
+  skips the resume prompt, is not summarized twice, keeps its own episode out
+  of the startup memory context, and reclaims its active plan lease when the
+  earlier process is gone. Provider and model are still not recorded, so a
+  resumed conversation runs on whatever the current startup selects (12.9).
+- **Undo is open (step 6.7):** snapshots still have no manifest, so nothing can
+  be restored yet.
 - Claude Code can rewind code and conversation to a checkpoint. Here, edits
   are copied to `.agent_snapshots/`, but there is no command to restore them.
   Git checkpoints exist only inside coding tasks.
@@ -1644,10 +1650,11 @@ true: embedding-model filtering only runs for Ollama.
 
 - **I1p. Nothing records which provider was used.** `chat_history` has no
   provider or model column (`database/memory.py:234`), and `agent_tasks` has
-  none either. Conversations cannot be resumed at all yet (C3), and task plans
-  resumed through `/tasks` simply use whatever provider the current session
-  has, with no check that it suits the plan (for example vision or tool
-  support).
+  none either. Conversations can be resumed since step 6.6, but a resumed
+  conversation still runs on whatever provider and model the current startup
+  selects, and task plans resumed through `/tasks` have no check that the
+  provider suits the plan (for example vision or tool support). Step 12.9
+  covers recording the provider and falling back on resume.
 
 ### I2. Target behaviour
 
@@ -2323,7 +2330,7 @@ For when to do each step, see the implementation order in section L1.
 | 6.3 | **Partly done:** pipes, `&&`, `||` and redirects now run through `bash -c` inside the sandbox (commit `3296c63`). Remaining: a per-call timeout (with a maximum) and background processes with tools to read output and stop them | C5 | 4.3, 5.1 | `pytest \| tail`, a 5-minute build and a dev server all work inside the sandbox |
 | 6.4 | Add an Esc / single Ctrl+C handler that cancels the current turn and keeps the session; keep double Ctrl+C for exit | C12 | 4.2 | Stopping a turn does not end the session |
 | 6.5 | Add permission rules in config (`allow` / `deny` lists matching tool names, commands and paths, for example `run_shell_command(pytest *)` or `read_local_file(.env)`) | C8 | 4.3 | Allowed commands run in Auto mode without a prompt; denied ones are refused |
-| 6.6 | Save full conversations per session and add `--continue` (last session) and `--resume` (pick a session). Provider fallback on resume is step 12.9 | C3 | 4.2, 4.5 | A resumed session continues with its full message history |
+| 6.6 | **Done:** conversations were already saved per session; `--continue` reopens the most recent session, `--resume <session_id>` reopens a named one and `--list-sessions` lists ids with message counts and last activity (no interactive picker). A resumed run loads the saved history, skips the resume prompt, does not summarize an already-summarized session again, keeps that session's own episode out of the startup memory context, and reclaims its active plan lease when the earlier owner is gone. Provider fallback on resume is step 12.9 | C3 | 4.2, 4.5 | A resumed session continues with its full message history |
 | 6.7 | Add `/rewind` to restore files from `.agent_snapshots/` (and the conversation) to an earlier turn | C3 | 6.6 | An edit can be undone from the prompt, with a test |
 | 6.8 | Add a non-interactive mode: `private-agent -p "prompt"` with `--output text\|json`, using the permission rules from 6.5 instead of prompts | C2 | 4.2, 6.5 | The agent can run from a script or CI job without a terminal |
 | 6.9 | Add project-level config (`.private_agent/settings.json` in the workspace) and a local override file, merged over the user config | C13 | 3.1 | Project settings apply only inside that project |
@@ -2520,9 +2527,9 @@ follow it.
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic. Last updated 2026-11-19, after the
-Part A/Part B audit and step 5.7 (web search providers) on
-`audit-a-b-completion` (all 850 tests pass, 12 skipped, 0 failed).
+phase list below shows coverage by topic. Last updated 2026-11-19, after
+step 6.6 (session resume) on `session-resume` (all 885 tests pass, 12 skipped,
+0 failed).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
@@ -2537,7 +2544,7 @@ By phase:
 - [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
 - [ ] Phase 5: Improve individual features (5.1–5.9; 5.1, 5.3, 5.4, 5.5, 5.6 and 5.7 done)
-- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)
+- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15; 6.6 done)
 - [ ] Phase 7: Planning mode (7.1–7.10)
 - [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)
 - [ ] Phase 9: Single combined runtime and live status (9.1–9.11)

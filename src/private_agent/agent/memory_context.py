@@ -36,10 +36,14 @@ from .prompts import token_count as _token_count
 def _build_startup_memory_context(
     memory: PersistentMemory,
     skills_directory: str | None,
+    *,
+    exclude_session_id: str | None = None,
 ) -> str:
     """Build bounded local reference context from recent episodes and saved skills."""
     episode_count = memory.count_episodic_memories()
-    episodes = memory.get_recent_episodic_memories(DEFAULT_EPISODIC_SUMMARIES)
+    episodes = memory.get_recent_episodic_memories(
+        DEFAULT_EPISODIC_SUMMARIES, exclude_session_id=exclude_session_id
+    )
     episode_sections = []
     for episode in episodes:
         if episode.get("topic"):

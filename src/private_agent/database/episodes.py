@@ -84,6 +84,8 @@ class EpisodeMixin:
     def get_recent_episodic_memories(
         self,
         limit: int = DEFAULT_EPISODIC_SUMMARIES,
+        *,
+        exclude_session_id: str | None = None,
     ) -> list[dict[str, object]]:
         """Return a bounded chronological window of prior episode summaries."""
         with self._lock:
@@ -91,8 +93,10 @@ class EpisodeMixin:
                 "SELECT id, session_id, timestamp, content, episode_topic, "
                 "episode_description, episode_task_summary, episode_plan_json, "
                 "episode_outcome FROM chat_history "
-                "WHERE role = 'summary' ORDER BY id DESC LIMIT ?",
-                (max(0, limit),),
+                "WHERE role = 'summary' "
+                "AND (? IS NULL OR session_id IS NULL OR session_id != ?) "
+                "ORDER BY id DESC LIMIT ?",
+                (exclude_session_id, exclude_session_id, max(0, limit)),
             ).fetchall()
         return [
             {

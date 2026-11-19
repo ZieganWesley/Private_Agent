@@ -195,6 +195,15 @@ hardware-placement API. Destructive
 local data resets are available under
 `/maintenance` → `data reset` and still require typing `RESET`.
 
+Sessions are saved in SQLite. `private-agent --continue` reopens the most recent
+session and `private-agent --resume <session_id>` reopens a named one, both with
+the saved message history; `private-agent --list-sessions` prints saved ids with
+their message counts and last activity. A resumed session skips the resume
+prompt, is not summarized a second time, leaves its own summary out of the
+startup memory context, and reclaims its active plan's lease when the earlier
+process is gone. The provider and model are chosen again at startup, because
+they are not recorded with the session yet.
+
 When launched from a project directory, `private-agent` automatically uses any
 `workspace`, `rag`, and `skills` directories found directly there, under
 `resources/`, or under `private_agent/resources/`. For each folder name, lookup

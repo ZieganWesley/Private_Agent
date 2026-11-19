@@ -187,6 +187,7 @@ from .providers import (
 from .providers import (
     online_request_failure as _online_request_failure,
 )
+from .session_resume import resolve_session_id, take_over_session_task_lease
 from .session_state import SESSION_INFO as _SESSION_INFO
 from .session_state import SESSION_STATS as _SESSION_STATS
 from .session_stats import build_stats_table, format_duration
@@ -1216,6 +1217,8 @@ async def _execute_task_tool_call(
 async def _prepare_session(
     *,
     verbose_startup: bool = False,
+    resume_session: str | None = None,
+    continue_session: bool = False,
 ) -> SessionSetup | None:
     """Discover local resources, open memory and build the session state."""
     global _ACTIVE_MEMORY, _SESSION_INFO, _TASK_LEASE_HEARTBEAT
@@ -1229,7 +1232,11 @@ async def _prepare_session(
         return
 
     try:
-        return await _build_session_setup(verbose_startup=verbose_startup)
+        return await _build_session_setup(
+            verbose_startup=verbose_startup,
+            resume_session=resume_session,
+            continue_session=continue_session,
+        )
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         # Startup owns everything it opened, including SQLite, so a failure
         # here never leaves a connection or lease task behind.
@@ -1237,7 +1244,12 @@ async def _prepare_session(
         raise
 
 
-async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup:
+async def _build_session_setup(
+    *,
+    verbose_startup: bool = False,
+    resume_session: str | None = None,
+    continue_session: bool = False,
+) -> SessionSetup:
     """Create the memory, RAG index, skills and provider state for a session."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     startup_started = time.monotonic()
@@ -1607,22 +1619,21 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
         rag_enabled=is_rag_active,
     )
 
-    latest_session_id = memory.get_latest_session_id()
-    if latest_session_id and sys.stdin.isatty():
-        resume = (
-            console.input(
-                f"[cyan]Resume latest session '{latest_session_id}'? \\[Y/n]: [/cyan]"
+    resume_prompt = (
+        (
+            lambda latest: console.input(
+                f"[cyan]Resume latest session '{latest}'? \\[Y/n]: [/cyan]"
             )
-            .strip()
-            .lower()
         )
-        session_id = (
-            latest_session_id
-            if resume in {"", "y", "yes"}
-            else f"session_{uuid.uuid4().hex}"
-        )
-    else:
-        session_id = f"session_{uuid.uuid4().hex}"
+        if sys.stdin.isatty()
+        else None
+    )
+    session_id = resolve_session_id(
+        memory,
+        resume_session=resume_session,
+        continue_session=continue_session,
+        prompt=resume_prompt,
+    )
     _tool_context = get_tool_context()
     _tool_context.skill_session_id = session_id
     set_tool_context(_tool_context)
@@ -1631,6 +1642,15 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
     _tool_context.task_session_id = session_id
     _tool_context.task_id = None
     set_tool_context(_tool_context)
+    if (
+        take_over_session_task_lease(memory, session_id, _tool_context.runtime_owner_id)
+        == "held"
+    ):
+        console.print(
+            "[yellow][Task lease warning] This session's active plan is still "
+            "owned by another running process; task actions wait until it "
+            "releases or expires.[/yellow]"
+        )
     network_consent_state: dict[str, bool] = {}
     _TASK_LEASE_HEARTBEAT = asyncio.create_task(
         _maintain_task_lease(memory, session_id)
@@ -1995,7 +2015,9 @@ async def _choose_provider(
         provider_type == "local" or preference.online_selection["share_context"]
     )
     startup_memory_context = (
-        _build_startup_memory_context(memory, skills_folder_input or None)
+        _build_startup_memory_context(
+            memory, skills_folder_input or None, exclude_session_id=session_id
+        )
         if include_private_context
         else ""
     )
@@ -2005,7 +2027,7 @@ async def _choose_provider(
         else []
     )
     context_summary = ""
-    session_summary_saved = False
+    session_summary_saved = memory.ends_with_summary(session_id)
     _SESSION_INFO.update(
         {
             "SQL session ID": session_id,
@@ -2119,10 +2141,17 @@ async def _choose_provider(
     )
 
 
-async def _run_agent_cli_session(*, verbose_startup: bool = False):
+async def _run_agent_cli_session(
+    *,
+    verbose_startup: bool = False,
+    resume_session: str | None = None,
+    continue_session: bool = False,
+):
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     setup = await _prepare_session(
         verbose_startup=verbose_startup,
+        resume_session=resume_session,
+        continue_session=continue_session,
     )
     if setup is None:
         return
@@ -3792,16 +3821,22 @@ def _acknowledge_interrupt() -> None:
     console.print("\n[yellow][Info] Ctrl+C received; ending session.[/yellow]")
 
 
-async def run_agent_cli_async(*, verbose_startup: bool = False):
+async def run_agent_cli_async(
+    *,
+    verbose_startup: bool = False,
+    resume_session: str | None = None,
+    continue_session: bool = False,
+):
     """Own runtime resources and restore dynamically registered global tools."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     original_mcp_tools = set(MCP_TOOL_NAMES)
     original_workspace_root = SandboxManager.root_dir
     try:
-        if verbose_startup:
-            await _run_agent_cli_session(verbose_startup=True)
-        else:
-            await _run_agent_cli_session()
+        await _run_agent_cli_session(
+            verbose_startup=verbose_startup,
+            resume_session=resume_session,
+            continue_session=continue_session,
+        )
     finally:
         if _TASK_LEASE_HEARTBEAT is not None:
             _TASK_LEASE_HEARTBEAT.cancel()
@@ -3862,5 +3897,16 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
         clear_captured_images()
 
 
-def run_agent_cli(*, verbose_startup: bool = False):
-    asyncio.run(run_agent_cli_async(verbose_startup=verbose_startup))
+def run_agent_cli(
+    *,
+    verbose_startup: bool = False,
+    resume_session: str | None = None,
+    continue_session: bool = False,
+):
+    asyncio.run(
+        run_agent_cli_async(
+            verbose_startup=verbose_startup,
+            resume_session=resume_session,
+            continue_session=continue_session,
+        )
+    )

@@ -1800,7 +1800,7 @@ async def test_agent_shutdown_closes_resources_and_restores_dynamic_tools(
         def close(self):
             closed.append(True)
 
-    async def fail_during_session():
+    async def fail_during_session(**_kwargs):
         agent._ACTIVE_MEMORY = FakeMemory()
         agent.MCP_TOOL_NAMES.add("temporary_mcp_tool")
         agent.AVAILABLE_TOOLS["temporary_mcp_tool"] = object()
@@ -1945,9 +1945,10 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
         "hello",
         "local response",
     ]
+    # The resumed session was already summarized, so exiting it again must not
+    # store a second summary for the same conversation.
     assert memory.get_all_episodic_summaries(session_id=session_id) == [
-        "local response",
-        "local response",
+        "local response"
     ]
     summary_calls = [
         call.args[0]
@@ -1960,7 +1961,7 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
             if isinstance(message, SystemMessage)
         )
     ]
-    assert len(summary_calls) == 2
+    assert len(summary_calls) == 1
     assert any(
         "Semantically summarize" in str(message.content)
         for call in mock_model.ainvoke.call_args_list
@@ -1972,7 +1973,8 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
         == 1
     )
     memory.close()
-    assert mock_model.ainvoke.await_count == 4
+    # One turn, one summary for the first run; the resumed run adds no model call.
+    assert mock_model.ainvoke.await_count == 3
 
 
 @pytest.mark.asyncio
@@ -4788,3 +4790,143 @@ async def test_exit_prints_session_statistics_table(
         "Summary generation time",
     ):
         assert label in out
+
+
+@pytest.mark.asyncio
+async def test_continue_resumes_the_latest_session_and_appends_to_it(
+    scripted_local_cli, monkeypatch
+):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    memory = PersistentMemory(db_path=str(database_path))
+    memory.save_message("session_previous", "human", "earlier question")
+    memory.save_message("session_previous", "ai", "earlier answer")
+    memory.close()
+    model.responses = [
+        AIMessage(content="follow-up answer"),
+        AIMessage(content="session summary"),
+    ]
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["follow-up", "exit"])
+    )
+    inputs.side_effect = ["", "", "", "1", ""]
+
+    await run_agent_cli_async(continue_session=True)
+
+    assert not any(
+        "Resume latest session" in call.args[0] for call in inputs.call_args_list
+    )
+    memory = PersistentMemory(db_path=str(database_path))
+    assert [message.content for message in memory.load_history("session_previous")] == [
+        "earlier question",
+        "earlier answer",
+        "follow-up",
+        "follow-up answer",
+    ]
+    assert memory.get_latest_session_id() == "session_previous"
+    assert "earlier answer" in "\n".join(
+        str(message.content) for message in model.calls[0]
+    )
+    memory.close()
+
+
+@pytest.mark.asyncio
+async def test_resuming_an_unknown_session_fails_before_startup(
+    scripted_local_cli,
+):
+    from private_agent.agent.session_resume import SessionResumeError
+
+    agent, _model, _inputs, _workspace, database_path = scripted_local_cli
+
+    with pytest.raises(SessionResumeError) as excinfo:
+        await run_agent_cli_async(resume_session="session_missing")
+
+    assert "session_missing" in str(excinfo.value)
+    memory = PersistentMemory(db_path=str(database_path))
+    assert memory.list_sessions() == []
+    memory.close()
+
+
+@pytest.mark.asyncio
+async def test_resumed_session_that_was_already_summarized_is_not_summarized_again(
+    scripted_local_cli, monkeypatch
+):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    memory = PersistentMemory(db_path=str(database_path))
+    memory.save_message("session_previous", "human", "earlier question")
+    memory.save_message("session_previous", "ai", "earlier answer")
+    memory.save_summary("session_previous", "Already summarized.")
+    memory.close()
+    model.responses = []
+    monkeypatch.setattr(agent, "prompt_user_input", AsyncMock(side_effect=["exit"]))
+    inputs.side_effect = ["", "", "", "1", ""]
+
+    await run_agent_cli_async(continue_session=True)
+
+    memory = PersistentMemory(db_path=str(database_path))
+    assert memory.get_all_episodic_summaries(session_id="session_previous") == [
+        "Already summarized."
+    ]
+    memory.close()
+    assert model.calls == []
+
+
+@pytest.mark.asyncio
+async def test_startup_context_skips_the_resumed_sessions_own_episode(
+    scripted_local_cli, monkeypatch
+):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    memory = PersistentMemory(db_path=str(database_path))
+    memory.save_message("session_previous", "human", "earlier question")
+    memory.save_summary("session_previous", "ZEBRA-RESUMED episode marker.")
+    memory.save_summary("session_other", "GIRAFFE-OTHER episode marker.")
+    memory.close()
+    model.responses = [AIMessage(content="ok"), AIMessage(content="session summary")]
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["hello", "exit"])
+    )
+    inputs.side_effect = ["", "", "", "1", ""]
+
+    await run_agent_cli_async(continue_session=True)
+
+    first_turn = "\n".join(str(message.content) for message in model.calls[0])
+    assert "GIRAFFE-OTHER" in first_turn
+    assert "ZEBRA-RESUMED" not in first_turn
+
+
+@pytest.mark.asyncio
+async def test_resuming_takes_over_an_expired_task_lease(
+    scripted_local_cli, monkeypatch
+):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    memory = PersistentMemory(db_path=str(database_path))
+    memory.save_message("session_previous", "human", "earlier question")
+    task = memory.create_task_plan(
+        "session_previous",
+        "Resume the approved plan",
+        "coding",
+        [{"step_id": "inspect", "description": "Inspect saved state"}],
+    )
+    task = memory.approve_task_plan(
+        task["task_id"], task["revision"], task["digest"], "coding: resume test"
+    )
+    memory.acquire_task_lease(task["task_id"], "owner_dead", "session_previous")
+    memory.conn.execute(
+        "UPDATE agent_task_leases SET expires_at = 0 WHERE task_id = ?",
+        (task["task_id"],),
+    )
+    memory.conn.commit()
+    memory.close()
+    monkeypatch.setattr(
+        agent.uuid, "uuid4", lambda: type("U", (), {"hex": "owner_resume_test"})()
+    )
+    model.responses = []
+    monkeypatch.setattr(agent, "prompt_user_input", AsyncMock(side_effect=["exit"]))
+    inputs.side_effect = ["", "", "", "1", ""]
+
+    await run_agent_cli_async(continue_session=True)
+
+    memory = PersistentMemory(db_path=str(database_path))
+    lease = memory.get_task_lease(task["task_id"])
+    assert lease["owner_id"] == "owner_resume_test"
+    assert lease["session_id"] == "session_previous"
+    memory.close()
