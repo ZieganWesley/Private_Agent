@@ -258,3 +258,58 @@ def test_local_runtime_discovery_rejects_non_loopback_urls():
         )
         == []
     )
+
+
+def test_local_runtime_discovery_survives_httpx_connect_error():
+    import httpx
+
+    from private_agent.agent.local_runtimes import discover_local_runtimes
+
+    class FakeClient:
+        is_closed = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get(self, _url):
+            raise httpx.ConnectError("connection refused")
+
+    runtimes = discover_local_runtimes(
+        "http://127.0.0.1:11434",
+        [],
+        client_factory=lambda **_kwargs: FakeClient(),
+    )
+
+    assert runtimes == []
+
+
+def test_local_runtime_discovery_survives_httpx_http_status_error():
+    from types import SimpleNamespace
+
+    import httpx
+
+    from private_agent.agent.local_runtimes import discover_local_runtimes
+
+    class FakeClient:
+        is_closed = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get(self, _url):
+            response = SimpleNamespace(status_code=500)
+            raise httpx.HTTPStatusError("server error", request=None, response=response)
+
+    runtimes = discover_local_runtimes(
+        "http://127.0.0.1:11434",
+        [],
+        client_factory=lambda **_kwargs: FakeClient(),
+    )
+
+    assert runtimes == []
