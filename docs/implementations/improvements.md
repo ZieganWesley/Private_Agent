@@ -1,8 +1,8 @@
 # Code Review: Known Issues, Gaps, Plans and Fix Roadmap
 
 Review date: 2026-10-28
-Re-verified: 2026-11-17, against `main` at commit `4664191` (after the
-A1 and A2 step 3.1 pull requests, #17 and #18, were merged)
+Re-verified: 2026-11-19, against `main` at commit `d19f32d` (after the
+B1-B3, B4-B6 and B8/B9 pull requests, #28, #29 and #30, were merged)
 
 ## How this was checked
 
@@ -164,6 +164,35 @@ files were updated with `except (ValueError, OSError)` or specific exception typ
 All `except Exception` blocks in source code have been replaced with specific
 exception types (`ValueError`, `OSError`, `RuntimeError`, `ConnectionError`, etc.).
 The remaining BLE001 violations are limited to test files only.
+
+**Fixed (2026-11-19): the narrowing above missed `httpx` transport errors.**
+`httpx.ConnectError` and the other `httpx.HTTPError` types are not
+`ConnectionError` or `OSError` subclasses, so handlers narrowed to
+`(ValueError, OSError)` no longer caught a refused connection. The visible
+symptom was that `private-agent` aborted with a `httpx.ConnectError` traceback
+as soon as Ollama was not running, because startup runtime discovery probed a
+closed port.
+
+- `agent/local_runtimes.py` catches `httpx.HTTPError` next to the socket
+  errors, and a probe future that fails is now logged
+  (`provider.local_discovery_task_failed`) instead of aborting the whole
+  discovery pass. With no reachable runtime the CLI reports "No local runtimes
+  found" and continues to the online configuration path.
+- `agent/model_capabilities.py` already handled this for the capability probe;
+  the remaining HTTP-facing tool handlers did not. `tools/web.py`
+  (`web_search`, `fetch_webpage`, `download_web_file`) and `tools/location.py`
+  (`fetch_current_location`, `get_weather`) now return an error string for an
+  `httpx.HTTPError` instead of letting it escape the tool boundary, which
+  previously reached neither their own `(ValueError, OSError)` handlers nor the
+  `(ValueError, OSError, RuntimeError)` tool executor.
+- `cli.py` treats end of input (`EOFError`, Ctrl+D) at a startup prompt as an
+  orderly exit instead of printing a traceback.
+
+Coverage: `tests/unit/test_providers.py` (closed port and HTTP status errors),
+`tests/unit/test_location.py`, `tests/unit/test_tools.py` (web fetch and
+download) and `tests/unit/test_cli.py` (closed stdin). Verified with the real
+client against a closed port: before the change the call raised
+`httpx.ConnectError`; afterwards discovery returns `[]` and the CLI exits 0.
 
 - There is no `[tool.mypy]` config or other type checking.
 - There is still no CI workflow under `.github/workflows/` (step 1.5).
@@ -2440,8 +2469,9 @@ follow it.
 
 Track progress by stage (section L1), since that is the order of work. The
 phase list below shows coverage by topic. Last updated 2026-11-19, after the
-B1/B2/B3 refactors were completed on `b1-b2-b3` (all 812 tests pass, 12 skipped,
-0 failed).
+B8/B9 work was merged (#30) and the startup crash caused by uncaught `httpx`
+transport errors was fixed (830 pass, 12 skipped, 0 failed; `ruff check .` and
+`ruff format --check .` clean).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)

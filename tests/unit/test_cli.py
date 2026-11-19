@@ -81,3 +81,23 @@ def test_config_flag_sets_config_path_environment(monkeypatch, tmp_path):
     os.environ.pop("PRIVATE_AGENT_CONFIG", None)
 
     assert seen == [custom]
+
+
+def test_end_of_input_at_a_startup_prompt_exits_cleanly(monkeypatch, capsys):
+    from private_agent import run_logging
+    from private_agent.agent import runtime
+
+    def closed_stdin(**_kwargs):
+        raise EOFError
+
+    monkeypatch.setattr(sys, "argv", ["private-agent"])
+    monkeypatch.setattr(run_logging, "start_debug_logging", lambda: None)
+    monkeypatch.setattr(run_logging, "log_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run_logging, "stop_debug_logging", lambda: None)
+    monkeypatch.setattr(runtime, "run_agent_cli", closed_stdin)
+
+    cli.main()
+
+    output = capsys.readouterr().out
+    assert "Input closed; exiting." in output
+    assert "Goodbye" in output
