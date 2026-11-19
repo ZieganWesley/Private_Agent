@@ -285,7 +285,7 @@ execution and outer turn loop now live in `_invoke_initial_model_with_fallback`,
 `_preflight_tool_calls`, `_execute_tool_batch` and `_run_agent_turn` in
 `agent/runtime.py`; planning, coding and skills paths share that loop.
 
-Verified with the full suite: 803 passed, 12 skipped, plus the two pre-existing
+Verified with the full suite: 809 passed, 12 skipped, plus the two pre-existing
 LM Studio/llama.cpp environment failures.
 
 #### B2. Permission checks are spread across several places
@@ -332,12 +332,17 @@ shared `SQLITE_LOCK`; the active DB path no longer lives there. The remaining
 `set_active_*` functions in `tools/__init__.py` are documented compatibility
 shims that write into `ToolContext`, kept for existing callers/tests.
 
+`code_tasks.ACTIVE_CODE_TASK` was removed; `run_project_unit_tests`,
+`checkpoint_code_task` and `finalize_code_task` now read the active code task
+from `get_tool_context().code_task` and still degrade gracefully when no task
+is active. New coverage lives in `tests/unit/test_tool_context.py`, including
+shared-instance, copy, schema-read and code-task tool cases.
+
 Performance note: `get_tool_context()` returns the shared context object and
 performs no SQLite work, so hot tool paths add no database round trips.
 
-Residual follow-up: `code_tasks.ACTIVE_CODE_TASK` remains a legacy alias that
-`get_tool_context()` mirrors for code-task helpers; removing it requires
-migrating those helpers to accept the context explicitly.
+Residual follow-up: none identified for B3. The `set_active_*` shims remain
+only for external callers/tests and can be removed in a later cleanup.
 
 #### B4. The risky-command check matches text fragments
 
@@ -2393,7 +2398,7 @@ follow it.
 
 Track progress by stage (section L1), since that is the order of work. The
 phase list below shows coverage by topic. Last updated 2026-11-19, after the
-B1/B2/B3 refactors were completed on `b1-b2-b3` (all 803 tests pass; the only
+B1/B2/B3 refactors were completed on `b1-b2-b3` (all 809 tests pass; the only
 failures are the two pre-existing LM Studio/llama.cpp environment checks).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
