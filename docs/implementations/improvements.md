@@ -63,8 +63,11 @@ B1-B3, B4-B6 and B8/B9 pull requests, #28, #29 and #30, were merged)
   `connection.py` (436 lines), `tasks.py` (1,197), `task_actions.py` (426),
   `learning.py` (256), `conversations.py` (165), `episodes.py` (251),
   `skills.py` (68) and `maintenance.py` (220).
-- The ruff complexity counts below were measured at review time and were not
-  re-measured; the `runtime.py` split above has not changed them.
+- **Audit 2026-11-19:** `agent/runtime.py` is still 3,866 lines (the turn loop
+  and tool execution remain in it) and `database/memory.py` is a 35-line facade
+  over nine mixins. This stays open as the large-module refactor; it needs its
+  own branch rather than a single change, and the ruff complexity counts below
+  were measured at review time and were not re-measured.
 - Ruff complexity checks flag:
   - 38 overly complex functions (`C901`)
   - 22 functions with too many branches (`PLR0912`)
@@ -93,6 +96,10 @@ class for each table.
 - Mutable state is kept in module globals: `global` appears 16 times across
   `tools/__init__.py`, `tools/_task_state.py`, `tools/_sqlite_state.py`,
   `tools/media.py` and `run_logging.py`.
+- **Audit 2026-11-19:** 122 `NAME = SETTINGS.field` aliases remain in
+  `config.py` and 13 `global` statements remain in the package, so step 3.2
+  (inject the settings object, drop the aliases) is still open. New settings
+  added since then follow the same alias convention.
 
 **Standard practice:** a typed settings object (for example, a pydantic
 model), loaded once at startup and passed to the code that needs it.
@@ -134,6 +141,13 @@ Still verified green: `ruff check .` and `ruff format --check .` both pass.
 `ruff format --check .` both pass. The import-order,
 `typing`-modernisation, nested-`with`, closure (`B023`) and `subprocess`
 (`PLW1510`) counts from the review no longer apply.
+
+**Audit 2026-11-19:** lint and formatting are enforced (`ruff check .` and
+`ruff format --check .`, now including `BLE`), but the typing half of this item
+is still open: no `[tool.mypy]`/`[tool.pyright]` config exists and neither tool
+is a declared dependency, and there is still no CI workflow (step 1.5). Adding a
+type checker is a separate decision because it would introduce a dependency and
+a baseline of errors to clear.
 
 **A5 completed:** All blind `except Exception` blocks (BLE001) have been
 replaced with specific exception types across all source files. The following
@@ -446,6 +460,31 @@ against a live Ollama embedding endpoint.
 
 **Standard practice:** a search API, or a self-hosted SearXNG instance, which
 also suits the privacy goal.
+
+**Fixed.** Search now runs through a provider layer in `tools/search.py`. The
+`[network] search_provider` setting accepts `auto` (default), `searxng` or
+`duckduckgo`; `auto` uses a self-hosted instance when `[network] searxng_url` is
+set and otherwise keeps scraping, so a default install behaves exactly as
+before. `searxng_search` in `tools/network.py` queries the instance's JSON API
+(`?q=...&format=json`) and formats results identically to the scraper, reusing
+the existing redirect limit, response-size cap and concurrency semaphore. When
+an explicitly chosen SearXNG fails for any reason (transport, HTML instead of
+JSON, size cap), the failure is logged and the scraper answers, so an outage
+costs the instance's speed rather than all web search.
+
+The instance URL is operator configuration, never model- or page-supplied, so a
+loopback instance such as `127.0.0.1:8080` is reachable: `_get_limited_response_sync`
+now takes an opt-in validator, and only the SearXNG call relaxes the public-only
+DNS policy to scheme/credential checks. Every other caller, including
+`fetch_webpage`, keeps the strict default (guarded by a test).
+
+Coverage lives in `tests/unit/test_search.py` (19 tests): JSON parsing and
+formatting, the result cap, malformed entries, unconfigured and non-HTTP
+endpoints, the provider-selection matrix, unknown providers, the configuration
+error for `searxng` without a URL, fallback for transport/parse/OS failures, and
+the `web_search` tool wiring. The transport itself was exercised against a
+local HTTP server serving SearXNG-shaped JSON; no live SearXNG or internet
+search was available here.
 
 #### B8. Sync and async code are mixed
 
@@ -2266,7 +2305,7 @@ pydantic, and the old constants remain as aliases until step 3.2. Steps 3.2 and
 | 5.3 | Done: the 29 broad handlers left in `src/` are all genuine boundaries (third-party backends, cancellation-safe cleanup, re-raise wrappers); each carries `# noqa: BLE001 - <reason>`, and `BLE` is selected in ruff so a new blind catch fails lint unless it is justified | A5 | `ruff check .` passes with `BLE` selected, and `tests/unit/test_source_hygiene.py` fails without a written reason |
 | 5.5 | Done (unit-verified): `HybridRAGRetriever` uses reciprocal rank fusion and a punctuation-aware BM25 tokenizer; `scripts/benchmark_rag.py` reports recall@k and MRR | B9 | RRF/tokenizer tests pass; live benchmark pending an Ollama endpoint |
 | 5.6 | Done: skills support `name`/`description` front matter, use RAG embeddings when available, and fall back to keyword matching | B6, C9 | Old skills still load, and new skills use front matter |
-| 5.7 | Put web search behind a provider interface, with SearXNG (self-hosted) or an API as the main option and the DuckDuckGo scraper as a fallback | B7, E18 | The search provider is chosen in config |
+| 5.7 | Done: web search runs through `tools/search.py`, which selects `auto`/`searxng`/`duckduckgo` from `[network] search_provider`, queries a self-hosted SearXNG JSON API when `searxng_url` is set, and falls back to the scraper when the instance fails | B7, E18 | `tests/unit/test_search.py` covers selection, parsing and fallback, and the transport was exercised against a local HTTP server |
 
 ### Phase 6: Features from Claude Code and Codex
 
@@ -2476,9 +2515,9 @@ follow it.
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic. Last updated 2026-11-19, after step
-5.3 was completed on `phase5-3-except-audit` (all 827 tests pass, 12 skipped,
-0 failed).
+phase list below shows coverage by topic. Last updated 2026-11-19, after the
+Part A/Part B audit and step 5.7 (web search providers) on
+`audit-a-b-completion` (all 850 tests pass, 12 skipped, 0 failed).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
@@ -2492,7 +2531,7 @@ By phase:
 - [x] Phase 2: Quick fixes and real bugs (2.1–2.5)
 - [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
-- [ ] Phase 5: Improve individual features (5.1–5.9; 5.1, 5.3, 5.4, 5.5 and 5.6 done)
+- [ ] Phase 5: Improve individual features (5.1–5.9; 5.1, 5.3, 5.4, 5.5, 5.6 and 5.7 done)
 - [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)
 - [ ] Phase 7: Planning mode (7.1–7.10)
 - [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)

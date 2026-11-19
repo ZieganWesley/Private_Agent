@@ -590,13 +590,24 @@ async def _get_limited_response(client, url: str, max_bytes: int) -> tuple[bytes
         _network_slots.release()
 
 
-def _get_limited_response_sync(client, url: str, max_bytes: int) -> tuple[bytes, str]:
-    """Synchronous counterpart of ``_get_limited_response``."""
+def _get_limited_response_sync(
+    client,
+    url: str,
+    max_bytes: int,
+    *,
+    validate=validate_outbound_url,
+) -> tuple[bytes, str]:
+    """Synchronous counterpart of ``_get_limited_response``.
+
+    ``validate`` may be relaxed only for endpoints an operator configured
+    themselves (a self-hosted SearXNG on loopback); model- or page-supplied URLs
+    keep the full public-only policy.
+    """
     acquired = _network_slots.acquire(timeout=NETWORK_REQUEST_TIMEOUT)
     if not acquired:
         raise TimeoutError("Outbound request concurrency limit wait timed out.")
     try:
-        current_url = validate_outbound_url(url)
+        current_url = validate(url)
         for redirect_count in range(MAX_HTTP_REDIRECTS + 1):
             with client.stream("GET", current_url) as response:
                 if response.is_redirect:
@@ -605,9 +616,7 @@ def _get_limited_response_sync(client, url: str, max_bytes: int) -> tuple[bytes,
                         raise ValueError(
                             "HTTP redirect limit exceeded or redirect target missing."
                         )
-                    current_url = validate_outbound_url(
-                        urllib.parse.urljoin(current_url, location)
-                    )
+                    current_url = validate(urllib.parse.urljoin(current_url, location))
                     continue
                 response.raise_for_status()
                 declared_size = response.headers.get("content-length")
@@ -626,6 +635,59 @@ def _get_limited_response_sync(client, url: str, max_bytes: int) -> tuple[bytes,
         raise ValueError("HTTP redirect limit exceeded.")
     finally:
         _network_slots.release()
+
+
+def searxng_search(
+    query: str,
+    *,
+    base_url: str,
+    client_factory=httpx.Client,
+) -> str:
+    """Search a self-hosted SearXNG instance through its JSON API.
+
+    The instance URL comes from the operator's own configuration, never from a
+    model or a fetched page, so loopback hosts are permitted: a privacy-first
+    deployment normally runs SearXNG on ``127.0.0.1``. Scheme, credential and
+    redirect checks, the size cap and the concurrency limit still apply.
+
+    SearXNG only answers ``format=json`` when the instance enables it; otherwise
+    the HTML page fails to parse as JSON and callers fall back to the scraper.
+    """
+    if not query.strip() or len(query) > MAX_SEARCH_QUERY_CHARS:
+        raise ValueError(
+            f"Search query must contain 1 to {MAX_SEARCH_QUERY_CHARS} characters."
+        )
+    if not base_url.strip():
+        raise ValueError("SearXNG URL is not configured.")
+    endpoint = _normalize_outbound_url(base_url).rstrip("/")
+    search_url = (
+        f"{endpoint}/search?{urllib.parse.urlencode({'q': query, 'format': 'json'})}"
+    )
+    with client_factory(
+        headers={"User-Agent": "PrivateAgent/1.0"},
+        timeout=httpx.Timeout(NETWORK_REQUEST_TIMEOUT),
+    ) as client:
+        body, encoding = _get_limited_response_sync(
+            client,
+            search_url,
+            MAX_WEBPAGE_BYTES,
+            validate=_normalize_outbound_url,
+        )
+    payload = json.loads(body.decode(encoding, errors="replace"))
+    raw_results = payload.get("results") if isinstance(payload, dict) else None
+    results = []
+    for item in (raw_results if isinstance(raw_results, list) else [])[
+        :MAX_SEARCH_RESULTS
+    ]:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "").strip()
+        if not url:
+            continue
+        title = str(item.get("title") or "").strip()
+        snippet = str(item.get("content") or "").strip()
+        results.append(f"Title: {title}\nSnippet: {snippet}\nURL: {url}")
+    return "\n---\n".join(results) if results else "No web search results found."
 
 
 def search_duckduckgo(query: str, client_factory=public_only_sync_client) -> str:
