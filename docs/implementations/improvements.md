@@ -576,11 +576,21 @@ a prompt as an argument.
   of the startup memory context, and reclaims its active plan lease when the
   earlier process is gone. Provider and model are still not recorded, so a
   resumed conversation runs on whatever the current startup selects (12.9).
-- **Undo is open (step 6.7):** snapshots still have no manifest, so nothing can
-  be restored yet.
+- **Undo done (step 6.7):** `/undo` restores the workspace edits of the last
+  agent turn and rewinds that turn's saved conversation messages. Snapshots
+  now carry a session/turn manifest (`.agent_snapshots/index.jsonl`), update
+  messages in `chat_history` record their `turn_id`, and each file is restored
+  atomically and checksum-verified, so a failed restore never leaves half a
+  file. Files the turn created are removed again.
+- Limits: only workspace edits made through the file tools are recorded (shell
+  commands, MCP tools, edits made before this step and paths outside the active
+  workspace have no manifest entry; their old `.bak` files stay harmless).
+  `/undo` steps back one turn at a time, and when a file cannot be restored the
+  conversation is kept and the failure is reported so the undo can be retried.
+  Provider and model recording is still step 12.9.
 - Claude Code can rewind code and conversation to a checkpoint. Here, edits
-  are copied to `.agent_snapshots/`, but there is no command to restore them.
-  Git checkpoints exist only inside coding tasks.
+  are copied to `.agent_snapshots/` and `/undo` restores them. Git checkpoints
+  exist only inside coding tasks.
 
 **C4. Commands only run on Linux.**
 The sandbox needs Bubblewrap and `prlimit`, so on macOS and Windows the shell,
@@ -2246,7 +2256,7 @@ order, because its steps depend on Stage 4 work.
 | 121 | 7.7 | Automatic step validation | Medium | 6.3 |
 | 122 | 8.17 | Calculator / sandboxed Python tool | Medium | 6.3 |
 | 123 | 6.6 | Session resume (`--continue`, `--resume`) | Hard | 4.2, 4.5 |
-| 124 | 6.7 | `/rewind` from snapshots | Medium | 6.6 |
+| 124 | 6.7 | `/undo` from snapshots | Medium | 6.6 |
 | 125 | 8.11 | Chat commands (`/new`, `/retry`, `/edit`, `/export`) | Medium | 6.6 |
 | 126 | 6.13 | Subagents | Hard | 3.4, 4.2 |
 | 127 | 9.2 | Capability packs | Hard | 3.4, 4.2 |
@@ -2331,7 +2341,7 @@ For when to do each step, see the implementation order in section L1.
 | 6.4 | Add an Esc / single Ctrl+C handler that cancels the current turn and keeps the session; keep double Ctrl+C for exit | C12 | 4.2 | Stopping a turn does not end the session |
 | 6.5 | Add permission rules in config (`allow` / `deny` lists matching tool names, commands and paths, for example `run_shell_command(pytest *)` or `read_local_file(.env)`) | C8 | 4.3 | Allowed commands run in Auto mode without a prompt; denied ones are refused |
 | 6.6 | **Done:** conversations were already saved per session; `--continue` reopens the most recent session, `--resume <session_id>` reopens a named one and `--list-sessions` lists ids with message counts and last activity (no interactive picker). A resumed run loads the saved history, skips the resume prompt, does not summarize an already-summarized session again, keeps that session's own episode out of the startup memory context, and reclaims its active plan lease when the earlier owner is gone. Provider fallback on resume is step 12.9 | C3 | 4.2, 4.5 | A resumed session continues with its full message history |
-| 6.7 | Add `/rewind` to restore files from `.agent_snapshots/` (and the conversation) to an earlier turn | C3 | 6.6 | An edit can be undone from the prompt, with a test |
+| 6.7 | **Done:** `/undo` restores the files the last agent turn changed and rewinds that turn's saved conversation. `sandbox/linux.py` and `tools/filesystem.py` now return the backup they wrote and append a `{target, backup, session_id, turn_id, size, sha256, action}` line to `.agent_snapshots/index.jsonl` (sidecar manifest beside the backups rather than a DB table, so snapshots survive a database reset or a different `paths.database`); undo takes the earliest snapshot per file in the turn, restores through a temp file plus `os.replace` after a checksum check, removes files the turn created, and writes an `undo` marker so a turn cannot be undone twice. `chat_history.turn_id` (additive migration) and `save_message(..., turn_id=)` give the turn identity; `delete_turn_messages` rewinds the conversation. Failures (missing or changed backup, unwritable or symlinked target, unreadable manifest, sqlite error) are reported without touching the current file, and the conversation is only rewound after every file was restored | C3 | 6.6 | An edit can be undone from the prompt, with a test |
 | 6.8 | Add a non-interactive mode: `private-agent -p "prompt"` with `--output text\|json`, using the permission rules from 6.5 instead of prompts | C2 | 4.2, 6.5 | The agent can run from a script or CI job without a terminal |
 | 6.9 | Add project-level config (`.private_agent/settings.json` in the workspace) and a local override file, merged over the user config | C13 | 3.1 | Project settings apply only inside that project |
 | 6.10 | Add custom slash commands loaded from Markdown files in a commands folder (user and project level) | C9 | 4.4 | A new `.md` file becomes a `/command` |
@@ -2528,7 +2538,7 @@ follow it.
 
 Track progress by stage (section L1), since that is the order of work. The
 phase list below shows coverage by topic. Last updated 2026-11-19, after
-step 6.6 (session resume) on `session-resume` (all 885 tests pass, 12 skipped,
+step 6.7 (`/undo`) on `session-undo` (all 924 tests pass, 12 skipped,
 0 failed).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
@@ -2544,7 +2554,7 @@ By phase:
 - [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
 - [ ] Phase 5: Improve individual features (5.1–5.9; 5.1, 5.3, 5.4, 5.5, 5.6 and 5.7 done)
-- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15; 6.6 done)
+- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15; 6.6 and 6.7 done)
 - [ ] Phase 7: Planning mode (7.1–7.10)
 - [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)
 - [ ] Phase 9: Single combined runtime and live status (9.1–9.11)

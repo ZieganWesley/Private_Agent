@@ -1,10 +1,15 @@
 """Workspace path controls and Linux command risk helpers."""
 
+import logging
 import os
 import pathlib
 import shlex
 import shutil
 import uuid
+
+from ..snapshots import SnapshotError, record_snapshot
+
+_LOGGER = logging.getLogger(__name__)
 
 SNAPSHOT_DIR = pathlib.Path(".agent_snapshots").resolve()
 
@@ -58,22 +63,52 @@ class SandboxManager:
             ) from None
 
 
-def create_hitl_snapshot(target_path: pathlib.Path):
-    if target_path.exists():
-        root = SandboxManager.get_root().resolve()
-        source = target_path.resolve()
-        if not source.is_relative_to(root):
-            raise PermissionError(
-                "Cannot create a snapshot outside the active workspace."
-            )
-        snapshot_dir = root / ".agent_snapshots"
-        snapshot_dir.mkdir(parents=True, exist_ok=True)
-        if not snapshot_dir.resolve().is_relative_to(root):
-            raise PermissionError(
-                "Workspace snapshot directory cannot escape the workspace."
-            )
-        backup_name = f"{target_path.name}_{uuid.uuid4().hex}.bak"
-        shutil.copy2(source, snapshot_dir / backup_name)
+def create_hitl_snapshot(target_path: pathlib.Path) -> pathlib.Path | None:
+    """Copy a workspace file into the snapshot directory and record it for undo."""
+    if not target_path.exists():
+        return None
+    root = SandboxManager.get_root().resolve()
+    source = target_path.resolve()
+    if not source.is_relative_to(root):
+        raise PermissionError("Cannot create a snapshot outside the active workspace.")
+    snapshot_dir = root / ".agent_snapshots"
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    if not snapshot_dir.resolve().is_relative_to(root):
+        raise PermissionError(
+            "Workspace snapshot directory cannot escape the workspace."
+        )
+    backup_name = f"{target_path.name}_{uuid.uuid4().hex}.bak"
+    backup_path = snapshot_dir / backup_name
+    shutil.copy2(source, backup_path)
+    _record_snapshot_for_undo(root, source, backup_name)
+    return backup_path
+
+
+def _record_snapshot_for_undo(
+    root: pathlib.Path,
+    source: pathlib.Path,
+    backup_name: str,
+) -> None:
+    """Add the manifest line when a turn is active; never fail the snapshot."""
+    from ..tools import get_tool_context
+
+    context = get_tool_context()
+    if not context.session_id or not context.turn_id:
+        return
+    try:
+        record_snapshot(
+            root=root,
+            target=source,
+            backup=backup_name,
+            session_id=context.session_id,
+            turn_id=context.turn_id,
+        )
+    except (OSError, ValueError, SnapshotError) as exc:
+        _LOGGER.warning(
+            "Could not record the snapshot manifest entry for %s: %s",
+            source.name,
+            str(exc)[:200],
+        )
 
 
 _ELEVATED_PROGRAMS = frozenset({"sudo", "su", "doas", "pkexec", "runuser"})

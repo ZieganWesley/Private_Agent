@@ -4930,3 +4930,65 @@ async def test_resuming_takes_over_an_expired_task_lease(
     assert lease["owner_id"] == "owner_resume_test"
     assert lease["session_id"] == "session_previous"
     memory.close()
+
+
+@pytest.mark.asyncio
+async def test_undo_restores_a_file_edited_by_the_last_turn(
+    scripted_local_cli,
+    monkeypatch,
+):
+    agent, model, inputs, workspace, database_path = scripted_local_cli
+    target = workspace / "notes.txt"
+    target.write_text("pre-turn", encoding="utf-8")
+    model.responses = [
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "edit_local_file",
+                    "args": {"file_path": "notes.txt", "content": "post-turn"},
+                    "id": "edit-notes",
+                }
+            ],
+        ),
+        AIMessage(content="I edited notes.txt."),
+        AIMessage(content="Session summary."),
+    ]
+
+    def answer_prompt(prompt):
+        text = str(prompt)
+        if "Approve tool" in text:
+            return "y"
+        if "Choose provider" in text:
+            return "1"
+        if "Select model choice" in text:
+            return "1"
+        return ""
+
+    inputs.side_effect = answer_prompt
+    monkeypatch.setattr(
+        agent,
+        "prompt_user_input",
+        AsyncMock(side_effect=["Please replace notes.txt", "/undo", "exit"]),
+    )
+    printed = []
+    monkeypatch.setattr(
+        agent.console,
+        "print",
+        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+    )
+
+    await run_agent_cli_async()
+
+    assert target.read_text(encoding="utf-8") == "pre-turn"
+    undo_output = next(output for output in printed if "[Undo]" in output)
+    assert "Restored 1 file(s)" in undo_output
+    assert "- notes.txt" in undo_output
+    memory = PersistentMemory(db_path=str(database_path))
+    try:
+        conversation_rows = memory.conn.execute(
+            "SELECT COUNT(*) FROM chat_history WHERE role IN ('human', 'ai')"
+        ).fetchone()[0]
+        assert conversation_rows == 0
+    finally:
+        memory.close()

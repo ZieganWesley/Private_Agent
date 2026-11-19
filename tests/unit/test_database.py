@@ -1823,3 +1823,81 @@ def test_file_database_uses_wal_with_normal_synchronous(tmp_path):
         assert memory.conn.execute("PRAGMA busy_timeout").fetchone()[0] == 2000
     finally:
         memory.close()
+
+
+def test_turn_id_exists_on_a_fresh_database(tmp_path):
+    memory = PersistentMemory(str(tmp_path / "fresh-turn.sqlite"))
+    try:
+        columns = {
+            row[1] for row in memory.conn.execute("PRAGMA table_info(chat_history)")
+        }
+        assert "turn_id" in columns
+    finally:
+        memory.close()
+
+
+def test_turn_id_migration_preserves_rows_in_a_preexisting_database(tmp_path):
+    db_path = str(tmp_path / "legacy-turn.sqlite")
+    memory = PersistentMemory(db_path)
+    memory.save_message("session", "human", "written before the upgrade")
+    memory.close()
+
+    connection = sqlite3.connect(db_path)
+    connection.execute("ALTER TABLE chat_history DROP COLUMN turn_id")
+    connection.commit()
+    connection.close()
+
+    memory = PersistentMemory(db_path)
+    try:
+        columns = {
+            row[1] for row in memory.conn.execute("PRAGMA table_info(chat_history)")
+        }
+        assert "turn_id" in columns
+        assert memory.load_history("session")[0].content == "written before the upgrade"
+        row_id = memory.save_message("session", "ai", "after the upgrade", turn_id="t1")
+        assert row_id > 0
+        assert (
+            memory.conn.execute(
+                "SELECT turn_id FROM chat_history WHERE id = ?", (row_id,)
+            ).fetchone()[0]
+            == "t1"
+        )
+    finally:
+        memory.close()
+
+
+def test_delete_turn_messages_removes_only_that_turn(tmp_path):
+    memory = PersistentMemory(str(tmp_path / "delete-turn.sqlite"))
+    try:
+        memory.save_message("session", "human", "one", turn_id="t1")
+        memory.save_message("session", "ai", "one reply", turn_id="t1")
+        memory.save_message("session", "human", "two", turn_id="t2")
+        memory.save_message("session", "ai", "two reply", turn_id="t2")
+        memory.save_message("session", "summary", "kept summary")
+        memory.save_message("other", "human", "other session", turn_id="t1")
+
+        deleted = memory.delete_turn_messages("session", "t1")
+
+        assert deleted == 2
+        rows = memory.conn.execute(
+            "SELECT session_id, content FROM chat_history ORDER BY id"
+        ).fetchall()
+        assert rows == [
+            ("session", "two"),
+            ("session", "two reply"),
+            ("session", "kept summary"),
+            ("other", "other session"),
+        ]
+    finally:
+        memory.close()
+
+
+def test_delete_turn_messages_ignores_empty_identifiers(tmp_path):
+    memory = PersistentMemory(str(tmp_path / "delete-turn-empty.sqlite"))
+    try:
+        memory.save_message("session", "human", "kept", turn_id="t1")
+        assert memory.delete_turn_messages("session", "") == 0
+        assert memory.delete_turn_messages("", "t1") == 0
+        assert len(memory.load_history("session")) == 1
+    finally:
+        memory.close()

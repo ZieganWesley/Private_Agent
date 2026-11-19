@@ -19,12 +19,38 @@ from ..config import (
 class ConversationMixin:
     """Conversation history, summaries and retention."""
 
-    def save_message(self, session_id: str, role: str, content: str):
+    def save_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        *,
+        turn_id: str | None = None,
+    ) -> int:
+        """Store one message and return its row id.
+
+        ``turn_id`` ties the human/AI pair of an agent turn together so `/undo`
+        can rewind exactly that turn; older callers that omit it keep working.
+        """
         with self._lock, self.conn:
-            self.conn.execute(
-                "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
-                (session_id, role, content),
+            cursor = self.conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, turn_id) "
+                "VALUES (?, ?, ?, ?)",
+                (session_id, role, content, turn_id),
             )
+            return int(cursor.lastrowid or 0)
+
+    def delete_turn_messages(self, session_id: str, turn_id: str) -> int:
+        """Remove the conversation rows of one turn and return how many went."""
+        if not session_id or not turn_id:
+            return 0
+        with self._lock, self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM chat_history WHERE session_id = ? AND turn_id = ? "
+                "AND role IN ('human', 'ai')",
+                (session_id, turn_id),
+            )
+            return int(cursor.rowcount or 0)
 
     def get_history(
         self,

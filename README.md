@@ -128,7 +128,7 @@ reports that in the current session rather than restarting it.
   config file, with an auto-approve allow-list for trusted tools.
 - **Interactive CLI**: command and `@file` auto-completion, multi-line input (Alt+Enter or
   Ctrl+J adds a new line; Enter sends), session-wide prompt
-  history, `/help`, `/status`, `/context`, `/add`, `/list_tools`,
+  history, `/help`, `/status`, `/context`, `/add`, `/undo`, `/list_tools`,
   `/maintenance`, `/plan`, `/tasks`, `/skills`, `switch`,
   `exit`, compact startup counts for memory and saved plans.
 - **Maintenance and safety**: retention policies, stale-task handling,
@@ -204,6 +204,17 @@ startup memory context, and reclaims its active plan's lease when the earlier
 process is gone. The provider and model are chosen again at startup, because
 they are not recorded with the session yet.
 
+`/undo` restores the workspace files the last agent turn changed and rewinds
+that turn's saved conversation messages. Each edit records a manifest line in
+`<workspace>/.agent_snapshots/index.jsonl` with the original path, session and
+turn, and undo restores the pre-turn bytes atomically (temporary file plus
+rename) after verifying the backup checksum, removing files that turn created.
+It steps back one turn per call, reports files it could not restore without
+touching them (and keeps the conversation so you can retry), and only covers
+edits made through the file tools: shell commands, MCP tools and edits made
+before this feature have no manifest entry. Their old `.bak` files stay
+harmless.
+
 When launched from a project directory, `private-agent` automatically uses any
 `workspace`, `rag`, and `skills` directories found directly there, under
 `resources/`, or under `private_agent/resources/`. For each folder name, lookup
@@ -220,7 +231,7 @@ legacy flat keys are migrated. Memory is stored in `~/.local_ai_memory.db`.
 Put documents for RAG in `~/.private_agent/rag/` and skills in
 `~/.private_agent/resources/skills/`.
 
-Session commands: `exit`, `switch`, `/help`, `/status`, `/context`,
+Session commands: `exit`, `switch`, `/help`, `/status`, `/undo`, `/context`,
 `/context clear`, `/list_tools`, `/maintenance` (`data reset` resets local
 stores after typed confirmation), `/plan`, `/tasks`, `/skills [key]`, `/think on|off`, `/think-effort
 low|medium|high`, `/think-status`, `/hardware-status`, `/summarize` (summarize and store the session now; `exit` will not re-summarize unless new prompts followed), `/compact` (replace the context window with a short working summary, without storing it), `/add path/to/folder` (include supported UTF-8 text files from an in-workspace folder in the next request only), and `@path/to/file`

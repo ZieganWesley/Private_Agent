@@ -222,6 +222,7 @@ from .tool_display import (
     _tool_log_redactions,
     _tool_result_is_error,
 )
+from .undo import undo_last_turn
 
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
@@ -1636,6 +1637,7 @@ async def _build_session_setup(
     )
     _tool_context = get_tool_context()
     _tool_context.skill_session_id = session_id
+    _tool_context.session_id = session_id
     set_tool_context(_tool_context)
     _tool_context = get_tool_context()
     _tool_context.runtime_owner_id = uuid.uuid4().hex
@@ -2363,6 +2365,22 @@ async def _run_agent_cli_session(
                         ),
                     )
                     console.print(table)
+                    continue
+                if user_input.lower() == "/undo":
+                    undo_outcome = await asyncio.to_thread(
+                        undo_last_turn,
+                        memory,
+                        session_id,
+                        workspace_root=SandboxManager.get_root(),
+                    )
+                    console.print(undo_outcome.message)
+                    if undo_outcome.history_changed:
+                        chat_history = memory.get_history(
+                            session_id,
+                            limit=MAX_HISTORY_MESSAGES,
+                        )
+                        context_summary = ""
+                        session_summary_saved = memory.ends_with_summary(session_id)
                     continue
                 if user_input.lower() == "/add" or user_input.lower().startswith(
                     "/add "
@@ -3348,6 +3366,11 @@ Runtime context:
                     + [HumanMessage(content=enriched_input)]
                 )
 
+                turn_id = uuid.uuid4().hex
+                _tool_context = get_tool_context()
+                _tool_context.turn_id = turn_id
+                set_tool_context(_tool_context)
+
                 start_time = time.monotonic()
                 deadline = start_time + MAX_TASK_SECONDS
                 (
@@ -3597,8 +3620,13 @@ Runtime context:
                         f"\n\n[Code task verification]\n{verification}"
                     )
 
-                memory.save_message(session_id, "human", user_input)
-                memory.save_message(session_id, "ai", full_output_content)
+                memory.save_message(session_id, "human", user_input, turn_id=turn_id)
+                memory.save_message(
+                    session_id, "ai", full_output_content, turn_id=turn_id
+                )
+                _tool_context = get_tool_context()
+                _tool_context.turn_id = None
+                set_tool_context(_tool_context)
 
                 chat_history.append(HumanMessage(content=user_input))
                 chat_history.append(AIMessage(content=full_output_content))

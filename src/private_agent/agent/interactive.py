@@ -29,6 +29,7 @@ SLASH_COMMANDS = {
     "/add": "Add a workspace folder's text files to the next request's context.",
     "/skills": "List available skills or select one for your next request.",
     "/status": "Show current provider, model, permissions, workspace, and context state.",
+    "/undo": "Restore the files the last agent turn changed and rewind that turn.",
     "/tasks": "Inspect, approve, resume, pause, or cancel SQLite task plans.",
     "/think on": "Enable model thinking when supported.",
     "/think off": "Disable model thinking.",

@@ -110,6 +110,8 @@ class ToolContext:
     """Snapshot of the mutable runtime state tools depend on (B3 step 1)."""
 
     db_path: str
+    session_id: str | None = None
+    turn_id: str | None = None
     task_session_id: str | None = None
     task_id: str | None = None
     skill_directory: str | None = None
@@ -140,6 +142,8 @@ def get_tool_context() -> ToolContext:
 def set_tool_context(context: ToolContext) -> None:
     """Copy a context object into the process-local tool context."""
     _TOOL_CONTEXT.db_path = context.db_path
+    _TOOL_CONTEXT.session_id = context.session_id
+    _TOOL_CONTEXT.turn_id = context.turn_id
     _TOOL_CONTEXT.task_session_id = context.task_session_id
     _TOOL_CONTEXT.task_id = context.task_id
     _TOOL_CONTEXT.skill_directory = context.skill_directory
