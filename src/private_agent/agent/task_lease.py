@@ -15,11 +15,12 @@ TASK_LEASE_RENEW_INTERVAL_SECONDS = 30
 
 
 async def _maintain_task_lease(memory: PersistentMemory, session_id: str) -> None:
-    from ..tools import _task_state
+    from ..tools import get_tool_context
 
     while True:
         await asyncio.sleep(TASK_LEASE_RENEW_INTERVAL_SECONDS)
-        task_id = _task_state.ACTIVE_TASK_ID
+        context = get_tool_context()
+        task_id = context.task_id
         if not task_id:
             continue
         try:
@@ -34,7 +35,7 @@ async def _maintain_task_lease(memory: PersistentMemory, session_id: str) -> Non
             acquired = await asyncio.to_thread(
                 memory.acquire_task_lease,
                 task_id,
-                _task_state.RUNTIME_OWNER_ID,
+                context.runtime_owner_id,
                 session_id,
                 lease_seconds=TASK_LEASE_SECONDS,
             )

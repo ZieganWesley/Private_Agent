@@ -366,6 +366,9 @@ injection).
 and `schema_read_tables`; `tools/planner.py` and `create_skill` read them via
 `get_tool_context()` instead of `_task_state` globals.
 
+**Partly fixed (B3 step 9):** `agent/task_lease.py` now reads the active task
+and runtime owner through `get_tool_context()` instead of `_task_state`.
+
 #### B4. The risky-command check matches text fragments
 
 **Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead
