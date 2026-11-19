@@ -49,7 +49,7 @@ def inspect_local_model_capabilities(
     try:
         client = client_factory(host=base_url, **client_kwargs())
         details = client.show(model_name)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - ollama RequestError/ResponseError derive directly from Exception
         log_event(
             RUN_LOGGER,
             "provider.local_capabilities_failed",
@@ -214,7 +214,7 @@ def create_robust_local_chat_model(
                 context_window=context_window,
             )
             return model.bind_tools(list(tools)) if tools is not None else model
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - try each configured model; any constructor failure falls through
             last_error = exc
             log_event(
                 RUN_LOGGER,
@@ -480,7 +480,7 @@ def select_online_model(
             f"[yellow]Could not list provider models (HTTP "
             f"{exc.response.status_code}); you can enter a model identifier manually.[/yellow]"
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - provider listing errors vary by backend; degrade to manual entry
         log_event(
             RUN_LOGGER,
             "provider.online_model_listing_failed",
@@ -573,7 +573,7 @@ def select_online_model(
 
     try:
         model = model_factory(base_url, model_name, api_key)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - model factory failures vary by provider; degrade with a message
         log_event(
             RUN_LOGGER,
             "provider.online_model_initialization_failed",
@@ -609,7 +609,7 @@ def online_capabilities(model, allow_tools: bool) -> dict:
     """
     try:
         profile = getattr(model, "profile", None)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - profile is a third-party property that may raise anything
         log_event(
             RUN_LOGGER,
             "provider.capability_profile_unavailable",

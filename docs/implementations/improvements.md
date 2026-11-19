@@ -161,9 +161,17 @@ files were updated with `except (ValueError, OSError)` or specific exception typ
 - `src/private_agent/tools/network.py`
 - `src/private_agent/config.py`
 
-All `except Exception` blocks in source code have been replaced with specific
-exception types (`ValueError`, `OSError`, `RuntimeError`, `ConnectionError`, etc.).
-The remaining BLE001 violations are limited to test files only.
+That work narrowed real blind catches, but it did not leave source code free
+of BLE001: the audit in step 5.3 found 29 broad handlers still in `src/`, and
+each one turned out to be a boundary that has to stay broad. Narrowing them is
+what caused a startup crash — `ollama.RequestError` and `ResponseError` derive
+directly from `Exception`, not from `ConnectionError` or `OSError`, so an
+`except (ValueError, OSError)` around a provider probe let real backend errors
+escape. Every one of the 29 now carries an explicit
+`# noqa: BLE001 - <reason>` naming why the catch is broad, `BLE` is selected in
+`[tool.ruff.lint]` (with `tests/**` opted out, since tests may assert on
+arbitrary failure), and a source-hygiene test fails when a broad handler appears
+without a written reason. See 5.3.
 
 **Fixed (2026-11-19): the narrowing above missed `httpx` transport errors.**
 `httpx.ConnectError` and the other `httpx.HTTPError` types are not
@@ -2255,7 +2263,7 @@ pydantic, and the old constants remain as aliases until step 3.2. Steps 3.2 and
 |---|---|---|---|
 | 5.1 | Done: network and shell tools use async clients or run synchronously off the event loop; `asyncio.run` remains only at the synchronous CLI boundary | A7, B8 | `tests/unit/test_source_hygiene.py` proves no `subprocess.run` inside `async def`, and `asyncio.run` only in `run_agent_cli` |
 | 5.2 | Replace print-based diagnostics with module-level `logging` loggers, keeping `rich` for user-facing output | A6, E34 | Diagnostics go to the run log, and user output stays unchanged |
-| 5.3 | Narrow the 93 blind `except Exception` blocks to specific exceptions, keeping broad catches only at the outer session boundary | A5 | `BLE001` warnings are only at documented boundaries |
+| 5.3 | Done: the 29 broad handlers left in `src/` are all genuine boundaries (third-party backends, cancellation-safe cleanup, re-raise wrappers); each carries `# noqa: BLE001 - <reason>`, and `BLE` is selected in ruff so a new blind catch fails lint unless it is justified | A5 | `ruff check .` passes with `BLE` selected, and `tests/unit/test_source_hygiene.py` fails without a written reason |
 | 5.5 | Done (unit-verified): `HybridRAGRetriever` uses reciprocal rank fusion and a punctuation-aware BM25 tokenizer; `scripts/benchmark_rag.py` reports recall@k and MRR | B9 | RRF/tokenizer tests pass; live benchmark pending an Ollama endpoint |
 | 5.6 | Done: skills support `name`/`description` front matter, use RAG embeddings when available, and fall back to keyword matching | B6, C9 | Old skills still load, and new skills use front matter |
 | 5.7 | Put web search behind a provider interface, with SearXNG (self-hosted) or an API as the main option and the DuckDuckGo scraper as a fallback | B7, E18 | The search provider is chosen in config |
@@ -2468,10 +2476,9 @@ follow it.
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic. Last updated 2026-11-19, after the
-B8/B9 work was merged (#30) and the startup crash caused by uncaught `httpx`
-transport errors was fixed (830 pass, 12 skipped, 0 failed; `ruff check .` and
-`ruff format --check .` clean).
+phase list below shows coverage by topic. Last updated 2026-11-19, after step
+5.3 was completed on `phase5-3-except-audit` (all 827 tests pass, 12 skipped,
+0 failed).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
@@ -2485,7 +2492,7 @@ By phase:
 - [x] Phase 2: Quick fixes and real bugs (2.1–2.5)
 - [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
-- [ ] Phase 5: Improve individual features (5.1–5.9; 5.4 and 5.6 done)
+- [ ] Phase 5: Improve individual features (5.1–5.9; 5.1, 5.3, 5.4, 5.5 and 5.6 done)
 - [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)
 - [ ] Phase 7: Planning mode (7.1–7.10)
 - [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)
