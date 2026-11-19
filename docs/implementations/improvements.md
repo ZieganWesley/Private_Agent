@@ -396,7 +396,9 @@ keyword matcher. `skills.relevance_embedding_threshold` controls the semantic
 cutoff (default `0.55`).
 
 Coverage lives in `tests/unit/test_skills.py` for front-matter loading, invalid
-front matter, semantic selection, embedding caching, and keyword fallback.
+front matter, semantic selection, embedding caching, and keyword fallback. The
+semantic path is unit-tested with a fake embedder; it has not been exercised
+against a live Ollama embedding endpoint.
 
 #### B7. Web search scrapes DuckDuckGo's HTML page
 
@@ -2049,7 +2051,7 @@ order, because its steps depend on Stage 4 work.
 | 40 | 11.11 | CI matrix (Linux, arm64, macOS, core-only) | Easy | 1.5 |
 | 41 | 13.10 | Performance checks in CI | Easy | 1.5 |
 | 42 | 3.1 | Create the typed `Settings` model | Medium | — |
-| 43 | 3.5 | Set the workspace root explicitly at startup | Easy | 3.1 |
+| 43 | 3.5 | Done: workspace root is set explicitly at startup and validated | Easy | 3.1 |
 | 44 | 14.10 | Fix `SNAPSHOT_DIR` | Trivial | 3.5 |
 | 45 | 6.1 | Load `AGENTS.md` project instructions | Easy | 3.1 |
 | 46 | 6.9 | Project-level config file | Easy | 3.1 |
@@ -2057,7 +2059,7 @@ order, because its steps depend on Stage 4 work.
 | 48 | 5.2 | Move diagnostics to `logging` | Medium | 1.3 |
 | 49 | 8.2 | Keep diagnostics apart from replies (rest of 8.2) | Trivial | 5.2, 10.2 |
 | 50 | 5.3 | Narrow the blind `except Exception` blocks | Medium | 5.2 |
-| 51 | 5.6 | Skill front matter and embedding matching | Medium | — |
+| 51 | 5.6 | Done: skill front matter and embedding matching with keyword fallback | Medium | — |
 | 52 | 5.7 | Web search provider interface (SearXNG first) | Medium | — |
 | 53 | 8.12 | More search results and paged web fetch | Easy | 5.7 |
 | 54 | 8.5 | Rewrite follow-up questions before searching | Medium | 8.3 |
@@ -2183,8 +2185,9 @@ All steps in this phase are done.
 
 ### Phase 3: Remove global state
 
-Step 3.1 is done (the model is a frozen dataclass instead of pydantic, and
-the old constants remain as aliases until step 3.2).
+Steps 3.1, 3.3 and 3.5 are done. The model is a frozen dataclass instead of
+pydantic, and the old constants remain as aliases until step 3.2. Steps 3.2 and
+3.4 remain open.
 
 | Step | Task | Fixes | Done when |
 |---|---|---|---|
@@ -2438,9 +2441,9 @@ By phase:
 
 - [ ] Phase 1: Safety net — 1.1, 1.2, 1.3, 1.4 and 1.6 done; 1.5 (CI) open
 - [x] Phase 2: Quick fixes and real bugs (2.1–2.5)
-- [ ] Phase 3: Remove global state (3.1–3.5; 3.1 and 3.3 done, 3.2 and 3.4–3.5 open)
+- [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
-- [ ] Phase 5: Improve individual features (5.1–5.9; 5.4 done)
+- [ ] Phase 5: Improve individual features (5.1–5.9; 5.4 and 5.6 done)
 - [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)
 - [ ] Phase 7: Planning mode (7.1–7.10)
 - [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)
