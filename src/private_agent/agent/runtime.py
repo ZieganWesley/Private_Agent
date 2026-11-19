@@ -2927,7 +2927,22 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             )
                     selected_skill_key = None
                 elif loaded_skills and include_private_context:
-                    active_skill = match_skill_by_relevancy(user_input, loaded_skills)
+                    skill_embedder = (
+                        getattr(vectorstore, "embeddings", None)
+                        if vectorstore is not None
+                        else None
+                    )
+                    if skill_embedder is not None:
+                        active_skill = await asyncio.to_thread(
+                            match_skill_by_relevancy,
+                            user_input,
+                            loaded_skills,
+                            skill_embedder,
+                        )
+                    else:
+                        active_skill = match_skill_by_relevancy(
+                            user_input, loaded_skills
+                        )
                 enforce_tool_call_limits = (
                     provider_type == "online"
                     and online_selection is not None

@@ -370,14 +370,33 @@ missing, non-directory, empty and valid-root paths.
 
 #### B6. Skill matching uses keyword overlap
 
-- `skills/manager.py` picks skills by counting matching words against fixed
-  thresholds.
-- `skills/loader.py` uses the first characters of the file as the
-  description, and the file name as the skill name.
+**Fixed.** Skill files now support optional YAML front matter:
 
-**Standard practice:** YAML front matter with `name` and `description` (the
-format used by Anthropic Agent Skills), matched with embeddings or by the
-model itself. The embedding model is already available for RAG.
+```markdown
+---
+name: Python Expert
+description: Write secure and robust Python code.
+---
+# Python Expert
+...
+```
+
+`skills/loader.py` reads `name` and `description` from the front matter while
+keeping the Markdown body as the system prompt. Files without front matter
+still load with the previous filename/first-lines fallback, and invalid YAML
+is reported and ignored rather than dropping the skill. New skills written by
+`create_skill` include front matter automatically.
+
+`skills/manager.py` accepts an optional embedder. When the RAG vector store is
+active, the runtime passes its embedding model through `asyncio.to_thread`, so
+skill selection uses cosine similarity without blocking the event loop. Skill
+embeddings are cached per loaded skill. If the embedding backend is unavailable
+or returns malformed data, selection falls back to the existing weighted
+keyword matcher. `skills.relevance_embedding_threshold` controls the semantic
+cutoff (default `0.55`).
+
+Coverage lives in `tests/unit/test_skills.py` for front-matter loading, invalid
+front matter, semantic selection, embedding caching, and keyword fallback.
 
 #### B7. Web search scrapes DuckDuckGo's HTML page
 
@@ -2194,7 +2213,7 @@ the old constants remain as aliases until step 3.2).
 | 5.2 | Replace print-based diagnostics with module-level `logging` loggers, keeping `rich` for user-facing output | A6, E34 | Diagnostics go to the run log, and user output stays unchanged |
 | 5.3 | Narrow the 93 blind `except Exception` blocks to specific exceptions, keeping broad catches only at the outer session boundary | A5 | `BLE001` warnings are only at documented boundaries |
 | 5.5 | Use reciprocal rank fusion in `HybridRAGRetriever` and a punctuation-aware tokenizer for BM25. Measure before and after with `scripts/benchmark_rag.py` | B9 | Recall@k and MRR are the same or better |
-| 5.6 | Support YAML front matter (`name`, `description`) in skills, and match them by embedding similarity, falling back to the current keyword match | B6, C9 | Old skills still load, and new skills use front matter |
+| 5.6 | Done: skills support `name`/`description` front matter, use RAG embeddings when available, and fall back to keyword matching | B6, C9 | Old skills still load, and new skills use front matter |
 | 5.7 | Put web search behind a provider interface, with SearXNG (self-hosted) or an API as the main option and the DuckDuckGo scraper as a fallback | B7, E18 | The search provider is chosen in config |
 
 ### Phase 6: Features from Claude Code and Codex
