@@ -114,28 +114,6 @@ def coding_allows_command_network(access_level: str) -> bool:
     return access_level in {"full_hitl", "full_governed", "full_monitored"}
 
 
-def prompt_tool_approval(
-    *,
-    console: Any,
-    name: str,
-    description: str,
-    safe_args: Any,
-) -> bool:
-    """Prompt the user for approval of a tool call.
-
-    Returns ``True`` when the user approves (answers ``y``).
-    """
-    approval = (
-        console.input(
-            f"[yellow]Approve tool '{name}'? {description}\n"
-            f"Arguments: {safe_args}\nRun? \\[y/N]: [/yellow]"
-        )
-        .strip()
-        .lower()
-    )
-    return approval == "y"
-
-
 def select_permission_mode(
     configured: str,
     console: Any,

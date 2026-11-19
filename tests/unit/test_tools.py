@@ -878,10 +878,11 @@ def test_non_interactive_shell_blocking(temp_workspace):
 def test_shell_command_requires_explicit_approval(temp_workspace):
     with (
         patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("private_agent.tools.shell.console.input", return_value="n"),
         patch("subprocess.run") as run,
     ):
         result = run_shell_command.invoke({"command": "echo no"})
-    assert "requires explicit approval" in result
+    assert "was not approved" in result
     run.assert_not_called()
 
 
@@ -1471,11 +1472,9 @@ def test_download_restricted_extension(temp_workspace):
 
 @pytest.mark.requires_sandbox
 def test_shell_command_tool(temp_workspace):
-    from private_agent.tools import approved_tool_invocation
-
     with (
-        approved_tool_invocation(),
         patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("private_agent.tools.shell.console.input", return_value="y"),
     ):
         res = run_shell_command.invoke({"command": "echo 'sandbox integration test'"})
     assert "Exit Code: 0" in res
@@ -1489,11 +1488,9 @@ def _run_shell_with_fake_sandbox(command):
         isolated.append((list(command_args), root))
         return ["bwrap", "--", *command_args], {"PATH": "/usr/bin"}
 
-    from private_agent.tools import approved_tool_invocation
-
     with (
-        approved_tool_invocation(),
         patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("private_agent.tools.shell.console.input", return_value="y"),
         patch("private_agent.code_tasks._isolated_command", side_effect=isolate),
         patch(
             "private_agent.tools.shell.subprocess.run",
@@ -1540,11 +1537,9 @@ def test_code_task_blocks_git_inside_compound_command(monkeypatch, temp_workspac
 def test_shell_compound_command_in_real_sandbox(temp_workspace):
     (temp_workspace / "sub").mkdir()
     (temp_workspace / "sub" / "note.txt").write_text("hello\n", encoding="utf-8")
-    from private_agent.tools import approved_tool_invocation
-
     with (
-        approved_tool_invocation(),
         patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("private_agent.tools.shell.console.input", return_value="y"),
     ):
         res = run_shell_command.invoke(
             {"command": "cd sub && cat note.txt | tr a-z A-Z && pwd > ../where.txt"}
