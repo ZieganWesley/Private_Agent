@@ -1,8 +1,8 @@
 # Code Review: Known Issues, Gaps, Plans and Fix Roadmap
 
 Review date: 2026-10-28
-Re-verified: 2026-11-17, against `main` at commit `4664191` (after the
-A1 and A2 step 3.1 pull requests, #17 and #18, were merged)
+Re-verified: 2026-11-19, against `main` at commit `d19f32d` (after the
+B1-B3, B4-B6 and B8/B9 pull requests, #28, #29 and #30, were merged)
 
 ## How this was checked
 
@@ -172,6 +172,35 @@ escape. Every one of the 29 now carries an explicit
 `[tool.ruff.lint]` (with `tests/**` opted out, since tests may assert on
 arbitrary failure), and a source-hygiene test fails when a broad handler appears
 without a written reason. See 5.3.
+
+**Fixed (2026-11-19): the narrowing above missed `httpx` transport errors.**
+`httpx.ConnectError` and the other `httpx.HTTPError` types are not
+`ConnectionError` or `OSError` subclasses, so handlers narrowed to
+`(ValueError, OSError)` no longer caught a refused connection. The visible
+symptom was that `private-agent` aborted with a `httpx.ConnectError` traceback
+as soon as Ollama was not running, because startup runtime discovery probed a
+closed port.
+
+- `agent/local_runtimes.py` catches `httpx.HTTPError` next to the socket
+  errors, and a probe future that fails is now logged
+  (`provider.local_discovery_task_failed`) instead of aborting the whole
+  discovery pass. With no reachable runtime the CLI reports "No local runtimes
+  found" and continues to the online configuration path.
+- `agent/model_capabilities.py` already handled this for the capability probe;
+  the remaining HTTP-facing tool handlers did not. `tools/web.py`
+  (`web_search`, `fetch_webpage`, `download_web_file`) and `tools/location.py`
+  (`fetch_current_location`, `get_weather`) now return an error string for an
+  `httpx.HTTPError` instead of letting it escape the tool boundary, which
+  previously reached neither their own `(ValueError, OSError)` handlers nor the
+  `(ValueError, OSError, RuntimeError)` tool executor.
+- `cli.py` treats end of input (`EOFError`, Ctrl+D) at a startup prompt as an
+  orderly exit instead of printing a traceback.
+
+Coverage: `tests/unit/test_providers.py` (closed port and HTTP status errors),
+`tests/unit/test_location.py`, `tests/unit/test_tools.py` (web fetch and
+download) and `tests/unit/test_cli.py` (closed stdin). Verified with the real
+client against a closed port: before the change the call raised
+`httpx.ConnectError`; afterwards discovery returns `[]` and the CLI exits 0.
 
 - There is no `[tool.mypy]` config or other type checking.
 - There is still no CI workflow under `.github/workflows/` (step 1.5).

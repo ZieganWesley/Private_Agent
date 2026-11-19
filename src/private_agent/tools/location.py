@@ -6,6 +6,7 @@ import urllib.parse
 from datetime import date, datetime, timedelta
 from typing import Any
 
+import httpx
 from langchain_core.tools import tool
 
 from ..config import NETWORK_REQUEST_TIMEOUT
@@ -112,7 +113,7 @@ def locate_current_position() -> dict:
     for url, service in IP_GEOLOCATION_SERVICES:
         try:
             location = _parse_ip_location(_get_json(url), service)
-        except (ValueError, OSError) as exc:
+        except (httpx.HTTPError, ValueError, OSError) as exc:
             failures.append(f"{service}: {type(exc).__name__}")
             continue
         if location:
@@ -141,7 +142,7 @@ def fetch_current_location() -> str:
         return NO_INTERNET_MESSAGE
     try:
         location = locate_current_position()
-    except (ValueError, OSError) as exc:
+    except (httpx.HTTPError, ValueError, OSError, RuntimeError) as exc:
         return f"Location lookup failed: {exc}"
     return (
         f"Approximate current location: {_describe_location(location)}\n"
@@ -318,7 +319,7 @@ def get_weather(
         hour = _parse_time(time)
         place = _geocode(location) if location else locate_current_position()
         return fetch_weather(place, first, last, hour, today)
-    except (ValueError, KeyError) as exc:
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
         return f"Weather lookup failed: {exc}"
     except RuntimeError as exc:
         return f"Weather lookup failed: {type(exc).__name__}: {exc}"

@@ -86,6 +86,10 @@ def main():
         run_agent_cli(verbose_startup=args.verbose_startup)
     except KeyboardInterrupt:
         console.print("\n[yellow][Info] Interrupted by user.[/yellow]")
+    except EOFError:
+        # stdin was closed at an interactive prompt (Ctrl+D), which is an
+        # orderly exit rather than an unexpected crash.
+        console.print("\n[yellow][Info] Input closed; exiting.[/yellow]")
     except RuntimeError as exc:
         log_event(
             RUN_LOGGER,

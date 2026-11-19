@@ -1580,3 +1580,46 @@ async def test_load_mcp_tools_connection_failure_edge_case(mock_stdio_client):
     tools = await load_mcp_tools()
     assert isinstance(tools, list)
     assert len(tools) == 0
+
+
+def test_fetch_webpage_reports_httpx_transport_errors_instead_of_raising(monkeypatch):
+    import httpx
+
+    from private_agent.tools import web
+
+    def refuse(*_args, **_kwargs):
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(web, "require_internet", lambda func: func)
+    monkeypatch.setattr(web, "public_only_sync_client", refuse)
+    monkeypatch.setattr(web, "has_internet_connection", lambda: True)
+
+    result = web.fetch_webpage.invoke({"url": "https://example.test/page"})
+
+    assert result.startswith("Failed to fetch webpage:")
+    assert "connection refused" in result
+
+
+def test_download_web_file_reports_httpx_transport_errors_instead_of_raising(
+    temp_workspace,
+):
+    import httpx
+
+    from private_agent.tools import web
+
+    original_client = web.public_only_sync_client
+
+    def refuse(*_args, **_kwargs):
+        raise httpx.ConnectError("connection refused")
+
+    web.public_only_sync_client = refuse
+    web.has_internet_connection = lambda: True
+    try:
+        result = web.download_web_file.invoke(
+            {"url": "https://example.test/file.pdf", "save_path": "file.pdf"}
+        )
+    finally:
+        web.public_only_sync_client = original_client
+
+    assert result.startswith("Failed to download file:")
+    assert "connection refused" in result

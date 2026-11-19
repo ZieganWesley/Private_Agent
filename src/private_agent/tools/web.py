@@ -4,6 +4,7 @@ import contextlib
 import os
 import tempfile
 
+import httpx
 from langchain_core.tools import tool
 
 from ..config import (
@@ -27,7 +28,7 @@ def web_search(query: str) -> str:
     """Search the web for up-to-date info, technical documentation, or code references."""
     try:
         return _search_duckduckgo(query)
-    except (ValueError, OSError) as exc:
+    except (httpx.HTTPError, ValueError, OSError) as exc:
         return f"Web search failed: {type(exc).__name__}: {exc}"
 
 
@@ -60,7 +61,7 @@ def fetch_webpage(url: str) -> str:
         )
     except ImportError:
         return "Failed to fetch webpage: Required package 'httpx' or 'beautifulsoup4' is not installed."
-    except (ValueError, OSError) as exc:
+    except (httpx.HTTPError, ValueError, OSError) as exc:
         return f"Failed to fetch webpage: {exc}"
 
 
@@ -108,5 +109,5 @@ def download_web_file(url: str, save_path: str) -> str:
                     os.unlink(temporary_path)
             raise
         return f"Success: File downloaded and saved to '{save_path}'."
-    except (ValueError, OSError) as exc:
+    except (httpx.HTTPError, ValueError, OSError) as exc:
         return f"Failed to download file: {exc}"

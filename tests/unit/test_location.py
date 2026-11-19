@@ -219,3 +219,21 @@ def test_format_weather_uses_each_days_own_values():
     assert "high 21°C" in day_lines[0] and "low 11°C" in day_lines[0]
     assert "high 22°C" in day_lines[1] and "low 12°C" in day_lines[1]
     assert "high 23°C" in day_lines[2] and "low n/a" in day_lines[2]
+
+
+def test_location_tools_report_httpx_transport_errors_instead_of_raising():
+    import httpx
+
+    def refuse(*_args, **_kwargs):
+        raise httpx.ConnectError("connection refused")
+
+    with (
+        patch.object(location, "has_internet_connection", return_value=True),
+        patch.object(location, "_get_json", side_effect=refuse),
+    ):
+        location_result = AVAILABLE_TOOLS["fetch_current_location"].invoke({})
+        weather_result = AVAILABLE_TOOLS["get_weather"].invoke({"location": "Berlin"})
+
+    assert location_result.startswith("Location lookup failed:")
+    assert "ConnectError" in location_result
+    assert weather_result.startswith("Weather lookup failed:")
