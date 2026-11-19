@@ -258,3 +258,45 @@ def test_local_runtime_discovery_rejects_non_loopback_urls():
         )
         == []
     )
+
+
+def test_local_capability_probe_degrades_on_a_plain_exception():
+    """A backend error must not escape: `ollama` errors derive from Exception."""
+    from types import SimpleNamespace
+
+    from private_agent.agent.providers import inspect_local_model_capabilities
+
+    class BackendError(Exception):
+        """Stands in for ollama.ResponseError, which is not an OSError."""
+
+    class FakeClient:
+        def show(self, _model):
+            raise BackendError("backend exploded")
+
+    printed = []
+    result = inspect_local_model_capabilities(
+        "qwen:latest",
+        base_url="http://127.0.0.1:11434",
+        client_factory=lambda **_kwargs: FakeClient(),
+        client_kwargs=lambda: {},
+        capability_cache={},
+        max_cache_entries=8,
+        console=SimpleNamespace(print=lambda *args, **kwargs: printed.append(args)),
+        close_client=lambda _client: None,
+    )
+
+    assert all(value is None for value in result.values())
+    assert printed, "the user must still be told the probe failed"
+
+
+def test_online_capabilities_treat_a_raising_profile_as_unknown():
+    from private_agent.agent.providers import online_capabilities
+
+    class ExplodingProfile:
+        @property
+        def profile(self):
+            raise RuntimeError("profile exploded")
+
+    unknown = online_capabilities(ExplodingProfile(), True)
+
+    assert all(value is None for value in unknown.values())

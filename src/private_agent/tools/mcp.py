@@ -137,7 +137,7 @@ async def load_configured_mcp_tools(server_name: str, server_config: dict) -> li
             isolated_command, sandbox_environment = _isolated_command(
                 command, pathlib.Path(sandbox_dir)
             )
-        except Exception:
+        except Exception:  # noqa: BLE001 - removes the sandbox directory for any setup failure, then re-raises
             _remove_mcp_sandbox_dir(sandbox_dir)
             raise
         normalized_config["command"] = isolated_command[0]
@@ -148,7 +148,7 @@ async def load_configured_mcp_tools(server_name: str, server_config: dict) -> li
     try:
         client = MultiServerMCPClient({server_name: normalized_config})
         server_tools = await client.get_tools(server_name=server_name)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - removes the sandbox directory and re-raises as RuntimeError
         if sandbox_dir is not None:
             _remove_mcp_sandbox_dir(sandbox_dir)
         raise RuntimeError(f"Failed to load MCP server '{server_name}': {exc}") from exc

@@ -3,6 +3,7 @@
 import ast
 import inspect
 import pathlib
+import re
 
 import private_agent
 
@@ -84,4 +85,47 @@ def test_subprocess_run_never_runs_inside_async_code():
         for path, name, function, is_async, line in _blocking_calls()
         if name == "subprocess.run" and is_async
     ]
+    assert offenders == []
+
+
+def _handled_names(node):
+    """Collect exception type names from an `except` clause node."""
+    if node is None:
+        return set()
+    if isinstance(node, ast.Name):
+        return {node.id}
+    if isinstance(node, ast.Tuple):
+        names = set()
+        for element in node.elts:
+            names |= _handled_names(element)
+        return names
+    return set()
+
+
+def _broad_except_handlers():
+    for path in sorted(SOURCE_ROOT.rglob("*.py")):
+        source = path.read_text(encoding="utf-8")
+        lines = source.splitlines()
+        tree = ast.parse(source, filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ExceptHandler):
+                continue
+            if not _handled_names(node.type) & {"Exception", "BaseException"}:
+                continue
+            lineno = getattr(node.type, "lineno", node.lineno)
+            line = lines[lineno - 1] if lineno - 1 < len(lines) else ""
+            yield path.relative_to(SOURCE_ROOT), lineno, line
+
+
+def test_every_blind_exception_handler_carries_a_written_justification():
+    """Issue 5.3: a blind catch must be a documented boundary, not a default."""
+    justified = re.compile(r"#\s*noqa:\s*BLE001\b(.*)$")
+    offenders = []
+    for path, lineno, line in _broad_except_handlers():
+        match = justified.search(line)
+        if match is None:
+            offenders.append(f"{path}:{lineno} has no '# noqa: BLE001 - reason'")
+            continue
+        if not match.group(1).strip(" -:\t"):
+            offenders.append(f"{path}:{lineno} needs a reason after the noqa")
     assert offenders == []

@@ -41,7 +41,7 @@ class ConnectionMixin:
                 self.conn.execute("PRAGMA journal_mode = WAL")
                 self.conn.execute("PRAGMA synchronous = NORMAL")
             self._create_table()
-        except BaseException:
+        except BaseException:  # noqa: BLE001 - closes a half-initialised connection for any failure, then re-raises
             self.conn.close()
             self._closed = True
             raise
@@ -53,7 +53,7 @@ class ConnectionMixin:
             self.conn.execute("BEGIN IMMEDIATE")
             yield
             self.conn.commit()
-        except BaseException:
+        except BaseException:  # noqa: BLE001 - rolls back for any failure, including cancellation, then re-raises
             self.conn.rollback()
             raise
 

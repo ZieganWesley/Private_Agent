@@ -120,7 +120,7 @@ def _match_by_embedding(
             if score > highest_score:
                 highest_score = score
                 best_skill = skill
-    except Exception:
+    except Exception:  # noqa: BLE001 - embedding backends are optional; fall back to keyword matching
         # Embedding providers are optional; any transport or shape failure
         # falls back to the deterministic keyword matcher below.
         return None

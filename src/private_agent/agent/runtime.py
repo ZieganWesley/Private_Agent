@@ -426,7 +426,7 @@ async def _invoke_initial_model_with_fallback(
             context_usage=usage,
         )
         return llm, llm_with_tools, selected_model, capabilities, response
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - inspects any model error to detect missing tool support, then re-raises
         error_text = str(e).lower()
         tool_unsupported = any(
             marker in error_text
@@ -1161,7 +1161,7 @@ async def _execute_task_tool_call(
     try:
         with logging_context(task_id=task_id):
             result = await execute_tool_call(tool_call, **execution_options)
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - journals an unknown outcome for any failure, including cancellation
         try:
             await asyncio.shield(
                 asyncio.to_thread(
@@ -1230,7 +1230,7 @@ async def _prepare_session(
 
     try:
         return await _build_session_setup(verbose_startup=verbose_startup)
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         # Startup owns everything it opened, including SQLite, so a failure
         # here never leaves a connection or lease task behind.
         await _discard_session_startup()
@@ -1437,7 +1437,7 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                     f"[green][MCP][/green] Loaded {len(discovered_tools)} "
                     f"tool(s) from '{server_name}'."
                 )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - third-party MCP transport errors vary; isolate one server
             reference_id = uuid.uuid4().hex[:8]
             console.print(
                 f"[red][MCP error][/red] Could not load {server_name} "
@@ -1492,7 +1492,7 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                     == "REBUILD"
                 ),
             )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - Chroma/embedding failures must not block startup
         vectorstore = None
         reference_id = uuid.uuid4().hex[:8]
         console.print(
@@ -1790,7 +1790,7 @@ async def _choose_provider(
         if preference.online_selection["allow_tools"]:
             try:
                 llm_with_tools = _bind_tools(llm, tools_list)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the endpoint; continue without tools
                 console.print(
                     f"[yellow]The selected endpoint/model does not accept tool calls "
                     f"({type(exc).__name__}); continuing without tools.[/yellow]"
@@ -1884,7 +1884,7 @@ async def _choose_provider(
                 thinking_effort=thinking_effort,
                 capabilities=capabilities,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - provider constructors raise library-specific errors
             log_event(
                 RUN_LOGGER,
                 "provider.local_model_initialization_failed",
@@ -1910,7 +1910,7 @@ async def _choose_provider(
         else:
             try:
                 llm_with_tools = _bind_tools(llm, tools_list)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the runtime; continue without tools
                 fallback_model = (
                     next(
                         (
@@ -2231,7 +2231,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
             if capabilities["tools"] is not False:  # noqa: B023
                 try:
                     llm_with_tools = _bind_tools(llm, tools_list)  # noqa: B023
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the runtime; continue without tools
                     console.print(
                         f"[yellow]Could not restore the base tool set "
                         f"({type(exc).__name__}); tool calls are disabled for this model.[/yellow]"
@@ -2696,7 +2696,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         continue
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; abort only this turn
                         console.print(
                             f"[red]Could not bind planner tools "
                             f"({type(exc).__name__}); no task was planned.[/red]"
@@ -2709,7 +2709,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     tools_list = list(base_tools_list)
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; continue without tools
                         console.print(
                             f"[yellow]Could not bind the session tools "
                             f"({type(exc).__name__}); continuing without tool calls.[/yellow]"
@@ -2815,7 +2815,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             direct_source=not _coding_uses_isolated_copy(access_level),
                             allow_network=_coding_allows_command_network(access_level),
                         )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - workspace creation mixes git/OS/library failures; resolve the action
                         try:
                             memory.finish_task_action(
                                 workspace_action_id,
@@ -2881,7 +2881,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
 
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; abort the code task
                         console.print(
                             f"[red]Could not bind the code-task tools ({type(exc).__name__}); "
                             "no code was written.[/red]"
@@ -3067,7 +3067,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                                     "[yellow][RAG] Update failed; keeping the "
                                     "previous index.[/yellow]"
                                 )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - reindex failures come from Chroma/embeddings; keep the old index
                         reference_id = uuid.uuid4().hex[:8]
                         console.print(
                             f"[yellow][RAG] Auto-update skipped "
@@ -3114,7 +3114,7 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                             console.print(
                                 f"[cyan][RAG State][/cyan] Retrieved {len(relevant_docs)} document/episodic chunks."
                             )
-                    except Exception as exc:
+                    except Exception as exc:  # noqa: BLE001 - retrieval failures come from Chroma/embeddings; use no context
                         reference_id = uuid.uuid4().hex[:8]
                         console.print(
                             "[yellow][RAG][/yellow] Local search failed; "
@@ -3449,7 +3449,7 @@ Runtime context:
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                                 context_usage=usage,
                             )
-                        except Exception as exc:
+                        except Exception as exc:  # noqa: BLE001 - wraps any model error after tool execution; re-raised as RuntimeError
                             if provider_type == "online":  # noqa: B023
                                 raise RuntimeError(
                                     "Online model failed after tool execution. "
@@ -3761,7 +3761,7 @@ async def _summarize_and_save_session(
         return True
     except (KeyboardInterrupt, asyncio.CancelledError):
         console_obj.print("[yellow][Summary] Skipped; no summary was saved.[/yellow]")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - summary mixes model/transport/SQLite failures
         log_event(
             RUN_LOGGER,
             "session.summary_failed",
@@ -3825,7 +3825,7 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
                             f"task interruption: {exc}[/yellow]"
                         )
                 _ACTIVE_MEMORY.close()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - shutdown must not raise while closing memory
                 log_event(
                     RUN_LOGGER,
                     "memory.shutdown_failed",
