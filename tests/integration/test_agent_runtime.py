@@ -82,10 +82,9 @@ def scripted_local_cli(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "AGENT_PERMISSION_MODE", "auto")
     monkeypatch.setattr(agent, "APP_CONFIG", {})
     monkeypatch.setattr(memory_context, "_offer_local_data_reset", lambda memory: None)
-    monkeypatch.setattr(agent, "set_active_db_path", lambda path: None)
-    from private_agent.tools import _sqlite_state
+    from private_agent.tools import get_tool_context
 
-    monkeypatch.setattr(_sqlite_state, "ACTIVE_DB_PATH", str(database_path))
+    get_tool_context().db_path = str(database_path)
     monkeypatch.setattr(
         model_selection, "fetch_local_chat_models", lambda: ["local-model"]
     )
@@ -131,7 +130,7 @@ def scripted_local_cli(monkeypatch, tmp_path):
 
 
 def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
-    from private_agent.tools import _task_state
+    from private_agent.tools import get_tool_context
 
     memory = PersistentMemory(db_path=str(db_path))
     task = memory.create_task_plan(
@@ -153,11 +152,11 @@ def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
         if task_type == "coding"
         else f"{task_type}: goal={goal}"
     )
-    owner_id = _task_state.RUNTIME_OWNER_ID
+    owner_id = get_tool_context().runtime_owner_id
     monkeypatch.setattr(
-        _task_state,
-        "set_runtime_owner",
-        lambda owner_id=owner_id: owner_id,
+        agent.uuid,
+        "uuid4",
+        lambda: type("U", (), {"hex": owner_id})(),
     )
     assert memory.acquire_task_lease(
         task["task_id"],
@@ -173,15 +172,14 @@ def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
         owner_id=owner_id,
     )
     memory.close()
-    original_set_context = agent.set_active_task_context
-    monkeypatch.setattr(
-        agent,
-        "set_active_task_context",
-        lambda session_id, task_id=None: original_set_context(
-            session_id,
-            task_id or task["task_id"],
-        ),
-    )
+    original_set_context = agent.set_tool_context
+
+    def force_approved_task(context):
+        if context.task_id is None:
+            context.task_id = task["task_id"]
+        original_set_context(context)
+
+    monkeypatch.setattr(agent, "set_tool_context", force_approved_task)
     return task
 
 
@@ -1698,7 +1696,7 @@ async def test_agent_shutdown_closes_resources_and_restores_dynamic_tools(
         agent.AVAILABLE_TOOLS["temporary_mcp_tool"] = object()
         agent.AVAILABLE_TOOLS["checkpoint_code_task"] = object()
         SandboxManager.set_root(str(session_root))
-        agent.code_tasks_module.ACTIVE_CODE_TASK = object()
+        agent.get_tool_context().code_task = object()
         raise failure
 
     monkeypatch.setattr(agent, "_ACTIVE_MEMORY", None)
@@ -1724,7 +1722,7 @@ async def test_agent_shutdown_closes_resources_and_restores_dynamic_tools(
     assert cleanup_calls == ["http", "mcp", "images"]
     assert "temporary_mcp_tool" not in agent.MCP_TOOL_NAMES
     assert "temporary_mcp_tool" not in agent.AVAILABLE_TOOLS
-    assert agent.code_tasks_module.ACTIVE_CODE_TASK is None
+    assert agent.get_tool_context().code_task is None
     assert agent._ACTIVE_MEMORY is None
     assert SandboxManager.root_dir == initial_root.resolve()
     assert "checkpoint_code_task" not in agent.AVAILABLE_TOOLS
@@ -1788,7 +1786,6 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
     monkeypatch.setattr(agent, "SKILLS_FOLDER_DEFAULT", "")
     monkeypatch.setattr(agent, "WORKSPACE_ROOT_DEFAULT", str(workspace))
     monkeypatch.setattr(agent, "MCP_SERVERS", {})
-    monkeypatch.setattr(agent, "set_active_db_path", lambda path: None)
     monkeypatch.setattr(
         model_selection, "fetch_local_chat_models", lambda: ["local-model"]
     )
@@ -2069,13 +2066,6 @@ async def test_cli_history_search_and_reviewed_entry_deletion_flow(
     scripted_local_cli, monkeypatch
 ):
     agent, model, inputs, _workspace, database_path = scripted_local_cli
-    from private_agent.tools import _sqlite_state
-
-    monkeypatch.setattr(
-        agent,
-        "set_active_db_path",
-        lambda path: setattr(_sqlite_state, "ACTIVE_DB_PATH", path),
-    )
     memory = PersistentMemory(db_path=str(database_path))
     memory.save_message("review-session", "human", "Juniper local memory entry")
     entry_id = memory.conn.execute(
@@ -2333,7 +2323,7 @@ async def test_session_setup_closes_its_memory_when_startup_fails(
     # Fails after the database is open but before the lease task exists.
     monkeypatch.setattr(
         agent,
-        "set_active_db_path",
+        "set_tool_context",
         MagicMock(side_effect=RuntimeError("db path rejected")),
     )
     inputs.return_value = ""
@@ -4386,7 +4376,7 @@ async def test_cli_code_task_retries_checkpoint_after_test_failure(
     )
     assert "tests did not pass" in first_tool_result.content
     assert "Checkpoint committed locally" in second_tool_result.content
-    assert not agent.code_tasks_module.ACTIVE_CODE_TASK
+    assert not agent.get_tool_context().code_task
 
 
 @pytest.mark.requires_sandbox
@@ -4438,7 +4428,7 @@ async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
         for call in model.calls
         for message in call
     )
-    assert agent.code_tasks_module.ACTIVE_CODE_TASK is None
+    assert agent.get_tool_context().code_task is None
     assert "isolated workspace could not be created" in "\n".join(printed)
     assert "Code task cancelled" in "\n".join(printed)
 
@@ -4452,7 +4442,9 @@ async def test_checkpoint_system_failure_is_returned_to_runtime_call(monkeypatch
         def checkpoint(self, label, paths):
             raise RuntimeError("Git status could not be inspected")
 
-    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", BrokenCheckpointWorkspace())
+    monkeypatch.setattr(
+        agent.get_tool_context(), "code_task", BrokenCheckpointWorkspace()
+    )
     monkeypatch.setitem(
         agent.AVAILABLE_TOOLS, "checkpoint_code_task", code_tasks.checkpoint_code_task
     )
@@ -4470,7 +4462,7 @@ async def test_checkpoint_system_failure_is_returned_to_runtime_call(monkeypatch
     )
 
     assert "Git status could not be inspected" in result.content
-    monkeypatch.setattr(code_tasks, "ACTIVE_CODE_TASK", None)
+    monkeypatch.setattr(agent.get_tool_context(), "code_task", None)
 
 
 @pytest.mark.asyncio

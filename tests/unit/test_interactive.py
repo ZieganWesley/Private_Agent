@@ -312,7 +312,7 @@ def test_task_management_requires_confirmation_and_approves_exact_revision(
     tmp_path, monkeypatch
 ):
     from private_agent.agent import runtime
-    from private_agent.tools import set_active_task_context
+    from private_agent.tools import get_tool_context
 
     memory = PersistentMemory(str(tmp_path / "tasks.sqlite"))
     task = memory.create_task_plan(
@@ -330,7 +330,7 @@ def test_task_management_requires_confirmation_and_approves_exact_revision(
     )
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(commands))
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
-    set_active_task_context("session")
+    get_tool_context().task_session_id = "session"
     _enable_interactive_task_controls(runtime, monkeypatch)
 
     activated_task_id = runtime._run_task_management(memory, "session")
@@ -344,7 +344,8 @@ def test_task_management_requires_confirmation_and_approves_exact_revision(
         "research: goal=Research a local deployment issue"
     )
     memory.close()
-    set_active_task_context(None)
+    get_tool_context().task_session_id = None
+    get_tool_context().task_id = None
 
 
 def test_noninteractive_task_management_cannot_approve_saved_plans(
@@ -448,7 +449,7 @@ def test_task_management_requires_confirmation_to_reconcile_unknown_action(
     monkeypatch,
 ):
     from private_agent.agent import runtime
-    from private_agent.tools import _task_state
+    from private_agent.tools import get_tool_context
 
     memory = PersistentMemory(str(tmp_path / "reconcile-task.sqlite"))
     task = memory.create_task_plan(
@@ -457,7 +458,7 @@ def test_task_management_requires_confirmation_to_reconcile_unknown_action(
         "research",
         [{"step_id": "inspect", "description": "Inspect the source"}],
     )
-    owner_id = _task_state.RUNTIME_OWNER_ID
+    owner_id = get_tool_context().runtime_owner_id
     assert memory.acquire_task_lease(
         task["task_id"],
         owner_id,
@@ -906,7 +907,7 @@ def test_coding_approval_persists_user_selected_source_scope(tmp_path, monkeypat
     import json
 
     from private_agent.agent import runtime
-    from private_agent.tools import set_active_task_context
+    from private_agent.tools import get_tool_context
 
     memory = PersistentMemory(str(tmp_path / "coding-tasks.sqlite"))
     task = memory.create_task_plan(
@@ -927,7 +928,7 @@ def test_coding_approval_persists_user_selected_source_scope(tmp_path, monkeypat
     )
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(commands))
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
-    set_active_task_context("session")
+    get_tool_context().task_session_id = "session"
     _enable_interactive_task_controls(runtime, monkeypatch)
 
     runtime._run_task_management(memory, "session")
@@ -943,7 +944,8 @@ def test_coding_approval_persists_user_selected_source_scope(tmp_path, monkeypat
         "network_access": False,
     }
     memory.close()
-    set_active_task_context(None)
+    get_tool_context().task_session_id = None
+    get_tool_context().task_id = None
 
 
 def test_direct_workspace_approval_persists_access_and_network_scope(
@@ -952,7 +954,7 @@ def test_direct_workspace_approval_persists_access_and_network_scope(
     import json
 
     from private_agent.agent import runtime
-    from private_agent.tools import set_active_task_context
+    from private_agent.tools import get_tool_context
 
     allowed_root = tmp_path / "workspace"
     selected_source = allowed_root / "project"
@@ -976,7 +978,7 @@ def test_direct_workspace_approval_persists_access_and_network_scope(
     )
     monkeypatch.setattr(runtime.console, "input", lambda _prompt: next(commands))
     monkeypatch.setattr(runtime.console, "print", lambda *_args, **_kwargs: None)
-    set_active_task_context("session")
+    get_tool_context().task_session_id = "session"
     _enable_interactive_task_controls(runtime, monkeypatch)
 
     runtime._run_task_management(memory, "session")
@@ -986,7 +988,8 @@ def test_direct_workspace_approval_persists_access_and_network_scope(
     assert scope["source_path"] == str(selected_source)
     assert scope["network_access"] is True
     memory.close()
-    set_active_task_context(None)
+    get_tool_context().task_session_id = None
+    get_tool_context().task_id = None
 
 
 @pytest.mark.parametrize(
@@ -1137,7 +1140,7 @@ def test_research_validation_prompts_for_source_quality_review(tmp_path, monkeyp
 
 def test_verified_five_star_task_can_create_and_register_skill(tmp_path, monkeypatch):
     from private_agent.agent import runtime
-    from private_agent.tools import set_active_task_context
+    from private_agent.tools import get_tool_context
 
     database = tmp_path / "skill-task.sqlite"
     skills_directory = tmp_path / "skills"
@@ -1212,7 +1215,8 @@ def test_verified_five_star_task_can_create_and_register_skill(tmp_path, monkeyp
         "print",
         lambda *args, **_kwargs: output.append(str(args[0]) if args else ""),
     )
-    set_active_task_context("session", task["task_id"])
+    get_tool_context().task_session_id = "session"
+    get_tool_context().task_id = task["task_id"]
     _enable_interactive_task_controls(runtime, monkeypatch)
 
     runtime._run_task_management(memory, "session", str(skills_directory))
@@ -1233,7 +1237,8 @@ def test_verified_five_star_task_can_create_and_register_skill(tmp_path, monkeyp
     assert "csv_safe_parsing" in reloaded
     assert "Focused parser tests pass" in reloaded["csv_safe_parsing"].system_prompt
     memory.close()
-    set_active_task_context(None)
+    get_tool_context().task_session_id = None
+    get_tool_context().task_id = None
 
 
 def test_skill_registration_failure_rolls_back_created_skill_file(

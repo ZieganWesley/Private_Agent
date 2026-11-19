@@ -14,7 +14,7 @@ from rich.console import Console
 from ..config import (
     CODE_TASK_GIT_TIMEOUT,
 )
-from .workspace import CodeTaskWorkspace
+from .workspace import CodeTaskWorkspace as CodeTaskWorkspace
 
 console = Console()
 
@@ -424,9 +424,6 @@ def _not_ignored_by_project_git(root: Path, relative_path: str) -> bool:
     )
 
 
-ACTIVE_CODE_TASK: CodeTaskWorkspace | None = None
-
-
 class RunTestsInput(BaseModel):
     pass
 
@@ -448,22 +445,31 @@ class FinalizeInput(BaseModel):
 @tool(args_schema=RunTestsInput)
 def run_project_unit_tests() -> str:
     """Run the code task's unit tests in its isolated project directory."""
-    if ACTIVE_CODE_TASK is None:
+    from ..tools import get_tool_context
+
+    task = get_tool_context().code_task
+    if task is None:
         return "Error: No isolated code task is active."
-    return ACTIVE_CODE_TASK.run_tests()
+    return task.run_tests()
 
 
 @tool(args_schema=CheckpointInput)
 def checkpoint_code_task(label: str, paths: list[str]) -> str:
     """Run project tests and create a local-only Git checkpoint for exact changed files."""
-    if ACTIVE_CODE_TASK is None:
+    from ..tools import get_tool_context
+
+    task = get_tool_context().code_task
+    if task is None:
         return "Error: No isolated code task is active."
-    return ACTIVE_CODE_TASK.checkpoint(label, paths)
+    return task.checkpoint(label, paths)
 
 
 @tool(args_schema=FinalizeInput)
 def finalize_code_task() -> str:
     """Run final project tests and commit a verified local completion checkpoint."""
-    if ACTIVE_CODE_TASK is None:
+    from ..tools import get_tool_context
+
+    task = get_tool_context().code_task
+    if task is None:
         return "Error: No isolated code task is active."
-    return ACTIVE_CODE_TASK.finalize()
+    return task.finalize()

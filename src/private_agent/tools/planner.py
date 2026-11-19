@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 
 from ..config import MAX_SUMMARY_CHARS
 from ..database import PersistentMemory
-from . import _sqlite_state, _task_state
+from . import get_tool_context, set_tool_context
 from .schemas import (
     CreateTaskPlanInput,
     InspectTaskPlanInput,
@@ -83,7 +83,7 @@ def read_table_schema(table_name: str) -> str:
             PersistentMemory.describe_table_schema(connection, name)
             for name in table_names
         ]
-        _task_state.record_schema_read(set(table_names))
+        get_tool_context().schema_read_tables.update(table_names)
         return json.dumps(
             {
                 "database": "configured local SQLite database",
@@ -126,7 +126,7 @@ def read_table_schema(table_name: str) -> str:
 
 
 def _require_schema(*table_names: str) -> None:
-    missing = set(table_names) - _task_state.SCHEMA_READ_TABLES
+    missing = set(table_names) - (get_tool_context().schema_read_tables or set())
     if missing:
         raise ValueError(
             "Read the destination table schema with read_table_schema before "
@@ -164,7 +164,10 @@ def create_task_plan(
             research_questions=research_questions,
             research_references=research_references,
         )
-        _task_state.set_active_task_context(session_id, task["task_id"])
+        _context = get_tool_context()
+        _context.task_session_id = session_id
+        _context.task_id = task["task_id"]
+        set_tool_context(_context)
         return (
             "Plan saved in SQLite with status awaiting_approval. It cannot be "
             "executed until the user reviews and approves it with /tasks.\n"
@@ -220,7 +223,7 @@ def update_todo_step(step_id: str, status: str, evidence: str = "") -> str:
             step_id,
             status,
             evidence,
-            owner_id=_task_state.RUNTIME_OWNER_ID,
+            owner_id=get_tool_context().runtime_owner_id,
         )
         return "Todo progress persisted in SQLite.\n" + _format_task(updated)
     except (ValueError, OSError) as exc:

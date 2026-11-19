@@ -3,6 +3,7 @@ import os
 import socket
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import datetime
@@ -12,6 +13,7 @@ from langchain_core.tools import tool
 from rich.console import Console
 
 from ..config import (
+    DEFAULT_DB_PATH,
     INTERNET_CHECK_HOST,
     INTERNET_CHECK_PORT,
     INTERNET_CHECK_TIMEOUT,
@@ -19,7 +21,7 @@ from ..config import (
     SKILL_DESCRIPTION_PREVIEW_CHARS,
     SKILLS_FOLDER_DEFAULT,
 )
-from . import _sqlite_state, _task_state
+from . import _sqlite_state
 from .media import (
     capture_webcam_image,
     list_microphone_devices,
@@ -101,8 +103,51 @@ def approved_tool_invocation():
         _tool_invocation_approved.reset(token)
 
 
-def set_active_db_path(path: str):
-    _sqlite_state.set_active_db_path(path)
+@dataclass
+class ToolContext:
+    """Snapshot of the mutable runtime state tools depend on (B3 step 1)."""
+
+    db_path: str
+    task_session_id: str | None = None
+    task_id: str | None = None
+    skill_directory: str | None = None
+    skill_registry: dict | None = None
+    skill_session_id: str | None = None
+    code_task: Any = None
+    runtime_owner_id: str | None = None
+    schema_read_tables: set | None = None
+
+
+_TOOL_CONTEXT = ToolContext(
+    db_path=os.path.abspath(DEFAULT_DB_PATH),
+    skill_directory=(
+        os.path.abspath(os.path.expanduser(SKILLS_FOLDER_DEFAULT))
+        if SKILLS_FOLDER_DEFAULT
+        else None
+    ),
+    runtime_owner_id=uuid.uuid4().hex,
+    schema_read_tables=set(),
+)
+
+
+def get_tool_context() -> ToolContext:
+    """Return the process-local tool context (single source of truth)."""
+    return _TOOL_CONTEXT
+
+
+def set_tool_context(context: ToolContext) -> None:
+    """Copy a context object into the process-local tool context."""
+    _TOOL_CONTEXT.db_path = context.db_path
+    _TOOL_CONTEXT.task_session_id = context.task_session_id
+    _TOOL_CONTEXT.task_id = context.task_id
+    _TOOL_CONTEXT.skill_directory = context.skill_directory
+    _TOOL_CONTEXT.skill_registry = context.skill_registry
+    _TOOL_CONTEXT.skill_session_id = context.skill_session_id
+    _TOOL_CONTEXT.code_task = context.code_task
+    if context.runtime_owner_id is not None:
+        _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
+    if context.schema_read_tables is not None:
+        _TOOL_CONTEXT.schema_read_tables = context.schema_read_tables
 
 
 # --- NETWORK CONNECTIVITY UTILITY ---
@@ -144,41 +189,11 @@ LOCAL_MEDIA_TOOL_NAMES = frozenset(
 MCP_TOOL_NAMES = set()
 MCP_TOOL_SOURCES = {}
 MCP_TOOL_TRANSPORTS = {}
-_ACTIVE_SKILL_DIRECTORY = (
-    os.path.abspath(os.path.expanduser(SKILLS_FOLDER_DEFAULT))
-    if SKILLS_FOLDER_DEFAULT
-    else None
-)
-_ACTIVE_SKILL_REGISTRY = None
-_ACTIVE_SKILL_SESSION_ID = None
-
-
-def set_active_skill_runtime(folder_path: str | None, loaded_skills: dict) -> None:
-    """Set the configured destination and in-memory registry for skill creation."""
-    global _ACTIVE_SKILL_DIRECTORY, _ACTIVE_SKILL_REGISTRY
-    _ACTIVE_SKILL_DIRECTORY = (
-        os.path.abspath(os.path.expanduser(folder_path)) if folder_path else None
-    )
-    _ACTIVE_SKILL_REGISTRY = loaded_skills
-
-
-def set_active_skill_session(session_id: str | None) -> None:
-    """Associate newly created skills with the current conversation session."""
-    global _ACTIVE_SKILL_SESSION_ID
-    _ACTIVE_SKILL_SESSION_ID = session_id
-
-
-def set_active_task_context(
-    session_id: str | None,
-    task_id: str | None = None,
-) -> None:
-    """Bind planner tools to the current session and optionally resumed task."""
-    _task_state.set_active_task_context(session_id, task_id)
 
 
 def clear_schema_reads() -> None:
     """Require the model to inspect write-target schemas for each user turn."""
-    _task_state.clear_schema_reads()
+    _TOOL_CONTEXT.schema_read_tables.clear()
 
 
 def describe_tool_catalog() -> list[dict[str, str]]:
@@ -394,11 +409,11 @@ def create_skill(name: str, description: str, instructions: str) -> str:
     from ..skills import AgentSkill, create_skill_file
 
     try:
-        if _ACTIVE_SKILL_DIRECTORY is None:
+        context = get_tool_context()
+        if context.skill_directory is None:
             return "Error creating skill: No skills directory is configured."
-        if (
-            _ACTIVE_SKILL_SESSION_ID
-            and "chat_history" not in _task_state.SCHEMA_READ_TABLES
+        if context.skill_session_id and "chat_history" not in (
+            context.schema_read_tables or set()
         ):
             return (
                 "Error creating skill: call read_table_schema for chat_history "
@@ -406,7 +421,7 @@ def create_skill(name: str, description: str, instructions: str) -> str:
                 "destination schema."
             )
         target = create_skill_file(
-            _ACTIVE_SKILL_DIRECTORY, name, description, instructions
+            context.skill_directory, name, description, instructions
         )
         skill_key = target.stem
         display_name = name.strip()
@@ -419,19 +434,19 @@ def create_skill(name: str, description: str, instructions: str) -> str:
             system_prompt=f"[Skill Markdown Profile: {display_name}]\n"
             f"{target.read_text(encoding='utf-8')}",
         )
-        if isinstance(_ACTIVE_SKILL_REGISTRY, dict):
-            _ACTIVE_SKILL_REGISTRY[skill_key] = skill
-        if _ACTIVE_SKILL_SESSION_ID:
+        if isinstance(context.skill_registry, dict):
+            context.skill_registry[skill_key] = skill
+        if context.skill_session_id:
             from ..database import PersistentMemory
 
             with _sqlite_lock:
-                memory = PersistentMemory(_sqlite_state.ACTIVE_DB_PATH)
+                memory = PersistentMemory(context.db_path)
                 try:
                     memory.register_skill_file(
-                        _ACTIVE_SKILL_SESSION_ID,
+                        context.skill_session_id,
                         str(target),
                         description.strip(),
-                        source_task_id=_task_state.ACTIVE_TASK_ID,
+                        source_task_id=context.task_id,
                     )
                 finally:
                     memory.close()

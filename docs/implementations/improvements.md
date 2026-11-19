@@ -279,6 +279,14 @@ local models by default, and works on the project folder it is launched from.
 **Standard practice:** one reusable loop function, or a framework such as
 LangGraph (`create_react_agent`). The project already depends on LangChain.
 
+**Fixed.** All `llm.bind_tools(tools_list)` call sites route through one
+`_bind_tools` helper. The model fallback, per-turn preflight, tool-batch
+execution and outer turn loop now live in `_invoke_initial_model_with_fallback`,
+`_preflight_tool_calls`, `_execute_tool_batch` and `_run_agent_turn` in
+`agent/runtime.py`; planning, coding and skills paths share that loop.
+
+Verified with the full suite: 812 passed, 12 skipped, 0 failed.
+
 #### B2. Permission checks are spread across several places
 
 - There is a central `tool_needs_permission` in `agent/permissions.py`.
@@ -289,6 +297,17 @@ LangGraph (`create_react_agent`). The project already depends on LangChain.
 **Standard practice:** a single policy check that every tool call passes
 through. Tools never prompt the user directly.
 
+**Fixed.** `tools/shell.py` no longer prompts for approval itself; approval is
+handled by the central `agent.permissions.tool_needs_permission` policy (with
+the `_tool_invocation_approved` context). The runtime wrapper was removed, and
+the interactive prompt now lives in `prompt_tool_approval` beside the policy.
+Direct/unapproved invocations return an explicit error instead of prompting.
+Covered by `test_shell_command_requires_explicit_approval` and
+`test_permission_mode_policy_matrix`.
+
+Residual follow-up: none identified for B2; session-level allow rules remain a
+separate C8 feature.
+
 #### B3. Tool state lives in module globals
 
 - The active database, task, skill folder and code task are global variables
@@ -298,6 +317,37 @@ through. Tools never prompt the user directly.
 
 **Standard practice:** pass a context object into each tool, for example
 through LangChain's `RunnableConfig` or injected tool arguments.
+
+**Fixed.** `ToolContext` is now the single process-local source of truth. It
+holds the active DB path, task session/id, runtime owner, skill directory,
+registry and session, code task, and schema-read set. `tools/memory.py`,
+`tools/planner.py`, `create_skill`, `tools/shell.py`, `agent/runtime.py`,
+`agent/task_commands.py` and `agent/task_lease.py` read through
+`get_tool_context()`; runtime/task-command writes go through
+`set_tool_context()`.
+
+`tools/_task_state.py` was removed. `tools/_sqlite_state.py` is reduced to the
+shared `SQLITE_LOCK`; the active DB path no longer lives there. The
+`set_active_*` compatibility shims were removed: callers and tests now write
+directly through `get_tool_context()` / `set_tool_context()`.
+
+`code_tasks.ACTIVE_CODE_TASK` was removed; `run_project_unit_tests`,
+`checkpoint_code_task` and `finalize_code_task` now read the active code task
+from `get_tool_context().code_task` and still degrade gracefully when no task
+is active. New coverage lives in `tests/unit/test_tool_context.py`, including
+shared-instance, copy, schema-read and code-task tool cases.
+
+Performance note: `get_tool_context()` returns the shared context object and
+performs no SQLite work, so hot tool paths add no database round trips.
+
+Final green run: `812 passed, 12 skipped`. The two previously red
+OpenAI-compatible runtime tests exposed an uncaught `httpx.ConnectError` in the
+capability probe; `model_capabilities` now treats it as an unknown endpoint
+(same as other transport failures), with unit coverage in
+`tests/unit/test_model_capabilities.py`.
+
+Residual follow-up: none identified for B3. `ToolContext` is the only
+tool-state write path.
 
 #### B4. The risky-command check matches text fragments
 
@@ -2352,9 +2402,9 @@ follow it.
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic. Last updated 2026-11-17, after the
-A1 (`runtime.py` split) and A2 step 3.1 (`Settings` dataclass) pull requests
-were merged into `main` and the last recorded test failure was fixed.
+phase list below shows coverage by topic. Last updated 2026-11-19, after the
+B1/B2/B3 refactors were completed on `b1-b2-b3` (all 812 tests pass, 12 skipped,
+0 failed).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)

@@ -5,7 +5,7 @@ from rich.console import Console
 
 from private_agent.tools import (
     create_skill,
-    set_active_skill_runtime,
+    get_tool_context,
 )
 
 try:
@@ -55,7 +55,9 @@ def test_markdown_skill_loading(tmp_path):
 
 def test_create_skill_tool_writes_markdown_and_updates_active_registry(tmp_path):
     registry = {}
-    set_active_skill_runtime(str(tmp_path / "skills"), registry)
+    context = get_tool_context()
+    context.skill_directory = str(tmp_path / "skills")
+    context.skill_registry = registry
     result = create_skill.invoke(
         {
             "name": "Python Testing",
@@ -77,7 +79,9 @@ def test_create_skill_tool_writes_markdown_and_updates_active_registry(tmp_path)
 
 def test_create_skill_tool_rejects_path_traversal_and_existing_files(tmp_path):
     skills_dir = tmp_path / "skills"
-    set_active_skill_runtime(str(skills_dir), {})
+    context = get_tool_context()
+    context.skill_directory = str(skills_dir)
+    context.skill_registry = {}
     args = {
         "name": "../outside",
         "description": "Unsafe path test.",
@@ -101,7 +105,9 @@ async def test_skill_creation_requires_interactive_approval(monkeypatch, tmp_pat
     from private_agent import tools
 
     registry = {}
-    set_active_skill_runtime(str(tmp_path / "skills"), registry)
+    context = get_tool_context()
+    context.skill_directory = str(tmp_path / "skills")
+    context.skill_registry = registry
     monkeypatch.setattr(agent, "AVAILABLE_TOOLS", {"create_skill": create_skill})
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(agent.console, "input", lambda prompt: "n")
@@ -144,7 +150,9 @@ async def test_skill_creation_is_blocked_without_interactive_terminal(
 ):
     import private_agent.agent.runtime as agent
 
-    set_active_skill_runtime(str(tmp_path / "skills"), {})
+    context = get_tool_context()
+    context.skill_directory = str(tmp_path / "skills")
+    context.skill_registry = {}
     monkeypatch.setattr(agent, "AVAILABLE_TOOLS", {"create_skill": create_skill})
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: False))
     result = await agent.execute_tool_call(

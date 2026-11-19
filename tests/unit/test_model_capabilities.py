@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from private_agent.agent.model_capabilities import (
@@ -95,6 +96,20 @@ def test_llamacpp_server_reports_tools_modalities_and_running_context():
         # The running n_ctx from /props wins over the training context.
         "context_window": 65536,
     }
+
+
+def test_unreachable_openai_compatible_endpoint_is_treated_as_unknown():
+    class UnreachableClient(FakeClient):
+        def get(self, url):
+            raise httpx.ConnectError("connection refused")
+
+    result = detect_openai_compatible_capabilities(
+        "local-chat-model",
+        base_url="http://127.0.0.1:1234/v1",
+        client_factory=lambda **_kwargs: UnreachableClient({}),
+    )
+
+    assert all(value is None for value in result.values())
 
 
 def test_llamacpp_router_props_are_requested_for_the_selected_model():

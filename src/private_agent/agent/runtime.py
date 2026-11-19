@@ -3,6 +3,7 @@ import hashlib
 import importlib.util
 import json
 import logging
+import os
 import pathlib
 import platform
 import re
@@ -99,13 +100,11 @@ from ..tools import (
     close_mcp_sandbox_dirs,
     close_outbound_http_clients,
     describe_tool_catalog,
+    get_tool_context,
     has_internet_connection,
     load_configured_mcp_tools,
     ollama_client_kwargs,
-    set_active_db_path,
-    set_active_skill_runtime,
-    set_active_skill_session,
-    set_active_task_context,
+    set_tool_context,
 )
 from ..tools.media import (
     approve_local_capture,
@@ -391,16 +390,416 @@ def _tool_needs_permission(
     name: str,
     permission_mode: str,
     *,
-    network_authorized: bool = False,
-) -> bool:
-    return _tool_needs_permission_impl(
-        name,
-        permission_mode,
-        network_authorized=network_authorized,
-        network_tool_names=NETWORK_TOOL_NAMES,
-        mcp_tool_names=MCP_TOOL_NAMES,
-        mcp_auto_approve_tools=MCP_AUTO_APPROVE_TOOLS,
+    response,
+    state: _PreflightState,
+    network_consent_state,
+    provider_type,
+    capabilities,
+    planning_only,
+    turn_permission_mode,
+    tool_call_limit,
+    start_time,
+    deadline,
+    memory,
+    planning_research_citations,
+    console,
+) -> None:
+    schema_read_in_batch = any(
+        call.get("name") == "read_table_schema" for call in response.tool_calls
     )
+    for tool_call in response.tool_calls:
+        call_name = tool_call.get("name")
+        if get_tool_context().task_id and state.task_action_seen:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Only one action for the active task "
+                        "may run per model step. Wait for this "
+                        "action's result before proposing another."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if schema_read_in_batch and call_name in {
+            "create_task_plan",
+            "revise_task_plan",
+            "update_todo_step",
+            "create_skill",
+        }:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Schema reads and database writes "
+                        "must be separate model steps. Read the "
+                        "destination schema first, then prepare and "
+                        "submit the write in a later step."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if time.monotonic() - start_time >= MAX_TASK_SECONDS:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content="Error: Task time budget exhausted; this tool was not run.",
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if tool_call_limit is not None and state.tool_call_count >= tool_call_limit:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Maximum tool-call budget exhausted; "
+                        "this tool was not run."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        state.tool_call_count += 1
+        _SESSION_STATS.record_tool_call(str(tool_call.get("name") or "unknown"))
+        network_authorized = False
+        media_capture_authorized = False
+        if planning_only:
+            if state.planning_tool_seen:
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=(
+                            "Error: Use one planner operation per "
+                            "model step so task selection remains "
+                            "deterministic."
+                        ),
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            state.planning_tool_seen = True
+        if call_name in {"create_task_plan", "revise_task_plan"} and not planning_only:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Task plans may only be created or "
+                        "revised in the user's explicit /plan mode."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if planning_only and call_name not in {
+            "read_table_schema",
+            "create_task_plan",
+            "inspect_task_plan",
+            "revise_task_plan",
+            "web_search",
+        }:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=(
+                        "Error: Planning mode permits planner tools "
+                        "and consented web searches only; no other "
+                        "research or execution tool ran."
+                    ),
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if call_name in LOCAL_MEDIA_TOOL_NAMES:
+            if not _device_tools_allowed(provider_type):
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=(
+                            "Error: Media device tools are local-only and "
+                            "cannot be used with an Online provider."
+                        ),
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            if (
+                call_name
+                in {
+                    "capture_webcam_image",
+                    "load_workspace_image",
+                    "load_workspace_video",
+                }
+                and capabilities["vision"] is not True
+            ):
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=(
+                            "Error: The selected local model does not "
+                            "declare vision support."
+                        ),
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            if call_name != "list_microphone_devices":
+                media_capture_authorized = (
+                    turn_permission_mode == "full"
+                    or approve_local_capture(
+                        call_name,
+                        tool_call.get("args", {}),
+                    )
+                )
+                if not media_capture_authorized:
+                    state.declined_media_calls.append(call_name)
+                    state.blocked_tool_messages.append(
+                        ToolMessage(
+                            content=(
+                                "Error: Media capture was declined; "
+                                "the device was not accessed."
+                            ),
+                            tool_call_id=tool_call.get("id"),
+                        )
+                    )
+                    continue
+        location_refusal = _local_location_refusal(
+            call_name,
+            tool_call.get("args", {}),
+            _device_tools_allowed(provider_type),
+        )
+        if location_refusal:
+            state.blocked_tool_messages.append(
+                ToolMessage(
+                    content=location_refusal,
+                    tool_call_id=tool_call.get("id"),
+                )
+            )
+            continue
+        if call_name in NETWORK_TOOL_NAMES:
+            tool_args = tool_call.get("args", {})
+            planning_search = planning_only and call_name == "web_search"
+            (
+                network_authorized,
+                refusal,
+            ) = await authorize_network_research(
+                call_name,
+                tool_args,
+                permission_mode=("manual" if planning_search else turn_permission_mode),
+                session_consent_state=network_consent_state,
+            )
+            if not network_authorized:
+                state.blocked_tool_messages.append(
+                    ToolMessage(
+                        content=refusal,
+                        tool_call_id=tool_call.get("id"),
+                    )
+                )
+                continue
+            if planning_search:
+                state.authorized_planning_searches[str(tool_call.get("id") or "")] = (
+                    str(tool_args.get("query") or "")
+                )
+        execution_options = {
+            "network_authorized": network_authorized,
+            "local_media_allowed": _device_tools_allowed(provider_type),
+            "media_capture_authorized": media_capture_authorized,
+            "vision_supported": capabilities["vision"] is True,
+            "permission_mode": turn_permission_mode,
+        }
+        execution_tool_call = tool_call
+        if planning_only and call_name in {
+            "create_task_plan",
+            "revise_task_plan",
+        }:
+            prior_references = []
+            if call_name == "revise_task_plan":
+                active_plan = (
+                    memory.get_task(get_tool_context().task_id)
+                    if get_tool_context().task_id
+                    else None
+                )
+                if active_plan:
+                    prior_references = active_plan["plan"].get(
+                        "research_references",
+                        [],
+                    )
+            execution_tool_call = {
+                **tool_call,
+                "args": {
+                    **tool_call.get("args", {}),
+                    "research_references": list(
+                        dict.fromkeys(prior_references + planning_research_citations)
+                    )[:10],
+                },
+            }
+        if get_tool_context().task_id:
+            state.task_action_seen = True
+            state.tool_tasks.append(
+                _execute_task_tool_call(
+                    memory,
+                    get_tool_context().task_id,
+                    get_tool_context().runtime_owner_id,
+                    execution_tool_call,
+                    **execution_options,
+                )
+            )
+        else:
+            state.tool_tasks.append(
+                execute_tool_call(
+                    execution_tool_call,
+                    **execution_options,
+                )
+            )
+
+
+async def _execute_tool_batch(
+    *,
+    response,
+    session_id,
+    tool_tasks,
+    blocked_tool_messages,
+    declined_media_calls,
+    authorized_planning_searches,
+    planning_research_citations,
+    messages,
+    provider_type,
+    planning_only,
+    deadline,
+    console,
+):
+    if tool_tasks:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            tool_messages = [
+                ToolMessage(
+                    content="Error: Task time budget exhausted; completion is unknown.",
+                    tool_call_id=call.get("id"),
+                )
+                for call in response.tool_calls
+                if call.get("name") not in NETWORK_TOOL_NAMES
+                or call.get("id")
+                not in {message.tool_call_id for message in blocked_tool_messages}
+            ]
+        else:
+            tool_batch_started = time.monotonic()
+            console.print(
+                f"[dim][Processing][/dim] Running "
+                f"{len(tool_tasks)} tool action(s); approval "
+                "prompts may appear."
+            )
+            try:
+                tool_messages = await asyncio.wait_for(
+                    asyncio.gather(*tool_tasks),
+                    timeout=remaining,
+                )
+            except asyncio.TimeoutError:
+                timed_out_calls = [
+                    {
+                        "tool": str(call.get("name") or "unknown"),
+                        "call_id": str(call.get("id") or ""),
+                    }
+                    for call in response.tool_calls
+                    if call.get("id")
+                    not in {message.tool_call_id for message in blocked_tool_messages}
+                ]
+                log_event(
+                    RUN_LOGGER,
+                    "tool.batch_timeout",
+                    level=logging.ERROR,
+                    session_id=session_id,
+                    turn_index=_SESSION_STATS.turns + 1,
+                    tool_calls=timed_out_calls,
+                )
+                tool_messages = [
+                    ToolMessage(
+                        content=(
+                            "Error: Tool execution exceeded the task time budget. "
+                            "Its final side effects may be unknown; verify before retrying."
+                        ),
+                        tool_call_id=call.get("id"),
+                    )
+                    for call in response.tool_calls
+                    if call.get("id")
+                    not in {message.tool_call_id for message in blocked_tool_messages}
+                ]
+            tool_batch_elapsed = time.monotonic() - tool_batch_started
+            if tool_batch_elapsed >= 2:
+                console.print(
+                    f"[dim][Completed][/dim] Tool actions in {tool_batch_elapsed:.1f}s."
+                )
+    else:
+        tool_messages = []
+    for tool_message in tool_messages:
+        result_text = _visible_chunk_text(tool_message.content)
+        if not _tool_result_is_error(result_text):
+            tool_call = next(
+                (
+                    call
+                    for call in response.tool_calls
+                    if call.get("id") == tool_message.tool_call_id
+                ),
+                None,
+            )
+            if tool_call is not None:
+                _display_tool_result(
+                    str(tool_call.get("name", "unknown")),
+                    result_text,
+                )
+    if planning_only and authorized_planning_searches:
+        for tool_result in tool_messages:
+            if tool_result.tool_call_id not in authorized_planning_searches:
+                continue
+            result_text = _visible_chunk_text(tool_result.content)
+            if result_text.casefold().startswith(("error", "web search failed")):
+                continue
+            for citation in _planning_search_citations(result_text):
+                if (
+                    citation not in planning_research_citations
+                    and len(planning_research_citations) < 10
+                ):
+                    planning_research_citations.append(citation)
+    messages.extend(blocked_tool_messages + tool_messages)
+    if declined_media_calls:
+        console.print(
+            "Local media access was not permitted; no capture or file load occurred."
+        )
+        if len(declined_media_calls) == len(response.tool_calls):
+            devices = " and ".join(
+                sorted(
+                    {
+                        {
+                            "capture_webcam_image": "webcam",
+                            "load_workspace_image": "workspace image",
+                            "load_workspace_video": "workspace video",
+                            "transcribe_workspace_audio": "workspace audio",
+                            "record_microphone_audio": "microphone",
+                        }.get(name, "local media")
+                        for name in declined_media_calls
+                    }
+                )
+            )
+            response = AIMessage(
+                content=(
+                    f"I did not access the {devices} because "
+                    "permission was not granted. No capture was made."
+                )
+            )
+            return response, True
+    webcam_error = _local_image_input_error(
+        response.tool_calls,
+        blocked_tool_messages + tool_messages,
+    )
+    if webcam_error is not None:
+        response = AIMessage(content=f"Local image input failed: {webcam_error}")
+        return response, True
+    if provider_type == "local":
+        _append_captured_images_from_tool_results(
+            messages,
+            tool_messages,
+        )
+    if time.monotonic() >= deadline:
+        response = AIMessage(
+            content="The task execution budget was exhausted. "
+            "Tool results may be incomplete; the requested outcome "
+            "was not verified."
+        )
+        return response, True
+
+    return response, False
 
 
 def _select_permission_mode() -> str:
@@ -882,7 +1281,9 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
                 f"{task_plans - approved_task_plans} not approved — "
                 "use `/tasks` to review or proceed."
             )
-    set_active_db_path(DEFAULT_DB_PATH)
+    _tool_context = get_tool_context()
+    _tool_context.db_path = os.path.abspath(DEFAULT_DB_PATH)
+    set_tool_context(_tool_context)
     for server_name, server_config in MCP_SERVERS.items():
         if server_config.get("transport", "stdio") == "stdio" and isolation_warning:
             console.print(
@@ -1038,7 +1439,14 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
     loaded_skills = (
         load_skills_from_folder(skills_folder_input) if skills_folder_input else {}
     )
-    set_active_skill_runtime(skills_folder_input or None, loaded_skills)
+    _tool_context = get_tool_context()
+    _tool_context.skill_directory = (
+        os.path.abspath(os.path.expanduser(skills_folder_input))
+        if skills_folder_input
+        else None
+    )
+    _tool_context.skill_registry = loaded_skills
+    set_tool_context(_tool_context)
     if loaded_skills and verbose_startup:
         console.print(
             f"[bold green][Skills Loaded][/bold green] Successfully loaded {len(loaded_skills)} markdown skill profile(s)."
@@ -1106,11 +1514,14 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
         )
     else:
         session_id = f"session_{uuid.uuid4().hex}"
-    set_active_skill_session(session_id)
-    from ..tools import _task_state
-
-    _task_state.set_runtime_owner()
-    set_active_task_context(session_id)
+    _tool_context = get_tool_context()
+    _tool_context.skill_session_id = session_id
+    set_tool_context(_tool_context)
+    _tool_context = get_tool_context()
+    _tool_context.runtime_owner_id = uuid.uuid4().hex
+    _tool_context.task_session_id = session_id
+    _tool_context.task_id = None
+    set_tool_context(_tool_context)
     network_consent_state: dict[str, bool] = {}
     _TASK_LEASE_HEARTBEAT = asyncio.create_task(
         _maintain_task_lease(memory, session_id)
@@ -1138,7 +1549,6 @@ async def _build_session_setup(*, verbose_startup: bool = False) -> SessionSetup
         thinking_enabled=thinking_enabled,
         thinking_effort=thinking_effort,
         permission_mode=permission_mode,
-        _task_state=_task_state,
     )
 
 
@@ -1624,7 +2034,6 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
     thinking_enabled = setup.thinking_enabled
     thinking_effort = setup.thinking_effort
     permission_mode = setup.permission_mode
-    _task_state = setup._task_state
 
     provider_preference = ProviderPreference()
     while True:
@@ -1692,9 +2101,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
             try:
                 _record_code_task_validation(
                     memory,
-                    _task_state.ACTIVE_TASK_ID,
+                    get_tool_context().task_id,
                     result,
-                    _task_state.RUNTIME_OWNER_ID,
+                    get_tool_context().runtime_owner_id,
                 )
             except (ValueError, sqlite3.Error, OSError) as exc:
                 console.print(
@@ -1703,7 +2112,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     f"{type(exc).__name__}: {exc}[/yellow]"
                 )
             SandboxManager.set_root(str(previous_workspace_root))  # noqa: B023
-            code_tasks_module.ACTIVE_CODE_TASK = None
+            _tool_context = get_tool_context()
+            _tool_context.code_task = None
+            set_tool_context(_tool_context)
             AVAILABLE_TOOLS.pop("run_project_unit_tests", None)
             AVAILABLE_TOOLS.pop("checkpoint_code_task", None)
             AVAILABLE_TOOLS.pop("finalize_code_task", None)
@@ -1938,10 +2349,14 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         if skills_folder_input
                         else {}
                     )
-                    set_active_skill_runtime(
-                        skills_folder_input or None,
-                        loaded_skills,
+                    _tool_context = get_tool_context()
+                    _tool_context.skill_directory = (
+                        os.path.abspath(os.path.expanduser(skills_folder_input))
+                        if skills_folder_input
+                        else None
                     )
+                    _tool_context.skill_registry = loaded_skills
+                    set_tool_context(_tool_context)
                     if approved_task_id:
                         approved_task = memory.get_task(approved_task_id)
                         if not (
@@ -2258,8 +2673,8 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     workspace_action_id = None
                     try:
                         workspace_action_id = memory.begin_task_action(
-                            _task_state.ACTIVE_TASK_ID,
-                            _task_state.RUNTIME_OWNER_ID,
+                            get_tool_context().task_id,
+                            get_tool_context().runtime_owner_id,
                             f"runtime-workspace-{uuid.uuid4().hex}",
                             (
                                 "create_isolated_code_workspace"
@@ -2336,7 +2751,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                         continue
 
                     SandboxManager.set_root(str(active_code_workspace.root))
-                    code_tasks_module.ACTIVE_CODE_TASK = active_code_workspace
+                    _tool_context = get_tool_context()
+                    _tool_context.code_task = active_code_workspace
+                    set_tool_context(_tool_context)
                     AVAILABLE_TOOLS["run_project_unit_tests"] = run_project_unit_tests
                     AVAILABLE_TOOLS["checkpoint_code_task"] = checkpoint_code_task
                     AVAILABLE_TOOLS["finalize_code_task"] = finalize_code_task
@@ -2456,11 +2873,9 @@ async def _run_agent_cli_session(*, verbose_startup: bool = False):
                     else "other"
                 )
                 if include_private_context:
-                    from ..tools import _task_state
-
                     selected_task = (
-                        memory.get_task(_task_state.ACTIVE_TASK_ID)
-                        if _task_state.ACTIVE_TASK_ID
+                        memory.get_task(get_tool_context().task_id)
+                        if get_tool_context().task_id
                         else None
                     )
                     if selected_task and selected_task["status"] == "active":
@@ -2648,9 +3063,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 )
                 active_task_instruction = ""
                 if include_private_context:
-                    from ..tools import _task_state
-
-                    active_task_id = _task_state.ACTIVE_TASK_ID
+                    active_task_id = get_tool_context().task_id
                     active_task = (
                         memory.get_task(active_task_id) if active_task_id else None
                     )
@@ -2933,19 +3346,85 @@ Runtime context:
                             tool_call_limit is not None
                             and tool_call_count >= tool_call_limit
                         ):
-                            blocked_tool_messages.append(
-                                ToolMessage(
-                                    content=(
-                                        "Error: Maximum tool-call budget exhausted; "
-                                        "this tool was not run."
-                                    ),
-                                    tool_call_id=tool_call.get("id"),
-                                )
-                            )
-                            continue
-                        tool_call_count += 1
-                        _SESSION_STATS.record_tool_call(
-                            str(tool_call.get("name") or "unknown")
+                            plan_text = str(response.content).strip()
+                            if plan_text:
+                                console.print(f"[cyan][Plan][/cyan] {plan_text}")
+                        iteration_label = (
+                            f"{iteration} of {tool_iteration_limit}"  # noqa: B023
+                            if tool_iteration_limit is not None  # noqa: B023
+                            else str(iteration)
+                        )
+                        console.print(
+                            f"[cyan][Agent Loop] Plan/act/verify step "
+                            f"{iteration_label}...[/cyan]"
+                        )
+                        for tool_call in response.tool_calls:
+                            _display_tool_request(tool_call)
+                        messages.append(response)  # noqa: B023
+
+                        tool_tasks = []
+                        blocked_tool_messages = []
+                        declined_media_calls = []
+                        authorized_planning_searches = {}
+                        state = _PreflightState(
+                            tool_tasks=[],
+                            blocked_tool_messages=[],
+                            declined_media_calls=[],
+                            planning_tool_seen=False,
+                            authorized_planning_searches={},
+                            task_action_seen=False,
+                            tool_call_count=tool_call_count,
+                        )
+                        await _preflight_tool_calls(
+                            response=response,
+                            state=state,
+                            network_consent_state=network_consent_state,
+                            provider_type=provider_type,  # noqa: B023
+                            capabilities=capabilities,  # noqa: B023
+                            planning_only=planning_only,  # noqa: B023
+                            turn_permission_mode=turn_permission_mode,  # noqa: B023
+                            tool_call_limit=tool_call_limit,  # noqa: B023
+                            start_time=start_time,  # noqa: B023
+                            deadline=deadline,  # noqa: B023
+                            memory=memory,
+                            planning_research_citations=planning_research_citations,  # noqa: B023
+                            console=console,
+                        )
+                        tool_tasks = state.tool_tasks
+                        blocked_tool_messages = state.blocked_tool_messages
+                        declined_media_calls = state.declined_media_calls
+                        authorized_planning_searches = (
+                            state.authorized_planning_searches
+                        )
+                        tool_call_count = state.tool_call_count
+
+                        response, stop = await _execute_tool_batch(
+                            response=response,
+                            session_id=session_id,
+                            tool_tasks=tool_tasks,
+                            blocked_tool_messages=blocked_tool_messages,
+                            declined_media_calls=declined_media_calls,
+                            authorized_planning_searches=authorized_planning_searches,
+                            planning_research_citations=planning_research_citations,  # noqa: B023
+                            messages=messages,  # noqa: B023
+                            provider_type=provider_type,  # noqa: B023
+                            planning_only=planning_only,  # noqa: B023
+                            deadline=deadline,  # noqa: B023
+                            console=console,
+                        )
+                        if stop:
+                            break
+
+                        await compact_loop_messages(
+                            llm,  # noqa: B023
+                            messages,  # noqa: B023
+                            context_stats["max"],  # noqa: B023
+                            threshold=CONTEXT_COMPACTION_THRESHOLD,
+                            max_chars=CONTEXT_SUMMARY_CHARS,
+                            notify=lambda text: console.print(
+                                f"[cyan][Context][/cyan] {text}"
+                            ),
+                            model_name=selected_model,  # noqa: B023
                         )
                         network_authorized = False
                         media_capture_authorized = False
@@ -3680,9 +4159,7 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
             _TASK_LEASE_HEARTBEAT = None
         if _ACTIVE_MEMORY is not None:
             try:
-                from ..tools import _task_state
-
-                active_task_id = _task_state.ACTIVE_TASK_ID
+                active_task_id = get_tool_context().task_id
                 if active_task_id:
                     try:
                         task = _ACTIVE_MEMORY.get_task(active_task_id)
@@ -3690,7 +4167,7 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
                             _ACTIVE_MEMORY.set_task_status(
                                 active_task_id,
                                 "interrupted",
-                                owner_id=_task_state.RUNTIME_OWNER_ID,
+                                owner_id=get_tool_context().runtime_owner_id,
                             )
                     except (ValueError, sqlite3.Error, OSError) as exc:
                         console.print(
@@ -3722,9 +4199,12 @@ async def run_agent_cli_async(*, verbose_startup: bool = False):
             "finalize_code_task",
         ):
             AVAILABLE_TOOLS.pop(tool_name, None)
-        set_active_skill_session(None)
-        set_active_task_context(None)
-        code_tasks_module.ACTIVE_CODE_TASK = None
+        _tool_context = get_tool_context()
+        _tool_context.skill_session_id = None
+        _tool_context.task_session_id = None
+        _tool_context.task_id = None
+        _tool_context.code_task = None
+        set_tool_context(_tool_context)
         SandboxManager.set_root(str(original_workspace_root))
         await close_outbound_http_clients()
         close_mcp_sandbox_dirs()
