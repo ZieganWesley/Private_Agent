@@ -279,24 +279,14 @@ local models by default, and works on the project folder it is launched from.
 **Standard practice:** one reusable loop function, or a framework such as
 LangGraph (`create_react_agent`). The project already depends on LangChain.
 
-**Partly fixed (B1 step 1):** all `llm.bind_tools(tools_list)` call sites now
-route through a single `_bind_tools(llm, tools_list)` helper in
-`agent/runtime.py`, removing the duplicated binding call and giving one place
-to adjust binding behaviour.
+**Fixed.** All `llm.bind_tools(tools_list)` call sites route through one
+`_bind_tools` helper. The model fallback, per-turn preflight, tool-batch
+execution and outer turn loop now live in `_invoke_initial_model_with_fallback`,
+`_preflight_tool_calls`, `_execute_tool_batch` and `_run_agent_turn` in
+`agent/runtime.py`; planning, coding and skills paths share that loop.
 
-Remaining B1 sub-tasks (planned, not yet implemented):
-  1. ✅ Centralise tool binding (`_bind_tools`).
-  2. ✅ Extract the model-invocation fallback block into
-     `_invoke_initial_model_with_fallback`.
-  3. ✅ Extract per-turn tool preflight/filtering into
-     `_preflight_tool_calls` (with `_PreflightState`).
-  4. ✅ Extract tool-batch execution and result handling into
-     `_execute_tool_batch`.
-  5. ✅ Extract the outer turn loop into `_run_agent_turn` (nested helper).
-  6. ✅ Planning/coding/skills paths already route through the shared loop (no separate loops remain).
-
-Steps 2-6 are large and touch the interactive session; they are deferred to
-follow-up commits to avoid destabilising the 800+ test suite.
+Verified with the full suite: 803 passed, 12 skipped, plus the two pre-existing
+LM Studio/llama.cpp environment failures.
 
 #### B2. Permission checks are spread across several places
 
@@ -308,20 +298,16 @@ follow-up commits to avoid destabilising the 800+ test suite.
 **Standard practice:** a single policy check that every tool call passes
 through. Tools never prompt the user directly.
 
-**Partly fixed (B2 step 1):** `tools/shell.py` no longer calls `console.input`
-for approval itself; approval is handled solely by the runtime's
-`_tool_needs_permission` policy (and the `_tool_invocation_approved`
-context). Direct/unapproved invocations now return an explicit error instead
-of prompting. Covered by `test_shell_command_requires_explicit_approval`.
+**Fixed.** `tools/shell.py` no longer prompts for approval itself; approval is
+handled by the central `agent.permissions.tool_needs_permission` policy (with
+the `_tool_invocation_approved` context). The runtime wrapper was removed, and
+the interactive prompt now lives in `prompt_tool_approval` beside the policy.
+Direct/unapproved invocations return an explicit error instead of prompting.
+Covered by `test_shell_command_requires_explicit_approval` and
+`test_permission_mode_policy_matrix`.
 
-**Partly fixed (B2 step 2):** runtime's `_tool_needs_permission` wrapper was
-removed; `execute_tool_call` now calls `agent.permissions.tool_needs_permission`
-directly, so the permission policy lives in one place. `test_permission_mode_policy_matrix`
-updated to pass the policy inputs explicitly.
-
-**Partly fixed (B2 step 3):** the interactive tool-approval prompt was moved
-out of `execute_tool_call` into `prompt_tool_approval` in `agent/permissions.py`,
-so approval interaction lives alongside the permission policy.
+Residual follow-up: none identified for B2; session-level allow rules remain a
+separate C8 feature.
 
 #### B3. Tool state lives in module globals
 
@@ -333,41 +319,25 @@ so approval interaction lives alongside the permission policy.
 **Standard practice:** pass a context object into each tool, for example
 through LangChain's `RunnableConfig` or injected tool arguments.
 
-**Partly fixed (B3 step 1):** introduced `ToolContext` plus
-`get_tool_context()`/`set_tool_context()` in `tools/__init__.py`, backed by
-the existing module globals for compatibility. `tools/shell.py` now reads the
-active code task through `get_tool_context().code_task` instead of the
-`code_tasks.ACTIVE_CODE_TASK` global directly; remaining consumers still use
-the globals and will migrate in later steps.
+**Fixed.** `ToolContext` is now the single process-local source of truth. It
+holds the active DB path, task session/id, runtime owner, skill directory,
+registry and session, code task, and schema-read set. `tools/memory.py`,
+`tools/planner.py`, `create_skill`, `tools/shell.py`, `agent/runtime.py`,
+`agent/task_commands.py` and `agent/task_lease.py` read through
+`get_tool_context()`; runtime/task-command writes go through
+`set_tool_context()`.
 
-**Partly fixed (B3 step 2):** `tools/memory.py` now reads the active database
-path via `get_tool_context().db_path` instead of `_sqlite_state.ACTIVE_DB_PATH`.
+`tools/_task_state.py` was removed. `tools/_sqlite_state.py` is reduced to the
+shared `SQLITE_LOCK`; the active DB path no longer lives there. The remaining
+`set_active_*` functions in `tools/__init__.py` are documented compatibility
+shims that write into `ToolContext`, kept for existing callers/tests.
 
-**Partly fixed (B3 step 3):** `tools/planner.py` now reads the active database
-path and task session/id via `get_tool_context()` instead of the module globals
-(schema-read tracking still uses `_task_state`).
+Performance note: `get_tool_context()` returns the shared context object and
+performs no SQLite work, so hot tool paths add no database round trips.
 
-**Partly fixed (B3 step 4):** `tools/__init__.py`'s `create_skill` now reads
-skill directory/registry/session and DB/task state via `get_tool_context()`.
-
-**Partly fixed (B3 step 5):** `agent/runtime.py` now updates the active code
-task through `set_tool_context()` instead of writing `code_tasks.ACTIVE_CODE_TASK`
-directly.
-
-**Partly fixed (B3 step 6):** `agent/task_commands.py` now updates the active
-task session/id through `set_tool_context()` instead of `set_active_task_context()`.
-
-**Partly fixed (B3 step 7):** `agent/runtime.py` now updates database, skill
-runtime/session and task context through `set_tool_context()` (with
-`set_active_db_path` retained as a compatibility entry point for failure
-injection).
-
-**Partly fixed (B3 step 8):** `ToolContext` now carries `runtime_owner_id`
-and `schema_read_tables`; `tools/planner.py` and `create_skill` read them via
-`get_tool_context()` instead of `_task_state` globals.
-
-**Partly fixed (B3 step 9):** `agent/task_lease.py` now reads the active task
-and runtime owner through `get_tool_context()` instead of `_task_state`.
+Residual follow-up: `code_tasks.ACTIVE_CODE_TASK` remains a legacy alias that
+`get_tool_context()` mirrors for code-task helpers; removing it requires
+migrating those helpers to accept the context explicitly.
 
 #### B4. The risky-command check matches text fragments
 
@@ -2422,9 +2392,9 @@ follow it.
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic. Last updated 2026-11-17, after the
-A1 (`runtime.py` split) and A2 step 3.1 (`Settings` dataclass) pull requests
-were merged into `main` and the last recorded test failure was fixed.
+phase list below shows coverage by topic. Last updated 2026-11-19, after the
+B1/B2/B3 refactors were completed on `b1-b2-b3` (all 803 tests pass; the only
+failures are the two pre-existing LM Studio/llama.cpp environment checks).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
