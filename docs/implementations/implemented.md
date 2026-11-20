@@ -24,4 +24,4 @@
 
 - Branch `g-tui-ui` pushed and mergeable into `main` (fast-forward).
 - G1–G4, G15–G16 implemented; light toggle functional.
-- Remaining G items: G5 (Markdown, deferred), G8 (full live panel - partial), G13 (arrow menus - partial). Done: G1, G2, G3, G4, G6, G7, G10, G11, G12, G14, G15, G16, G17, G18, G19, G20, G21, G22, G23, G24. Shared console across modules.
+- Section G complete: G1-G24 all addressed (G5 Markdown replies, G8 live panel context gauge, G13 arrow-key selection helper; G5 streaming remains plain-text by design). Pre-existing unrelated failure: tests/integration/test_agent_runtime.py::test_tool_result_and_failure_are_returned_to_agent (SandboxManager root).
