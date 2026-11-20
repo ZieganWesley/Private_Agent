@@ -122,19 +122,29 @@ def prompt_tool_approval(
     name: str,
     description: str,
     safe_args: Any,
+    on_always_allow: Any = None,
 ) -> bool:
     """Prompt the user for approval of a tool call.
 
-    Returns ``True`` when the user approves (answers ``y``).
+    Returns ``True`` when the user approves (answers ``y`` or ``a``).
+    ``a`` approves and, when ``on_always_allow`` is provided, registers the
+    tool as always-allowed for the rest of the session.
     """
     approval = (
         console.input(
             f"[yellow]Approve tool '{name}'? {description}\n"
-            f"Arguments: {safe_args}\nRun? \\[y/N]: [/yellow]"
+            f"Arguments: {safe_args}\nRun? [y/N/a (always allow)]: [/yellow]"
         )
         .strip()
         .lower()
     )
+    if approval == "a":
+        if on_always_allow is not None:
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                on_always_allow(name)
+        return True
     return approval == "y"
 
 

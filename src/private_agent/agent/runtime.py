@@ -241,6 +241,7 @@ from .tool_display import (
 )
 from .undo import undo_last_turn
 
+_ALWAYS_ALLOWED_TOOLS: set[str] = set()
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _LAST_HEADLESS_RESPONSE: str = ""
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
@@ -1072,6 +1073,7 @@ async def execute_tool_call(
         )
         and not (name in LOCAL_MEDIA_TOOL_NAMES and media_capture_authorized)
         and not _permission_rule_allowed
+        and name not in _ALWAYS_ALLOWED_TOOLS
     ):
         if not (get_tool_context().interactive and sys.stdin.isatty()):
             result = (
@@ -1085,6 +1087,7 @@ async def execute_tool_call(
                 name=name,
                 description=description,
                 safe_args=safe_args,
+                on_always_allow=_ALWAYS_ALLOWED_TOOLS.add,
             )
             if not approved:
                 result = "Error: Tool invocation was declined; no action was taken."
