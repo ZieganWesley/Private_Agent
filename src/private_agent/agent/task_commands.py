@@ -955,8 +955,8 @@ def _run_task_management(
 
 def _approved_coding_task_scope(
     memory: PersistentMemory,
-    requested_goal: str,
 ) -> dict | None:
+    """Return the active approved coding plan selected through ToolContext."""
     task_id = get_tool_context().task_id
     if not task_id:
         return None
@@ -965,7 +965,6 @@ def _approved_coding_task_scope(
         task
         and task["status"] == "active"
         and task["task_type"] == "coding"
-        and task["goal"].strip().casefold() == requested_goal.strip().casefold()
         and task["approved_revision"] == task["revision"]
         and task["approved_digest"] == task["digest"]
     ):

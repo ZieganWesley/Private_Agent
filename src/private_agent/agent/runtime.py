@@ -2925,18 +2925,16 @@ async def _run_agent_cli_session(
 
                 code_related_request = _is_coding_guidance_request(user_input)
                 if coding_task_requested and not planning_only:
-                    approved_coding_scope = _approved_coding_task_scope(
-                        memory,
-                        user_input,
-                    )
+                    approved_coding_scope = _approved_coding_task_scope(memory)
                     if approved_coding_scope is None:
                         console.print(
                             "[yellow][Plan approval required][/yellow] Run /plan, "
                             "save the coding checklist from the approved request, "
                             "review and approve it with /tasks (including the "
-                            "source project scope), then repeat that request. "
-                            "Approved plans are matched by their stored goal, not "
-                            "by repeating the original wording. "
+                            "source project scope), then run /code for the next "
+                            "request. The active approved plan selected in "
+                            "ToolContext is used; you do not need to repeat the "
+                            "original wording. "
                             "No code workspace was created."
                         )
                         continue
