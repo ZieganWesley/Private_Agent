@@ -521,6 +521,7 @@ from .shell import (
 )
 from .subagents import run_subagent
 from .web import download_web_file, fetch_webpage, web_search
+from .documents import create_docx, create_pdf, create_xlsx
 
 AVAILABLE_TOOLS = {
     "get_local_datetime": get_local_datetime,
@@ -567,6 +568,9 @@ AVAILABLE_TOOLS = {
     "list_microphone_devices": list_microphone_devices,
     "record_microphone_audio": record_microphone_audio,
     "transcribe_workspace_audio": transcribe_workspace_audio,
+    "create_docx": create_docx,
+    "create_xlsx": create_xlsx,
+    "create_pdf": create_pdf,
 }
 
 

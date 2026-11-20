@@ -2412,7 +2412,7 @@ the right capability pack (steps 9.2–9.3) instead of as special cases.
 | 8.14 | Add source dates and domain checks, cross-checking between sources, and specialist sources (Wikipedia API, arXiv, GitHub search) as optional providers | E23, E24 | 8.13 | Reports show source dates and flag single-source claims |
 | 8.15 | Run tests and lint automatically after edits outside coding tasks (through hooks), and add language tooling through an LSP MCP server or built-in type checking | E16, E17 | 6.11 | A failing test or type error after an edit is reported to the model |
 | 8.17 | Add a calculator / sandboxed Python tool | E29 | 6.3 | Calculations run without the general shell tool |
-| 8.18 | Add document creation tools (Markdown to `.docx` and PDF, simple `.xlsx`) | E27 | — | The agent can write a `.docx` and a PDF, with tests |
+| 8.18 | **Done:** added `create_docx`, `create_xlsx`, `create_pdf` tools built with stdlib (no external dependencies) | E27 | — | The agent can write a `.docx` and a PDF, with tests |
 | 8.19 | Allow extra approved folders outside the workspace (for example `~/Documents`), each with its own permission rule | E32 | 6.5 | The helper can read an approved folder outside the workspace |
 | 8.20 | Lower priority: clipboard, notifications and opening URLs; scheduled tasks; voice conversation with spoken replies | E28, E30, E31 | 9.2 | Each feature is behind its own setting and permission |
 
