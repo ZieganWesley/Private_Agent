@@ -1514,7 +1514,7 @@ def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
 
     panel = printed[0][0][0]
     assert isinstance(panel, tool_display.Panel)
-    assert panel.title.plain == "Tool output: search_workspace"
+    assert panel.title.plain == "✓ Tool output: search_workspace"
     assert panel.renderable.plain.startswith(
         "x" * tool_display.TOOL_RESULT_PREVIEW_CHARS
     )
