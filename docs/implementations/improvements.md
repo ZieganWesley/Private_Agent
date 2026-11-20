@@ -2403,7 +2403,7 @@ the right capability pack (steps 9.2–9.3) instead of as special cases.
 | 8.5 | Rewrite follow-up questions using the conversation before searching | E8 | 8.3 | "What about the second one?" retrieves the right chunks, with a test |
 | 8.6 | Add re-ranking of retrieved chunks (local cross-encoder or the chat model) | E10 | 5.5 | Benchmark MRR improves |
 | 8.7 | Add a documents-only answer mode that says when the answer is not in the documents | E12 | 8.3 | The agent says "not found in your documents" instead of guessing |
-| 8.8 | Support more formats: `.docx`, `.xlsx`, `.pptx`, `.epub`, text extraction from `.html` (BeautifulSoup is already a dependency), optional OCR for scanned PDFs | E11 | — | Each format is indexed, with a test file per format |
+| 8.8 | **Done:** added `.docx`, `.xlsx`, `.pptx`, `.epub` (zip/XML text extraction) and `.html`/`.htm` (BeautifulSoup text extraction) to supported RAG formats | E11 | — | Each format is indexed, with a test file per format |
 | 8.9 | ~~Put embeddings behind a provider interface~~ Moved to step 12.11 | E14 | 12.11 | See 12.11 |
 | 8.10 | Support several document collections and choosing one per question or per project | E13 | 3.1 | A question can be limited to one collection |
 | 8.11 | Chat commands: `/new`, `/retry`, `/edit`, `/export`, named conversations, and personas | E2, E3, E4, E5 | 6.6 | Each command works, with tests |

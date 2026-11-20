@@ -47,7 +47,23 @@ console = Console()
 SQLITE_EXTENSIONS = frozenset({".db", ".sqlite", ".sqlite3", ".db3"})
 SUPPORTED_EXTENSIONS = (
     frozenset(
-        {".pdf", ".txt", ".md", ".py", ".json", ".csv", ".rs", ".js", ".ts", ".html"}
+        {
+            ".pdf",
+            ".txt",
+            ".md",
+            ".py",
+            ".json",
+            ".csv",
+            ".rs",
+            ".js",
+            ".ts",
+            ".html",
+            ".htm",
+            ".docx",
+            ".xlsx",
+            ".pptx",
+            ".epub",
+        }
     )
     | SQLITE_EXTENSIONS
 )
@@ -419,6 +435,46 @@ def initialize_knowledge_base(
                     continue
             elif ext in SQLITE_EXTENSIONS:
                 pages = _read_sqlite_pages(file_path)
+            elif ext in {".html", ".htm"}:
+                try:
+                    from bs4 import BeautifulSoup
+
+                    soup = BeautifulSoup(
+                        file_path.read_text(encoding="utf-8", errors="ignore"),
+                        "html.parser",
+                    )
+                    for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                        element.decompose()
+                    pages = [(soup.get_text(separator="\n", strip=True), None)]
+                except ImportError:
+                    pages = [
+                        (file_path.read_text(encoding="utf-8", errors="ignore"), None)
+                    ]
+            elif ext in {".docx", ".xlsx", ".pptx", ".epub"}:
+                try:
+                    import html as _html
+                    import re as _re
+                    import zipfile
+
+                    texts = []
+                    with zipfile.ZipFile(file_path) as archive:
+                        for member in archive.namelist():
+                            if member.endswith(
+                                (".xml", ".html", ".xhtml", ".htm", ".txt")
+                            ):
+                                try:
+                                    data = archive.read(member).decode(
+                                        "utf-8", errors="ignore"
+                                    )
+                                except (OSError, KeyError, RuntimeError):
+                                    continue
+                                text = _re.sub(r"<[^>]+>", " ", data)
+                                text = _html.unescape(text)
+                                if text.strip():
+                                    texts.append(text)
+                    pages = [("\n".join(texts), None)] if texts else []
+                except (OSError, RuntimeError, ValueError, zipfile.BadZipFile):
+                    pages = []
             else:
                 pages = [(file_path.read_text(encoding="utf-8", errors="ignore"), None)]
 
