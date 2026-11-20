@@ -2012,3 +2012,11 @@ def test_prompt_key_bindings_insert_newline_on_alt_enter_and_ctrl_j():
         by_keys[keys].handler(event)
         buffer.insert_text("line two")
         assert buffer.text == "line one\nline two"
+
+
+def test_arrow_select_returns_none_non_interactive(monkeypatch):
+    from private_agent.agent import interactive
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    assert interactive.arrow_select("t", [("a", "A")]) is None

@@ -3913,10 +3913,10 @@ Runtime context:
                 )
                 if not isinstance(response, AIMessageChunk):
                     console.print(f"\n[bold green]AI ({selected_model}):[/bold green]")
+                    from rich.markdown import Markdown
+
                     console.print(
-                        full_output_content,
-                        markup=False,
-                        highlight=False,
+                        Markdown(full_output_content),
                         soft_wrap=True,
                     )
                 elif not full_output_content and not getattr(

@@ -160,6 +160,18 @@ def select_permission_mode(
     }
     if not is_interactive():
         return configured
+    try:
+        from .interactive import arrow_select
+
+        chosen = arrow_select(
+            "Permission mode:",
+            [(m, labels[m]) for m in ("manual", "auto", "full")],
+            default=configured,
+        )
+        if chosen is not None:
+            return chosen
+    except Exception:  # noqa: BLE001 - fall back to typed prompt
+        pass
     console.print("[bold cyan][Agent Permission Mode][/bold cyan]")
     for number, mode in enumerate(("manual", "auto", "full"), 1):
         console.print(f"  {number}. {labels[mode]}")

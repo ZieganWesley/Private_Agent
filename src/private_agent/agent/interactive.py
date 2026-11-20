@@ -539,3 +539,55 @@ def handle_session_command(
             console.print(f"[red][Command][/red] Export failed: {exc}")
         return True, True, user_input, chat_history, context_summary, last_user_request
     return False, False, user_input, chat_history, context_summary, last_user_request
+
+
+def arrow_select(
+    title: str,
+    choices: list[tuple[str, str]],
+    *,
+    default: str | None = None,
+) -> str | None:
+    """Present an arrow-key selectable menu and return the chosen value.
+
+    ``choices`` is a list of ``(value, label)`` pairs. Returns ``None`` when
+    the user cancels (Esc/Ctrl-C) or the terminal is non-interactive, in
+    which case callers should fall back to their typed/numbered prompt.
+    """
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return None
+    try:
+        from prompt_toolkit.application import Application
+        from prompt_toolkit.key_binding import KeyBindings as KB
+        from prompt_toolkit.layout import Layout
+        from prompt_toolkit.layout.containers import HSplit, Window
+        from prompt_toolkit.layout.controls import FormattedTextControl
+        from prompt_toolkit.widgets import RadioList
+    except Exception:  # noqa: BLE001 - optional UI
+        return None
+
+    radio = RadioList(choices)
+    if default is not None:
+        for _i, (value, _label) in enumerate(choices):
+            if value == default:
+                radio.current_value = value
+                break
+
+    kb = KB()
+
+    @kb.add("enter")
+    def _accept(event) -> None:  # type: ignore[no-untyped-def]
+        event.app.exit(result=radio.current_value)
+
+    @kb.add("escape")
+    @kb.add("c-c")
+    def _cancel(event) -> None:  # type: ignore[no-untyped-def]
+        event.app.exit(result=None)
+
+    body = HSplit([Window(FormattedTextControl(title), height=1), radio])
+    app = Application(layout=Layout(body), key_bindings=kb, full_screen=False)
+    try:
+        return app.run()
+    except (KeyboardInterrupt, EOFError):
+        return None
+    except Exception:  # noqa: BLE001 - fall back on any UI failure
+        return None
