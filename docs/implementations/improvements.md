@@ -1678,8 +1678,14 @@ back to the same choice prompt.
 **Fixed:** I1b, I1c and I1d. `agent/model_capabilities.py` (commit `7ff2016`)
 reads capabilities from llama.cpp `/props`, LM Studio `/api/v1/models` and the
 `/v1/models` entries many servers extend, merges per-endpoint config overrides,
-and the tool-capable model fallback now applies to every provider. I1l is still
-true: embedding-model filtering only runs for Ollama.
+and the tool-capable model fallback now applies to every provider. A small
+`MODEL_FAMILY_CAPABILITIES` family table now provides the last capability
+fallback before user overrides.
+
+**Status (updated 2026-11-20):** every I1 item is implemented on branch
+`i-provider-independence`; see `implemented.md`, Part I, for the per-item
+table. I1l, I1m, I1h and I1o are no longer open, and the resume gaps below
+are closed by the `session_providers` record.
 
 **Discovery and selection gaps:**
 
@@ -1823,6 +1829,34 @@ Rules:
   the index is rebuilt, because vectors from different models cannot be mixed.
 - With no embedding provider at all, RAG falls back to keyword search (BM25 or
   SQLite FTS5), as in step 11.6.
+
+### I3. Implementation notes
+
+Delivered on branch `i-provider-independence`:
+
+- Provider adapters live in `private_agent/providers/` (`ProviderPreset`,
+  `PROVIDER_PRESETS`, `LocalProviderAdapter`, `OllamaAdapter`,
+  `OpenAICompatibleAdapter`, `build_adapter`).
+- `fetch_local_chat_models()` and embedding-model filtering cover every
+  local provider; installed-but-idle providers are listed with a start hint.
+- `--provider` / `--model`, `models.always_ask`,
+  `models.auto_select_single_provider` (opt-in), the remembered last provider
+  (`~/.private_agent/last_provider.json`) and `ollama_base_urls` shape
+  provider choice at session start.
+- `session_providers` records adapter type, display name, base URL, model and
+  capabilities per session; resume reuses that provider without prompting
+  when it is reachable, falls back to the choice prompt with the reason and
+  the start hint when it is not, and journals `provider_changed` on the active
+  task.
+- `rag.embedding_provider = none` gives keyword-only retrieval, and
+  `scripts/benchmark_rag.py` no longer assumes Ollama.
+- `models.allow_remote_hosts` is the explicit opt-in for non-loopback hosts.
+
+Still open by choice: an interactive in-turn re-selection prompt when a
+provider stops mid-session (I1o prints the alternatives and the
+`--resume <id> --provider <name>` command instead), and RAG index metadata
+recording the embedding provider/model so a changed embedder rebuilds the
+index automatically.
 
 ---
 
