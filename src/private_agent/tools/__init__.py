@@ -486,6 +486,7 @@ from .filesystem import (
     search_workspace_text,
     stage_git_changes,
 )
+from .ask_user import ask_user
 from .location import fetch_current_location, get_weather
 from .memory import (
     delete_chat_history_entry_from_sqlite,
@@ -544,6 +545,7 @@ AVAILABLE_TOOLS = {
     "delete_chat_history_entry_from_sqlite": delete_chat_history_entry_from_sqlite,
     "create_skill": create_skill,
     "create_task_plan": create_task_plan,
+    "ask_user": ask_user,
     "inspect_task_plan": inspect_task_plan,
     "read_table_schema": read_table_schema,
     "update_todo_step": update_todo_step,

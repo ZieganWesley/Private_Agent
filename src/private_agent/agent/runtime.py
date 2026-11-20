@@ -610,6 +610,7 @@ async def _preflight_tool_calls(
             "search_workspace_text",
             "search_workspace_symbols",
             "inspect_workspace_git",
+            "ask_user",
         }:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -2295,7 +2296,7 @@ async def _run_agent_cli_session(
         active_code_workspace: CodeTaskWorkspace | None = None
         previous_workspace_root = SandboxManager.get_root()
         base_tools_list = list(tools_list)
-        planning_mode_armed = False
+        planning_mode_persistent = False
         coding_mode_armed = False
         selected_skill_key: str | None = None
         pending_folder_context = ""
@@ -2526,14 +2527,16 @@ async def _run_agent_cli_session(
                         on_data_reset=clear_context_after_data_reset,
                     )
                     continue
-                if user_input.lower() == "/plan":
-                    planning_mode_armed = True
+                if user_input.lower() == "/plan" or user_input.lower() == "/plan on":
+                    planning_mode_persistent = True
                     console.print(
-                        "[cyan][Planning mode][/cyan] Next request will only "
-                        "create or inspect a SQLite task plan, with an optional "
-                        "consented web search when available. No code execution "
-                        "tools will be available."
+                        "[cyan][Planning mode][/cyan] Planning stays on until a "
+                        "plan is approved or you run /plan off."
                     )
+                    continue
+                if user_input.lower() == "/plan off":
+                    planning_mode_persistent = False
+                    console.print("[cyan][Planning mode off][/cyan]")
                     continue
                 if user_input.lower() == "/code":
                     coding_mode_armed = True
@@ -2831,9 +2834,23 @@ async def _run_agent_cli_session(
                 if not user_input:
                     continue
                 turn_permission_mode = permission_mode
-                planning_only = planning_mode_armed
+                planning_only = planning_mode_persistent
                 coding_task_requested = coding_mode_armed
-                planning_mode_armed = False
+                if planning_only:
+                    active_task_id = get_tool_context().task_id
+                    active_task = (
+                        memory.get_task(active_task_id) if active_task_id else None
+                    )
+                    if (
+                        active_task
+                        and active_task["status"] == "active"
+                        and active_task.get("approved_revision")
+                        == active_task.get("revision")
+                        and active_task.get("approved_digest")
+                        == active_task.get("digest")
+                    ):
+                        planning_only = False
+                planning_mode_persistent = planning_only
                 coding_mode_armed = False
                 planning_research_citations: list[str] = []
                 clear_schema_reads()
@@ -2855,6 +2872,7 @@ async def _run_agent_cli_session(
                         "search_workspace_text",
                         "search_workspace_symbols",
                         "inspect_workspace_git",
+                        "ask_user",
                     }
                     if ENABLE_WEB_RESEARCH:
                         planner_names.add("web_search")
