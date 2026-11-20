@@ -79,6 +79,7 @@ from ..config import (
     merge_project_config,
 )
 from ..database import PersistentMemory
+from ..events import ToolFinished, ToolStarted, get_event_bus
 from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
@@ -318,7 +319,6 @@ def _tools_for_model(
         is None
         or name in OVERRIDE_TOOL_LIST
     ]
-
 def _print_tool_catalog(
     entries,
     *,
@@ -379,7 +379,6 @@ def _print_tool_catalog(
             style=("red strike" if overridden else "strike") if unavailable else None,
         )
     console.print(table)
-
 async def authorize_network_research(
     tool_name: str,
     tool_args: dict[str, Any],
@@ -398,11 +397,9 @@ async def authorize_network_research(
         is_interactive=lambda: get_tool_context().interactive and sys.stdin.isatty(),
         session_consent_state=session_consent_state,
     )
-
 def _bind_tools(llm, tools_list):
     """Bind the active tool set to an LLM (B1 step 1 helper)."""
     return llm.bind_tools(tools_list)
-
 async def _invoke_initial_model_with_fallback(
     *,
     llm,
@@ -948,6 +945,7 @@ async def execute_tool_call(
         f"[yellow][Tool Execution][/yellow] Calling '{name}' "
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
+    get_event_bus().emit(ToolStarted(call_id=str(call_id or ""), tool_name=str(name or ""), args_summary=str(safe_args), started_at=tool_started))
 
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
         name, args, SandboxManager.get_root()
@@ -1154,6 +1152,7 @@ async def execute_tool_call(
     _hook_output = collect_post_tool_hook_output(tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root())
     if _hook_output:
         result_text += "\n\n[Post-tool checks]\n" + _hook_output
+    get_event_bus().emit(ToolFinished(call_id=str(call_id or ""), status="ok", duration=time.monotonic() - tool_started, output_size=len(result_text)))
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
 async def _execute_task_tool_call(
