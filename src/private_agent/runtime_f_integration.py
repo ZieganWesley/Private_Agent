@@ -8,8 +8,23 @@ import time
 import uuid
 from typing import Any
 
+from . import capabilities as capability_packs
 from . import context_manager, json_output, task_orchestrator, timeline
 from .config import DEFAULT_DB_PATH
+from .tools import get_tool_context
+
+
+def rebuild_tools(base_tools_list, user_input, llm):
+    """Rebuild the tool list after enable_capability changes packs."""
+    import contextlib
+
+    tools_list = capability_packs.filter_tools_list(base_tools_list, user_input)
+    llm_with_tools = llm
+    with contextlib.suppress(Exception):
+        from .agent.runtime import _bind_tools
+
+        llm_with_tools = _bind_tools(llm, tools_list)
+    return tools_list, llm_with_tools
 
 
 def get_plan_summary(state: dict[str, Any]) -> str:
@@ -37,6 +52,8 @@ def trim_context(text: str, total_tokens: int) -> str:
 
 
 def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False) -> dict[str, Any]:
+    with contextlib.suppress(Exception):
+        get_tool_context().enabled_packs = set()
     plan = task_orchestrator.build_plan(user_input, ["respond to request"])
     run_id = turn_id or uuid.uuid4().hex
     conn: sqlite3.Connection | None = None

@@ -166,10 +166,16 @@ def tools_for_packs(packs: Iterable[str], available: set[str] | None = None) -> 
 
 
 def enable_capability(name: str) -> str:
-    """Placeholder: report a capability pack name. Does not yet change routing."""
+    """Enable a capability pack for the current turn."""
     if name not in PACKS:
-        return f"Unknown capability: {name} (placeholder)"
-    return f"Enabled capability: {name} (placeholder)"
+        return f"Unknown capability: {name}"
+    try:
+        from .tools import get_tool_context
+
+        get_tool_context().enabled_packs.add(name)
+    except Exception:  # noqa: BLE001 - context may be unavailable in tests
+        pass
+    return f"Enabled capability: {name}"
 
 
 def _all_pack_tools() -> set[str]:
@@ -181,7 +187,17 @@ def _all_pack_tools() -> set[str]:
 
 
 def filter_tools_list(tools_list, user_input="", **kw):
+    enabled = set()
+    try:
+        from .tools import get_tool_context
+
+        enabled = set(getattr(get_tool_context(), "enabled_packs", ()) or ())
+    except Exception:  # noqa: BLE001 - context may be unavailable in tests
+        enabled = set()
+    if "enabled_packs" in kw and kw.get("enabled_packs") is not None:
+        enabled = set(kw.pop("enabled_packs"))
     allowed = tools_for_packs(route_packs(user_input, **kw), None)
+    allowed |= tools_for_packs(enabled, None)
     all_known = _all_pack_tools()
     result = []
     for t in tools_list:

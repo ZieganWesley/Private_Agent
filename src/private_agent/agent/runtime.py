@@ -3599,6 +3599,7 @@ Runtime context:
                 )
 
                 async def _run_agent_turn(response) -> Any:
+                    nonlocal tools_list, llm_with_tools
                     iteration = 0
                     tool_call_count = 0
                     while getattr(response, "tool_calls", None) and (
@@ -3678,6 +3679,8 @@ Runtime context:
                             console=console,
                         )
                         f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
+                        if any(tc.get("name") == "enable_capability" for tc in (getattr(response, "tool_calls", None) or [])):
+                            tools_list, llm_with_tools = f_integration.rebuild_tools(base_tools_list, user_input, llm)  # noqa: B023
                         if stop:
                             break
 

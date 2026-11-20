@@ -124,6 +124,7 @@ class ToolContext:
     schema_read_tables: set | None = None
     interactive: bool = True
     subagent_runner: Any = None
+    enabled_packs: set = field(default_factory=set)
 
 
 _TOOL_CONTEXT = ToolContext(
