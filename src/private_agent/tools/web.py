@@ -35,7 +35,7 @@ def web_search(query: str) -> str:
 
 @tool(args_schema=FetchWebpageInput)
 @require_internet
-def fetch_webpage(url: str) -> str:
+def fetch_webpage(url: str, offset: int = 0, length: int | None = None) -> str:
     """Fetch, clean, and read article or documentation text from a URL."""
 
     try:
@@ -55,11 +55,15 @@ def fetch_webpage(url: str) -> str:
         for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
             element.decompose()
         text = soup.get_text(separator="\n", strip=True)
-        return (
-            text[:MAX_FETCHED_WEBPAGE_CHARS] + "\n[Truncated...]"
-            if len(text) > MAX_FETCHED_WEBPAGE_CHARS
-            else text
-        )
+        start = max(0, offset)
+        if length is not None:
+            end = start + length
+        else:
+            end = start + MAX_FETCHED_WEBPAGE_CHARS
+        chunk = text[start:end]
+        if end < len(text):
+            chunk += "\n[Truncated...]"
+        return chunk
     except ImportError:
         return "Failed to fetch webpage: Required package 'httpx' or 'beautifulsoup4' is not installed."
     except (httpx.HTTPError, ValueError, OSError) as exc:

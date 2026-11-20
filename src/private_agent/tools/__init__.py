@@ -119,6 +119,7 @@ class ToolContext:
     skill_registry: dict | None = None
     skill_session_id: str | None = None
     code_task: Any = None
+    vectorstore: Any = None
     runtime_owner_id: str | None = None
     schema_read_tables: set | None = None
     interactive: bool = True
@@ -521,6 +522,9 @@ from .shell import (
 )
 from .subagents import run_subagent
 from .web import download_web_file, fetch_webpage, web_search
+from .calculator import calculate
+from .rag_tools import search_documents
+from .documents import create_docx, create_pdf, create_xlsx
 
 AVAILABLE_TOOLS = {
     "get_local_datetime": get_local_datetime,
@@ -567,6 +571,11 @@ AVAILABLE_TOOLS = {
     "list_microphone_devices": list_microphone_devices,
     "record_microphone_audio": record_microphone_audio,
     "transcribe_workspace_audio": transcribe_workspace_audio,
+    "search_documents": search_documents,
+    "calculate": calculate,
+    "create_docx": create_docx,
+    "create_xlsx": create_xlsx,
+    "create_pdf": create_pdf,
 }
 
 

@@ -16,6 +16,19 @@ SNAPSHOT_DIR = pathlib.Path(".agent_snapshots").resolve()
 
 class SandboxManager:
     root_dir: pathlib.Path | None = None
+    approved_extra_folders: list[pathlib.Path] = []
+
+    @classmethod
+    def set_approved_extra_folders(cls, paths) -> list[pathlib.Path]:
+        """Configure additional directories the sandbox may read."""
+        resolved = []
+        for path in paths or []:
+            try:
+                resolved.append(pathlib.Path(path).expanduser().resolve())
+            except (OSError, ValueError):
+                continue
+        cls.approved_extra_folders = resolved
+        return resolved
 
     @classmethod
     def set_root(cls, path_str: str) -> pathlib.Path:
@@ -54,9 +67,15 @@ class SandboxManager:
             target = pathlib.Path(real_target_str)
             root = pathlib.Path(real_root_str)
 
-            if not target.is_relative_to(root):
-                raise PermissionError
-            return target
+            if target.is_relative_to(root):
+                return target
+            for approved in cls.approved_extra_folders:
+                try:
+                    if target.is_relative_to(approved):
+                        return target
+                except ValueError:
+                    continue
+            raise PermissionError
         except PermissionError:
             raise PermissionError(
                 f"Security Violation: Access denied outside workspace root ({root_dir})"

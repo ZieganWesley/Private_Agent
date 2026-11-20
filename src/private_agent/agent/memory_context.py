@@ -23,6 +23,7 @@ from ..config import (
     MAX_SKILL_DESCRIPTION_CHARS,
     MAX_SKILL_INSTRUCTION_CHARS,
     RAG_CONTEXT_RESULTS,
+    RAG_INCLUDE_CODING_GUIDANCE,
     RAG_INDEX_PATH,
 )
 from ..database import PersistentMemory
@@ -31,6 +32,8 @@ from ..run_logging import RUN_LOGGER
 from .console import console
 from .learning import _run_learning_maintenance, _run_learning_suggestion
 from .prompts import token_count as _token_count
+
+_LAST_RAG_QUERY = ""
 
 
 def _build_startup_memory_context(
@@ -239,14 +242,21 @@ async def _retrieve_rag_documents(
     query: str,
     *,
     include_coding_guidance: bool,
+    rewrite_query: bool = True,
 ) -> list:
     """Retrieve request-relevant documents and, for coding, local standards."""
+    global _LAST_RAG_QUERY
+    original_query = query
+    previous_query = _LAST_RAG_QUERY
+    if rewrite_query and len(query.split()) <= 4 and previous_query and previous_query != original_query:
+        query = f"{previous_query} {query}"
+    _LAST_RAG_QUERY = original_query
     documents = await asyncio.to_thread(
         vectorstore.similarity_search,
         query,
         k=RAG_CONTEXT_RESULTS,
     )
-    if not include_coding_guidance:
+    if not include_coding_guidance or not RAG_INCLUDE_CODING_GUIDANCE:
         return documents
     try:
         guidance_documents = await asyncio.to_thread(

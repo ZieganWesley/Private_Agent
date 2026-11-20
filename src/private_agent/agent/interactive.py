@@ -42,6 +42,9 @@ SLASH_COMMANDS = {
     "/hardware-status": "Show hardware details exposed by the selected local runtime.",
     "/summarize": "Summarize this session now and store it in SQLite memory.",
     "/compact": "Compact the context window into a short working summary.",
+    "/new": "Start a new conversation, clearing chat history.",
+    "/retry": "Resend the previous user request.",
+    "/export": "Export the current conversation to a Markdown file.",
 }
 
 SESSION_COMMANDS = {
@@ -433,3 +436,54 @@ def include_folder_context(
         + "\n\n".join(blocks)
     )
     return context, tuple(included_files), total_bytes
+
+
+def format_conversation_export(chat_history) -> str:
+    """Render chat history as Markdown for export."""
+    lines = ["# Conversation export", ""]
+    for message in chat_history or []:
+        role = getattr(message, "type", None) or getattr(message, "role", "message")
+        content = getattr(message, "content", "")
+        if isinstance(content, list):
+            content = " ".join(
+                part.get("text", "") if isinstance(part, dict) else str(part)
+                for part in content
+            )
+        lines.append(f"## {str(role).title()}")
+        lines.append("")
+        lines.append(str(content))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def export_conversation(path, chat_history) -> str:
+    """Write the conversation to ``path`` and return the path string."""
+    destination = pathlib.Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        format_conversation_export(chat_history), encoding="utf-8"
+    )
+    return str(destination)
+
+
+def handle_session_command(user_input, chat_history, context_summary, last_user_request, sandbox_root, console):
+    command = (user_input or "").lower()
+    if command == "/new":
+        console.print("[cyan][Command][/cyan] Started a new conversation.")
+        return True, True, user_input, [], "", last_user_request
+    if command == "/retry":
+        if last_user_request:
+            console.print("[cyan][Command][/cyan] Retrying previous request.")
+            return True, False, last_user_request, chat_history, context_summary, last_user_request
+        console.print("[cyan][Command][/cyan] No previous request to retry.")
+        return True, True, user_input, chat_history, context_summary, last_user_request
+    if command.startswith("/export"):
+        try:
+            saved = export_conversation(
+                os.path.join(str(sandbox_root), "conversation_export.md"), chat_history
+            )
+            console.print(f"[cyan][Command][/cyan] Exported conversation to {saved}")
+        except (OSError, ValueError) as exc:
+            console.print(f"[red][Command][/red] Export failed: {exc}")
+        return True, True, user_input, chat_history, context_summary, last_user_request
+    return False, False, user_input, chat_history, context_summary, last_user_request

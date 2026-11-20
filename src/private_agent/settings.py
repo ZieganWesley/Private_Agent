@@ -203,6 +203,9 @@ def resolve_config_values(
     PERMISSION_DENY_RULES = list(
         config_section(config, "permissions").get("deny", []) or []
     )
+    APPROVED_EXTRA_FOLDERS = list(
+        config_section(config, "permissions").get("approved_extra_folders", []) or []
+    )
     SYSTEM_PROMPT = (
         _configured_system_prompt.strip()
         if isinstance(_configured_system_prompt, str)
@@ -300,7 +303,7 @@ def resolve_config_values(
     CHUNKING_SEMANTIC_MAX_SENTENCES = configured_int(
         config, "chunking", "semantic_max_sentences", 2000
     )
-    RAG_SIMILARITY_RESULTS = configured_int(config, "rag", "similarity_results", 4)
+    RAG_SIMILARITY_RESULTS = configured_int(config, "rag", "similarity_results", 6)
     RAG_SQLITE_MAX_ROWS_PER_TABLE = configured_int(
         config, "rag", "sqlite_max_rows_per_table", 5000
     )
@@ -400,7 +403,7 @@ def resolve_config_values(
     MAX_SEARCH_QUERY_CHARS = configured_int(
         config, "network", "max_search_query_chars", 2000
     )
-    MAX_SEARCH_RESULTS = configured_int(config, "network", "max_search_results", 3)
+    MAX_SEARCH_RESULTS = configured_int(config, "network", "max_search_results", 8)
     SEARCH_PROVIDER = configured_choice(
         config,
         "network",
@@ -490,7 +493,12 @@ def resolve_config_values(
     SKILL_RELEVANCE_EMBEDDING_THRESHOLD = configured_float(
         config, "skills", "relevance_embedding_threshold", 0.55
     )
-    RAG_CONTEXT_RESULTS = configured_int(config, "agent", "rag_context_results", 2)
+    RAG_CONTEXT_RESULTS = configured_int(config, "agent", "rag_context_results", 5)
+    RAG_DOCUMENTS_ONLY = configured_bool(config, "agent", "rag_documents_only", False)
+    RAG_RELEVANCE_THRESHOLD = configured_float(config, "rag", "relevance_threshold", 0.25)
+    RAG_INCLUDE_CODING_GUIDANCE = configured_bool(
+        config, "rag", "include_coding_guidance", True
+    )
     SUMMARY_PROMPT_SENTENCES = configured_int(
         config, "agent", "summary_prompt_sentences", 2
     )
@@ -586,6 +594,7 @@ class Settings:
     system_prompt: str
     permission_allow_rules: list
     permission_deny_rules: list
+    approved_extra_folders: list
     project_instructions_file: str | None
     conversation_retention_days: Any
     episode_retention_days: Any
@@ -679,6 +688,9 @@ class Settings:
     skill_relevance_word_match_score: float
     skill_relevance_embedding_threshold: float
     rag_context_results: int
+    rag_documents_only: bool
+    rag_relevance_threshold: float
+    rag_include_coding_guidance: bool
     summary_prompt_sentences: int
     context_compaction_threshold: float
     context_keep_recent_messages: int

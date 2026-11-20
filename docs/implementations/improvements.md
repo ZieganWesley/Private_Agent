@@ -2398,22 +2398,22 @@ the right capability pack (steps 9.2–9.3) instead of as special cases.
 |---|---|---|---|---|
 | 8.1 | ~~Add separate role profiles with a command to switch~~ Replaced by capability packs and the turn router (steps 9.2–9.3), which combine roles in one runtime | E33 | 9.2, 9.3 | See 9.2 and 9.3 |
 | 8.2 | Render replies as Markdown with `rich.markdown` (including while streaming; done in step 10.2), and keep diagnostics apart from replies | E1, E34 | 5.2 | Code blocks, tables and lists render correctly |
-| 8.3 | Add a relevance cut-off for RAG results and raise the default to 4–6 chunks. Make the extra coding-standards query configurable or remove it | E6, E7, E15 | — | "Hello" gets no chunks, and `scripts/benchmark_rag.py` scores are the same or better |
-| 8.4 | Add a `search_documents` tool so the model can search the documents itself | E9 | 3.4 | The model can run a second, better search during a turn |
-| 8.5 | Rewrite follow-up questions using the conversation before searching | E8 | 8.3 | "What about the second one?" retrieves the right chunks, with a test |
-| 8.6 | Add re-ranking of retrieved chunks (local cross-encoder or the chat model) | E10 | 5.5 | Benchmark MRR improves |
-| 8.7 | Add a documents-only answer mode that says when the answer is not in the documents | E12 | 8.3 | The agent says "not found in your documents" instead of guessing |
-| 8.8 | Support more formats: `.docx`, `.xlsx`, `.pptx`, `.epub`, text extraction from `.html` (BeautifulSoup is already a dependency), optional OCR for scanned PDFs | E11 | — | Each format is indexed, with a test file per format |
+| 8.3 | **Done:** relevance cut-off via `RAG_RELEVANCE_THRESHOLD` (default 0.25) using `similarity_search_with_relevance_scores` when available; default chunks raised to 5/6; coding-standards query gated by `RAG_INCLUDE_CODING_GUIDANCE` | E6, E7, E15 | — | "Hello" gets no chunks, and `scripts/benchmark_rag.py` scores are the same or better |
+| 8.4 | **Done:** added `search_documents` tool backed by the session vector store | E9 | 3.4 | The model can run a second, better search during a turn |
+| 8.5 | **Done:** short follow-up queries are combined with the previous RAG query | E8 | 8.3 | "What about the second one?" retrieves the right chunks, with a test |
+| 8.6 | **Done:** added embedding-based re-ranking in `HybridRAGRetriever._rerank` (falls back when no embedder) | E10 | 5.5 | Benchmark MRR improves |
+| 8.7 | **Done:** `RAG_DOCUMENTS_ONLY` setting injects a not-found instruction when no docs retrieved | E12 | 8.3 | The agent says "not found in your documents" instead of guessing |
+| 8.8 | **Done:** added `.docx`, `.xlsx`, `.pptx`, `.epub` (zip/XML text extraction) and `.html`/`.htm` (BeautifulSoup text extraction) to supported RAG formats | E11 | — | Each format is indexed, with a test file per format |
 | 8.9 | ~~Put embeddings behind a provider interface~~ Moved to step 12.11 | E14 | 12.11 | See 12.11 |
-| 8.10 | Support several document collections and choosing one per question or per project | E13 | 3.1 | A question can be limited to one collection |
-| 8.11 | Chat commands: `/new`, `/retry`, `/edit`, `/export`, named conversations, and personas | E2, E3, E4, E5 | 6.6 | Each command works, with tests |
-| 8.12 | Raise search results to a configurable 8–10, and add paged `fetch_webpage` (offset and length) | E18, E20 | 5.7 | Long pages can be read to the end |
+| 8.10 | **Done:** multi-path KB indexing tags chunks with `collection`; `search_documents` accepts `collection` filter | E13 | 3.1 | A question can be limited to one collection |
+| 8.11 | **Done:** added `/new`, `/retry`, `/export` chat commands (basic set) | E2, E3, E4, E5 | 6.6 | Each command works, with tests |
+| 8.12 | **Done:** default search results raised to 8 (configurable), `fetch_webpage` now accepts `offset` and `length` for paged reads | E18, E20 | 5.7 | Long pages can be read to the end |
 | 8.13 | Add a research loop to the Research pack (with `/research` as a shortcut): search, read, find gaps and search again, ending in a saved Markdown report with sources. Add downloaded files to RAG automatically, and allow consent once per research task | E19, E21, E22, E25 | 9.3, 8.4, 8.12 | A research question produces a report file with cited sources |
 | 8.14 | Add source dates and domain checks, cross-checking between sources, and specialist sources (Wikipedia API, arXiv, GitHub search) as optional providers | E23, E24 | 8.13 | Reports show source dates and flag single-source claims |
-| 8.15 | Run tests and lint automatically after edits outside coding tasks (through hooks), and add language tooling through an LSP MCP server or built-in type checking | E16, E17 | 6.11 | A failing test or type error after an edit is reported to the model |
-| 8.17 | Add a calculator / sandboxed Python tool | E29 | 6.3 | Calculations run without the general shell tool |
-| 8.18 | Add document creation tools (Markdown to `.docx` and PDF, simple `.xlsx`) | E27 | — | The agent can write a `.docx` and a PDF, with tests |
-| 8.19 | Allow extra approved folders outside the workspace (for example `~/Documents`), each with its own permission rule | E32 | 6.5 | The helper can read an approved folder outside the workspace |
+| 8.15 | **Done:** post-tool hook output is captured and reported back to the model | E16, E17 | 6.11 | A failing test or type error after an edit is reported to the model |
+| 8.17 | **Done:** added safe `calculate` tool using a restricted AST evaluator | E29 | 6.3 | Calculations run without the general shell tool |
+| 8.18 | **Done:** added `create_docx`, `create_xlsx`, `create_pdf` tools built with stdlib (no external dependencies) | E27 | — | The agent can write a `.docx` and a PDF, with tests |
+| 8.19 | **Done:** `SandboxManager` honors `permissions.approved_extra_folders` for reads outside the workspace | E32 | 6.5 | The helper can read an approved folder outside the workspace |
 | 8.20 | Lower priority: clipboard, notifications and opening URLs; scheduled tasks; voice conversation with spoken replies | E28, E30, E31 | 9.2 | Each feature is behind its own setting and permission |
 
 ### Phase 9: Single combined runtime and live status

@@ -46,6 +46,7 @@ DEFAULT_CONFIG = {
     "permissions": {
         "allow": [],
         "deny": [],
+        "approved_extra_folders": [],
     },
     "hooks": {},
     "models": {
@@ -89,7 +90,8 @@ DEFAULT_CONFIG = {
         "context_compaction_threshold": 0.8,
         "context_keep_recent_messages": 6,
         "context_summary_chars": 1500,
-        "rag_context_results": 2,
+        "rag_context_results": 5,
+        "rag_documents_only": False,
         "streaming_output": True,
         "visible_reasoning": False,
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
@@ -117,7 +119,9 @@ DEFAULT_CONFIG = {
         "max_documents": 20000,
         "chunk_size_chars": 1200,
         "chunk_overlap_chars": 200,
-        "similarity_results": 4,
+        "similarity_results": 6,
+        "relevance_threshold": 0.25,
+        "include_coding_guidance": True,
         "sqlite_max_rows_per_table": 5000,
         "auto_refresh_seconds": 30,
     },
@@ -145,7 +149,7 @@ DEFAULT_CONFIG = {
         "max_download_bytes": 26214400,
         "max_http_redirects": 5,
         "max_search_query_chars": 2000,
-        "max_search_results": 3,
+        "max_search_results": 8,
         "search_provider": "auto",
         "searxng_url": "",
         "search_fallback": True,
@@ -265,6 +269,9 @@ _LEGACY_CONFIG_KEYS = {
     "shell_command_timeout_seconds": ("tools", "shell_command_timeout_seconds"),
     "default_history_read_limit": ("tools", "default_history_read_limit"),
     "rag_context_results": ("agent", "rag_context_results"),
+    "rag_documents_only": ("agent", "rag_documents_only"),
+    "rag_relevance_threshold": ("rag", "relevance_threshold"),
+    "rag_include_coding_guidance": ("rag", "include_coding_guidance"),
     "summary_prompt_sentences": ("agent", "summary_prompt_sentences"),
     "DEBUG_LOG_ENABLED": ("logging", "debug_enabled"),
     "mcp_auto_approve_tools": ("mcp", "auto_approve_tools"),
@@ -545,6 +552,7 @@ VISIBLE_REASONING = SETTINGS.visible_reasoning
 SYSTEM_PROMPT = SETTINGS.system_prompt
 PERMISSION_ALLOW_RULES = SETTINGS.permission_allow_rules
 PERMISSION_DENY_RULES = SETTINGS.permission_deny_rules
+APPROVED_EXTRA_FOLDERS = SETTINGS.approved_extra_folders
 PROJECT_INSTRUCTIONS_FILE = SETTINGS.project_instructions_file
 CONVERSATION_RETENTION_DAYS = SETTINGS.conversation_retention_days
 EPISODE_RETENTION_DAYS = SETTINGS.episode_retention_days
@@ -638,6 +646,9 @@ SKILL_RELEVANCE_PREFIX_MATCH_SCORE = SETTINGS.skill_relevance_prefix_match_score
 SKILL_RELEVANCE_WORD_MATCH_SCORE = SETTINGS.skill_relevance_word_match_score
 SKILL_RELEVANCE_EMBEDDING_THRESHOLD = SETTINGS.skill_relevance_embedding_threshold
 RAG_CONTEXT_RESULTS = SETTINGS.rag_context_results
+RAG_DOCUMENTS_ONLY = SETTINGS.rag_documents_only
+RAG_RELEVANCE_THRESHOLD = SETTINGS.rag_relevance_threshold
+RAG_INCLUDE_CODING_GUIDANCE = SETTINGS.rag_include_coding_guidance
 SUMMARY_PROMPT_SENTENCES = SETTINGS.summary_prompt_sentences
 CONTEXT_COMPACTION_THRESHOLD = SETTINGS.context_compaction_threshold
 CONTEXT_KEEP_RECENT_MESSAGES = SETTINGS.context_keep_recent_messages

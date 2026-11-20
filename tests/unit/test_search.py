@@ -107,7 +107,7 @@ def test_searxng_search_caps_results_and_ignores_malformed_entries():
                 "content": "",
                 "url": f"https://{index}.example",
             }
-            for index in range(6)
+            for index in range(10)
         ]
         + ["not a mapping"]
     }

@@ -47,7 +47,23 @@ console = Console()
 SQLITE_EXTENSIONS = frozenset({".db", ".sqlite", ".sqlite3", ".db3"})
 SUPPORTED_EXTENSIONS = (
     frozenset(
-        {".pdf", ".txt", ".md", ".py", ".json", ".csv", ".rs", ".js", ".ts", ".html"}
+        {
+            ".pdf",
+            ".txt",
+            ".md",
+            ".py",
+            ".json",
+            ".csv",
+            ".rs",
+            ".js",
+            ".ts",
+            ".html",
+            ".htm",
+            ".docx",
+            ".xlsx",
+            ".pptx",
+            ".epub",
+        }
     )
     | SQLITE_EXTENSIONS
 )
@@ -307,14 +323,23 @@ def initialize_knowledge_base(
     confirm_rebuild: Callable[[str], bool] | None = None,
 ):
     """Initializes the Chroma vector store exclusively when an explicit, valid knowledge base folder path is provided."""
-    if not docs_path or not str(docs_path).strip():
+    if not docs_path:
         return None
-
-    path = pathlib.Path(docs_path).expanduser().resolve()
-    if not path.is_dir():
-        console.print(
-            f"[yellow][Warning] Provided KB path '{path}' is not a valid directory. Skipping knowledge base initialization.[/yellow]"
-        )
+    if isinstance(docs_path, str):
+        raw_paths = [part.strip() for part in docs_path.replace(";", ",").split(",") if part.strip()]
+    else:
+        raw_paths = [str(part).strip() for part in docs_path if str(part).strip()]
+    valid_paths = []
+    for raw in raw_paths:
+        candidate = pathlib.Path(raw).expanduser().resolve()
+        if candidate.is_dir():
+            valid_paths.append(candidate)
+        else:
+            console.print(
+                f"[yellow][Warning] Provided KB path '{candidate}' is not a "
+                f"valid directory. Skipping it.[/yellow]"
+            )
+    if not valid_paths:
         return None
 
     chroma_persist_dir = os.path.abspath(index_path or RAG_INDEX_PATH)
@@ -371,7 +396,13 @@ def initialize_knowledge_base(
 
     chunking = load_chunking_settings()
 
-    for file_path, stat in _iter_source_files(path):
+    _source_items = []
+    for _collection_path in valid_paths:
+        _collection_name = _collection_path.name or "default"
+        for _file_path, _stat in _iter_source_files(_collection_path):
+            _source_items.append((_file_path, _stat, _collection_name))
+
+    for file_path, stat, collection_name in _source_items:
         ext = file_path.suffix.lower()
         try:
             file_key = str(file_path)
@@ -419,6 +450,46 @@ def initialize_knowledge_base(
                     continue
             elif ext in SQLITE_EXTENSIONS:
                 pages = _read_sqlite_pages(file_path)
+            elif ext in {".html", ".htm"}:
+                try:
+                    from bs4 import BeautifulSoup
+
+                    soup = BeautifulSoup(
+                        file_path.read_text(encoding="utf-8", errors="ignore"),
+                        "html.parser",
+                    )
+                    for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                        element.decompose()
+                    pages = [(soup.get_text(separator="\n", strip=True), None)]
+                except ImportError:
+                    pages = [
+                        (file_path.read_text(encoding="utf-8", errors="ignore"), None)
+                    ]
+            elif ext in {".docx", ".xlsx", ".pptx", ".epub"}:
+                try:
+                    import html as _html
+                    import re as _re
+                    import zipfile
+
+                    texts = []
+                    with zipfile.ZipFile(file_path) as archive:
+                        for member in archive.namelist():
+                            if member.endswith(
+                                (".xml", ".html", ".xhtml", ".htm", ".txt")
+                            ):
+                                try:
+                                    data = archive.read(member).decode(
+                                        "utf-8", errors="ignore"
+                                    )
+                                except (OSError, KeyError, RuntimeError):
+                                    continue
+                                text = _re.sub(r"<[^>]+>", " ", data)
+                                text = _html.unescape(text)
+                                if text.strip():
+                                    texts.append(text)
+                    pages = [("\n".join(texts), None)] if texts else []
+                except (OSError, RuntimeError, ValueError, zipfile.BadZipFile):
+                    pages = []
             else:
                 pages = [(file_path.read_text(encoding="utf-8", errors="ignore"), None)]
 
@@ -428,7 +499,11 @@ def initialize_knowledge_base(
                 for chunk_text in _split_into_chunks(
                     content, chunking, ext, getattr(embeddings, "embed_documents", None)
                 ):
-                    metadata = {"source": file_key, "chunk": chunk_number}
+                    metadata = {
+                        "source": file_key,
+                        "chunk": chunk_number,
+                        "collection": collection_name,
+                    }
                     if page_number is not None:
                         metadata["page"] = page_number
                     chunk_id = hashlib.sha256(
