@@ -9,14 +9,13 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from rich.console import Console
+
+from private_agent.console import console
 
 from ..config import (
     CODE_TASK_GIT_TIMEOUT,
 )
 from .workspace import CodeTaskWorkspace as CodeTaskWorkspace
-
-console = Console()
 
 _CODE_TASK_PATTERNS = (
     re.compile(

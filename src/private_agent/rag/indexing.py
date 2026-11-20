@@ -14,7 +14,8 @@ from urllib.parse import quote
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
-from rich.console import Console
+
+from private_agent.console import console
 
 from ..config import (
     CHUNKING_MIN_CHUNK_CHARS,
@@ -40,9 +41,6 @@ from ..hardware import ollama_acceleration_options
 from ..tools import ollama_langchain_client_kwargs, track_ollama_http_clients
 from .chunking import ChunkingSettings, split_text
 from .retrieval import HybridRAGRetriever
-
-console = Console()
-
 
 SQLITE_EXTENSIONS = frozenset({".db", ".sqlite", ".sqlite3", ".db3"})
 SUPPORTED_EXTENSIONS = (

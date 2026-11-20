@@ -13,7 +13,8 @@ from functools import wraps
 from typing import Any
 
 from langchain_core.tools import tool
-from rich.console import Console
+
+from private_agent.console import console as _shared_console
 
 from ..config import (
     DEFAULT_DB_PATH,
@@ -86,7 +87,7 @@ from .schemas import (
     CreateSkillInput,
 )
 
-console = Console()
+console = _shared_console
 _search_duckduckgo = search_duckduckgo
 _validate_explicit_service_url = validate_explicit_service_url
 
