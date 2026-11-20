@@ -71,6 +71,29 @@ _register(
     "How to write a plan.",
 )
 _register("MCP", set(), "Server descriptions.")
+_register(
+    "Media",
+    {
+        "capture_webcam_image",
+        "load_workspace_image",
+        "load_workspace_video",
+        "list_microphone_devices",
+        "record_microphone_audio",
+        "transcribe_workspace_audio",
+    },
+    "Media capture and transcription rules.",
+)
+_register(
+    "Memory",
+    {
+        "read_chat_history_from_sqlite",
+        "search_chat_history_in_sqlite",
+        "delete_chat_history_from_sqlite",
+        "delete_chat_history_entry_from_sqlite",
+        "create_skill",
+    },
+    "Memory and skill rules.",
+)
 
 
 _URL_RE = re.compile(r"https?://\S+")
@@ -86,7 +109,7 @@ def route_packs(
     forced: str | None = None,
 ) -> set[str]:
     """Return the set of pack names needed for a turn."""
-    packs: set[str] = {"Core", "Knowledge"}
+    packs: set[str] = {"Core", "Knowledge", "Media", "Memory", "MCP", "Helper"}
     text = (user_input or "").lower()
 
     if forced:
@@ -123,6 +146,8 @@ def route_packs(
         packs.add("Coding")
     if any(w in text for w in ("research", "search", "latest", "web")):
         packs.add("Research")
+    if "plan" in text:
+        packs.add("Planning")
 
     return packs
 
@@ -157,3 +182,25 @@ def enable_capability(name: str) -> str:
     if name not in PACKS:
         return f"Unknown capability: {name}"
     return f"Enabled capability: {name}"
+
+
+def _all_pack_tools() -> set[str]:
+    names: set[str] = set()
+    for pack in PACKS.values():
+        names |= pack.tools
+    names |= CORE_TOOLS
+    return names
+
+
+def filter_tools_list(tools_list, user_input="", **kw):
+    allowed = tools_for_packs(route_packs(user_input, **kw), None)
+    all_known = _all_pack_tools()
+    result = []
+    for t in tools_list:
+        name = getattr(t, "name", None)
+        if name is None or name in allowed:
+            result.append(t)
+        elif name not in all_known:
+            # Preserve tools not explicitly listed in any pack.
+            result.append(t)
+    return result
