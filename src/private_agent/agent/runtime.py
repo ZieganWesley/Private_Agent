@@ -101,6 +101,7 @@ from ..skills import (
     load_skills_from_folder,
     match_skill_by_relevancy,
 )
+from ..status_overlay import StatusOverlay
 from ..tools import (
     AVAILABLE_TOOLS,
     LOCAL_MEDIA_TOOL_NAMES,
@@ -216,7 +217,6 @@ from .status import (
     status_line,
     summarizing_message,
 )
-from .status_overlay import StatusOverlay
 from .streaming import (
     _invoke_with_status,
     _visible_chunk_text,
