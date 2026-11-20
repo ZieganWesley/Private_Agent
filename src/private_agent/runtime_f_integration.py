@@ -63,6 +63,7 @@ def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, 
 
 
 def finish_turn(state: dict[str, Any]) -> None:
+    state["pending"] = False
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):

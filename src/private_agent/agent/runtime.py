@@ -3601,17 +3601,11 @@ Runtime context:
                 async def _run_agent_turn(response) -> Any:
                     iteration = 0
                     tool_call_count = 0
-                    while (
-                        getattr(response, "tool_calls", None)
-                        or not f_integration.is_plan_complete(_f_state)  # noqa: B023
-                    ) and (
+                    while getattr(response, "tool_calls", None) and (
                         tool_iteration_limit is None or iteration < tool_iteration_limit  # noqa: B023
                     ):
                         iteration += 1
                         _iter_start = f_integration.record_iteration(_f_state, iteration)  # noqa: B023
-                        if not getattr(response, "tool_calls", None):
-                            f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok", True)  # noqa: B023
-                            break
                         if (
                             iteration == 1
                             and response.content
@@ -3683,10 +3677,7 @@ Runtime context:
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
-                        f_integration.finish_iteration(
-                            _f_state, iteration, _iter_start, "ok",  # noqa: B023
-                            not bool(getattr(response, "tool_calls", None)),
-                        )
+                        f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
                         if stop:
                             break
 
