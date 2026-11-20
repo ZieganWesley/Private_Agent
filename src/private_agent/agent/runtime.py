@@ -86,7 +86,7 @@ from ..hardware import (
 from ..hooks import (
     evaluate_pre_tool_hooks,
     load_hooks,
-    safe_run_post_tool_hooks,
+    run_post_tool_hooks,
     safe_run_session_start_hooks,
 )
 from ..rag import (
@@ -1154,14 +1154,29 @@ async def execute_tool_call(
         elapsed_seconds=round(time.monotonic() - tool_started, 3),
         output_character_count=len(result_text),
     )
-    safe_run_post_tool_hooks(
-        hooks=load_hooks(
-            merge_project_config(load_or_create_config(), SandboxManager.get_root())
-        ),
-        tool_name=name,
-        tool_args=args,
-        workspace_root=SandboxManager.get_root(),
-    )
+    try:
+        _post_hook_results = run_post_tool_hooks(
+            hooks=load_hooks(
+                merge_project_config(load_or_create_config(), SandboxManager.get_root())
+            ),
+            tool_name=name,
+            tool_args=args,
+            workspace_root=SandboxManager.get_root(),
+        )
+    except (OSError, ValueError, RuntimeError):
+        _post_hook_results = []
+    _hook_output = []
+    for _hook_result in _post_hook_results or []:
+        if getattr(_hook_result, "stdout", ""):
+            _hook_output.append(_hook_result.stdout.strip())
+        if getattr(_hook_result, "stderr", ""):
+            _hook_output.append(_hook_result.stderr.strip())
+        if getattr(_hook_result, "reason", ""):
+            _hook_output.append(_hook_result.reason)
+    if _hook_output:
+        result_text += "\n\n[Post-tool checks]\n" + "\n".join(
+            part for part in _hook_output if part
+        )
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
 async def _execute_task_tool_call(
