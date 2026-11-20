@@ -83,17 +83,32 @@ def select_coding_access_level(
     choices = tuple(CODING_ACCESS_LEVELS.items())
     for index, (_, description) in enumerate(choices, 1):
         console.print(f"  {index}. {description}")
-    selection = console.input(
-        "Choose workspace access [1-5] (default: 4, isolated): "
-    ).strip()
     try:
-        choice = int(selection) if selection else 4
-    except ValueError:
-        console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
-        choice = 4
-    if not 1 <= choice <= len(choices):
-        console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
-        choice = 4
+        from .interactive import arrow_select as _arrow_select
+
+        _chosen = _arrow_select(
+            "Coding workspace access:",
+            [(str(i), desc) for i, (_, desc) in enumerate(choices, 1)],
+            default="4",
+        )
+    except Exception:  # noqa: BLE001 - fall back to typed prompt
+        _chosen = None
+    if _chosen is not None and _chosen.isdigit():
+        choice = int(_chosen)
+        if not 1 <= choice <= len(choices):
+            choice = 4
+    else:
+        selection = console.input(
+            "Choose workspace access [1-5] (default: 4, isolated): "
+        ).strip()
+        try:
+            choice = int(selection) if selection else 4
+        except ValueError:
+            console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
+            choice = 4
+        if not 1 <= choice <= len(choices):
+            console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
+            choice = 4
     return choices[choice - 1][0]
 
 
