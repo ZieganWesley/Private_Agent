@@ -120,3 +120,32 @@ def test_prune_memory_retention_requires_a_skills_directory(tmp_path, monkeypatc
     assert result["skill_files_deleted"] == 0
     assert expired_skill.exists()
     assert any("no skills directory is configured" in line for line in printed)
+
+
+import asyncio
+
+
+def test_rag_followup_rewrite_combines_previous_query():
+    from private_agent.agent import memory_context
+
+    # Reset module-level state.
+    memory_context._LAST_RAG_QUERY = "implement a parser"
+
+    class VectorStore:
+        def __init__(self):
+            self.queries = []
+
+        def similarity_search(self, query, k):
+            self.queries.append((query, k))
+            return []
+
+    vectorstore = VectorStore()
+    asyncio.run(
+        memory_context._retrieve_rag_documents(
+            vectorstore,
+            "second one",
+            include_coding_guidance=False,
+            rewrite_query=True,
+        )
+    )
+    assert vectorstore.queries[0][0] == "implement a parser second one"
