@@ -2216,6 +2216,10 @@ async def _choose_provider(
         startup_summary.add_row("Ollama hardware", hardware_value)
     console.print(startup_summary)
     console.print(
+        "[dim]Version: dev "
+        f"\u00b7 Workspace: {SandboxManager.get_root()} \u00b7 Type /help for commands.[/dim]"
+    )
+    console.print(
         f"\n[bold green]--- {mode_label} Ready! Type 'exit' or 'switch' ---[/bold green]"
     )
     return ProviderSelection(
@@ -2398,6 +2402,9 @@ async def _run_agent_cli_session(
                         user_input = (prompt or "").strip() or "exit"
                         prompt = None
                     else:
+                        from rich.rule import Rule
+
+                        console.print(Rule(style="dim"))
                         user_input = (
                             await prompt_user_input(
                                 console,
@@ -2405,6 +2412,9 @@ async def _run_agent_cli_session(
                                 prompt_message="User: ",
                                 skills=loaded_skills,
                                 history=cli_input_history,
+                                bottom_toolbar=(
+                                    f"{selected_model} \u00b7 {permission_mode}"
+                                ),
                             )
                         ).strip()
                 except (KeyboardInterrupt, EOFError, asyncio.CancelledError):
