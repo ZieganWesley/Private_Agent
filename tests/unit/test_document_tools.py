@@ -38,7 +38,9 @@ def test_create_xlsx(tmp_path):
 def test_create_pdf(tmp_path):
     root = _root(tmp_path)
     out = root / "doc.pdf"
-    result = documents.create_pdf.invoke({"content": "Hello PDF", "save_path": str(out)})
+    result = documents.create_pdf.invoke(
+        {"content": "Hello PDF", "save_path": str(out)}
+    )
     assert "Created PDF" in result
     assert out.exists()
     assert out.read_bytes().startswith(b"%PDF-1.4")
@@ -52,7 +54,9 @@ def test_calculate_basic(tmp_path):
 
 def test_calculate_rejects_unsafe(tmp_path):
     _root(tmp_path)
-    result = calculator.calculate.invoke({"expression": "__import__('os').system('ls')"})
+    result = calculator.calculate.invoke(
+        {"expression": "__import__('os').system('ls')"}
+    )
     assert "Calculation error" in result
 
 

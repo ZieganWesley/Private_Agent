@@ -55,5 +55,11 @@ def calculate(expression: str) -> str:
         tree = ast.parse(expression, mode="eval")
         result = _eval(tree)
         return str(result)
-    except (SyntaxError, ValueError, TypeError, ZeroDivisionError, OverflowError) as exc:
+    except (
+        SyntaxError,
+        ValueError,
+        TypeError,
+        ZeroDivisionError,
+        OverflowError,
+    ) as exc:
         return f"Calculation error: {exc}"

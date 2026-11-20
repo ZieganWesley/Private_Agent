@@ -119,12 +119,12 @@ class HybridRAGRetriever:
                 scored = scored_method(query, k=k)
             except Exception:  # noqa: BLE001 - backend-specific failure
                 scored = None
-            if isinstance(scored, list) and scored and all(
-                isinstance(item, tuple) and len(item) == 2 for item in scored
+            if (
+                isinstance(scored, list)
+                and scored
+                and all(isinstance(item, tuple) and len(item) == 2 for item in scored)
             ):
-                vector_results = [
-                    doc for doc, score in scored if score >= threshold
-                ]
+                vector_results = [doc for doc, score in scored if score >= threshold]
                 if not vector_results:
                     return []
         if vector_results is None:

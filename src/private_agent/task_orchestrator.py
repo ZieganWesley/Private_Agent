@@ -21,7 +21,9 @@ class TaskPlan:
     revision: int = 0
 
     def add_step(self, description: str, packs: set[str] | None = None) -> TaskStep:
-        step = TaskStep(index=len(self.steps), description=description, packs=packs or set())
+        step = TaskStep(
+            index=len(self.steps), description=description, packs=packs or set()
+        )
         self.steps.append(step)
         return step
 

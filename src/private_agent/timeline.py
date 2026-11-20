@@ -69,7 +69,9 @@ class StepEstimate:
     confidence: float
 
 
-def estimate_step(conn: sqlite3.Connection, pack: str, fallback: float = 5.0) -> StepEstimate:
+def estimate_step(
+    conn: sqlite3.Connection, pack: str, fallback: float = 5.0
+) -> StepEstimate:
     med = median_for_pack(conn, pack)
     if med is not None:
         return StepEstimate(seconds=med, confidence=0.8)

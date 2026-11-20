@@ -1,6 +1,5 @@
 """Built-in document creation tools (Markdown/text to .docx, .xlsx and .pdf)."""
 
-import os
 import zipfile
 from xml.sax.saxutils import escape as xml_escape
 
@@ -27,12 +26,12 @@ def create_docx(content: str, save_path: str, title: str = "") -> str:
         if title:
             body += (
                 "<w:p><w:r><w:rPr><w:b/></w:rPr>"
-                f"<w:t xml:space=\"preserve\">{xml_escape(title)}</w:t></w:r></w:p>"
+                f'<w:t xml:space="preserve">{xml_escape(title)}</w:t></w:r></w:p>'
             )
         for paragraph in paragraphs:
             body += (
                 "<w:p><w:r>"
-                f"<w:t xml:space=\"preserve\">{xml_escape(paragraph)}</w:t>"
+                f'<w:t xml:space="preserve">{xml_escape(paragraph)}</w:t>'
                 "</w:r></w:p>"
             )
         document_xml = (
@@ -86,7 +85,7 @@ def create_xlsx(rows: list[list[str]] | None, save_path: str, title: str = "") -
             sheet_rows += f"<row>{cells}</row>"
         if title:
             sheet_rows = (
-                "<row><c t=\"inlineStr\"><is><t xml:space=\"preserve\">"
+                '<row><c t="inlineStr"><is><t xml:space="preserve">'
                 f"{xml_escape(title)}</t></is></c></row>" + sheet_rows
             )
         sheet_xml = (
@@ -157,9 +156,7 @@ def create_pdf(content: str, save_path: str, title: str = "") -> str:
         text_ops = []
         y = 760
         for line in lines:
-            text_ops.append(
-                f"BT /F1 11 Tf 72 {y} Td ({_escape_pdf_text(line)}) Tj ET"
-            )
+            text_ops.append(f"BT /F1 11 Tf 72 {y} Td ({_escape_pdf_text(line)}) Tj ET")
             y -= 14
             if y < 72:
                 break
@@ -172,7 +169,9 @@ def create_pdf(content: str, save_path: str, title: str = "") -> str:
             b"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n"
         )
         objects.append(
-            b"4 0 obj\n<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream\nendobj\n"
+            b"4 0 obj\n<< /Length %d >>\nstream\n" % len(stream)
+            + stream
+            + b"\nendstream\nendobj\n"
         )
         objects.append(
             b"5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n"

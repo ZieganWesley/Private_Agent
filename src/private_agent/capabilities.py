@@ -10,7 +10,7 @@ BASELINE_PACKS = {"Core", "Knowledge", "Media", "Memory", "MCP", "Helper"}
 
 CORE_TOOLS = frozenset(
     {
-        "get_current_datetime",
+        "get_local_datetime",
         "read_local_file",
         "search_workspace_text",
         "list_directory",
@@ -53,9 +53,8 @@ _register(
     {
         "apply_workspace_patch",
         "edit_local_file",
-        "write_local_file",
-        "rename_path",
-        "delete_path",
+        "rename_workspace_file",
+        "delete_workspace_file",
         "run_shell_command",
         "run_project_unit_tests",
         "inspect_workspace_git",
@@ -152,24 +151,27 @@ def route_packs(
     return packs
 
 
-def tools_for_packs(packs: Iterable[str], available: set[str] | None = None) -> set[str]:
+def tools_for_packs(packs: Iterable[str]) -> set[str]:
     """Return the set of tool names allowed by the given packs."""
-    names: set[str] = set()
+    names: set[str] = set(CORE_TOOLS)
     for pack_name in packs:
         pack = PACKS.get(pack_name)
         if pack:
             names |= pack.tools
-    names |= CORE_TOOLS
-    if available is not None:
-        names &= available
     return names
 
 
 def enable_capability(name: str) -> str:
-    """Placeholder: report a capability pack name. Does not yet change routing."""
+    """Enable a capability pack for the current turn."""
     if name not in PACKS:
-        return f"Unknown capability: {name} (placeholder)"
-    return f"Enabled capability: {name} (placeholder)"
+        return f"Unknown capability: {name}"
+    try:
+        from .tools import get_tool_context
+
+        get_tool_context().enabled_packs.add(name)
+    except Exception:  # noqa: BLE001 - context may be unavailable in tests
+        pass
+    return f"Enabled capability: {name}"
 
 
 def _all_pack_tools() -> set[str]:
@@ -180,15 +182,37 @@ def _all_pack_tools() -> set[str]:
     return names
 
 
-def filter_tools_list(tools_list, user_input="", **kw):
-    allowed = tools_for_packs(route_packs(user_input, **kw), None)
+def unknown_pack_tools(registered: Iterable[str]) -> dict[str, list[str]]:
+    """Return pack name -> sorted tool names the registry does not provide.
+
+    ``filter_tools_list`` preserves any tool that no pack mentions, so a pack
+    naming a tool that is not registered silently leaves the real tool always
+    available instead of gated. Callers pass the live registry so a rename on
+    either side is caught instead of being maintained by hand.
+    """
+    available = set(registered)
+    return {
+        name: sorted(pack.tools - available)
+        for name, pack in PACKS.items()
+        if pack.tools - available
+    }
+
+
+def filter_tools_list(tools_list, user_input=""):
+    """Filter ``tools_list`` to the packs needed for ``user_input`` plus any
+    packs enabled for the current turn."""
+    try:
+        from .tools import get_tool_context
+
+        enabled = set(getattr(get_tool_context(), "enabled_packs", ()) or ())
+    except Exception:  # noqa: BLE001 - context may be unavailable in tests
+        enabled = set()
+    allowed = tools_for_packs(route_packs(user_input))
+    allowed |= tools_for_packs(enabled)
     all_known = _all_pack_tools()
     result = []
     for t in tools_list:
         name = getattr(t, "name", None)
-        if name is None or name in allowed:
-            result.append(t)
-        elif name not in all_known:
-            # Preserve tools not explicitly listed in any pack.
+        if name is None or name in allowed or name not in all_known:
             result.append(t)
     return result

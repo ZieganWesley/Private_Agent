@@ -326,7 +326,11 @@ def initialize_knowledge_base(
     if not docs_path:
         return None
     if isinstance(docs_path, str):
-        raw_paths = [part.strip() for part in docs_path.replace(";", ",").split(",") if part.strip()]
+        raw_paths = [
+            part.strip()
+            for part in docs_path.replace(";", ",").split(",")
+            if part.strip()
+        ]
     else:
         raw_paths = [str(part).strip() for part in docs_path if str(part).strip()]
     valid_paths = []
@@ -458,7 +462,9 @@ def initialize_knowledge_base(
                         file_path.read_text(encoding="utf-8", errors="ignore"),
                         "html.parser",
                     )
-                    for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                    for element in soup(
+                        ["script", "style", "nav", "footer", "header", "aside"]
+                    ):
                         element.decompose()
                     pages = [(soup.get_text(separator="\n", strip=True), None)]
                 except ImportError:

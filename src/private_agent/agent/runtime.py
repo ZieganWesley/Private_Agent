@@ -52,7 +52,6 @@ from ..config import (
     MAX_CONTEXT_TOKENS,
     MAX_HISTORY_MESSAGES,
     MAX_OUTPUT_TOKENS,
-    MAX_SUMMARY_CHARS,
     MAX_TASK_SECONDS,
     MAX_TOOL_CALLS,
     MAX_TOOL_ITERATIONS,
@@ -71,7 +70,6 @@ from ..config import (
     RAG_INDEX_PATH,
     REGISTERED_SKILL_RETENTION_DAYS,
     SKILLS_FOLDER_DEFAULT,
-    SUMMARY_PROMPT_SENTENCES,
     SYSTEM_PROMPT,
     TASK_STALE_AFTER_DAYS,
     THINKING_EFFORT_DEFAULT,
@@ -200,9 +198,6 @@ from .prompts import (
 from .prompts import (
     current_datetime_context as _current_datetime_context,
 )
-from .prompts import (
-    token_count as _token_count,
-)
 from .providers import (
     has_saved_online_config as _has_saved_online_config,
 )
@@ -212,14 +207,14 @@ from .providers import (
 from .session_resume import resolve_session_id, take_over_session_task_lease
 from .session_state import SESSION_INFO as _SESSION_INFO
 from .session_state import SESSION_STATS as _SESSION_STATS
-from .session_stats import build_stats_table, format_duration
-from .session_types import ProviderPreference, ProviderSelection, SessionSetup
-from .status import (
-    SUMMARIZING,
-    StatusIndicator,
-    status_line,
-    summarizing_message,
+from .session_summary import (
+    _acknowledge_interrupt,
+    _history_with_summary,
+    _print_context_state,
+    _print_session_statistics,
+    _summarize_and_save_session,
 )
+from .session_types import ProviderPreference, ProviderSelection, SessionSetup
 from .streaming import (
     _invoke_with_status,
     _visible_chunk_text,
@@ -257,6 +252,8 @@ OS_ISOLATED_TOOL_NAMES = frozenset(
         "finalize_code_task",
     }
 )
+
+
 def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | None:
     """Explain why a location-revealing call must not run, or None if allowed."""
     if local_session:
@@ -271,9 +268,13 @@ def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | 
             "provider; ask the user for a place name and pass it as 'location'."
         )
     return None
+
+
 def _device_tools_allowed(provider_type: str) -> bool:
     """Local-only (location/media) tools: Local provider, or the explicit override."""
     return provider_type == "local" or ONLINE_PERMISSION_OVERRIDE
+
+
 def _tool_unavailable_reason(
     name: str,
     *,
@@ -305,6 +306,8 @@ def _tool_unavailable_reason(
         ):
             return "The selected local model does not declare vision support."
     return None
+
+
 def _tools_for_model(
     *,
     provider_type: str,
@@ -323,6 +326,8 @@ def _tools_for_model(
         is None
         or name in OVERRIDE_TOOL_LIST
     ]
+
+
 def _print_tool_catalog(
     entries,
     *,
@@ -383,6 +388,8 @@ def _print_tool_catalog(
             style=("red strike" if overridden else "strike") if unavailable else None,
         )
     console.print(table)
+
+
 async def authorize_network_research(
     tool_name: str,
     tool_args: dict[str, Any],
@@ -401,9 +408,13 @@ async def authorize_network_research(
         is_interactive=lambda: get_tool_context().interactive and sys.stdin.isatty(),
         session_consent_state=session_consent_state,
     )
+
+
 def _bind_tools(llm, tools_list):
     """Bind the active tool set to an LLM (B1 step 1 helper)."""
     return llm.bind_tools(tools_list)
+
+
 async def _invoke_initial_model_with_fallback(
     *,
     llm,
@@ -491,6 +502,8 @@ async def _invoke_initial_model_with_fallback(
             thinking_enabled=thinking_enabled,
         )
         return llm, llm_with_tools, selected_model, capabilities, response
+
+
 @dataclass
 class _PreflightState:
     tool_tasks: list
@@ -500,6 +513,9 @@ class _PreflightState:
     authorized_planning_searches: dict
     task_action_seen: bool
     tool_call_count: int
+    capability_approved: bool = False
+
+
 async def _preflight_tool_calls(
     *,
     response,
@@ -682,6 +698,10 @@ async def _preflight_tool_calls(
                 )
             )
             continue
+        if call_name == "enable_capability" and not f_integration.gate_capability(
+            tool_call, turn_permission_mode, console, state
+        ):
+            continue
         if call_name in NETWORK_TOOL_NAMES:
             tool_args = tool_call.get("args", {})
             planning_search = planning_only and call_name == "web_search"
@@ -757,6 +777,8 @@ async def _preflight_tool_calls(
                     **execution_options,
                 )
             )
+
+
 async def _execute_tool_batch(
     *,
     response,
@@ -910,12 +932,16 @@ async def _execute_tool_batch(
         )
         return response, True
     return response, False
+
+
 def _select_permission_mode(interactive: bool = True) -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
         console,
         lambda: interactive,
     )
+
+
 async def execute_tool_call(
     tool_call: dict,
     *,
@@ -943,7 +969,14 @@ async def execute_tool_call(
         f"[yellow][Tool Execution][/yellow] Calling '{name}' "
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
-    get_event_bus().emit(ToolStarted(call_id=str(call_id or ""), tool_name=str(name or ""), args_summary=str(safe_args), started_at=tool_started))
+    get_event_bus().emit(
+        ToolStarted(
+            call_id=str(call_id or ""),
+            tool_name=str(name or ""),
+            args_summary=str(safe_args),
+            started_at=tool_started,
+        )
+    )
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
         name, args, SandboxManager.get_root()
     )[0]
@@ -1145,11 +1178,22 @@ async def execute_tool_call(
         elapsed_seconds=round(time.monotonic() - tool_started, 3),
         output_character_count=len(result_text),
     )
-    _hook_output = collect_post_tool_hook_output(tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root())
+    _hook_output = collect_post_tool_hook_output(
+        tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root()
+    )
     if _hook_output:
         result_text += "\n\n[Post-tool checks]\n" + _hook_output
-    get_event_bus().emit(ToolFinished(call_id=str(call_id or ""), status="ok", duration=time.monotonic() - tool_started, output_size=len(result_text)))
+    get_event_bus().emit(
+        ToolFinished(
+            call_id=str(call_id or ""),
+            status="ok",
+            duration=time.monotonic() - tool_started,
+            output_size=len(result_text),
+        )
+    )
     return ToolMessage(content=result_text, tool_call_id=call_id)
+
+
 async def _execute_task_tool_call(
     memory: PersistentMemory,
     task_id: str,
@@ -1232,6 +1276,7 @@ async def _execute_task_tool_call(
         )
     return result
 
+
 async def _prepare_session(
     *,
     verbose_startup: bool = False,
@@ -1266,6 +1311,7 @@ async def _prepare_session(
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         await _discard_session_startup()
         raise
+
 
 async def _build_session_setup(
     *,
@@ -1581,7 +1627,6 @@ async def _build_session_setup(
         load_skills_from_folder(skills_folder_input) if skills_folder_input else {}
     )
     _tool_context = get_tool_context()
-    _tool_context.vectorstore = vectorstore
     _tool_context.skill_directory = (
         os.path.abspath(os.path.expanduser(skills_folder_input))
         if skills_folder_input
@@ -1715,6 +1760,7 @@ async def _build_session_setup(
         permission_mode=permission_mode,
     )
 
+
 async def _discard_session_startup() -> None:
     """Release whatever a failed startup already opened."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
@@ -1725,6 +1771,7 @@ async def _discard_session_startup() -> None:
     memory, _ACTIVE_MEMORY = _ACTIVE_MEMORY, None
     if memory is not None:
         memory.close()
+
 
 async def _choose_provider(
     *,
@@ -2177,6 +2224,7 @@ async def _choose_provider(
         available_models=available_models,
     )
 
+
 async def _run_agent_cli_session(
     *,
     verbose_startup: bool = False,
@@ -2372,11 +2420,20 @@ async def _run_agent_cli_session(
                     )
                 if user_input and not user_input.startswith("/"):
                     last_user_request = user_input
-                _handled, _cont, user_input, chat_history, context_summary, last_user_request = (
-                    handle_session_command(
-                        user_input, chat_history, context_summary,
-                        last_user_request, SandboxManager.get_root(), console,
-                    )
+                (
+                    _handled,
+                    _cont,
+                    user_input,
+                    chat_history,
+                    context_summary,
+                    last_user_request,
+                ) = handle_session_command(
+                    user_input,
+                    chat_history,
+                    context_summary,
+                    last_user_request,
+                    SandboxManager.get_root(),
+                    console,
                 )
                 if _handled and _cont:
                     continue
@@ -2514,7 +2571,7 @@ async def _run_agent_cli_session(
                         vectorstore=vectorstore,
                         on_data_reset=clear_context_after_data_reset,
                     )
-                    get_tool_context().vectorstore = vectorstore
+
                     continue
                 if user_input.lower() == "/plan" or user_input.lower() == "/plan on":
                     planning_mode_persistent = True
@@ -2895,7 +2952,9 @@ async def _run_agent_cli_session(
                 elif (
                     active_code_workspace is None and capabilities["tools"] is not False
                 ):
-                    tools_list = capability_packs.filter_tools_list(base_tools_list, user_input)
+                    tools_list = capability_packs.filter_tools_list(
+                        base_tools_list, user_input
+                    )
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; continue without tools
@@ -3387,6 +3446,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         and active_task["approved_revision"] == active_task["revision"]
                         and active_task["approved_digest"] == active_task["digest"]
                     ):
+
                         def _plan_field(step: dict, name: str) -> str:
                             value = step.get(name)
                             if isinstance(value, (list, tuple)):
@@ -3414,7 +3474,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                             else ""
                                         ),
                                         (
-                                            "validation=" + _plan_field(step, "validation")
+                                            "validation="
+                                            + _plan_field(step, "validation")
                                             if step.get("validation")
                                             else ""
                                         ),
@@ -3429,7 +3490,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                             else ""
                                         ),
                                         (
-                                            "edge_cases=" + _plan_field(step, "edge_cases")
+                                            "edge_cases="
+                                            + _plan_field(step, "edge_cases")
                                             if step.get("edge_cases")
                                             else ""
                                         ),
@@ -3544,7 +3606,9 @@ Runtime context:
                     user_input,
                     budget=prompt_budget,
                 )
-                enriched_input = f_integration.trim_context(enriched_input, prompt_budget)
+                enriched_input = f_integration.trim_context(
+                    enriched_input, prompt_budget
+                )
                 prompt_history = trim_history_to_context_budget(
                     chat_history,
                     enriched_input,
@@ -3567,45 +3631,52 @@ Runtime context:
                 )
 
                 turn_id = uuid.uuid4().hex
-                _f_state = f_integration.begin_turn(turn_id, user_input, effective_context, non_interactive)
+                _f_state = f_integration.begin_turn(
+                    turn_id, user_input, effective_context, non_interactive
+                )
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
 
                 start_time = time.monotonic()
                 deadline = start_time + MAX_TASK_SECONDS
-                (
-                    llm,
-                    llm_with_tools,
-                    selected_model,
-                    capabilities,
-                    response,
-                ) = await _invoke_initial_model_with_fallback(
-                    llm=llm,
-                    llm_with_tools=llm_with_tools,
-                    tools_list=tools_list,
-                    messages=messages,
-                    deadline=deadline,
-                    selected_model=selected_model,
-                    provider_type=provider_type,
-                    selected_local_runtime=selected_local_runtime,
-                    available_models=available_models,
-                    capabilities=capabilities,
-                    thinking_enabled=thinking_enabled,
-                    thinking_effort=thinking_effort,
-                    status_message=status_message,
-                    usage=usage,
-                    console=console,
-                )
+                with f_integration.guard_turn_start(_f_state):
+                    (
+                        llm,
+                        llm_with_tools,
+                        selected_model,
+                        capabilities,
+                        response,
+                    ) = await _invoke_initial_model_with_fallback(
+                        llm=llm,
+                        llm_with_tools=llm_with_tools,
+                        tools_list=tools_list,
+                        messages=messages,
+                        deadline=deadline,
+                        selected_model=selected_model,
+                        provider_type=provider_type,
+                        selected_local_runtime=selected_local_runtime,
+                        available_models=available_models,
+                        capabilities=capabilities,
+                        thinking_enabled=thinking_enabled,
+                        thinking_effort=thinking_effort,
+                        status_message=status_message,
+                        usage=usage,
+                        console=console,
+                    )
 
                 async def _run_agent_turn(response) -> Any:
+                    nonlocal tools_list, llm_with_tools
                     iteration = 0
                     tool_call_count = 0
                     while getattr(response, "tool_calls", None) and (
                         tool_iteration_limit is None or iteration < tool_iteration_limit  # noqa: B023
                     ):
                         iteration += 1
-                        _iter_start = f_integration.record_iteration(_f_state, iteration)  # noqa: B023
+                        _iter_start = f_integration.record_iteration(
+                            _f_state,  # noqa: B023
+                            iteration,
+                        )
                         if (
                             iteration == 1
                             and response.content
@@ -3662,7 +3733,6 @@ Runtime context:
                             state.authorized_planning_searches
                         )
                         tool_call_count = state.tool_call_count
-
                         response, stop = await _execute_tool_batch(
                             response=response,
                             session_id=session_id,
@@ -3677,7 +3747,18 @@ Runtime context:
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
-                        f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
+                        f_integration.finish_iteration(
+                            _f_state,  # noqa: B023
+                            iteration,
+                            _iter_start,
+                            "ok",
+                        )
+                        if getattr(state, "capability_approved", False):
+                            tools_list, llm_with_tools = f_integration.rebuild_tools(
+                                base_tools_list,  # noqa: B023
+                                user_input,  # noqa: B023
+                                llm,  # noqa: B023
+                            )
                         if stop:
                             break
 
@@ -3695,7 +3776,9 @@ Runtime context:
                         usage = (messages_tokens(messages), context_stats["max"])  # noqa: B023
                         _plan_summary = f_integration.get_plan_summary(_f_state)  # noqa: B023
                         if _plan_summary:
-                            messages.append(SystemMessage(content=f"[Task plan]\n{_plan_summary}"))  # noqa: B023
+                            messages.append(  # noqa: B023
+                                SystemMessage(content=f"[Task plan]\n{_plan_summary}")
+                            )
                         try:
                             response = await _invoke_with_status(
                                 llm_with_tools,  # noqa: B023
@@ -3896,191 +3979,6 @@ Runtime context:
             continue
         break
 
-def _print_context_state(
-    stats: dict,
-    output_tokens: int,
-    model_name: str | None = None,
-    permission_mode: str = "auto",
-) -> tuple[int, int]:
-    """Print the consolidated status line and return ``(used, maximum)``."""
-    values = stats if isinstance(stats, dict) else {}
-    context_tokens = values.get("tokens", 0)
-    context_maximum = values.get("max", 0)
-    try:
-        from ..tools.shell import background_process_indicator
-
-        process_status = background_process_indicator()
-    except (ImportError, OSError, RuntimeError, ValueError):  # pragma: no cover
-        process_status = ""
-    status_text = status_line(
-        model_name, context_tokens, context_maximum, permission_mode, output_tokens
-    )
-    if process_status:
-        status_text = f"{status_text} | {process_status}"
-    console.print(f"[dim]{status_text}[/dim]")
-    used = context_tokens
-    try:
-        used = int(context_tokens)
-    except (TypeError, ValueError):
-        used = 0
-    maximum = context_maximum
-    try:
-        maximum = int(context_maximum)
-    except (TypeError, ValueError):
-        maximum = 0
-    return used, maximum
-
-def _history_with_summary(summary: str, history: list) -> list:
-    if not summary:
-        return history
-    return [AIMessage(content=f"[Earlier in this session] {summary}")] + history
-
-async def _summarize_and_save_session(
-    console_obj,
-    memory: PersistentMemory,
-    llm,
-    session_id: str,
-    chat_history: list,
-    provider_type: str,
-    reason: str = "before exit",
-    model_name: str = "model",
-) -> bool:
-    """Summarize the session into SQLite with concise stage output.
-
-    A further Ctrl+C while this runs skips the summary instead of exiting
-    with a traceback.
-    """
-    if not chat_history:
-        console_obj.print(
-            "[cyan][Memory][/cyan] No chat history was available "
-            "to summarize; slash commands such as /maintenance "
-            "are not stored as episodic memories."
-        )
-        return False
-    console_obj.print(
-        f"\n[cyan][Info] Summarizing session {reason} "
-        "(press Ctrl+C again to skip)...[/cyan]"
-    )
-    summary_started = time.monotonic()
-    try:
-        console_obj.print("[cyan][Summary 1/3][/cyan] Preparing session context...")
-        summary_schema = memory.get_table_schema("chat_history")
-        summary_limit = MAX_SUMMARY_CHARS
-        summary_prompt = (
-            "Summarize the key technical takeaways, code solutions, "
-            "and user preferences from this session. Do not include "
-            "secrets, credentials, unnecessary private details, or "
-            "raw tool output. The destination is SQLite table "
-            "chat_history, column content for role=summary. Use the "
-            "provided table schema and application content budget; "
-            f"the summary must be at most {summary_limit} characters. "
-            f"Prefer approximately {SUMMARY_PROMPT_SENTENCES} "
-            "sentences when that fits. Preserve key meaning rather "
-            "than truncating text."
-        )
-        summary_messages = (
-            [
-                SystemMessage(
-                    content=(
-                        "Prepare one meaning-preserving episodic "
-                        "summary value that fits the SQLite destination. "
-                        "Schema metadata and limits:\n"
-                        + json.dumps(
-                            {
-                                "schema": summary_schema,
-                                "application_limit_characters": summary_limit,
-                            },
-                            ensure_ascii=False,
-                        )
-                    )
-                )
-            ]
-            + chat_history
-            + [HumanMessage(content=summary_prompt)]
-        )
-        console_obj.print(
-            "[cyan][Summary 2/3][/cyan] Model is summarizing the session..."
-        )
-        with StatusIndicator(
-            summarizing_message(model_name, "the session"),
-            phase=SUMMARIZING,
-            console=console_obj,
-        ):
-            call_started = time.monotonic()
-            summary_res = await llm.ainvoke(summary_messages)
-            _SESSION_STATS.record_model_call(
-                summary_messages, summary_res, time.monotonic() - call_started
-            )
-            summary_text = str(summary_res.content).strip()
-            if len(summary_text) > summary_limit:
-                shorten_messages = [
-                    SystemMessage(
-                        content=(
-                            "Semantically summarize the provided "
-                            "candidate for the exact SQLite schema "
-                            "budget below. Do not slice or merely "
-                            "remove its ending. Return only the "
-                            "revised summary value.\n"
-                            + json.dumps(
-                                {
-                                    "schema": summary_schema,
-                                    "maximum_characters": summary_limit,
-                                },
-                                ensure_ascii=False,
-                            )
-                        )
-                    ),
-                    HumanMessage(content=summary_text),
-                ]
-                call_started = time.monotonic()
-                summary_res = await llm.ainvoke(shorten_messages)
-                _SESSION_STATS.record_model_call(
-                    shorten_messages,
-                    summary_res,
-                    time.monotonic() - call_started,
-                )
-                summary_text = str(summary_res.content).strip()
-        console_obj.print("[cyan][Summary 3/3][/cyan] Saving summary to SQLite...")
-        memory.save_summary(session_id, summary_text)
-        elapsed = time.monotonic() - summary_started
-        _SESSION_STATS.summary_seconds += elapsed
-        _SESSION_STATS.summary_tokens += _token_count(summary_text)
-        _SESSION_STATS.summary_saved = True
-        console_obj.print(
-            f"[green][Summary][/green] Saved to SQLite memory "
-            f"({len(summary_text)} chars, ~{_token_count(summary_text)} tokens, "
-            f"{format_duration(elapsed)})."
-        )
-        return True
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        console_obj.print("[yellow][Summary] Skipped; no summary was saved.[/yellow]")
-    except Exception as exc:  # noqa: BLE001 - summary mixes model/transport/SQLite failures
-        log_event(
-            RUN_LOGGER,
-            "session.summary_failed",
-            level=logging.ERROR,
-            session_id=session_id,
-            provider=provider_type,
-            error_type=type(exc).__name__,
-            exc_info=True,
-        )
-        error_detail = type(exc).__name__ if provider_type == "online" else str(exc)
-        console_obj.print(
-            f"[yellow][Memory warning] Could not summarize session: "
-            f"{error_detail}[/yellow]"
-        )
-    _SESSION_STATS.summary_seconds += time.monotonic() - summary_started
-    return False
-
-def _print_session_statistics() -> None:
-    console.print(build_stats_table(_SESSION_STATS, _SESSION_INFO))
-
-def _acknowledge_interrupt() -> None:
-    task = asyncio.current_task()
-    if task is not None:
-        while task.cancelling():
-            task.uncancel()
-    console.print("\n[yellow][Info] Ctrl+C received; ending session.[/yellow]")
 
 async def run_agent_cli_async(
     *,
@@ -4168,6 +4066,7 @@ async def run_agent_cli_async(
         await close_outbound_http_clients()
         close_mcp_sandbox_dirs()
         clear_captured_images()
+
 
 def run_agent_cli(
     *,

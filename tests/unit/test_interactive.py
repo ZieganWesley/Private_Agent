@@ -837,8 +837,6 @@ def test_startup_memory_budget_reports_omitted_episode_counts(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
-
     memory = PersistentMemory(str(tmp_path / "memory-budget.sqlite"))
     for index in range(9):
         memory.save_summary(
@@ -849,7 +847,7 @@ def test_startup_memory_budget_reports_omitted_episode_counts(
 
     context = memory_context._build_startup_memory_context(memory, None)
 
-    assert runtime._token_count(context) <= 180
+    assert memory_context._token_count(context) <= 180
     assert "[Memory context budget: omitted" in context
     assert "episode(s)" in context
     memory.close()
@@ -1509,6 +1507,8 @@ async def test_code_rag_retrieval_also_searches_and_deduplicates_local_guidance(
             return [manual_doc, duplicate_doc]
 
     vectorstore = VectorStore()
+    # The rewrite hint is process-global; isolate this test from earlier turns.
+    monkeypatch.setattr(memory_context, "_LAST_RAG_QUERY", "")
     results = await runtime._retrieve_rag_documents(
         vectorstore,
         "implement a parser",
