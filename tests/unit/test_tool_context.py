@@ -258,6 +258,56 @@ async def test_concurrent_turns_keep_separate_enabled_packs():
 
 
 @pytest.mark.asyncio
+async def test_concurrent_turns_do_not_clobber_durable_fields():
+    """Durable fields (task_id, ...) must not clobber between concurrent turns."""
+    import asyncio
+
+    from private_agent import runtime_f_integration as f
+    from private_agent.tools import get_tool_context
+
+    observed = {}
+
+    async def turn(name: str, task_id: str, peer: str):
+        state = f.begin_turn(name, "do thing", 100)
+        try:
+            ctx = get_tool_context()
+            ctx.task_session_id = f"sess-{name}"
+            ctx.task_id = task_id
+            ready = concurrent_events[name]
+            peer_ready = concurrent_events[peer]
+            ready.set()
+            await peer_ready.wait()
+            # Each turn must only see its own durable state mid-flight.
+            assert get_tool_context().task_id == task_id
+            assert get_tool_context().task_session_id == f"sess-{name}"
+            observed[name] = (
+                get_tool_context().task_id,
+                dict(get_tool_context().task_ids),
+            )
+            await asyncio.sleep(0)
+        finally:
+            f.finish_turn(state)
+
+    parent_before = get_tool_context()
+    parent_task_id_before = parent_before.task_id
+    parent_task_ids_before = dict(parent_before.task_ids)
+
+    concurrent_events = {"first": asyncio.Event(), "second": asyncio.Event()}
+    await asyncio.gather(
+        asyncio.create_task(turn("first", "task-A", "second")),
+        asyncio.create_task(turn("second", "task-B", "first")),
+    )
+
+    # Neither turn observed the other's task_id mid-flight.
+    assert observed["first"][0] == "task-A"
+    assert observed["second"][0] == "task-B"
+    # The calling (parent) context is not polluted/clobbered by either turn.
+    parent = get_tool_context()
+    assert parent.task_id == parent_task_id_before
+    assert parent.task_ids == parent_task_ids_before
+
+
+@pytest.mark.asyncio
 async def test_worker_thread_tool_execution_sees_the_turn_context():
     import asyncio
 

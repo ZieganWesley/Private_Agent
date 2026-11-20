@@ -1,3 +1,4 @@
+import asyncio
 import contextvars
 import os
 import socket
@@ -124,18 +125,31 @@ class ToolContext:
     interactive: bool = True
     subagent_runner: Any = None
     enabled_packs: set = field(default_factory=set)
+    task_key: Any = None
 
 
 _TOOL_CONTEXT_UNSET = object()
 
 
-def _new_base_tool_context() -> ToolContext:
-    """Create a fresh per-execution-context base ToolContext.
+def _current_task_key() -> Any:
+    """Return a key identifying the current execution context.
 
-    Each execution context (asyncio task, thread) materialises its own base
-    instance on first access, so concurrent turns no longer share a single
-    process-global mutable context. Turn-scoped copies are derived from it.
+    Asyncio tasks get a distinct key so concurrent turns do not share a
+    mutable base context; synchronous/thread contexts return ``None`` and keep
+    sharing the propagated context (so ``asyncio.to_thread`` tool execution
+    keeps seeing the same object).
     """
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:  # no running event loop
+        task = None
+    if task is not None:
+        return ("asyncio", id(task))
+    return None
+
+
+def _new_base_tool_context(task_key: Any = None) -> ToolContext:
+    """Create a fresh per-execution-context base ToolContext."""
     return ToolContext(
         db_path=os.path.abspath(DEFAULT_DB_PATH),
         skill_directory=(
@@ -145,6 +159,7 @@ def _new_base_tool_context() -> ToolContext:
         ),
         runtime_owner_id=uuid.uuid4().hex,
         schema_read_tables=set(),
+        task_key=task_key,
     )
 
 
@@ -164,8 +179,22 @@ def get_tool_context() -> ToolContext:
     do not mutate the same context object.
     """
     context = _TOOL_CONTEXT_VAR.get()
+    key = _current_task_key()
     if context is _TOOL_CONTEXT_UNSET:
-        context = _new_base_tool_context()
+        context = _new_base_tool_context(task_key=key)
+        _TOOL_CONTEXT_VAR.set(context)
+    elif key is not None and getattr(context, "task_key", None) != key:
+        # Inherited from a different asyncio task: clone so concurrent turns
+        # do not mutate a shared base context. Threads (key is None) keep the
+        # propagated object for asyncio.to_thread tool execution. Copy mutable
+        # containers so task state cannot leak through shared references.
+        context = replace(
+            context,
+            task_key=key,
+            task_ids=dict(context.task_ids or {}),
+            schema_read_tables=set(context.schema_read_tables or set()),
+            enabled_packs=set(context.enabled_packs or set()),
+        )
         _TOOL_CONTEXT_VAR.set(context)
     if (
         context.task_session_id is not None
@@ -235,7 +264,7 @@ def reset_turn_tool_context(token: Any) -> None:
     _TOOL_CONTEXT_VAR.reset(token)
     outer = _TOOL_CONTEXT_VAR.get()
     if outer is _TOOL_CONTEXT_UNSET:
-        outer = _new_base_tool_context()
+        outer = _new_base_tool_context(task_key=_current_task_key())
         _TOOL_CONTEXT_VAR.set(outer)
     if outer is turn:
         return
