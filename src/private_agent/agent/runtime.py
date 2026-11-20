@@ -25,7 +25,9 @@ from langchain_core.messages import (
 from prompt_toolkit.history import InMemoryHistory
 from rich.table import Table
 
+from .. import capabilities as capability_packs
 from .. import code_tasks as code_tasks_module
+from .. import json_output
 from ..code_tasks import (
     CodeTaskWorkspace,
     checkpoint_code_task,
@@ -79,7 +81,7 @@ from ..config import (
     merge_project_config,
 )
 from ..database import PersistentMemory
-from ..events import ToolFinished, ToolStarted, get_event_bus
+from ..events import Event, ToolFinished, ToolStarted, get_event_bus
 from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
@@ -2255,6 +2257,7 @@ async def _run_agent_cli_session(
         )
         if selection is None:
             if non_interactive:
+                get_event_bus().subscribe(Event, json_output.emit_event)
                 return
             continue
         provider_type = selection.provider_type
@@ -2902,7 +2905,7 @@ async def _run_agent_cli_session(
                 elif (
                     active_code_workspace is None and capabilities["tools"] is not False
                 ):
-                    tools_list = list(base_tools_list)
+                    tools_list = capability_packs.filter_tools_list(base_tools_list, user_input)
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; continue without tools
