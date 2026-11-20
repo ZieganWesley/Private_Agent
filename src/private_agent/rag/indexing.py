@@ -13,6 +13,7 @@ from urllib.parse import quote
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
+
 try:
     from langchain_ollama import OllamaEmbeddings
 except Exception:  # noqa: BLE001 - optional dependency
@@ -31,6 +32,7 @@ from ..config import (
     CHUNKING_STRATEGY,
     CHUNKING_UNIT,
     EMBEDDING_MODEL,
+    EMBEDDING_PROVIDER,
     HARDWARE_ACCELERATION_MODE,
     OLLAMA_BASE_URL,
     RAG_INDEX_PATH,
@@ -373,6 +375,12 @@ def initialize_knowledge_base(
             f"'{backup_path}' and will build a new index."
         )
         index_state = {}
+
+    if EMBEDDING_PROVIDER == "none":
+        console.print(
+            "[cyan][Info] Embedding provider disabled; RAG will use keyword search only.[/cyan]"
+        )
+        return None
 
     console.print(
         f"[cyan][Info] Initializing local embedding model '{EMBEDDING_MODEL}' via Ollama...[/cyan]"

@@ -172,6 +172,9 @@ def resolve_config_values(
         config, "models", "online_permission_override", False
     )
     EMBEDDING_MODEL = str(config.get("embedding_model", "nomic-embed-text"))
+    EMBEDDING_PROVIDER = configured_choice(
+        config, "rag", "embedding_provider", "ollama", ("ollama", "none")
+    )
     RAG_INDEX_PATH = configured_path(
         config_section(config, "paths").get("rag_index"),
         default_paths["rag_index"],
@@ -594,6 +597,7 @@ class Settings:
     model_temperature: float
     online_permission_override: bool
     embedding_model: str
+    embedding_provider: str
     rag_index_path: str
     ollama_base_url: str
     ollama_base_urls: list[str]

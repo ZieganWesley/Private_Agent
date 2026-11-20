@@ -536,6 +536,7 @@ RAG_DOCS_DEFAULT = SETTINGS.rag_docs_default
 MODEL_TEMPERATURE = SETTINGS.model_temperature
 ONLINE_PERMISSION_OVERRIDE = SETTINGS.online_permission_override
 EMBEDDING_MODEL = SETTINGS.embedding_model
+EMBEDDING_PROVIDER = SETTINGS.embedding_provider
 RAG_INDEX_PATH = SETTINGS.rag_index_path
 OLLAMA_BASE_URL = SETTINGS.ollama_base_url
 OLLAMA_BASE_URLS = SETTINGS.ollama_base_urls
