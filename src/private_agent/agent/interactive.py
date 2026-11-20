@@ -293,6 +293,7 @@ async def prompt_user_input(
     prompt_message: str = "User: ",
     skills: Mapping[str, Any] | None = None,
     history: History | None = None,
+    bottom_toolbar: str | None = None,
 ) -> str:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return console.input(prompt_message)
@@ -303,7 +304,12 @@ async def prompt_user_input(
         history=history,
         key_bindings=build_prompt_key_bindings(),
     )
-    return await session.prompt_async(ANSI("\x1b[1;34m" + prompt_message + "\x1b[0m"))
+    kwargs = {}
+    if bottom_toolbar:
+        kwargs["bottom_toolbar"] = bottom_toolbar
+    return await session.prompt_async(
+        ANSI("\x1b[1;34m" + prompt_message + "\x1b[0m"), **kwargs
+    )
 
 
 def include_file_context(

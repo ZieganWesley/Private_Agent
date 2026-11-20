@@ -250,6 +250,7 @@ OS_ISOLATED_TOOL_NAMES = frozenset(
     }
 )
 
+
 def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | None:
     """Explain why a location-revealing call must not run, or None if allowed."""
     if local_session:
@@ -265,9 +266,11 @@ def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | 
         )
     return None
 
+
 def _device_tools_allowed(provider_type: str) -> bool:
     """Local-only (location/media) tools: Local provider, or the explicit override."""
     return provider_type == "local" or ONLINE_PERMISSION_OVERRIDE
+
 
 def _tool_unavailable_reason(
     name: str,
@@ -301,6 +304,7 @@ def _tool_unavailable_reason(
             return "The selected local model does not declare vision support."
     return None
 
+
 def _tools_for_model(
     *,
     provider_type: str,
@@ -319,6 +323,7 @@ def _tools_for_model(
         is None
         or name in OVERRIDE_TOOL_LIST
     ]
+
 
 def _print_tool_catalog(
     entries,
@@ -381,6 +386,7 @@ def _print_tool_catalog(
         )
     console.print(table)
 
+
 async def authorize_network_research(
     tool_name: str,
     tool_args: dict[str, Any],
@@ -400,9 +406,11 @@ async def authorize_network_research(
         session_consent_state=session_consent_state,
     )
 
+
 def _bind_tools(llm, tools_list):
     """Bind the active tool set to an LLM (B1 step 1 helper)."""
     return llm.bind_tools(tools_list)
+
 
 async def _invoke_initial_model_with_fallback(
     *,
@@ -492,6 +500,7 @@ async def _invoke_initial_model_with_fallback(
         )
         return llm, llm_with_tools, selected_model, capabilities, response
 
+
 @dataclass
 class _PreflightState:
     tool_tasks: list
@@ -502,6 +511,7 @@ class _PreflightState:
     task_action_seen: bool
     tool_call_count: int
     step_deadline: float | None = None
+
 
 async def _preflight_tool_calls(
     *,
@@ -762,6 +772,7 @@ async def _preflight_tool_calls(
                 )
             )
 
+
 async def _execute_tool_batch(
     *,
     response,
@@ -917,12 +928,14 @@ async def _execute_tool_batch(
 
     return response, False
 
+
 def _select_permission_mode(interactive: bool = True) -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
         console,
         lambda: interactive,
     )
+
 
 async def execute_tool_call(
     tool_call: dict,
@@ -1164,6 +1177,7 @@ async def execute_tool_call(
     )
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
+
 async def _execute_task_tool_call(
     memory: PersistentMemory,
     task_id: str,
@@ -1248,6 +1262,7 @@ async def _execute_task_tool_call(
         )
     return result
 
+
 async def _prepare_session(
     *,
     verbose_startup: bool = False,
@@ -1282,6 +1297,7 @@ async def _prepare_session(
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         await _discard_session_startup()
         raise
+
 
 async def _build_session_setup(
     *,
@@ -1729,6 +1745,7 @@ async def _build_session_setup(
         permission_mode=permission_mode,
     )
 
+
 async def _discard_session_startup() -> None:
     """Release whatever a failed startup already opened."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
@@ -1739,6 +1756,7 @@ async def _discard_session_startup() -> None:
     memory, _ACTIVE_MEMORY = _ACTIVE_MEMORY, None
     if memory is not None:
         memory.close()
+
 
 async def _choose_provider(
     *,
@@ -2172,6 +2190,16 @@ async def _choose_provider(
                 hardware_value += f" — {loaded_models}"
         startup_summary.add_row("Ollama hardware", hardware_value)
     console.print(startup_summary)
+    try:
+        from importlib.metadata import version as _pkg_version
+
+        _version = _pkg_version("private-agent")
+    except (ValueError, OSError, RuntimeError):
+        _version = "0.1.0"
+    console.print(
+        f"[bold]Private Agent[/bold] v{_version} \u00b7 workspace: "
+        f"{SandboxManager.get_root()} \u00b7 type /help for commands"
+    )
     console.print(
         f"\n[bold green]--- {mode_label} Ready! Type 'exit' or 'switch' ---[/bold green]"
     )
@@ -2190,6 +2218,7 @@ async def _choose_provider(
         session_summary_saved=session_summary_saved,
         available_models=available_models,
     )
+
 
 async def _run_agent_cli_session(
     *,
@@ -2350,6 +2379,12 @@ async def _run_agent_cli_session(
                         user_input = (prompt or "").strip() or "exit"
                         prompt = None
                     else:
+                        try:
+                            from rich.rule import Rule
+
+                            console.print(Rule(style="dim"))
+                        except (ValueError, OSError, RuntimeError):
+                            pass
                         user_input = (
                             await prompt_user_input(
                                 console,
@@ -2357,6 +2392,10 @@ async def _run_agent_cli_session(
                                 prompt_message="User: ",
                                 skills=loaded_skills,
                                 history=cli_input_history,
+                                bottom_toolbar=(
+                                    f" {selected_model} \u00b7 auto \u00b7 "
+                                    f"type /help for commands "
+                                ),
                             )
                         ).strip()
                 except (KeyboardInterrupt, EOFError, asyncio.CancelledError):
@@ -3386,6 +3425,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         and active_task["approved_revision"] == active_task["revision"]
                         and active_task["approved_digest"] == active_task["digest"]
                     ):
+
                         def _plan_field(step: dict, name: str) -> str:
                             value = step.get(name)
                             if isinstance(value, (list, tuple)):
@@ -3413,7 +3453,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                             else ""
                                         ),
                                         (
-                                            "validation=" + _plan_field(step, "validation")
+                                            "validation="
+                                            + _plan_field(step, "validation")
                                             if step.get("validation")
                                             else ""
                                         ),
@@ -3428,7 +3469,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                             else ""
                                         ),
                                         (
-                                            "edge_cases=" + _plan_field(step, "edge_cases")
+                                            "edge_cases="
+                                            + _plan_field(step, "edge_cases")
                                             if step.get("edge_cases")
                                             else ""
                                         ),
@@ -3571,7 +3613,6 @@ Runtime context:
 
                 start_time = time.monotonic()
                 deadline = start_time + MAX_TASK_SECONDS
-                step_deadline: float | None = None
                 (
                     llm,
                     llm_with_tools,
@@ -3790,12 +3831,17 @@ Runtime context:
                 )
                 if not isinstance(response, AIMessageChunk):
                     console.print(f"\n[bold green]AI ({selected_model}):[/bold green]")
-                    console.print(
-                        full_output_content,
-                        markup=False,
-                        highlight=False,
-                        soft_wrap=True,
-                    )
+                    try:
+                        from rich.markdown import Markdown
+
+                        console.print(Markdown(full_output_content))
+                    except (ValueError, OSError, RuntimeError):
+                        console.print(
+                            full_output_content,
+                            markup=False,
+                            highlight=False,
+                            soft_wrap=True,
+                        )
                 elif not full_output_content and not getattr(
                     response, "tool_calls", None
                 ):
@@ -3881,6 +3927,7 @@ Runtime context:
             continue
         break
 
+
 def _print_context_state(
     stats: dict,
     output_tokens: int,
@@ -3915,10 +3962,12 @@ def _print_context_state(
         maximum = 0
     return used, maximum
 
+
 def _history_with_summary(summary: str, history: list) -> list:
     if not summary:
         return history
     return [AIMessage(content=f"[Earlier in this session] {summary}")] + history
+
 
 async def _summarize_and_save_session(
     console_obj,
@@ -4057,8 +4106,10 @@ async def _summarize_and_save_session(
     _SESSION_STATS.summary_seconds += time.monotonic() - summary_started
     return False
 
+
 def _print_session_statistics() -> None:
     console.print(build_stats_table(_SESSION_STATS, _SESSION_INFO))
+
 
 def _acknowledge_interrupt() -> None:
     task = asyncio.current_task()
@@ -4066,6 +4117,7 @@ def _acknowledge_interrupt() -> None:
         while task.cancelling():
             task.uncancel()
     console.print("\n[yellow][Info] Ctrl+C received; ending session.[/yellow]")
+
 
 async def run_agent_cli_async(
     *,
@@ -4153,6 +4205,7 @@ async def run_agent_cli_async(
         await close_outbound_http_clients()
         close_mcp_sandbox_dirs()
         clear_captured_images()
+
 
 def run_agent_cli(
     *,
