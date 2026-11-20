@@ -165,23 +165,11 @@ def tools_for_packs(packs: Iterable[str], available: set[str] | None = None) -> 
     return names
 
 
-def classify_turn(user_input: str = "") -> tuple[set[str], str]:
-    """Return (packs, complexity) using rules (no LLM). Complexity: simple/multi_step/long."""
-    packs = route_packs(user_input)
-    text = (user_input or "").lower()
-    complexity = "simple"
-    if any(w in text for w in ("then", "and then", "after", "step", "plan")):
-        complexity = "multi_step"
-    if len(text.split()) > 40:
-        complexity = "long"
-    return packs, complexity
-
-
 def enable_capability(name: str) -> str:
-    """Escalate to an additional capability pack (placeholder)."""
+    """Placeholder: report a capability pack name. Does not yet change routing."""
     if name not in PACKS:
-        return f"Unknown capability: {name}"
-    return f"Enabled capability: {name}"
+        return f"Unknown capability: {name} (placeholder)"
+    return f"Enabled capability: {name} (placeholder)"
 
 
 def _all_pack_tools() -> set[str]:

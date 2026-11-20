@@ -7,5 +7,5 @@ from ..capabilities import enable_capability as _enable
 
 @tool
 def enable_capability(name: str) -> str:
-    """Enable an additional capability pack during a turn (e.g. Coding, Research)."""
+    """Placeholder: report an additional capability pack (not yet wired)."""
     return _enable(name)
