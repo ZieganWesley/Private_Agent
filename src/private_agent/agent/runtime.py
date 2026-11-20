@@ -3576,7 +3576,7 @@ Runtime context:
                 )
 
                 turn_id = uuid.uuid4().hex
-                _f_state = f_integration.begin_turn(turn_id, user_input, effective_context)
+                _f_state = f_integration.begin_turn(turn_id, user_input, effective_context, non_interactive)
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
