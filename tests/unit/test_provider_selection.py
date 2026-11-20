@@ -174,3 +174,85 @@ def test_provider_loss_guidance_survives_a_failing_discovery():
     )
 
     assert "No other local provider is reachable" in message
+
+
+def test_preset_probe_endpoints_cover_installed_presets_only():
+    from private_agent.providers.adapters import ProviderPreset
+    from private_agent.providers.selection import preset_probe_endpoints
+
+    def installed():
+        return True
+
+    def missing():
+        return False
+
+    presets = [
+        ProviderPreset(
+            name="LM Studio",
+            kind="openai-compatible",
+            default_ports=(1234,),
+            install_check=installed,
+            start_hint="start it",
+        ),
+        ProviderPreset(
+            name="vLLM",
+            kind="openai-compatible",
+            default_ports=(8000,),
+            install_check=installed,
+            start_hint="serve it",
+        ),
+        ProviderPreset(
+            name="Jan",
+            kind="openai-compatible",
+            default_ports=(1337,),
+            install_check=missing,
+            start_hint="start Jan",
+        ),
+    ]
+
+    endpoints = preset_probe_endpoints(
+        [{"name": "LM Studio", "base_url": "http://127.0.0.1:1234/v1"}],
+        presets=presets,
+    )
+
+    assert endpoints == [{"name": "vLLM", "base_url": "http://127.0.0.1:8000/v1"}]
+
+
+def test_preset_probe_endpoints_deduplicate_shared_default_ports():
+    from private_agent.providers.adapters import ProviderPreset
+    from private_agent.providers.selection import preset_probe_endpoints
+
+    presets = [
+        ProviderPreset(
+            name=name,
+            kind="openai-compatible",
+            default_ports=(8080,),
+            install_check=lambda: True,
+            start_hint="run it",
+        )
+        for name in ("llama.cpp", "LocalAI", "llamafile")
+    ]
+
+    endpoints = preset_probe_endpoints([], presets=presets)
+
+    assert endpoints == [{"name": "llama.cpp", "base_url": "http://127.0.0.1:8080/v1"}]
+
+
+def test_preset_probe_endpoints_tolerate_a_failing_install_check():
+    from private_agent.providers.adapters import ProviderPreset
+    from private_agent.providers.selection import preset_probe_endpoints
+
+    def exploding():
+        raise OSError("permission denied")
+
+    presets = [
+        ProviderPreset(
+            name="Jan",
+            kind="openai-compatible",
+            default_ports=(1337,),
+            install_check=exploding,
+            start_hint="start Jan",
+        )
+    ]
+
+    assert preset_probe_endpoints([], presets=presets) == []

@@ -257,6 +257,19 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
             if isinstance(raw, bool)
             else str(raw).strip().lower() in {"true", "1", "yes", "on"}
         )
+    configured = endpoints if isinstance(endpoints, list) else []
+    from ..providers.selection import preset_probe_endpoints
+
+    endpoints = configured + [
+        entry
+        for entry in preset_probe_endpoints(configured)
+        if entry["base_url"]
+        not in {
+            str(e.get("base_url", "")).rstrip("/")
+            for e in configured
+            if isinstance(e, dict)
+        }
+    ]
     return discover_local_runtimes(
         OLLAMA_BASE_URLS,
         endpoints,

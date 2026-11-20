@@ -114,6 +114,41 @@ def optional_dependency_hint(kind: str, error: BaseException) -> str | None:
     return None
 
 
+def preset_probe_endpoints(
+    configured: Iterable[Any],
+    *,
+    presets: Iterable[ProviderPreset] | None = None,
+) -> list[dict[str, str]]:
+    """Return default-port endpoints for installed presets not yet configured.
+
+    Probing only installed presets keeps startup cheap while still finding a
+    provider the user installed and started without adding it to config.
+    """
+    configured_urls = {
+        str(entry.get("base_url", "")).rstrip("/")
+        for entry in configured
+        if isinstance(entry, dict)
+    }
+    endpoints: list[dict[str, str]] = []
+    seen = set(configured_urls)
+    for preset in presets if presets is not None else all_presets():
+        if preset.kind != "openai-compatible":
+            continue
+        try:
+            installed = bool(preset.install_check())
+        except (OSError, RuntimeError):
+            installed = False
+        if not installed:
+            continue
+        for port in preset.default_ports:
+            base_url = preset.base_url_template.format(port=port).rstrip("/")
+            if base_url in seen:
+                continue
+            seen.add(base_url)
+            endpoints.append({"name": preset.name, "base_url": base_url})
+    return endpoints
+
+
 def requested_provider() -> str:
     """Return the provider name requested on the command line, if any."""
     return os.environ.get(PROVIDER_ENV, "").strip()

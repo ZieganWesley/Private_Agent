@@ -96,6 +96,10 @@ def _probe_endpoint(
                 for model in models
                 if not any(marker in model.lower() for marker in embedding_markers)
             )
+            if kind == "openai-compatible":
+                from ..providers.identify import identify_server
+
+                name = identify_server(client, base_url) or name
             return LocalRuntime(name, kind, base_url.rstrip("/"), models)
     except (httpx.HTTPError, ValueError, ConnectionError, OSError) as exc:
         log_event(
