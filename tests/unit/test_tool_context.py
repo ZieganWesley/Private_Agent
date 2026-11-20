@@ -40,6 +40,7 @@ def test_set_tool_context_copies_all_fields():
         code_task=object(),
         runtime_owner_id="owner",
         schema_read_tables={"chat_history"},
+        enabled_packs={"Coding"},
     )
 
     set_tool_context(context)
@@ -54,6 +55,7 @@ def test_set_tool_context_copies_all_fields():
     assert current.code_task is context.code_task
     assert current.runtime_owner_id == "owner"
     assert current.schema_read_tables == {"chat_history"}
+    assert current.enabled_packs == {"Coding"}
 
 
 def test_set_tool_context_keeps_runtime_owner_and_schema_reads_when_unset():

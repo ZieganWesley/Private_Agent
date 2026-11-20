@@ -171,6 +171,11 @@ def set_tool_context(context: ToolContext) -> None:
         _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:
         _TOOL_CONTEXT.schema_read_tables = context.schema_read_tables
+    if getattr(context, "enabled_packs", None) is not None and (
+        context.enabled_packs is not _TOOL_CONTEXT.enabled_packs
+    ):
+        _TOOL_CONTEXT.enabled_packs.clear()
+        _TOOL_CONTEXT.enabled_packs.update(context.enabled_packs)
 
 
 # --- NETWORK CONNECTIVITY UTILITY ---

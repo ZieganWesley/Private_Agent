@@ -5049,3 +5049,30 @@ async def test_enable_capability_rebuilds_tool_list_end_to_end(scripted_local_cl
     bound_names = {getattr(t, "name", None) for t in getattr(model, "bound_tools", [])}
     assert "enable_capability" in bound_names
     assert "create_task_plan" in bound_names
+
+
+@pytest.mark.asyncio
+async def test_enable_capability_then_uses_newly_enabled_tool_next_iteration(scripted_local_cli, capsys, monkeypatch):
+    agent, model, inputs, workspace, database_path = scripted_local_cli
+    import private_agent.runtime_f_integration as f_integration
+
+    monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
+    model.responses = [
+        AIMessage(content="", tool_calls=[{"name": "enable_capability", "args": {"name": "Planning"}, "id": "e1"}]),
+        AIMessage(content="", tool_calls=[{"name": "create_task_plan", "args": {"goal": "g", "task_type": "simple", "steps": [{"title": "s"}]}, "id": "t1"}]),
+        AIMessage(content="done"),
+    ]
+
+    await agent.run_agent_cli_async(
+        prompt="hello",
+        non_interactive=True,
+        output="json",
+    )
+
+    out = capsys.readouterr().out
+    assert "turn_started" in out
+    assert "turn_finished" in out
+    assert len(model.calls) == 3
+
+    bound_names = {getattr(t, "name", None) for t in getattr(model, "bound_tools", [])}
+    assert "create_task_plan" in bound_names
