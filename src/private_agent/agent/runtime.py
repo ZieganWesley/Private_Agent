@@ -501,6 +501,7 @@ class _PreflightState:
     authorized_planning_searches: dict
     task_action_seen: bool
     tool_call_count: int
+    step_deadline: float | None = None
 
 async def _preflight_tool_calls(
     *,
@@ -550,7 +551,9 @@ async def _preflight_tool_calls(
                 )
             )
             continue
-        effective_deadline = step_deadline if step_deadline is not None else deadline
+        effective_deadline = (
+            state.step_deadline if state.step_deadline is not None else deadline
+        )
         if time.monotonic() >= effective_deadline:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -564,7 +567,7 @@ async def _preflight_tool_calls(
             and str(tool_call.get("args", {}).get("status", "")).lower()
             == "in_progress"
         ):
-            step_deadline = time.monotonic() + MAX_TASK_SECONDS
+            state.step_deadline = time.monotonic() + MAX_TASK_SECONDS
         if tool_call_limit is not None and state.tool_call_count >= tool_call_limit:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -2849,7 +2852,7 @@ async def _run_agent_cli_session(
                             create_text_plan(
                                 memory, session_id, user_input, llm, console
                             )
-                        except Exception as exc:  # noqa: BLE001
+                        except Exception as exc:  # noqa: BLE001 - text planning fallback boundary
                             console.print(
                                 "[red]Text planning failed: "
                                 f"{type(exc).__name__}: {exc}[/red]"
@@ -3697,7 +3700,7 @@ Runtime context:
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                                 context_usage=usage,
                             )
-                        except Exception as exc:  # noqa: BLE001 - wraps any model error after tool execution; re-raised as RuntimeError
+                        except Exception as exc:  # noqa: BLE001 - text planning fallback boundary - wraps any model error after tool execution; re-raised as RuntimeError
                             if provider_type == "online":  # noqa: B023
                                 raise RuntimeError(
                                     "Online model failed after tool execution. "

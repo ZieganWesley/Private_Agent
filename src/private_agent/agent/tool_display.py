@@ -14,6 +14,9 @@ from .console import console
 
 TOOL_RESULT_PREVIEW_CHARS = 500
 
+_RECENT_TOOL_RESULTS: list[tuple[str, str]] = []
+_MAX_RECENT_TOOL_RESULTS = 20
+
 
 def _redact_tool_arguments(value: Any) -> Any:
     if isinstance(value, dict):
@@ -97,12 +100,21 @@ def _tool_log_redactions(arguments: Any) -> tuple[str, ...]:
 def _display_tool_request(tool_call: dict) -> None:
     name = str(tool_call.get("name") or "unknown")
     arguments = _redact_tool_arguments(tool_call.get("args", {}))
-    summary = repr(arguments)
+    if isinstance(arguments, dict) and arguments:
+        parts = []
+        for key, value in arguments.items():
+            rendered = repr(value)
+            if len(rendered) > 80:
+                rendered = rendered[:77] + "..."
+            parts.append(f"{key}={rendered}")
+        summary = " \u00b7 ".join(parts)
+    else:
+        summary = repr(arguments)
     if len(summary) > 300:
         summary = summary[:297] + "..."
     console.print(
         "[cyan][Tool Request][/cyan]",
-        Text(f"{name} {summary}", overflow="ellipsis"),
+        Text(f"{name} \u00b7 {summary}", overflow="ellipsis"),
     )
 
 
@@ -110,25 +122,55 @@ def _display_tool_error(tool_name: str, details: str) -> None:
     console.print(
         Panel(
             Text(details),
-            title=Text(f"Tool '{tool_name}' returned an error"),
+            title=Text(f"\u2717 Tool '{tool_name}' returned an error", style="red"),
             border_style="red",
         )
     )
 
 
+def _render_tool_result_text(result: str) -> Text:
+    """Render a tool result, colouring diff-like output when detected."""
+    lines = result.splitlines()
+    looks_like_diff = any(
+        line.startswith(("+++", "---", "@@", "+", "-")) for line in lines
+    ) and any(line.startswith(("+++", "---")) for line in lines)
+    text = Text()
+    for index, line in enumerate(lines):
+        if index:
+            text.append("\n")
+        if looks_like_diff:
+            if line.startswith("+++") or line.startswith("---"):
+                text.append(line, style="bold")
+            elif line.startswith("@@"):
+                text.append(line, style="cyan")
+            elif line.startswith("+"):
+                text.append(line, style="green")
+            elif line.startswith("-"):
+                text.append(line, style="red")
+            else:
+                text.append(line)
+        else:
+            text.append(line)
+    return text
+
+
 def _display_tool_result(tool_name: str, result: str) -> None:
     preview = result[:TOOL_RESULT_PREVIEW_CHARS]
-    if len(result) > TOOL_RESULT_PREVIEW_CHARS:
+    truncated = len(result) > TOOL_RESULT_PREVIEW_CHARS
+    if truncated:
         preview += "\n[Preview truncated; full result was sent to the model.]"
-    if not preview:
+    if not preview.strip():
         preview = "(Tool completed with no textual output.)"
+    symbol = "\u2713" if not _tool_result_is_error(result) else "\u2717"
+    style = "green" if symbol == "\u2713" else "red"
     console.print(
         Panel(
-            Text(preview),
-            title=Text(f"Tool output: {tool_name}"),
+            _render_tool_result_text(preview),
+            title=Text(f"{symbol} Tool output: {tool_name}", style=style),
             border_style="blue",
         )
     )
+    record_tool_result(tool_name, result)
 
 
 def _tool_result_is_error(result: str) -> bool:
@@ -184,3 +226,27 @@ def _append_captured_images_from_tool_results(
             )
             if image_message is not None:
                 messages.append(image_message)
+
+
+def record_tool_result(tool_name: str, result: str) -> None:
+    """Remember a full tool result so it can be expanded later (G11)."""
+    _RECENT_TOOL_RESULTS.append((tool_name, result))
+    if len(_RECENT_TOOL_RESULTS) > _MAX_RECENT_TOOL_RESULTS:
+        del _RECENT_TOOL_RESULTS[: len(_RECENT_TOOL_RESULTS) - _MAX_RECENT_TOOL_RESULTS]
+
+
+def expand_last_tool_result(index: int = -1) -> str | None:
+    """Return the full text of a stored tool result, or None if unavailable."""
+    if not _RECENT_TOOL_RESULTS:
+        return None
+    if index < 0:
+        index = len(_RECENT_TOOL_RESULTS) + index
+    if index < 0 or index >= len(_RECENT_TOOL_RESULTS):
+        return None
+    _name, result = _RECENT_TOOL_RESULTS[index]
+    return result
+
+
+def list_recent_tool_results() -> list[tuple[str, str]]:
+    """Return (name, full_result) pairs for recently displayed tool results."""
+    return list(_RECENT_TOOL_RESULTS)
