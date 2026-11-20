@@ -11,3 +11,11 @@
 - **Tests and docs:** about 13k lines of tests against about 21k lines of
   source, and a detailed README.
 
+
+## Part G — User Interface (first pass)
+
+- G1: `Exit` option (0) in provider menu; `ProviderPreference.exit_requested`.
+- G2: `initialize_knowledge_base` creates missing folders instead of warning.
+- G3: indexing spinner only runs when a docs path is provided.
+- G4: workspace prompt precedes RAG folder prompt.
+- G15/G16: shared `Console` with a named `Theme` (info/success/warning/error/tool/user) and light-toggle env var.

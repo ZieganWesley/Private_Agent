@@ -1361,19 +1361,27 @@ At exit, a **Session Statistics** table is printed, which looks good.
 ### Bugs seen in the real run
 
 **G1. No way out of the online-provider loop.**
+
+**Fixed.** Added an `Exit` option (0) to the provider menu and an `exit_requested` flag on `ProviderPreference`.
 With no local model, pressing Enter at `Continue? [y/N]` (default No) returns
 to a provider menu whose only option is the same online provider. Only Ctrl+C
 exits.
 
 **G2. A warning about its own default folder.**
+
+**Fixed.** Missing KB folders are created instead of warned.
 On first run it warns that its own default RAG folder `~/.private_agent/rag`
 is not a valid directory, instead of creating it or skipping quietly.
 
 **G3. A spinner after skipping.**
+
+**Fixed.** The indexing spinner only runs when a docs path is provided.
 "Indexing local knowledge base..." appears right after it says indexing was
 skipped.
 
 **G4. Questions in an odd order.**
+
+**Fixed.** Workspace prompt now precedes the RAG folder prompt.
 It asks for the RAG folder before the workspace, though the project-local
 `rag` folder is found relative to the workspace.
 
