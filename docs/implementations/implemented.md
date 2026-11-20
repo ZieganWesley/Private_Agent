@@ -144,3 +144,13 @@ Branch `j-k-performance-optimization`.
 | J7/J8 | Partly fixed | `rag/indexing.py` keeps parsed chunks for unchanged files in `_CHUNK_CACHE` |
 
 Verification: `ruff check .` clean; `pytest` -> 1120 passed, 12 skipped, 1 warning.
+
+### K section audit note
+
+Hard-coded values from Part K remain tracked for a dedicated configuration pass
+(Phase 14): sandbox limits (K2), timeouts/leases (K3), output/context sizes (K4),
+RAG values and embedding-name patterns (K5), external service URLs (K6),
+import-time snapshot path (K7), duplicated plan limits (K8), duplicated defaults
+(K9), and stricter-only config extensions (K10). Similar unlisted values include
+network timeouts, memory-context caps, and tool-output caps, which follow the same
+K3/K4 pattern and are tracked with them.
