@@ -10,6 +10,7 @@ import re
 import sqlite3
 import sys
 import time
+import types
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -225,6 +226,7 @@ from .tool_display import (
 from .undo import undo_last_turn
 
 _ACTIVE_MEMORY: PersistentMemory | None = None
+_LAST_HEADLESS_RESPONSE: str = ""
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
 OS_ISOLATED_TOOL_NAMES = frozenset(
     {
@@ -1025,7 +1027,10 @@ async def execute_tool_call(
         mcp_auto_approve_tools=MCP_AUTO_APPROVE_TOOLS,
     ) and not (name in LOCAL_MEDIA_TOOL_NAMES and media_capture_authorized):
         if not sys.stdin.isatty():
-            result = "Error: This tool requires interactive approval and was not run."
+            result = (
+                "Error: This tool requires interactive approval and was not run. "
+                "Re-run with --permission-mode full to allow it."
+            )
         else:
             description = getattr(tool_func, "description", "") if tool_func else ""
             approved = _prompt_tool_approval(
@@ -1220,12 +1225,14 @@ async def _prepare_session(
     verbose_startup: bool = False,
     resume_session: str | None = None,
     continue_session: bool = False,
+    non_interactive: bool = False,
+    permission_mode: str | None = None,
 ) -> SessionSetup | None:
     """Discover local resources, open memory and build the session state."""
     global _ACTIVE_MEMORY, _SESSION_INFO, _TASK_LEASE_HEARTBEAT
     _SESSION_STATS.reset()
     _SESSION_INFO.clear()
-    if not sys.stdin.isatty():
+    if not non_interactive and not sys.stdin.isatty():
         console.print(
             "[red]Private Agent requires an interactive terminal. "
             "Run it from a terminal session.[/red]"
@@ -1237,6 +1244,8 @@ async def _prepare_session(
             verbose_startup=verbose_startup,
             resume_session=resume_session,
             continue_session=continue_session,
+            non_interactive=non_interactive,
+            permission_mode=permission_mode,
         )
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         # Startup owns everything it opened, including SQLite, so a failure
@@ -1250,17 +1259,20 @@ async def _build_session_setup(
     verbose_startup: bool = False,
     resume_session: str | None = None,
     continue_session: bool = False,
+    non_interactive: bool = False,
+    permission_mode: str | None = None,
 ) -> SessionSetup:
     """Create the memory, RAG index, skills and provider state for a session."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     startup_started = time.monotonic()
-    if not sys.stdin.isatty():
+    if not non_interactive and not sys.stdin.isatty():
         console.print(
             "[red]Private Agent requires an interactive terminal. "
             "Run it from a terminal session.[/red]"
         )
         return
-
+    if non_interactive:
+        console.input = lambda *args, **kwargs: ""
     console.print("[bold cyan]Private Agent[/bold cyan]")
 
     invocation_root = pathlib.Path.cwd()
@@ -1659,7 +1671,9 @@ async def _build_session_setup(
     )
     thinking_enabled = THINKING_TOGGLE_DEFAULT
     thinking_effort = THINKING_EFFORT_DEFAULT
-    permission_mode = _select_permission_mode()
+    permission_mode = (
+        permission_mode if permission_mode is not None else _select_permission_mode()
+    )
     if verbose_startup:
         console.print(f"[cyan][Agent Permission Mode][/cyan] {permission_mode.title()}")
     return SessionSetup(
@@ -1712,6 +1726,7 @@ async def _choose_provider(
     vectorstore,
     session_id,
     skills_folder_input,
+    non_interactive: bool = False,
 ) -> ProviderSelection | None:
     """Ask for a provider and model, initialise it and print the ready summary."""
     available_models: list = []
@@ -2148,12 +2163,20 @@ async def _run_agent_cli_session(
     verbose_startup: bool = False,
     resume_session: str | None = None,
     continue_session: bool = False,
+    prompt: str | None = None,
+    output: str = "text",
+    permission_mode: str | None = None,
+    non_interactive: bool = False,
 ):
-    global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
+    global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT, _LAST_HEADLESS_RESPONSE
+    if non_interactive:
+        sys.stdin = types.SimpleNamespace(isatty=lambda: False)
     setup = await _prepare_session(
         verbose_startup=verbose_startup,
         resume_session=resume_session,
         continue_session=continue_session,
+        non_interactive=non_interactive,
+        permission_mode=permission_mode,
     )
     if setup is None:
         return
@@ -2193,8 +2216,11 @@ async def _run_agent_cli_session(
             vectorstore=vectorstore,
             session_id=session_id,
             skills_folder_input=skills_folder_input,
+            non_interactive=non_interactive,
         )
         if selection is None:
+            if non_interactive:
+                return
             continue
         provider_type = selection.provider_type
         selected_model = selection.selected_model
@@ -2274,15 +2300,19 @@ async def _run_agent_cli_session(
         try:
             while True:
                 try:
-                    user_input = (
-                        await prompt_user_input(
-                            console,
-                            SandboxManager.get_root(),
-                            prompt_message="User: ",
-                            skills=loaded_skills,
-                            history=cli_input_history,
-                        )
-                    ).strip()
+                    if non_interactive:
+                        user_input = (prompt or "").strip() or "exit"
+                        prompt = None
+                    else:
+                        user_input = (
+                            await prompt_user_input(
+                                console,
+                                SandboxManager.get_root(),
+                                prompt_message="User: ",
+                                skills=loaded_skills,
+                                history=cli_input_history,
+                            )
+                        ).strip()
                 except (KeyboardInterrupt, EOFError, asyncio.CancelledError):
                     _acknowledge_interrupt()
                     user_input = "exit"
@@ -2688,6 +2718,15 @@ async def _run_agent_cli_session(
                     )
                     continue
                 if user_input.lower() == "exit":
+                    if non_interactive:
+                        # Headless runs skip the exit-time summary to avoid an
+                        # extra model call and never block on the terminal.
+                        if output == "json":
+                            sys.stdout.write(
+                                json.dumps({"response": _LAST_HEADLESS_RESPONSE}) + "\n"
+                            )
+                            sys.stdout.flush()
+                        return
                     if session_summary_saved:
                         console.print(
                             "[cyan][Memory][/cyan] Session summary already saved; "
@@ -3630,6 +3669,8 @@ Runtime context:
 
                 chat_history.append(HumanMessage(content=user_input))
                 chat_history.append(AIMessage(content=full_output_content))
+                if non_interactive:
+                    _LAST_HEADLESS_RESPONSE = full_output_content
                 session_summary_saved = False
                 _SESSION_STATS.turns += 1
                 if CONTEXT_COMPACTION_THRESHOLD <= 0:
@@ -3638,6 +3679,8 @@ Runtime context:
         except (KeyboardInterrupt, asyncio.CancelledError):
             cleanup_code_task(finalize=False)
             _acknowledge_interrupt()
+            if non_interactive:
+                return
             if not session_summary_saved:
                 await _summarize_and_save_session(
                     console,
@@ -3854,6 +3897,10 @@ async def run_agent_cli_async(
     verbose_startup: bool = False,
     resume_session: str | None = None,
     continue_session: bool = False,
+    prompt: str | None = None,
+    output: str = "text",
+    permission_mode: str | None = None,
+    non_interactive: bool = False,
 ):
     """Own runtime resources and restore dynamically registered global tools."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
@@ -3864,6 +3911,10 @@ async def run_agent_cli_async(
             verbose_startup=verbose_startup,
             resume_session=resume_session,
             continue_session=continue_session,
+            prompt=prompt,
+            output=output,
+            permission_mode=permission_mode,
+            non_interactive=non_interactive,
         )
     finally:
         if _TASK_LEASE_HEARTBEAT is not None:
@@ -3930,11 +3981,19 @@ def run_agent_cli(
     verbose_startup: bool = False,
     resume_session: str | None = None,
     continue_session: bool = False,
+    prompt: str | None = None,
+    output: str = "text",
+    permission_mode: str | None = None,
+    non_interactive: bool = False,
 ):
     asyncio.run(
         run_agent_cli_async(
             verbose_startup=verbose_startup,
             resume_session=resume_session,
             continue_session=continue_session,
+            prompt=prompt,
+            output=output,
+            permission_mode=permission_mode,
+            non_interactive=non_interactive,
         )
     )

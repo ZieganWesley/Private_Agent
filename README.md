@@ -215,6 +215,12 @@ edits made through the file tools: shell commands, MCP tools and edits made
 before this feature have no manifest entry. Their old `.bak` files stay
 harmless.
 
+Non-interactive mode: `private-agent -p "prompt"` runs a single prompt and exits
+without a terminal; `--output text|json` and `--permission-mode` are supported.
+Tools that need approval return a denial instead of prompting, and online consent,
+shell-history deletion and terminal-only paths fail closed; run with
+`--permission-mode full` to allow all tool calls.
+
 When launched from a project directory, `private-agent` automatically uses any
 `workspace`, `rag`, and `skills` directories found directly there, under
 `resources/`, or under `private_agent/resources/`. For each folder name, lookup

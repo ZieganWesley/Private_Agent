@@ -28,6 +28,10 @@ def test_verbose_startup_flag_is_forwarded(monkeypatch):
             "verbose_startup": True,
             "resume_session": None,
             "continue_session": False,
+            "prompt": None,
+            "output": "text",
+            "permission_mode": None,
+            "non_interactive": False,
         }
     ]
 

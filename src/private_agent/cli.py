@@ -105,6 +105,24 @@ def main():
         action="store_true",
         help="List saved sessions with their message counts and exit.",
     )
+    parser.add_argument(
+        "-p",
+        "--prompt",
+        metavar="PROMPT",
+        help="Run a single prompt non-interactively and exit (headless mode).",
+    )
+    parser.add_argument(
+        "--output",
+        choices=("text", "json"),
+        default="text",
+        help="Output format for non-interactive mode (default: text).",
+    )
+    parser.add_argument(
+        "--permission-mode",
+        choices=("manual", "auto", "full", "monitored"),
+        default=None,
+        help="Permission mode for this run (default: configured).",
+    )
     args = parser.parse_args()
     if args.config:
         os.environ["PRIVATE_AGENT_CONFIG"] = args.config
@@ -145,6 +163,10 @@ def main():
             verbose_startup=args.verbose_startup,
             resume_session=args.resume,
             continue_session=args.continue_session,
+            prompt=args.prompt,
+            output=args.output,
+            permission_mode=args.permission_mode,
+            non_interactive=bool(args.prompt),
         )
     except KeyboardInterrupt:
         console.print("\n[yellow][Info] Interrupted by user.[/yellow]")
