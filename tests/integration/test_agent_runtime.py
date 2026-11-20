@@ -2003,9 +2003,7 @@ async def test_runtime_rag_citations_are_prompted_and_shown(
         agent.console,
         "print",
         lambda *values, **kwargs: printed.append(
-            " ".join(
-                getattr(value, "markup", str(value)) for value in values
-            )
+            " ".join(getattr(value, "markup", str(value)) for value in values)
         ),
     )
     monkeypatch.setattr(
@@ -2644,9 +2642,7 @@ async def test_runtime_does_not_access_webcam_without_declared_vision(
         agent.console,
         "print",
         lambda *values, **kwargs: printed.append(
-            " ".join(
-                getattr(value, "markup", str(value)) for value in values
-            )
+            " ".join(getattr(value, "markup", str(value)) for value in values)
         ),
     )
     camera = MagicMock(description="Capture a webcam image")
@@ -3945,9 +3941,7 @@ async def test_online_tool_failure_redacts_sensitive_args_and_keeps_only_approve
         agent.console,
         "print",
         lambda *values, **kwargs: printed.append(
-            " ".join(
-                getattr(value, "markup", str(value)) for value in values
-            )
+            " ".join(getattr(value, "markup", str(value)) for value in values)
         ),
     )
 
@@ -4005,9 +3999,7 @@ async def test_online_cli_uses_mock_http_boundary_without_unapproved_history(
         agent.console,
         "print",
         lambda *values, **kwargs: printed.append(
-            " ".join(
-                getattr(value, "markup", str(value)) for value in values
-            )
+            " ".join(getattr(value, "markup", str(value)) for value in values)
         ),
     )
     persisted = PersistentMemory(db_path=str(database_path))
@@ -4314,9 +4306,7 @@ async def test_online_cli_failure_does_not_print_provider_secrets(
         agent.console,
         "print",
         lambda *values, **kwargs: printed.append(
-            " ".join(
-                getattr(value, "markup", str(value)) for value in values
-            )
+            " ".join(getattr(value, "markup", str(value)) for value in values)
         ),
     )
     inputs.side_effect = [
@@ -4539,9 +4529,7 @@ async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
         agent.console,
         "print",
         lambda *values, **kwargs: printed.append(
-            " ".join(
-                getattr(value, "markup", str(value)) for value in values
-            )
+            " ".join(getattr(value, "markup", str(value)) for value in values)
         ),
     )
     monkeypatch.setattr(
@@ -5002,9 +4990,7 @@ async def test_undo_restores_a_file_edited_by_the_last_turn(
         agent.console,
         "print",
         lambda *values, **kwargs: printed.append(
-            " ".join(
-                getattr(value, "markup", str(value)) for value in values
-            )
+            " ".join(getattr(value, "markup", str(value)) for value in values)
         ),
     )
 

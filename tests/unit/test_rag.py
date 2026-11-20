@@ -815,5 +815,5 @@ def test_initialize_knowledge_base_creates_missing_folder(tmp_path):
 
     missing = tmp_path / "does_not_exist" / "rag"
     assert not missing.exists()
-    result = indexing.initialize_knowledge_base(str(missing))
+    indexing.initialize_knowledge_base(str(missing))
     assert missing.is_dir()

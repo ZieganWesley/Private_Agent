@@ -5,6 +5,7 @@ import pathlib
 import re
 import shlex
 import sys
+import threading
 from collections.abc import Mapping
 from itertools import islice
 from pathlib import Path
@@ -585,9 +586,30 @@ def arrow_select(
 
     body = HSplit([Window(FormattedTextControl(title), height=1), radio])
     app = Application(layout=Layout(body), key_bindings=kb, full_screen=False)
-    try:
-        return app.run()
-    except (KeyboardInterrupt, EOFError):
-        return None
-    except Exception:  # noqa: BLE001 - fall back on any UI failure
-        return None
+    return _run_arrow_app(app)
+
+
+def _run_arrow_app(app: Any) -> str | None:
+    """Run a prompt_toolkit application and return its result.
+
+    ``Application.run()`` refuses to start while an event loop is already
+    running, and the runtime drives these menus from inside its asyncio turn.
+    Running the application on a dedicated thread gives it a clean loop while
+    the caller waits synchronously, which is equivalent from the terminal's
+    point of view.
+    """
+    outcome: dict[str, Any] = {"value": None}
+
+    def _runner() -> None:
+        try:
+            outcome["value"] = app.run()
+        except (KeyboardInterrupt, EOFError):
+            outcome["value"] = None
+        except Exception:  # noqa: BLE001 - fall back to typed prompt on any UI failure
+            outcome["value"] = None
+
+    worker = threading.Thread(target=_runner, daemon=True, name="arrow-select")
+    worker.start()
+    worker.join()
+    value = outcome["value"]
+    return value if isinstance(value, str) else None
