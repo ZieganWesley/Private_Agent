@@ -183,6 +183,17 @@ def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
     return task
 
 
+def _capture_rendered_text(printed):
+    """Capture console.print output, unwrapping rich Markdown to its source."""
+
+    def _printer(*values, **_kwargs):
+        printed.append(
+            " ".join(getattr(value, "markup", str(value)) for value in values)
+        )
+
+    return _printer
+
+
 @pytest.mark.asyncio
 async def test_cli_requires_a_terminal_before_starting_session(monkeypatch):
     from types import SimpleNamespace
@@ -2002,9 +2013,7 @@ async def test_runtime_rag_citations_are_prompted_and_shown(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(
-            " ".join(getattr(value, "markup", str(value)) for value in values)
-        ),
+        _capture_rendered_text(printed),
     )
     monkeypatch.setattr(
         agent,
@@ -2641,9 +2650,7 @@ async def test_runtime_does_not_access_webcam_without_declared_vision(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(
-            " ".join(getattr(value, "markup", str(value)) for value in values)
-        ),
+        _capture_rendered_text(printed),
     )
     camera = MagicMock(description="Capture a webcam image")
     camera.ainvoke = AsyncMock(return_value="camera-image:unexpected")
@@ -3940,9 +3947,7 @@ async def test_online_tool_failure_redacts_sensitive_args_and_keeps_only_approve
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(
-            " ".join(getattr(value, "markup", str(value)) for value in values)
-        ),
+        _capture_rendered_text(printed),
     )
 
     def answer_prompt(prompt):
@@ -3998,9 +4003,7 @@ async def test_online_cli_uses_mock_http_boundary_without_unapproved_history(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(
-            " ".join(getattr(value, "markup", str(value)) for value in values)
-        ),
+        _capture_rendered_text(printed),
     )
     persisted = PersistentMemory(db_path=str(database_path))
     persisted.save_message("previous-session", "human", "private local history")
@@ -4305,9 +4308,7 @@ async def test_online_cli_failure_does_not_print_provider_secrets(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(
-            " ".join(getattr(value, "markup", str(value)) for value in values)
-        ),
+        _capture_rendered_text(printed),
     )
     inputs.side_effect = [
         "",
@@ -4528,9 +4529,7 @@ async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(
-            " ".join(getattr(value, "markup", str(value)) for value in values)
-        ),
+        _capture_rendered_text(printed),
     )
     monkeypatch.setattr(
         agent,
@@ -4989,9 +4988,7 @@ async def test_undo_restores_a_file_edited_by_the_last_turn(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(
-            " ".join(getattr(value, "markup", str(value)) for value in values)
-        ),
+        _capture_rendered_text(printed),
     )
 
     await run_agent_cli_async()
