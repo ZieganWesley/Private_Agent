@@ -561,7 +561,8 @@ async def _preflight_tool_calls(
                 )
             )
             continue
-        if time.monotonic() - start_time >= MAX_TASK_SECONDS:
+        effective_deadline = step_deadline if step_deadline is not None else deadline
+        if time.monotonic() >= effective_deadline:
             state.blocked_tool_messages.append(
                 ToolMessage(
                     content="Error: Task time budget exhausted; this tool was not run.",
@@ -569,6 +570,12 @@ async def _preflight_tool_calls(
                 )
             )
             continue
+        if (
+            call_name == "update_todo_step"
+            and str(tool_call.get("args", {}).get("status", "")).lower()
+            == "in_progress"
+        ):
+            step_deadline = time.monotonic() + MAX_TASK_SECONDS
         if tool_call_limit is not None and state.tool_call_count >= tool_call_limit:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -3576,6 +3583,7 @@ Runtime context:
 
                 start_time = time.monotonic()
                 deadline = start_time + MAX_TASK_SECONDS
+                step_deadline: float | None = None
                 (
                     llm,
                     llm_with_tools,

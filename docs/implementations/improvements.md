@@ -2385,7 +2385,7 @@ order (section L1); the rest come after the shared agent loop.
 | 7.5 | **Done:** `/plan` stays on until approval or `/plan off`; added `ask_user` tool | D3 | 4.2, 4.4 | A plan can be refined over several messages |
 | 7.6 | **Done:** plans render as Markdown; approval offers approve / approve and allow edits / feedback and keep planning, with typed `APPROVE` only for riskier access levels | D7, D8, D13 | 7.5 | Approving takes one choice for normal plans |
 | 7.7 | **Done:** `validate` runs command-like step validation entries and prefills step evidence automatically | D6 | 6.3 | Coding steps with test commands are verified without typed evidence |
-| 7.8 | Give each plan step its own time budget | D12 | 4.2 | A long plan runs to the end without a manual resume |
+| 7.8 | **Done:** each in-progress plan step gets its own time budget | D12 | 4.2 | A long plan runs to the end without a manual resume |
 | 7.9 | Allow more than one active plan, using the `ToolContext` | D11 | 3.4 | Two plans can be active in different sessions |
 | 7.10 | Add a text-plan fallback for models without tool support, parsed into the same structure by the runtime | D14 | 7.6 | Planning works with a non-tool model |
 
