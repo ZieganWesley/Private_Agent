@@ -6,7 +6,7 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from functools import wraps
 from typing import Any
@@ -114,6 +114,7 @@ class ToolContext:
     turn_id: str | None = None
     task_session_id: str | None = None
     task_id: str | None = None
+    task_ids: dict[str, str] = field(default_factory=dict)
     skill_directory: str | None = None
     skill_registry: dict | None = None
     skill_session_id: str | None = None
@@ -138,6 +139,13 @@ _TOOL_CONTEXT = ToolContext(
 
 def get_tool_context() -> ToolContext:
     """Return the process-local tool context (single source of truth)."""
+    if (
+        _TOOL_CONTEXT.task_session_id is not None
+        and _TOOL_CONTEXT.task_session_id in _TOOL_CONTEXT.task_ids
+    ):
+        _TOOL_CONTEXT.task_id = _TOOL_CONTEXT.task_ids[
+            _TOOL_CONTEXT.task_session_id
+        ]
     return _TOOL_CONTEXT
 
 
@@ -148,6 +156,9 @@ def set_tool_context(context: ToolContext) -> None:
     _TOOL_CONTEXT.turn_id = context.turn_id
     _TOOL_CONTEXT.task_session_id = context.task_session_id
     _TOOL_CONTEXT.task_id = context.task_id
+    if context.task_session_id is not None and context.task_id is not None:
+        _TOOL_CONTEXT.task_ids[context.task_session_id] = context.task_id
+    _TOOL_CONTEXT.task_ids.update(context.task_ids)
     _TOOL_CONTEXT.skill_directory = context.skill_directory
     _TOOL_CONTEXT.skill_registry = context.skill_registry
     _TOOL_CONTEXT.skill_session_id = context.skill_session_id
