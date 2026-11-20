@@ -30,7 +30,6 @@ from ..code_tasks import (
     CodeTaskWorkspace,
     checkpoint_code_task,
     finalize_code_task,
-    is_code_task_request,
     run_project_unit_tests,
 )
 from ..config import (
@@ -2925,7 +2924,7 @@ async def _run_agent_cli_session(
                 clear_captured_images()
 
                 code_related_request = _is_coding_guidance_request(user_input)
-                if code_task_requested and not planning_only:
+                if coding_task_requested and not planning_only:
                     approved_coding_scope = _approved_coding_task_scope(
                         memory,
                         user_input,

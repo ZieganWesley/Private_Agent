@@ -5,7 +5,6 @@ import re
 
 from rich.markdown import Markdown
 
-from ..database import PersistentMemory
 from ..tools import get_tool_context, set_tool_context
 from .task_commands import _task_plan_markdown
 
