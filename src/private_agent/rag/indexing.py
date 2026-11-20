@@ -323,14 +323,23 @@ def initialize_knowledge_base(
     confirm_rebuild: Callable[[str], bool] | None = None,
 ):
     """Initializes the Chroma vector store exclusively when an explicit, valid knowledge base folder path is provided."""
-    if not docs_path or not str(docs_path).strip():
+    if not docs_path:
         return None
-
-    path = pathlib.Path(docs_path).expanduser().resolve()
-    if not path.is_dir():
-        console.print(
-            f"[yellow][Warning] Provided KB path '{path}' is not a valid directory. Skipping knowledge base initialization.[/yellow]"
-        )
+    if isinstance(docs_path, str):
+        raw_paths = [part.strip() for part in docs_path.replace(";", ",").split(",") if part.strip()]
+    else:
+        raw_paths = [str(part).strip() for part in docs_path if str(part).strip()]
+    valid_paths = []
+    for raw in raw_paths:
+        candidate = pathlib.Path(raw).expanduser().resolve()
+        if candidate.is_dir():
+            valid_paths.append(candidate)
+        else:
+            console.print(
+                f"[yellow][Warning] Provided KB path '{candidate}' is not a "
+                f"valid directory. Skipping it.[/yellow]"
+            )
+    if not valid_paths:
         return None
 
     chroma_persist_dir = os.path.abspath(index_path or RAG_INDEX_PATH)
@@ -387,7 +396,13 @@ def initialize_knowledge_base(
 
     chunking = load_chunking_settings()
 
-    for file_path, stat in _iter_source_files(path):
+    _source_items = []
+    for _collection_path in valid_paths:
+        _collection_name = _collection_path.name or "default"
+        for _file_path, _stat in _iter_source_files(_collection_path):
+            _source_items.append((_file_path, _stat, _collection_name))
+
+    for file_path, stat, collection_name in _source_items:
         ext = file_path.suffix.lower()
         try:
             file_key = str(file_path)
@@ -484,7 +499,11 @@ def initialize_knowledge_base(
                 for chunk_text in _split_into_chunks(
                     content, chunking, ext, getattr(embeddings, "embed_documents", None)
                 ):
-                    metadata = {"source": file_key, "chunk": chunk_number}
+                    metadata = {
+                        "source": file_key,
+                        "chunk": chunk_number,
+                        "collection": collection_name,
+                    }
                     if page_number is not None:
                         metadata["page"] = page_number
                     chunk_id = hashlib.sha256(

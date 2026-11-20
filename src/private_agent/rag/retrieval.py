@@ -104,7 +104,10 @@ class HybridRAGRetriever:
         return [doc for doc, _ in scored]
 
     def similarity_search(
-        self, query: str, k: int = RAG_SIMILARITY_RESULTS
+        self,
+        query: str,
+        k: int = RAG_SIMILARITY_RESULTS,
+        collection: str | None = None,
     ) -> list[Document]:
         threshold = RAG_RELEVANCE_THRESHOLD
         vector_results = None
@@ -129,6 +132,15 @@ class HybridRAGRetriever:
             if threshold > 0:
                 # No scores available; keep results to preserve behaviour.
                 pass
+        if collection:
+            vector_results = [
+                doc
+                for doc in vector_results
+                if (getattr(doc, "metadata", None) or {}).get("collection")
+                == collection
+            ]
+            if not vector_results:
+                return []
         query_tokens = _tokenize(query)
         if not self.bm25 or not self.documents or not query_tokens:
             return self._rerank(query, vector_results[:k])
@@ -142,6 +154,13 @@ class HybridRAGRetriever:
         bm25_results = [
             self.documents[index] for index, score in top_scored_docs if score > 0
         ]
+        if collection:
+            bm25_results = [
+                doc
+                for doc in bm25_results
+                if (getattr(doc, "metadata", None) or {}).get("collection")
+                == collection
+            ]
 
         fused = _reciprocal_rank_fusion((vector_results, bm25_results), k)
         return self._rerank(query, fused)
