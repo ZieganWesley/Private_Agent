@@ -159,6 +159,11 @@ def _reap_background_processes() -> None:
                 item["status"] = "completed" if process.returncode == 0 else "failed"
                 item["returncode"] = process.returncode
                 item["ended_at"] = time.time()
+                handle = item.get("stdout_handle")
+                if handle is not None:
+                    with contextlib.suppress(OSError):
+                        handle.close()
+                    item["stdout_handle"] = None
 
 
 def _read_background_output(item: dict, tail: int = 4000) -> str:
@@ -179,17 +184,51 @@ def start_background_process(command: str, timeout: int | None = None) -> str:
         command_args = shlex.split(command)
         if not command_args:
             return "Error: Command must not be empty."
+        if not sys.stdin.isatty() and not _tool_invocation_approved.get():
+            return (
+                "Error: Shell execution requires an interactive terminal and explicit "
+                "per-command approval; no command was run."
+            )
+        from .. import code_tasks
+
+        if not _tool_invocation_approved.get():
+            return (
+                "Error: Command execution requires explicit approval through the "
+                "central permission policy; no command was run."
+            )
+        use_shell = requires_shell_interpreter(command)
+        sandbox_root = (
+            get_tool_context().code_task.root
+            if get_tool_context().code_task is not None
+            else SandboxManager.get_root()
+        )
+        if use_shell:
+            command_args = [
+                _SANDBOX_SHELL,
+                "-c",
+                _sandbox_shell_script(command, sandbox_root),
+            ]
+        isolated_command, environment = code_tasks._isolated_command(
+            command_args,
+            sandbox_root,
+            allow_network=(
+                get_tool_context().code_task is not None
+                and getattr(get_tool_context().code_task, "allow_network", False)
+            ),
+        )
         process_id = uuid.uuid4().hex[:12]
         output_handle = tempfile.NamedTemporaryFile(  # noqa: SIM115
             mode="w+", delete=False, prefix=f"bg-{process_id}-", suffix=".log"
         )
         output_path = output_handle.name
         output_handle.close()
+        stdout_handle = open(output_path, "a", encoding="utf-8")  # noqa: SIM115
         process = subprocess.Popen(
-            command_args,
-            stdout=open(output_path, "a", encoding="utf-8"),  # noqa: SIM115
+            isolated_command,
+            stdout=stdout_handle,
             stderr=subprocess.STDOUT,
             text=True,
+            env=environment,
             start_new_session=True,
         )
         started_at = time.time()
@@ -203,6 +242,7 @@ def start_background_process(command: str, timeout: int | None = None) -> str:
                 "status": "running",
                 "returncode": None,
                 "output_path": output_path,
+                "stdout_handle": stdout_handle,
                 "ended_at": None,
             }
         if timeout is not None:
@@ -214,7 +254,7 @@ def start_background_process(command: str, timeout: int | None = None) -> str:
             f"Started background process {process_id} (pid {process.pid}). "
             f"Running background processes: {running}."
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         return f"Error starting background process: {exc}"
 
 
@@ -256,6 +296,12 @@ def stop_background_process(process_id: str) -> str:
         item["status"] = "stopped"
         item["returncode"] = process.returncode
         item["ended_at"] = time.time()
+        handle = item.get("stdout_handle")
+        if handle is not None:
+            with contextlib.suppress(OSError):
+                handle.close()
+            item["stdout_handle"] = None
+        _reap_background_processes()
         running = _background_process_count()
     return f"Stopped background process {process_id}. Running background processes: {running}."
 
