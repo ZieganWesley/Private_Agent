@@ -14,7 +14,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-import ollama
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -1391,7 +1390,7 @@ async def _build_session_setup(
                     hardware_info = inspect_ollama_hardware(
                         runtime.base_url,
                         HARDWARE_ACCELERATION_MODE,
-                        client_factory=lambda **kwargs: ollama.Client(
+                        client_factory=lambda **kwargs: __import__("ollama").Client(
                             **kwargs, **ollama_client_kwargs()
                         ),
                     )
@@ -2229,7 +2228,7 @@ async def _choose_provider(
             hardware_info = inspect_ollama_hardware(
                 selected_local_runtime.base_url,
                 HARDWARE_ACCELERATION_MODE,
-                client_factory=lambda **kwargs: ollama.Client(
+                client_factory=lambda **kwargs: __import__("ollama").Client(
                     **kwargs, **ollama_client_kwargs()
                 ),
             )
@@ -2846,7 +2845,7 @@ async def _run_agent_cli_session(
                         hardware_info = inspect_ollama_hardware(
                             selected_local_runtime.base_url,
                             HARDWARE_ACCELERATION_MODE,
-                            client_factory=lambda **kwargs: ollama.Client(
+                            client_factory=lambda **kwargs: __import__("ollama").Client(
                                 **kwargs, **ollama_client_kwargs()
                             ),
                         )

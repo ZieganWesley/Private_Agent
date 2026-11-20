@@ -13,7 +13,10 @@ from urllib.parse import quote
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_ollama import OllamaEmbeddings
+try:
+    from langchain_ollama import OllamaEmbeddings
+except Exception:  # noqa: BLE001 - optional dependency
+    OllamaEmbeddings = None
 
 from private_agent.console import console
 
@@ -382,7 +385,7 @@ def initialize_knowledge_base(
             **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
         )
         track_ollama_http_clients(embeddings)
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, TypeError, RuntimeError) as e:  # noqa: BLE001 - optional dependency boundary
         console.print(f"[red][Error] Could not bind embedding model: {e}[/red]")
         return None
 

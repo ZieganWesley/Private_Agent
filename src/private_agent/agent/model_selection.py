@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+try:
+    import ollama
+except Exception:  # noqa: BLE001 - optional dependency
+    ollama = None
+
 import logging
 import sys
 from collections.abc import Sequence
 from getpass import getpass
 from typing import Any
-
-import ollama
-from langchain_ollama import ChatOllama
 
 from ..config import (
     APP_CONFIG,
@@ -55,6 +57,20 @@ from .providers import validate_online_base_url as _validate_online_base_url
 _MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] = {}
 
 
+def _ollama_client(*args, **kwargs):
+    """Lazily import and build an Ollama client (keeps ollama optional)."""
+    import ollama as _ollama
+
+    return _ollama.Client(*args, **kwargs)
+
+
+def ChatOllama(*args, **kwargs):
+    """Lazily import ChatOllama (keeps langchain_ollama optional)."""
+    from langchain_ollama import ChatOllama as _ChatOllama
+
+    return _ChatOllama(*args, **kwargs)
+
+
 def _close_ollama_client(client):
     try:
         client.close()
@@ -79,7 +95,7 @@ def inspect_model_capabilities(
     return _inspect_local_model_capabilities(
         model_name,
         base_url=OLLAMA_BASE_URL,
-        client_factory=ollama.Client,
+        client_factory=_ollama_client,
         client_kwargs=ollama_client_kwargs,
         capability_cache=_MODEL_CAPABILITIES_CACHE,
         max_cache_entries=MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
@@ -262,7 +278,7 @@ def select_online_model(use_saved_details: bool | None = None):
 def fetch_local_chat_models() -> list[str]:
     client = None
     try:
-        client = ollama.Client(host=OLLAMA_BASE_URL, **ollama_client_kwargs())
+        client = _ollama_client(host=OLLAMA_BASE_URL, **ollama_client_kwargs())
         response = client.list()
         models_list = (
             response.get("models", [])
