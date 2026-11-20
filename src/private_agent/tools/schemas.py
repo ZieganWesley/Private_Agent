@@ -33,6 +33,22 @@ class EditFileInput(BaseModel):
     content: str = Field(..., description="Full text content to write into the file.")
 
 
+class RunSubagentInput(BaseModel):
+    task: str = Field(
+        ..., min_length=1, description="Task for the subagent to complete."
+    )
+    allowed_tools: list[str] | None = Field(
+        default=None,
+        description="Optional allowlist of tool names the subagent may use.",
+    )
+    max_iterations: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of agent loop iterations for the subagent.",
+    )
+
+
 class RunShellInput(BaseModel):
     command: str = Field(..., description="Shell command string to execute.")
     timeout: int | None = Field(

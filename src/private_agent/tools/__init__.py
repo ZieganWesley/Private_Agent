@@ -121,6 +121,7 @@ class ToolContext:
     runtime_owner_id: str | None = None
     schema_read_tables: set | None = None
     interactive: bool = True
+    subagent_runner: Any = None
 
 
 _TOOL_CONTEXT = ToolContext(
@@ -152,6 +153,7 @@ def set_tool_context(context: ToolContext) -> None:
     _TOOL_CONTEXT.skill_session_id = context.skill_session_id
     _TOOL_CONTEXT.code_task = context.code_task
     _TOOL_CONTEXT.interactive = context.interactive
+    _TOOL_CONTEXT.subagent_runner = context.subagent_runner
     if context.runtime_owner_id is not None:
         _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:
@@ -505,6 +507,7 @@ from .shell import (
     start_background_process,
     stop_background_process,
 )
+from .subagents import run_subagent
 from .web import download_web_file, fetch_webpage, web_search
 
 AVAILABLE_TOOLS = {
@@ -524,6 +527,7 @@ AVAILABLE_TOOLS = {
     "rename_workspace_file": rename_workspace_file,
     "delete_workspace_file": delete_workspace_file,
     "run_shell_command": run_shell_command,
+    "run_subagent": run_subagent,
     "start_background_process": start_background_process,
     "get_background_process_status": get_background_process_status,
     "stop_background_process": stop_background_process,

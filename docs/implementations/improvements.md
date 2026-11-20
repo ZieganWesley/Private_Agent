@@ -2355,7 +2355,7 @@ For when to do each step, see the implementation order in section L1.
 | 6.10 | **Done:** custom slash commands loaded from Markdown files in `~/.private_agent/commands` and `<workspace>/.private_agent/commands` | C9 | 4.4 | A new `.md` file becomes a `/command` |
 | 6.11 | **Done:** hooks in config (`hooks` section) run before/after tool calls and at session start; PreToolUse hooks can block a call via nonzero exit or JSON decision; matcher filtering; timeout handling | C7 | 4.2, 4.3 | A post-edit formatter hook runs after every file edit |
 | 6.12 | **Done:** git write tools (`create_git_branch`, `stage_git_changes`, `commit_git_changes`, `create_pull_request`) behind permission checks; optional PR via `gh` | C11 | 4.3, 6.5 | The agent can commit its work on a new branch after approval |
-| 6.13 | Add subagents: a tool that starts a separate agent loop with its own context and a limited tool set, and returns only its summary | C6 | 4.2, 3.4 | A search can be delegated without filling the main context |
+| 6.13 | **Done:** `run_subagent` tool starts a focused agent loop with a limited tool set and returns only its summary; wired into runtime sessions | C6 | 4.2, 3.4 | A search can be delegated without filling the main context |
 | 6.14 | ~~Add a macOS sandbox using Seatbelt~~ Moved to steps 11.7–11.8 | C4 | 11.8 | See 11.8 |
 | 6.15 | ~~Add a status line showing model, context use and permission mode~~ Replaced by step 9.7 | C14 | 9.7 | See 9.7 |
 

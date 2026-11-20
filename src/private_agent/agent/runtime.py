@@ -2293,6 +2293,11 @@ async def _run_agent_cli_session(
         llm = selection.llm
         llm_with_tools = selection.llm_with_tools
         tools_list = selection.tools_list
+        from .subagent_runner import make_subagent_runner
+
+        _tool_context = get_tool_context()
+        _tool_context.subagent_runner = make_subagent_runner(llm)
+        set_tool_context(_tool_context)
         selected_local_runtime = selection.selected_local_runtime
         include_private_context = selection.include_private_context
         startup_memory_context = selection.startup_memory_context
