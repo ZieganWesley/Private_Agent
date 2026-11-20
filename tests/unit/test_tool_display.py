@@ -97,7 +97,7 @@ def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
     )
 
     panel = printed[0][0]
-    assert panel.title.plain == "Tool output: search_workspace"
+    assert panel.title.plain == "\u2713 Tool output: search_workspace"
     body = panel.renderable.plain
     assert body.startswith("x" * tool_display.TOOL_RESULT_PREVIEW_CHARS)
     assert "Preview truncated" in body

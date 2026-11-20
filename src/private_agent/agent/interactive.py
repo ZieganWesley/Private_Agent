@@ -21,6 +21,7 @@ from ..sandbox import SandboxManager
 
 SLASH_COMMANDS = {
     "/help": "Show available commands and file-context syntax.",
+    "/expand": "Show the full output of the most recent tool call.",
     "/list_tools": "List available tools, descriptions, and permission boundaries.",
     "/maintenance": (
         "Review episodes, manage user-confirmed learning, and maintain SQLite/RAG."
@@ -87,15 +88,53 @@ _FOLDER_CONTEXT_EXTENSIONS = frozenset(
 
 
 def format_help() -> str:
+    groups = {
+        "Chat": [
+            "/plan",
+            "/code",
+            "/think on",
+            "/think off",
+            "/think-effort low",
+            "/think-effort medium",
+            "/think-effort high",
+            "/think-status",
+            "/summarize",
+            "/compact",
+            "/status",
+            "/undo",
+            "/help",
+            "/list_tools",
+        ],
+        "Files": ["/add", "/context"],
+        "Plans": ["/plan", "/code", "/tasks"],
+        "Memory": ["/summarize", "/compact", "/maintenance"],
+        "Model": ["/think on", "/think off", "/hardware-status", "switch"],
+        "Session": ["exit", "switch"],
+    }
     lines = ["[bold cyan]Commands[/bold cyan]"]
-    lines.extend(
-        f"  [cyan]{command}[/cyan] — {description}"
-        for command, description in SLASH_COMMANDS.items()
-    )
-    lines.extend(
-        f"  [cyan]{command}[/cyan] — {description}"
-        for command, description in SESSION_COMMANDS.items()
-    )
+    printed = set()
+    for group_name, command_names in groups.items():
+        group_lines = []
+        for command in command_names:
+            description = SLASH_COMMANDS.get(command) or SESSION_COMMANDS.get(command)
+            if description is None or command in printed:
+                continue
+            printed.add(command)
+            group_lines.append(f"  [cyan]{command}[/cyan] — {description}")
+        if group_lines:
+            lines.append(f"[bold]{group_name}[/bold]")
+            lines.extend(group_lines)
+    # Any commands not covered by a group above.
+    leftover = [
+        command
+        for command in list(SLASH_COMMANDS) + list(SESSION_COMMANDS)
+        if command not in printed
+    ]
+    if leftover:
+        lines.append("[bold]Other[/bold]")
+        for command in leftover:
+            description = SLASH_COMMANDS.get(command) or SESSION_COMMANDS.get(command)
+            lines.append(f"  [cyan]{command}[/cyan] — {description}")
     lines.extend(
         [
             "  [cyan]@<workspace-relative-path>[/cyan] — Include a UTF-8 text file "
@@ -258,6 +297,7 @@ async def prompt_user_input(
     prompt_message: str = "User: ",
     skills: Mapping[str, Any] | None = None,
     history: History | None = None,
+    bottom_toolbar: str | None = None,
 ) -> str:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return console.input(prompt_message)
@@ -268,7 +308,12 @@ async def prompt_user_input(
         history=history,
         key_bindings=build_prompt_key_bindings(),
     )
-    return await session.prompt_async(ANSI("\x1b[1;34m" + prompt_message + "\x1b[0m"))
+    kwargs = {}
+    if bottom_toolbar:
+        kwargs["bottom_toolbar"] = bottom_toolbar
+    return await session.prompt_async(
+        ANSI("\x1b[1;34m" + prompt_message + "\x1b[0m"), **kwargs
+    )
 
 
 def include_file_context(
