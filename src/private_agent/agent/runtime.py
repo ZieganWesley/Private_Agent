@@ -3362,24 +3362,59 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         and active_task["approved_revision"] == active_task["revision"]
                         and active_task["approved_digest"] == active_task["digest"]
                     ):
+                        def _plan_field(step: dict, name: str) -> str:
+                            value = step.get(name)
+                            if isinstance(value, (list, tuple)):
+                                return ", ".join(str(item) for item in value)
+                            return str(value or "")
+
                         active_task_instruction = (
                             "Current user-approved SQLite task plan (reference, "
                             "not authorization beyond its recorded scope): "
                             f"task_id={active_task['task_id']}; "
                             f"revision={active_task['revision']}; "
                             f"type={active_task['task_type']}; "
-                            f"goal={active_task['goal']}; steps="
+                            f"goal={active_task['goal']}; "
+                            f"assumptions={'; '.join(active_task.get('assumptions') or [])}; "
+                            f"constraints={'; '.join(active_task.get('constraints') or [])}; "
+                            "steps="
                             + "; ".join(
-                                f"{step['step_id']} [{step['status']}] "
-                                f"{step['description']}"
+                                " ".join(
+                                    part
+                                    for part in (
+                                        f"{step['step_id']} [{step['status']}] {_plan_field(step, 'description')}",
+                                        (
+                                            "deps=" + _plan_field(step, "dependencies")
+                                            if step.get("dependencies")
+                                            else ""
+                                        ),
+                                        (
+                                            "validation=" + _plan_field(step, "validation")
+                                            if step.get("validation")
+                                            else ""
+                                        ),
+                                        (
+                                            "proof=" + _plan_field(step, "proof")
+                                            if step.get("proof")
+                                            else ""
+                                        ),
+                                        (
+                                            "risks=" + _plan_field(step, "risks")
+                                            if step.get("risks")
+                                            else ""
+                                        ),
+                                        (
+                                            "edge_cases=" + _plan_field(step, "edge_cases")
+                                            if step.get("edge_cases")
+                                            else ""
+                                        ),
+                                    )
+                                    if part
+                                )
                                 for step in active_task["steps"]
                             )
                             + ". Persist truthful progress using update_todo_step "
-                            "only after calling read_table_schema for the task "
-                            "tables. Tailor evidence to reported schema/application "
-                            "limits; semantically summarize it when necessary and "
-                            "never rely on fixed truncation. Update at step "
-                            "boundaries. Model-reported completion is not "
+                            "at step boundaries. Model-reported completion is not "
                             "verification; the user/runtime must verify evidence. "
                             "If blocked by a failed tool, unavailable source, or "
                             "invalid assumption, explain what failed, state what "
