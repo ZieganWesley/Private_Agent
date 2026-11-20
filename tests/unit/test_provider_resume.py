@@ -118,3 +118,71 @@ def test_provider_loss_guidance_handles_no_other_provider_and_discovery_errors()
     assert "No other local provider" in provider_loss_guidance(
         runtime_name="Ollama", session_id="s", discover=exploding
     )
+
+
+def test_capability_change_warnings_describe_what_a_resumed_model_lost():
+    from private_agent.agent.provider_resume import capability_change_warnings
+
+    previous = ProviderRecord(
+        "ollama",
+        "Ollama",
+        "http://127.0.0.1:11434",
+        "qwen3:8b",
+        needs_tools=True,
+        needs_vision=True,
+        context_window=32768,
+    )
+
+    warnings = capability_change_warnings(
+        previous, {"tools": False, "vision": False, "context_window": 8192}
+    )
+
+    assert len(warnings) == 3
+    assert any("tool calling" in warning for warning in warnings)
+    assert any("vision" in warning for warning in warnings)
+    assert any("32768 to 8192" in warning for warning in warnings)
+
+
+def test_capability_change_warnings_are_quiet_when_nothing_shrank():
+    from private_agent.agent.provider_resume import capability_change_warnings
+
+    previous = ProviderRecord(
+        "ollama", "Ollama", "http://127.0.0.1:11434", "qwen3:8b", needs_tools=True
+    )
+
+    assert (
+        capability_change_warnings(
+            previous, {"tools": True, "vision": False, "context_window": None}
+        )
+        == []
+    )
+    assert capability_change_warnings(None, {"tools": False}) == []
+
+
+def test_persisting_a_weaker_provider_warns_about_the_lost_capabilities(tmp_path):
+    memory = _memory(tmp_path)
+    printed = []
+    previous = ProviderRecord(
+        "ollama",
+        "Ollama",
+        "http://127.0.0.1:11434",
+        "qwen3:8b",
+        needs_tools=True,
+        context_window=32768,
+    )
+
+    persist_provider_choice(
+        console=SimpleNamespace(
+            print=lambda message, **_kwargs: printed.append(message)
+        ),
+        memory=memory,
+        session_id="session-a",
+        runtime=_runtime(),
+        model="qwen3-8b",
+        capabilities={"tools": False, "context_window": 4096},
+        previous=previous,
+    )
+
+    assert any("tool calling" in message for message in printed)
+    assert any("context window shrank" in message for message in printed)
+    memory.close()

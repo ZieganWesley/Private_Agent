@@ -9,6 +9,8 @@ __all__ = [
     "always_ask_provider",
     "provider_loss_guidance",
     "auto_select_single_provider",
+    "capability_change_warnings",
+    "warn_capability_changes",
     "provider_record_for_resume",
     "match_runtime_by_address",
     "persist_provider_choice",
@@ -39,6 +41,35 @@ def provider_record_for_resume(memory, session_id):
             error_type=type(exc).__name__,
         )
         return None
+
+
+def capability_change_warnings(previous, capabilities):
+    """Describe what a resumed model lost compared with its provider record."""
+    if previous is None:
+        return []
+    current = capabilities or {}
+    warnings = []
+    if previous.needs_tools and not current.get("tools"):
+        warnings.append("it was recorded with tool calling, which it no longer reports")
+    if previous.needs_vision and not current.get("vision"):
+        warnings.append("it was recorded with vision, which it no longer reports")
+    recorded_window = previous.context_window
+    current_window = current.get("context_window")
+    if recorded_window and current_window and current_window < recorded_window:
+        warnings.append(
+            f"its context window shrank from {recorded_window} to "
+            f"{current_window} tokens"
+        )
+    return warnings
+
+
+def warn_capability_changes(console, previous, capabilities, model):
+    """Print one warning per capability a resumed model no longer reports."""
+    for warning in capability_change_warnings(previous, capabilities):
+        console.print(
+            f"[yellow][Resume][/yellow] {model}: {warning}; "
+            "continuing, but expect a weaker result."
+        )
 
 
 def match_runtime_by_address(base_url, runtimes):
@@ -90,6 +121,7 @@ def persist_provider_choice(
                 level=logging.WARNING,
                 error_type=type(exc).__name__,
             )
+    warn_capability_changes(console, previous, capabilities, record.model)
     if previous is not None and (
         previous.display_name != record.display_name
         or previous.base_url != record.base_url
