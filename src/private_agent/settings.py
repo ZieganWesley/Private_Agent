@@ -303,7 +303,7 @@ def resolve_config_values(
     CHUNKING_SEMANTIC_MAX_SENTENCES = configured_int(
         config, "chunking", "semantic_max_sentences", 2000
     )
-    RAG_SIMILARITY_RESULTS = configured_int(config, "rag", "similarity_results", 4)
+    RAG_SIMILARITY_RESULTS = configured_int(config, "rag", "similarity_results", 6)
     RAG_SQLITE_MAX_ROWS_PER_TABLE = configured_int(
         config, "rag", "sqlite_max_rows_per_table", 5000
     )
