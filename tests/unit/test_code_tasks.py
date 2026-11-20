@@ -300,7 +300,7 @@ def test_code_task_blocks_manual_git_shell_commands(monkeypatch):
 @pytest.mark.parametrize(
     ("system", "available_tools", "message"),
     [
-        ("Darwin", {"bwrap", "prlimit"}, "currently supported only on Linux"),
+        ("Darwin", set(), "macOS sandbox support"),
         ("Linux", {"prlimit"}, "Bubblewrap"),
         ("Linux", {"bwrap"}, "Bubblewrap"),
     ],
@@ -326,8 +326,16 @@ def test_isolated_command_fails_closed_when_isolation_is_unavailable(
     [
         (
             "Darwin",
-            {"bwrap", "prlimit"},
-            "OS-level command isolation is currently supported only on Linux.",
+            set(),
+            "Install macOS sandbox support (sandbox-exec) for filesystem, "
+            "network, and resource isolation. Grant Terminal or the agent "
+            "camera and microphone permissions in System Settings if those "
+            "features are needed.",
+        ),
+        (
+            "Darwin",
+            {"sandbox-exec"},
+            None,
         ),
         (
             "Linux",
@@ -357,6 +365,26 @@ def test_isolation_readiness_reports_platform_without_raising(
     )
 
     assert code_tasks.isolation_unavailable_reason() == expected
+
+
+def test_isolated_command_uses_seatbelt_on_macos(monkeypatch, tmp_path):
+    from private_agent import code_tasks
+
+    monkeypatch.setattr(code_tasks.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(
+        code_tasks.shutil,
+        "which",
+        lambda name: "/usr/bin/sandbox-exec" if name == "sandbox-exec" else None,
+    )
+
+    isolated, env = code_tasks._isolated_command(
+        ["echo", "hi"], tmp_path, allow_network=False
+    )
+    assert isolated[0] == "/usr/bin/sandbox-exec"
+    assert isolated[1] == "-p"
+    assert "deny network*" in isolated[2]
+    assert isolated[3:] == ["echo", "hi"]
+    assert isinstance(env, dict)
 
 
 def test_isolated_command_shares_network_only_when_explicitly_enabled(

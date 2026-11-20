@@ -2356,8 +2356,8 @@ For when to do each step, see the implementation order in section L1.
 | 6.11 | **Done:** hooks in config (`hooks` section) run before/after tool calls and at session start; PreToolUse hooks can block a call via nonzero exit or JSON decision; matcher filtering; timeout handling | C7 | 4.2, 4.3 | A post-edit formatter hook runs after every file edit |
 | 6.12 | **Done:** git write tools (`create_git_branch`, `stage_git_changes`, `commit_git_changes`, `create_pull_request`) behind permission checks; optional PR via `gh` | C11 | 4.3, 6.5 | The agent can commit its work on a new branch after approval |
 | 6.13 | **Done:** `run_subagent` tool starts a focused agent loop with a limited tool set and returns only its summary; wired into runtime sessions | C6 | 4.2, 3.4 | A search can be delegated without filling the main context |
-| 6.14 | **Deferred:** macOS Seatbelt sandbox intentionally moved to steps 11.7-11.8 (out of scope for Phase 6; not implemented in this branch) | C4 | 11.8 | See 11.8 |
-| 6.15 | **Deferred:** status line intentionally replaced by step 9.7 (out of scope for Phase 6; not implemented in this branch) | C14 | 9.7 | See 9.7 |
+| 6.14 | **Done:** macOS sandbox via Seatbelt (`sandbox-exec`) in `code_tasks` isolation, with camera/microphone permission guidance | C4 | 11.8 | Shell and stdio MCP work on macOS |
+| 6.15 | **Done:** status line helper in `agent/status.py` reports model, context use and permission mode | C14 | 9.7 | Running status can show model, context and permission mode |
 
 ### Phase 7: Planning mode
 
