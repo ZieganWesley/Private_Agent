@@ -87,9 +87,9 @@ Branch `i-provider-independence`; `main` untouched.
 | I1j | Done | Installed-but-idle providers are listed with their start hint; the last chosen provider is remembered in `~/.private_agent/last_provider.json` (override `PRIVATE_AGENT_PROVIDER_STATE`) and used as the menu default |
 | I1k | Done | 11 presets with default ports and start hints, so vLLM, Jan, KoboldCpp, GPT4All, LocalAI, llamafile and MLX-LM no longer need manual configuration |
 | I1l | Done | Embedding-model filtering runs for every provider, not only Ollama |
-| I1m | Done | Non-loopback hosts are accepted only when `models.allow_remote_hosts` is on (default off; loopback is unchanged) |
+| I1m | Done | Non-loopback hosts are accepted only when `models.allow_remote_hosts` is on (default off; loopback is unchanged); using one prints a `[Remote host]` warning that prompts and chunks leave the machine (`agent/model_selection.py`, `rag/indexing.py`) |
 | I1n | Done | `--provider` / `--model` flags skip the menu when they match; a single reachable provider is auto-selected when `models.auto_select_single_provider` is on; `models.always_ask` forces the prompt |
-| I1o | Done | A provider that stops mid-session prints `[Provider lost]` guidance with the reachable alternatives and the `--resume <id> --provider <name>` command before the request error |
+| I1o | Done | A provider that stops mid-session prints `[Provider lost]` guidance, offers to retry the same turn on another reachable provider with one explicit yes (rebuilding the model and tool binding there), and records the switch; declining keeps the session usable with the original error (`agent/provider_fallback.py`) |
 | I1p | Done | New `session_providers` table (`database/provider_records.py`) records adapter type, display name, base URL, model and capabilities per session; `agent/provider_resume.py` reads it back |
 
 ### Resume rules (I2)
@@ -108,12 +108,13 @@ construction.
 ### Verification
 
 - `ruff check .` clean, `ruff format` applied.
-- `pytest` -> 1074 passed, 12 skipped, 0 failures (was 1038 before Part I).
+- `pytest` -> 1120 passed, 12 skipped, 0 failures (was 1038 before Part I).
 - New tests: `tests/unit/test_provider_selection.py` (12),
   `tests/unit/test_provider_adapters.py` (3),
   `tests/unit/test_provider_records.py` (6),
   `tests/unit/test_model_capabilities.py` (+4),
-  `tests/unit/test_benchmark_rag.py` (+3), plus resume auto-select,
+  `tests/unit/test_benchmark_rag.py` (+3), `tests/unit/test_provider_fallback.py` (6),
+  `tests/unit/test_provider_identify.py` (6), plus resume auto-select,
   stopped-provider fallback and summary tests in
   `tests/integration/test_agent_runtime.py`.
 
@@ -124,10 +125,9 @@ construction.
   changed startup for 18 existing menu integration tests and removes the
   visible confirmation line users rely on, so it is opt-in and documented in
   `config.default.json` as an addition.
-- I1o prints actionable guidance plus the resume-with-provider command rather
-  than opening an interactive re-selection prompt inside the failed turn: the
-  turn has already lost its tool binding, so re-choosing in place would need a
-  full re-initialisation. The provider record makes the documented
-  `--resume … --provider …` path equivalent and tested.
+- I1o now offers an in-turn retry on another reachable provider (see
+  `agent/provider_fallback.py`); the original deviation (guidance only) is
+  superseded. The resume-with-provider command remains the documented path
+  when the user declines or no other provider is reachable.
 - The module-size guard forced the resume/flag helpers out of `runtime.py` into
   `agent/provider_resume.py` (`runtime.py` stays below the 4300-line limit).
