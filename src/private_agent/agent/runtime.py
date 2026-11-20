@@ -3833,9 +3833,18 @@ def _print_context_state(
     values = stats if isinstance(stats, dict) else {}
     context_tokens = values.get("tokens", 0)
     context_maximum = values.get("max", 0)
-    console.print(
-        f"[dim]{status_line(model_name, context_tokens, context_maximum, permission_mode, output_tokens)}[/dim]"
+    try:
+        from ..tools.shell import background_process_indicator
+
+        process_status = background_process_indicator()
+    except (ImportError, OSError, RuntimeError, ValueError):  # pragma: no cover
+        process_status = ""
+    status_text = status_line(
+        model_name, context_tokens, context_maximum, permission_mode, output_tokens
     )
+    if process_status:
+        status_text = f"{status_text} | {process_status}"
+    console.print(f"[dim]{status_text}[/dim]")
     used = context_tokens
     try:
         used = int(context_tokens)
