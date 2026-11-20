@@ -2296,6 +2296,7 @@ async def _run_agent_cli_session(
         previous_workspace_root = SandboxManager.get_root()
         base_tools_list = list(tools_list)
         planning_mode_armed = False
+        coding_mode_armed = False
         selected_skill_key: str | None = None
         pending_folder_context = ""
         pending_folder_context_files: tuple[str, ...] = ()
@@ -2532,6 +2533,13 @@ async def _run_agent_cli_session(
                         "create or inspect a SQLite task plan, with an optional "
                         "consented web search when available. No code execution "
                         "tools will be available."
+                    )
+                    continue
+                if user_input.lower() == "/code":
+                    coding_mode_armed = True
+                    console.print(
+                        "[cyan][Coding mode][/cyan] Next request requires an "
+                        "approved coding plan before edits or commands run."
                     )
                     continue
                 if user_input.lower() == "/skills" or user_input.lower().startswith(
@@ -2824,7 +2832,9 @@ async def _run_agent_cli_session(
                     continue
                 turn_permission_mode = permission_mode
                 planning_only = planning_mode_armed
+                coding_task_requested = coding_mode_armed
                 planning_mode_armed = False
+                coding_mode_armed = False
                 planning_research_citations: list[str] = []
                 clear_schema_reads()
                 if planning_only:
@@ -2901,7 +2911,6 @@ async def _run_agent_cli_session(
                     user_input = "Use the attached file context to answer my request."
                 clear_captured_images()
 
-                code_task_requested = is_code_task_request(user_input)
                 code_related_request = _is_coding_guidance_request(user_input)
                 if code_task_requested and not planning_only:
                     approved_coding_scope = _approved_coding_task_scope(
@@ -2911,9 +2920,11 @@ async def _run_agent_cli_session(
                     if approved_coding_scope is None:
                         console.print(
                             "[yellow][Plan approval required][/yellow] Run /plan, "
-                            "submit this exact coding request to save its SQLite "
-                            "checklist, review and approve it with /tasks (including "
-                            "the source project scope), then repeat the request. "
+                            "save the coding checklist from the approved request, "
+                            "review and approve it with /tasks (including the "
+                            "source project scope), then repeat that request. "
+                            "Approved plans are matched by their stored goal, not "
+                            "by repeating the original wording. "
                             "No code workspace was created."
                         )
                         continue
