@@ -43,6 +43,10 @@ DEFAULT_CONFIG = {
         "rag_documents": "~/.private_agent/rag/",
         "rag_index": "~/.private_agent/rag_index",
     },
+    "permissions": {
+        "allow": [],
+        "deny": [],
+    },
     "models": {
         "ollama_base_url": "http://localhost:11434",
         "local_openai_compatible_endpoints": [
@@ -486,6 +490,8 @@ MAX_OUTPUT_TOKENS = SETTINGS.max_output_tokens
 STREAMING_OUTPUT = SETTINGS.streaming_output
 VISIBLE_REASONING = SETTINGS.visible_reasoning
 SYSTEM_PROMPT = SETTINGS.system_prompt
+PERMISSION_ALLOW_RULES = SETTINGS.permission_allow_rules
+PERMISSION_DENY_RULES = SETTINGS.permission_deny_rules
 PROJECT_INSTRUCTIONS_FILE = SETTINGS.project_instructions_file
 CONVERSATION_RETENTION_DAYS = SETTINGS.conversation_retention_days
 EPISODE_RETENTION_DAYS = SETTINGS.episode_retention_days

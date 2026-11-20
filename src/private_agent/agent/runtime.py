@@ -58,6 +58,8 @@ from ..config import (
     MCP_SERVERS,
     ONLINE_PERMISSION_OVERRIDE,
     OVERRIDE_TOOL_LIST,
+    PERMISSION_ALLOW_RULES,
+    PERMISSION_DENY_RULES,
     PREFERRED_MODEL,
     PROJECT_INSTRUCTIONS_FILE,
     RAG_AUTO_REFRESH_SECONDS,
@@ -157,6 +159,9 @@ from .permissions import (
 )
 from .permissions import (
     coding_uses_isolated_copy as _coding_uses_isolated_copy,
+)
+from .permissions import (
+    evaluate_permission_rules as _evaluate_permission_rules,
 )
 from .permissions import (
     prompt_tool_approval as _prompt_tool_approval,
@@ -950,7 +955,14 @@ async def execute_tool_call(
     )
 
     tool_func = AVAILABLE_TOOLS.get(name)
-    if name in LOCAL_MEDIA_TOOL_NAMES and not local_media_allowed:
+    _permission_rule_decision, _permission_rule = _evaluate_permission_rules(
+        PERMISSION_ALLOW_RULES, PERMISSION_DENY_RULES, name, args
+    )
+    _permission_rule_denied = _permission_rule_decision == "deny"
+    _permission_rule_allowed = _permission_rule_decision == "allow"
+    if _permission_rule_denied:
+        result = f"Error: Tool call denied by permission rule: {_permission_rule}"
+    elif name in LOCAL_MEDIA_TOOL_NAMES and not local_media_allowed:
         result = (
             "Error: Local media tools are available only in an explicitly "
             "selected local-model session."
@@ -1018,14 +1030,18 @@ async def execute_tool_call(
             else:
                 with approved_tool_invocation():
                     result = await asyncio.to_thread(tool_func.invoke, args)
-    elif _tool_needs_permission(
-        name,
-        permission_mode,
-        network_authorized=network_authorized,
-        network_tool_names=NETWORK_TOOL_NAMES,
-        mcp_tool_names=MCP_TOOL_NAMES,
-        mcp_auto_approve_tools=MCP_AUTO_APPROVE_TOOLS,
-    ) and not (name in LOCAL_MEDIA_TOOL_NAMES and media_capture_authorized):
+    elif (
+        _tool_needs_permission(
+            name,
+            permission_mode,
+            network_authorized=network_authorized,
+            network_tool_names=NETWORK_TOOL_NAMES,
+            mcp_tool_names=MCP_TOOL_NAMES,
+            mcp_auto_approve_tools=MCP_AUTO_APPROVE_TOOLS,
+        )
+        and not (name in LOCAL_MEDIA_TOOL_NAMES and media_capture_authorized)
+        and not _permission_rule_allowed
+    ):
         if not (get_tool_context().interactive and sys.stdin.isatty()):
             result = (
                 "Error: This tool requires interactive approval and was not run. "
