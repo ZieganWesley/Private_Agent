@@ -2295,6 +2295,7 @@ async def _run_agent_cli_session(
         pending_folder_context_files: tuple[str, ...] = ()
         pending_folder_context_bytes = 0
         cli_input_history = InMemoryHistory()
+        last_user_request = ""
 
         def clear_context_after_data_reset(scopes: frozenset[str]) -> None:
             nonlocal chat_history, context_summary, startup_memory_context
@@ -2384,6 +2385,40 @@ async def _run_agent_cli_session(
                     console.print(
                         f"[cyan][Command][/cyan] Running {_custom_command_name}"
                     )
+                if user_input and not user_input.startswith("/"):
+                    last_user_request = user_input
+                if user_input.lower() == "/new":
+                    chat_history = []
+                    context_summary = ""
+                    console.print("[cyan][Command][/cyan] Started a new conversation.")
+                    continue
+                if user_input.lower() == "/retry":
+                    if last_user_request:
+                        user_input = last_user_request
+                        console.print(
+                            "[cyan][Command][/cyan] Retrying previous request."
+                        )
+                    else:
+                        console.print(
+                            "[cyan][Command][/cyan] No previous request to retry."
+                        )
+                        continue
+                if user_input.lower().startswith("/export"):
+                    from .interactive import export_conversation
+
+                    export_path = os.path.join(
+                        str(SandboxManager.get_root()), "conversation_export.md"
+                    )
+                    try:
+                        saved = export_conversation(export_path, chat_history)
+                        console.print(
+                            f"[cyan][Command][/cyan] Exported conversation to {saved}"
+                        )
+                    except (OSError, ValueError) as exc:
+                        console.print(
+                            f"[red][Command][/red] Export failed: {exc}"
+                        )
+                    continue
                 if user_input.lower() == "/help":
                     console.print(_format_interactive_help())
                     continue
