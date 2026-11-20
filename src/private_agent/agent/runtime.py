@@ -216,6 +216,7 @@ from .status import (
     status_line,
     summarizing_message,
 )
+from .status_overlay import StatusOverlay
 from .streaming import (
     _invoke_with_status,
     _visible_chunk_text,
@@ -3785,7 +3786,12 @@ Runtime context:
 
                     return response
 
-                response = await _run_agent_turn(response)
+                _overlay = StatusOverlay(console)
+                _overlay.start()
+                try:
+                    response = await _run_agent_turn(response)
+                finally:
+                    _overlay.stop()
                 elapsed_time = time.monotonic() - start_time
 
                 content = response.content
