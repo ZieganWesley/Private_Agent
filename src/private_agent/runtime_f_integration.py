@@ -12,11 +12,16 @@ from . import context_manager, json_output, task_orchestrator, timeline
 from .config import DEFAULT_DB_PATH
 
 
-def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False) -> dict[str, Any]:
-    plan = task_orchestrator.build_plan(user_input, [user_input])
-    budget = context_manager.ContextBudget(total_tokens=max(1, int(total_tokens or 1)))
+def trim_context(text: str, total_tokens: int) -> str:
+    """Trim text to the context budget using context_manager."""
     with contextlib.suppress(Exception):
-        budget.allocate()
+        out = context_manager.build_context({"recent": text}, total_tokens)
+        return out.get("recent", text)
+    return text
+
+
+def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False) -> dict[str, Any]:
+    plan = task_orchestrator.build_plan(user_input, ["respond to request"])
     run_id = turn_id or uuid.uuid4().hex
     conn: sqlite3.Connection | None = None
     try:
@@ -36,7 +41,9 @@ def record_iteration(state: dict[str, Any], step_index: int, pack: str = "Core")
     plan = state.get("plan")
     if plan is not None:
         with contextlib.suppress(Exception):
-            plan.add_step(f"tool iteration {step_index}", {pack})
+            if not plan.steps:
+                plan.add_step("tool iteration", {pack})
+            plan.mark(0, "running")
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):
@@ -49,7 +56,7 @@ def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, 
     plan = state.get("plan")
     if plan is not None and getattr(plan, "steps", None):
         with contextlib.suppress(Exception):
-            plan.mark(len(plan.steps) - 1, "done" if status == "ok" else "failed")
+            plan.mark(0, "done" if status == "ok" else "failed")
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):

@@ -500,7 +500,6 @@ class _PreflightState:
     authorized_planning_searches: dict
     task_action_seen: bool
     tool_call_count: int
-
 async def _preflight_tool_calls(
     *,
     response,
@@ -3554,6 +3553,7 @@ Runtime context:
                     user_input,
                     budget=prompt_budget,
                 )
+                enriched_input = f_integration.trim_context(enriched_input, prompt_budget)
                 prompt_history = trim_history_to_context_budget(
                     chat_history,
                     enriched_input,
