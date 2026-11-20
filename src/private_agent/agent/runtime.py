@@ -979,7 +979,7 @@ async def execute_tool_call(
         )
     )
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
-        name, args, SandboxManager.root_dir
+        name, args, SandboxManager.get_root_or_none()
     )[0]
     if _pre_hook_block_reason:
         return ToolMessage(
@@ -1182,7 +1182,7 @@ async def execute_tool_call(
         output_character_count=len(result_text),
     )
     _hook_output = collect_post_tool_hook_output(
-        tool_name=name, tool_args=args, workspace_root=SandboxManager.root_dir
+        tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root_or_none()
     )
     if _hook_output:
         result_text += "\n\n[Post-tool checks]\n" + _hook_output
@@ -4060,7 +4060,7 @@ async def run_agent_cli_async(
     """Own runtime resources and restore dynamically registered global tools."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     original_mcp_tools = set(MCP_TOOL_NAMES)
-    original_workspace_root = SandboxManager.root_dir
+    original_workspace_root = SandboxManager.get_root_or_none()
     try:
         await _run_agent_cli_session(
             verbose_startup=verbose_startup,

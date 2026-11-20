@@ -54,6 +54,11 @@ class SandboxManager:
         return cls.root_dir
 
     @classmethod
+    def get_root_or_none(cls) -> pathlib.Path | None:
+        """Return the configured workspace root, or None when unset."""
+        return cls.root_dir
+
+    @classmethod
     def validate_path(cls, file_path: str) -> pathlib.Path:
         root_dir = cls.get_root()
         try:
