@@ -2399,7 +2399,7 @@ the right capability pack (steps 9.2–9.3) instead of as special cases.
 | 8.1 | ~~Add separate role profiles with a command to switch~~ Replaced by capability packs and the turn router (steps 9.2–9.3), which combine roles in one runtime | E33 | 9.2, 9.3 | See 9.2 and 9.3 |
 | 8.2 | Render replies as Markdown with `rich.markdown` (including while streaming; done in step 10.2), and keep diagnostics apart from replies | E1, E34 | 5.2 | Code blocks, tables and lists render correctly |
 | 8.3 | **Done:** relevance cut-off via `RAG_RELEVANCE_THRESHOLD` (default 0.25) using `similarity_search_with_relevance_scores` when available; default chunks raised to 5/6; coding-standards query gated by `RAG_INCLUDE_CODING_GUIDANCE` | E6, E7, E15 | — | "Hello" gets no chunks, and `scripts/benchmark_rag.py` scores are the same or better |
-| 8.4 | Add a `search_documents` tool so the model can search the documents itself | E9 | 3.4 | The model can run a second, better search during a turn |
+| 8.4 | **Done:** added `search_documents` tool backed by the session vector store | E9 | 3.4 | The model can run a second, better search during a turn |
 | 8.5 | Rewrite follow-up questions using the conversation before searching | E8 | 8.3 | "What about the second one?" retrieves the right chunks, with a test |
 | 8.6 | Add re-ranking of retrieved chunks (local cross-encoder or the chat model) | E10 | 5.5 | Benchmark MRR improves |
 | 8.7 | Add a documents-only answer mode that says when the answer is not in the documents | E12 | 8.3 | The agent says "not found in your documents" instead of guessing |

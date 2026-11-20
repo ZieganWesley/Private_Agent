@@ -521,6 +521,7 @@ async def _preflight_tool_calls(
     schema_read_in_batch = any(
         call.get("name") == "read_table_schema" for call in response.tool_calls
     )
+    step_deadline = None
     for tool_call in response.tool_calls:
         call_name = tool_call.get("name")
         if get_tool_context().task_id and state.task_action_seen:
@@ -1594,6 +1595,7 @@ async def _build_session_setup(
         load_skills_from_folder(skills_folder_input) if skills_folder_input else {}
     )
     _tool_context = get_tool_context()
+    _tool_context.vectorstore = vectorstore
     _tool_context.skill_directory = (
         os.path.abspath(os.path.expanduser(skills_folder_input))
         if skills_folder_input
@@ -2513,6 +2515,7 @@ async def _run_agent_cli_session(
                         vectorstore=vectorstore,
                         on_data_reset=clear_context_after_data_reset,
                     )
+                    get_tool_context().vectorstore = vectorstore
                     continue
                 if user_input.lower() == "/plan" or user_input.lower() == "/plan on":
                     planning_mode_persistent = True
@@ -3568,7 +3571,6 @@ Runtime context:
 
                 start_time = time.monotonic()
                 deadline = start_time + MAX_TASK_SECONDS
-                step_deadline: float | None = None
                 (
                     llm,
                     llm_with_tools,
