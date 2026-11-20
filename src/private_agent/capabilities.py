@@ -152,16 +152,13 @@ def route_packs(
     return packs
 
 
-def tools_for_packs(packs: Iterable[str], available: set[str] | None = None) -> set[str]:
+def tools_for_packs(packs: Iterable[str]) -> set[str]:
     """Return the set of tool names allowed by the given packs."""
-    names: set[str] = set()
+    names: set[str] = set(CORE_TOOLS)
     for pack_name in packs:
         pack = PACKS.get(pack_name)
         if pack:
             names |= pack.tools
-    names |= CORE_TOOLS
-    if available is not None:
-        names &= available
     return names
 
 
@@ -186,25 +183,21 @@ def _all_pack_tools() -> set[str]:
     return names
 
 
-def filter_tools_list(tools_list, user_input="", **kw):
-    enabled = set()
+def filter_tools_list(tools_list, user_input=""):
+    """Filter ``tools_list`` to the packs needed for ``user_input`` plus any
+    packs enabled for the current turn."""
     try:
         from .tools import get_tool_context
 
         enabled = set(getattr(get_tool_context(), "enabled_packs", ()) or ())
     except Exception:  # noqa: BLE001 - context may be unavailable in tests
         enabled = set()
-    if "enabled_packs" in kw and kw.get("enabled_packs") is not None:
-        enabled = set(kw.pop("enabled_packs"))
-    allowed = tools_for_packs(route_packs(user_input, **kw), None)
-    allowed |= tools_for_packs(enabled, None)
+    allowed = tools_for_packs(route_packs(user_input))
+    allowed |= tools_for_packs(enabled)
     all_known = _all_pack_tools()
     result = []
     for t in tools_list:
         name = getattr(t, "name", None)
-        if name is None or name in allowed:
-            result.append(t)
-        elif name not in all_known:
-            # Preserve tools not explicitly listed in any pack.
+        if name is None or name in allowed or name not in all_known:
             result.append(t)
     return result

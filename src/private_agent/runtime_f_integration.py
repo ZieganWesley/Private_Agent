@@ -42,7 +42,7 @@ def gate_capability(tool_call, permission_mode, console, state):
         state.blocked_tool_messages.append(
             ToolMessage(content=reason, tool_call_id=str(tool_call.get("id") or ""))
         )
-    else:
+    elif name in capability_packs.PACKS:
         state.capability_approved = True
     return allowed
 
@@ -93,7 +93,7 @@ def trim_context(text: str, total_tokens: int) -> str:
 
 def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False) -> dict[str, Any]:
     with contextlib.suppress(Exception):
-        get_tool_context().enabled_packs = set()
+        get_tool_context().enabled_packs.clear()
     plan = task_orchestrator.build_plan(user_input, ["respond to request"])
     run_id = turn_id or uuid.uuid4().hex
     conn: sqlite3.Connection | None = None
