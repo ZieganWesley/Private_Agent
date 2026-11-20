@@ -999,6 +999,8 @@ user.
 
 ## Part F: Plan for a Single Combined Runtime with Live Status
 
+**Status (F0 done):** event bus foundation implemented (`src/private_agent/events.py`); tool calls now emit `ToolStarted`/`ToolFinished`.
+
 Goal: the chatbot, RAG chatbot, coding agent, research agent and helper become
 **one runtime**, not separate modes the user switches between. Any request
 can use any mix of these abilities in the same conversation, for example
