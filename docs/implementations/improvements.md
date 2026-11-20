@@ -2384,7 +2384,7 @@ order (section L1); the rest come after the shared agent loop.
 | 7.4 | **Done:** removed regex coding gate; `/code` arms coding mode and approved plans are matched by stored goal; blocked-request hint corrected | D2, D10 | 4.3 | Questions are never blocked, and every edit inside a coding task needs an approved plan |
 | 7.5 | **Done:** `/plan` stays on until approval or `/plan off`; added `ask_user` tool | D3 | 4.2, 4.4 | A plan can be refined over several messages |
 | 7.6 | **Done:** plans render as Markdown; approval offers approve / approve and allow edits / feedback and keep planning, with typed `APPROVE` only for riskier access levels | D7, D8, D13 | 7.5 | Approving takes one choice for normal plans |
-| 7.7 | Check validation automatically where possible: run the plan's test commands and pre-fill evidence from tool results so the user only confirms | D6 | 6.3 | Coding steps with test commands are verified without typed evidence |
+| 7.7 | **Done:** `validate` runs command-like step validation entries and prefills step evidence automatically | D6 | 6.3 | Coding steps with test commands are verified without typed evidence |
 | 7.8 | Give each plan step its own time budget | D12 | 4.2 | A long plan runs to the end without a manual resume |
 | 7.9 | Allow more than one active plan, using the `ToolContext` | D11 | 3.4 | Two plans can be active in different sessions |
 | 7.10 | Add a text-plan fallback for models without tool support, parsed into the same structure by the runtime | D14 | 7.6 | Planning works with a non-tool model |

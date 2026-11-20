@@ -7,7 +7,9 @@ import json
 import logging
 import pathlib
 import re
+import shlex
 import sqlite3
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -148,6 +150,75 @@ def _task_plan_markdown(task: dict) -> str:
             if items:
                 lines.append(f"   - {label}: " + "; ".join(items))
     return "\n".join(lines)
+
+
+def _looks_like_validation_command(value: str) -> bool:
+    stripped = value.strip()
+    if not stripped or "\n" in stripped:
+        return False
+    first = stripped.split()[0].lower()
+    return first in {"pytest", "python", "python3", "npm", "pnpm", "yarn", "cargo", "go", "make"} or "pytest" in stripped.lower()
+
+
+def _run_automatic_step_validation(
+    memory: PersistentMemory,
+    task: dict,
+) -> None:
+    """Run validation commands found in step validation lists and prefill evidence."""
+    try:
+        root = SandboxManager.get_root()
+    except RuntimeError:
+        return
+    for step in task.get("steps", []):
+        if step.get("status") in {"verified", "skipped"}:
+            continue
+        for item in step.get("validation", []):
+            if not _looks_like_validation_command(item):
+                continue
+            console.print(
+                f"[cyan]Running automatic validation for {step['step_id']}: {item}[/cyan]"
+            )
+            try:
+                completed = subprocess.run(
+                    shlex.split(item),
+                    cwd=str(root),
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except (OSError, subprocess.SubprocessError) as exc:
+                console.print(
+                    f"[yellow]Automatic validation could not run: {exc}[/yellow]"
+                )
+                continue
+            output = (completed.stdout + completed.stderr).strip()
+            snippet = output[-1000:]
+            if completed.returncode == 0:
+                try:
+                    memory.verify_task_step(
+                        task["task_id"],
+                        task["revision"],
+                        step["step_id"],
+                        (
+                            f"Automated validation passed: {item}\n"
+                            f"{snippet}"
+                        ).strip(),
+                        owner_id=get_tool_context().runtime_owner_id,
+                    )
+                    console.print(
+                        f"[green]Step {step['step_id']} verified automatically.[/green]"
+                    )
+                except (ValueError, OSError) as exc:
+                    console.print(
+                        f"[yellow]Could not save automatic evidence: {exc}[/yellow]"
+                    )
+            else:
+                console.print(
+                    f"[red]Automatic validation failed for {step['step_id']} "
+                    f"(exit {completed.returncode}).[/red]"
+                )
+                if snippet:
+                    console.print(snippet)
 
 
 def _run_task_management(
@@ -655,6 +726,7 @@ def _run_task_management(
                 )
                 console.print("[green]Step verification saved in SQLite.[/green]")
             elif action == "validate":
+                _run_automatic_step_validation(memory, task)
                 if len(parts) < 3:
                     console.print(
                         "Usage: validate <ID> <concrete task-level validation evidence>"
