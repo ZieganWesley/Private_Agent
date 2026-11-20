@@ -6,6 +6,8 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
+BASELINE_PACKS = {"Core", "Knowledge", "Media", "Memory", "MCP", "Helper"}
+
 CORE_TOOLS = frozenset(
     {
         "get_current_datetime",
@@ -109,13 +111,11 @@ def route_packs(
     forced: str | None = None,
 ) -> set[str]:
     """Return the set of pack names needed for a turn."""
-    packs: set[str] = {"Core", "Knowledge", "Media", "Memory", "MCP", "Helper"}
+    packs: set[str] = set(BASELINE_PACKS)
     text = (user_input or "").lower()
 
     if forced:
         packs.add(forced)
-        if forced in ("Coding", "Research"):
-            pass
 
     explicit = {
         "/code": "Coding",
@@ -127,9 +127,9 @@ def route_packs(
         if text.strip().startswith(cmd):
             if pack:
                 packs.add(pack)
-            # /ask keeps only Core+Knowledge
+            # /ask keeps baseline packs only
             if cmd == "/ask":
-                return {"Core", "Knowledge"}
+                return set(BASELINE_PACKS)
 
     if has_attachment:
         packs.add("Coding")

@@ -79,5 +79,8 @@ class StatusOverlay:
             return
         with contextlib.suppress(Exception):  # noqa: BLE001 - best-effort
             self._live.stop()
+        bus = get_event_bus()
+        bus.unsubscribe(ToolStarted, self._on_tool_started)
+        bus.unsubscribe(ToolFinished, self._on_tool_finished)
         self._live = None
         self._started = False
