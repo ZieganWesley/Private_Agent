@@ -147,7 +147,7 @@ DEFAULT_CONFIG = {
         "max_download_bytes": 26214400,
         "max_http_redirects": 5,
         "max_search_query_chars": 2000,
-        "max_search_results": 3,
+        "max_search_results": 8,
         "search_provider": "auto",
         "searxng_url": "",
         "search_fallback": True,

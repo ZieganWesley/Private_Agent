@@ -194,6 +194,16 @@ class InspectWorkspaceGitInput(BaseModel):
 
 class FetchWebpageInput(BaseModel):
     url: str = Field(..., description="HTTP or HTTPS URL to fetch content from.")
+    offset: int = Field(
+        0,
+        ge=0,
+        description="Zero-based character offset into the cleaned page text.",
+    )
+    length: int | None = Field(
+        None,
+        ge=1,
+        description="Maximum number of characters to return (omit for all).",
+    )
 
 
 class DownloadWebFileInput(BaseModel):

@@ -400,7 +400,7 @@ def resolve_config_values(
     MAX_SEARCH_QUERY_CHARS = configured_int(
         config, "network", "max_search_query_chars", 2000
     )
-    MAX_SEARCH_RESULTS = configured_int(config, "network", "max_search_results", 3)
+    MAX_SEARCH_RESULTS = configured_int(config, "network", "max_search_results", 8)
     SEARCH_PROVIDER = configured_choice(
         config,
         "network",
