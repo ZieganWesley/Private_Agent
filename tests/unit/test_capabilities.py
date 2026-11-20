@@ -25,3 +25,14 @@ def test_tools_for_packs():
 def test_tools_for_packs_research():
     tools = capabilities.tools_for_packs({"Core", "Research"})
     assert "web_search" in tools
+
+
+def test_classify_turn():
+    packs, complexity = capabilities.classify_turn("research then implement")
+    assert "Research" in packs
+    assert complexity in ("simple", "multi_step", "long")
+
+
+def test_enable_capability():
+    assert "Enabled" in capabilities.enable_capability("Research")
+    assert "Unknown" in capabilities.enable_capability("Nope")
