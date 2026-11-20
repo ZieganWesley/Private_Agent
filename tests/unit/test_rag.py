@@ -946,3 +946,35 @@ def test_missing_openai_compatible_embedding_client_fails_closed(tmp_path, monke
         initialize_knowledge_base(str(docs), index_path=str(tmp_path / "index-missing"))
         is None
     )
+
+
+def test_remote_embedding_endpoint_warns_before_sending_chunks(
+    tmp_path, monkeypatch, capsys
+):
+    from types import SimpleNamespace
+
+    from private_agent.providers import adapters
+    from private_agent.rag import indexing
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "notes.txt").write_text("remote embeddings", encoding="utf-8")
+
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "openai-compatible")
+    monkeypatch.setattr(indexing, "EMBEDDING_BASE_URL", "http://10.0.0.5:11434/v1")
+    monkeypatch.setattr(
+        adapters.OpenAICompatibleAdapter,
+        "embeddings",
+        lambda self, model, *, base_url: object(),
+    )
+    monkeypatch.setattr(
+        indexing,
+        "Chroma",
+        SimpleNamespace(
+            from_documents=lambda documents, embeddings, **kwargs: MagicMock()
+        ),
+    )
+
+    initialize_knowledge_base(str(docs), index_path=str(tmp_path / "index-remote"))
+
+    assert "is not on this machine" in capsys.readouterr().out

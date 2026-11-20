@@ -42,7 +42,7 @@ from ..tools import (
     track_ollama_http_clients,
 )
 from .console import console
-from .local_runtimes import LocalRuntime, discover_local_runtimes
+from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
 from .model_capabilities import detect_openai_compatible_capabilities
 from .providers import create_local_chat_model as _create_local_chat_model
 from .providers import (
@@ -230,6 +230,11 @@ def _make_selected_local_chat_model(
     capabilities: dict,
 ):
     """Build a chat model using the selected local runtime's supported API."""
+    if not _is_loopback_url(runtime.base_url):
+        console.print(
+            f"[yellow][Remote host][/yellow] {runtime.base_url} is not on this "
+            "machine; prompts and model responses leave the local device."
+        )
     if runtime.kind == "ollama":
         return _make_chat_model(
             model_name,

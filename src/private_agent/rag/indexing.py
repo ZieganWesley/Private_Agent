@@ -419,8 +419,14 @@ def initialize_knowledge_base(
             )
             track_ollama_http_clients(embeddings)
         else:
+            from ..agent.local_runtimes import _is_loopback_url
             from ..providers.adapters import OpenAICompatibleAdapter
 
+            if not _is_loopback_url(EMBEDDING_BASE_URL):
+                console.print(
+                    f"[yellow][Remote host][/yellow] {EMBEDDING_BASE_URL} is not "
+                    "on this machine; document chunks leave the local device."
+                )
             embeddings = OpenAICompatibleAdapter().embeddings(
                 EMBEDDING_MODEL, base_url=EMBEDDING_BASE_URL
             )
