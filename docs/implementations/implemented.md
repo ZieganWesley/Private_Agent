@@ -20,8 +20,30 @@
 - G4: workspace prompt precedes RAG folder prompt.
 - G15/G16: shared `Console` with a named `Theme` (info/success/warning/error/tool/user) and light-toggle env var.
 
-## Section G status
+## Section G status (complete)
 
-- Branch `g-tui-ui` pushed and mergeable into `main` (fast-forward).
-- G1–G4, G15–G16 implemented; light toggle functional.
-- Section G complete: G1-G24 all addressed (G5 Markdown replies, G8 live panel context gauge, G13 arrow-key selection helper; G5 streaming remains plain-text by design). Pre-existing unrelated failure: tests/integration/test_agent_runtime.py::test_tool_result_and_failure_are_returned_to_agent (SandboxManager root).
+Branch `g-remaining`; `main` untouched.
+
+| ID | Status | Where |
+|---|---|---|
+| G1 | Done | `0. Exit` in the provider menu sets `ProviderPreference.exit_requested` |
+| G2 | Done | `initialize_knowledge_base` creates missing folders instead of warning; regression test in `tests/unit/test_rag.py` |
+| G3 | Done | Indexing spinner only runs when a docs path is supplied |
+| G4 | Done | Workspace prompt now precedes the RAG folder prompt |
+| G5 | Done | Non-streamed replies render via `rich.markdown.Markdown`; streamed text stays plain by design |
+| G6 | Done | Edit previews render coloured diffs in tool results |
+| G7 | Done | `--provider`, `--light` and existing startup flags reduce typing |
+| G8 | Done | Live overlay panel: running/finished tools, plan, ETA and a context-usage gauge |
+| G10 | Done | Alt+Enter / Ctrl+J multi-line input bindings |
+| G11 | Done | `/expand` prints the full last tool result |
+| G12 | Done | Approval prompt offers `a` (always allow for the session) beside `y/N` |
+| G13 | Done | `arrow_select` menu helper with typed fallback, wired into provider, model, permission, coding-workspace and `/tasks` menus |
+| G14 | Done | Replies and diagnostics separated (steps 5.2/8.2) |
+| G15/G16 | Done | One shared themed `Console` (`private_agent/console.py`) with dark/light palettes; every module imports it |
+| G17–G19 | Done | Bottom toolbar, `Rule` between turns, welcome screen |
+| G20–G23 | Done | Readable tool requests, ✓/✗ status symbols, grouped `/help`, per-turn details |
+| G24 | Done | Narrow-terminal friendly layout via `soft_wrap` and compact status lines |
+
+Verification: `ruff check src` clean; `pytest` -> 1033 passed, 12 skipped, 1 pre-existing
+failure (`tests/integration/test_agent_runtime.py::test_tool_result_and_failure_are_returned_to_agent`),
+which also fails on `main` and is caused by the sandbox root being unset in that test environment.
