@@ -3897,6 +3897,12 @@ Runtime context:
                 _overlay = StatusOverlay(console)
                 _overlay.set_plan_summary(f_integration.get_plan_summary(_f_state))
                 _overlay.set_eta_deadline(deadline)
+                try:
+                    _used, _maximum = usage
+                    if _maximum:
+                        _overlay.set_context_usage(100.0 * _used / _maximum)
+                except Exception:  # noqa: BLE001 - best effort
+                    pass
                 _overlay.start()
                 try:
                     response = await _run_agent_turn(response)
