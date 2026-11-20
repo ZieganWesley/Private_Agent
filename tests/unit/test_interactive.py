@@ -324,6 +324,7 @@ def test_task_management_requires_confirmation_and_approves_exact_revision(
     commands = iter(
         [
             f"approve {task['task_id']}",
+            "1",
             f"APPROVE {task['task_id'][:8]}",
             "done",
         ]
@@ -920,6 +921,7 @@ def test_coding_approval_persists_user_selected_source_scope(tmp_path, monkeypat
     commands = iter(
         [
             f"approve {task['task_id']}",
+            "1",
             "4",
             selected_source,
             f"APPROVE {task['task_id'][:8]}",
@@ -970,6 +972,7 @@ def test_direct_workspace_approval_persists_access_and_network_scope(
     commands = iter(
         [
             f"approve {task['task_id']}",
+            "1",
             "1",
             "project",
             f"APPROVE {task['task_id'][:8]}",

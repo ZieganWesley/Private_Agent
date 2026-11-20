@@ -2378,16 +2378,16 @@ order (section L1); the rest come after the shared agent loop.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 7.1 | Give planning mode read-only tools: `read_local_file`, `list_directory`, the `search_workspace_*` tools, `inspect_workspace_git`, and `fetch_webpage` with consent | D1, D9 | — | A coding plan can quote real file names and code, with a test |
-| 7.2 | Drop the `read_table_schema` requirement and the one-call-per-round limit for planner tools, and make most step fields optional | D4 | — | A plan can be saved in one model round |
-| 7.3 | Include the whole approved plan when running it, as readable text with validation criteria, risks, assumptions and constraints | D5 | — | The execution prompt contains every step field, with a test |
-| 7.4 | Replace the regex gate: require an approved plan at the edit and command tools themselves (or through an explicit `/code` command), not from the wording of the message, and fix the blocked-request hint | D2, D10 | 4.3 | Questions are never blocked, and every edit inside a coding task needs an approved plan |
-| 7.5 | Make `/plan` a mode that stays on until the plan is approved or `/plan off`, and add an `ask_user` tool for clarifying questions | D3 | 4.2, 4.4 | A plan can be refined over several messages |
-| 7.6 | Show the plan as Markdown right after it is saved, with three choices: approve, approve and allow edits, or give feedback and keep planning. Let the user edit the plan text. Keep the typed `APPROVE <id>` only for the riskier access levels | D7, D8, D13 | 7.5 | Approving takes one choice for normal plans |
-| 7.7 | Check validation automatically where possible: run the plan's test commands and pre-fill evidence from tool results so the user only confirms | D6 | 6.3 | Coding steps with test commands are verified without typed evidence |
-| 7.8 | Give each plan step its own time budget | D12 | 4.2 | A long plan runs to the end without a manual resume |
-| 7.9 | Allow more than one active plan, using the `ToolContext` | D11 | 3.4 | Two plans can be active in different sessions |
-| 7.10 | Add a text-plan fallback for models without tool support, parsed into the same structure by the runtime | D14 | 7.6 | Planning works with a non-tool model |
+| 7.1 | **Done:** planning mode now exposes read-only tools (`read_local_file`, `list_directory`, `search_workspace_*`, `inspect_workspace_git`, `fetch_webpage` with consent) | D1, D9 | — | A coding plan can quote real file names and code, with a test |
+| 7.2 | **Done:** removed `read_table_schema` requirement and one-call-per-round limit for planner tools; step list fields are optional | D4 | — | A plan can be saved in one model round |
+| 7.3 | **Done:** approved plan is injected as readable text including validation, proof, risks, edge cases, dependencies, assumptions and constraints | D5 | — | The execution prompt contains every step field, with a test |
+| 7.4 | **Done:** removed regex coding gate; `/code` arms coding mode and approved plans are matched by stored goal; blocked-request hint corrected | D2, D10 | 4.3 | Questions are never blocked, and every edit inside a coding task needs an approved plan |
+| 7.5 | **Done:** `/plan` stays on until approval or `/plan off`; added `ask_user` tool | D3 | 4.2, 4.4 | A plan can be refined over several messages |
+| 7.6 | **Done:** plans render as Markdown; approval offers approve / approve and allow edits / feedback and keep planning, with typed `APPROVE` only for riskier access levels | D7, D8, D13 | 7.5 | Approving takes one choice for normal plans |
+| 7.7 | **Done:** `validate` runs command-like step validation entries and prefills step evidence automatically | D6 | 6.3 | Coding steps with test commands are verified without typed evidence |
+| 7.8 | **Done:** each in-progress plan step gets its own time budget | D12 | 4.2 | A long plan runs to the end without a manual resume |
+| 7.9 | **Done:** active plan IDs are tracked per session in `ToolContext` | D11 | 3.4 | Two plans can be active in different sessions |
+| 7.10 | **Done:** non-tool models use a JSON text plan parsed and saved by the runtime | D14 | 7.6 | Planning works with a non-tool model |
 
 ### Phase 8: Role coverage
 

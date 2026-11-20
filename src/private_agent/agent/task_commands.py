@@ -7,12 +7,15 @@ import json
 import logging
 import pathlib
 import re
+import shlex
 import sqlite3
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
@@ -115,6 +118,157 @@ def _planning_search_citations(result: str) -> list[str]:
         if len(citations) >= 10:
             break
     return citations
+
+
+def _task_plan_markdown(task: dict) -> str:
+    """Render a task plan as Markdown for approval and feedback."""
+    lines = [f"# {task['goal']}", ""]
+    lines.append(
+        f"- ID: `{task['task_id']}`\n- Type: {task['task_type']}\n"
+        f"- Revision: {task['revision']}\n- Status: {task['status']}"
+    )
+    plan = task.get("plan") or {}
+    for label, key in (
+        ("Assumptions", "assumptions"),
+        ("Constraints", "constraints"),
+    ):
+        items = plan.get(key, [])
+        if items:
+            lines.append(f"\n## {label}")
+            lines.extend(f"- {item}" for item in items)
+    lines.append("\n## Steps")
+    for step in task.get("steps", []):
+        lines.append(f"{step['position']}. **{step['description']}** ({step['status']})")
+        for label, key in (
+            ("Depends on", "dependencies"),
+            ("Validation", "validation"),
+            ("Proof", "proof"),
+            ("Risks", "risks"),
+            ("Edge cases", "edge_cases"),
+        ):
+            items = step.get(key, [])
+            if items:
+                lines.append(f"   - {label}: " + "; ".join(items))
+    return "\n".join(lines)
+
+
+SHELL_METACHARACTERS = frozenset(";&|<>$`\\\n\r")
+VALIDATION_EXECUTABLES = frozenset(
+    {"pytest", "python", "python3", "npm", "pnpm", "yarn", "cargo", "go", "make"}
+)
+
+
+def _validated_validation_command(value: str, root: pathlib.Path) -> list[str] | None:
+    """Return a safe argv for a validation command, or None when unsafe."""
+    stripped = value.strip()
+    if not stripped or any(char in stripped for char in SHELL_METACHARACTERS):
+        return None
+    try:
+        argv = shlex.split(stripped, posix=True)
+    except ValueError:
+        return None
+    if not argv or len(argv) > 64:
+        return None
+    executable = pathlib.Path(argv[0]).name.lower()
+    if executable not in VALIDATION_EXECUTABLES:
+        return None
+    # Keep interpreters and package runners restricted to test commands.
+    if executable in {"python", "python3"}:
+        if len(argv) < 3 or argv[1] != "-m" or argv[2] not in {"pytest", "unittest"}:
+            return None
+    elif executable in {"npm", "pnpm", "yarn"}:
+        if len(argv) < 2 or argv[1] not in {"test", "run"}:
+            return None
+        if argv[1] == "run" and (len(argv) < 3 or argv[2] != "test"):
+            return None
+    elif executable == "cargo" and (len(argv) < 2 or argv[1] != "test"):
+        return None
+    elif executable == "go" and (len(argv) < 2 or argv[1] != "test"):
+        return None
+    elif executable == "make" and (len(argv) < 2 or argv[1] != "test"):
+        return None
+
+    # Reject absolute paths and traversal outside the selected workspace.
+    for token in argv[1:]:
+        if token.startswith("-"):
+            continue
+        candidate = pathlib.Path(token)
+        if candidate.is_absolute():
+            try:
+                candidate.resolve().relative_to(root.resolve())
+            except ValueError:
+                return None
+        elif ".." in candidate.parts:
+            return None
+    return argv
+
+
+def _run_automatic_step_validation(
+    memory: PersistentMemory,
+    task: dict,
+) -> None:
+    """Run validation commands found in step validation lists and prefill evidence."""
+    try:
+        root = SandboxManager.get_root()
+    except RuntimeError:
+        return
+    if not root.exists() or not root.is_dir():
+        return
+    for step in task.get("steps", []):
+        if step.get("status") in {"verified", "skipped"}:
+            continue
+        for item in step.get("validation", []):
+            argv = _validated_validation_command(item, root)
+            if argv is None:
+                console.print(
+                    f"[yellow]Skipping unsafe or unsupported validation command: "
+                    f"{item}[/yellow]"
+                )
+                continue
+            console.print(
+                f"[cyan]Running automatic validation for {step['step_id']}: {item}[/cyan]"
+            )
+            try:
+                completed = subprocess.run(
+                    argv,
+                    cwd=str(root),
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                console.print(
+                    f"[yellow]Automatic validation could not run: {exc}[/yellow]"
+                )
+                continue
+            output = (completed.stdout + completed.stderr).strip()
+            snippet = output[-1000:]
+            if completed.returncode == 0:
+                try:
+                    memory.verify_task_step(
+                        task["task_id"],
+                        task["revision"],
+                        step["step_id"],
+                        (
+                            f"Automated validation passed: {item}\n"
+                            f"{snippet}"
+                        ).strip(),
+                        owner_id=get_tool_context().runtime_owner_id,
+                    )
+                    console.print(
+                        f"[green]Step {step['step_id']} verified automatically.[/green]"
+                    )
+                except (ValueError, OSError) as exc:
+                    console.print(
+                        f"[yellow]Could not save automatic evidence: {exc}[/yellow]"
+                    )
+            else:
+                console.print(
+                    f"[red]Automatic validation failed for {step['step_id']} "
+                    f"(exit {completed.returncode}).[/red]"
+                )
+                if snippet:
+                    console.print(snippet)
 
 
 def _run_task_management(
@@ -355,6 +509,30 @@ def _run_task_management(
                     )
                     continue
                 show_task(task)
+                console.print(Markdown(_task_plan_markdown(task)))
+                approval_choice = console.input(
+                    "Approval choice [1 approve, 2 approve and allow edits, "
+                    "3 give feedback and keep planning] (default 1): "
+                ).strip() or "1"
+                if approval_choice == "3":
+                    feedback = console.input(
+                        "Feedback to keep planning: "
+                    ).strip()
+                    console.print(
+                        "[yellow]Keeping planning. Resubmit the updated "
+                        "request with /plan, including this feedback: "
+                        f"{feedback}[/yellow]"
+                    )
+                    continue
+                if approval_choice not in {"1", "2", "3"}:
+                    console.print(
+                        "[yellow]Plan approval declined; no task actions ran. "
+                        f"To retry, enter approve {task_id[:12]} and type the exact "
+                        f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
+                        "leave Tasks and submit the updated request with /plan.[/yellow]"
+                    )
+                    continue
+                allow_edits = approval_choice == "2"
                 if task["task_type"] == "coding":
                     access_level = _select_coding_access_level(
                         console,
@@ -431,18 +609,45 @@ def _run_task_management(
                         "sources as verified; evidence must be checked and "
                         "recorded separately.[/yellow]"
                     )
-                confirmation = console.input(
-                    f"Approve exact revision {task['revision']}? "
-                    f"Type APPROVE {task_id[:8]}: "
-                ).strip()
-                if confirmation != f"APPROVE {task_id[:8]}":
-                    console.print(
-                        "[yellow]Plan approval declined; no task actions ran. "
-                        f"To retry, enter approve {task_id[:12]} and type the exact "
-                        f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
-                        "leave Tasks and submit the updated request with /plan.[/yellow]"
+                risky_approval = (
+                    task["task_type"] == "research"
+                    or (
+                        task["task_type"] == "coding"
+                        and (
+                            access_level
+                            in {"full_hitl", "full_governed", "full_monitored"}
+                            or allow_edits
+                        )
                     )
-                    continue
+                )
+                if risky_approval:
+                    confirmation = console.input(
+                        f"Approve exact revision {task['revision']}? "
+                        f"Type APPROVE {task_id[:8]}: "
+                    ).strip()
+                    if confirmation != f"APPROVE {task_id[:8]}":
+                        console.print(
+                            "[yellow]Plan approval declined; no task actions ran. "
+                            f"To retry, enter approve {task_id[:12]} and type the exact "
+                            f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
+                            "leave Tasks and submit the updated request with /plan.[/yellow]"
+                        )
+                        continue
+                else:
+                    confirmation = console.input(
+                        "Approve this plan? [Y/n/APPROVE "
+                        f"{task_id[:8]}] (default Y): "
+                    ).strip()
+                    if confirmation.lower() not in {
+                        "",
+                        "y",
+                        "yes",
+                        f"approve {task_id[:8]}".lower(),
+                    }:
+                        console.print(
+                            "[yellow]Plan approval declined; no task actions ran.[/yellow]"
+                        )
+                        continue
                 owner_id = get_tool_context().runtime_owner_id
                 lease = memory.get_task_lease(task_id)
                 takeover = False
@@ -571,6 +776,7 @@ def _run_task_management(
                 )
                 console.print("[green]Step verification saved in SQLite.[/green]")
             elif action == "validate":
+                _run_automatic_step_validation(memory, task)
                 if len(parts) < 3:
                     console.print(
                         "Usage: validate <ID> <concrete task-level validation evidence>"
@@ -749,8 +955,8 @@ def _run_task_management(
 
 def _approved_coding_task_scope(
     memory: PersistentMemory,
-    requested_goal: str,
 ) -> dict | None:
+    """Return the active approved coding plan selected through ToolContext."""
     task_id = get_tool_context().task_id
     if not task_id:
         return None
@@ -759,7 +965,6 @@ def _approved_coding_task_scope(
         task
         and task["status"] == "active"
         and task["task_type"] == "coding"
-        and task["goal"].strip().casefold() == requested_goal.strip().casefold()
         and task["approved_revision"] == task["revision"]
         and task["approved_digest"] == task["digest"]
     ):

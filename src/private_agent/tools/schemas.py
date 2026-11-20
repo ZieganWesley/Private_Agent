@@ -326,3 +326,8 @@ class CreateSkillInput(BaseModel):
         max_length=MAX_SKILL_INSTRUCTION_CHARS,
         description="Markdown instructions for the skill, based only on the user's request and relevant context.",
     )
+
+
+class AskUserInput(BaseModel):
+    question: str = Field(..., min_length=1, max_length=2000)
+    options: list[str] = Field(default_factory=list, max_length=10)

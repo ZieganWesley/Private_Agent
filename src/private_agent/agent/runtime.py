@@ -30,7 +30,6 @@ from ..code_tasks import (
     CodeTaskWorkspace,
     checkpoint_code_task,
     finalize_code_task,
-    is_code_task_request,
     run_project_unit_tests,
 )
 from ..config import (
@@ -251,7 +250,6 @@ OS_ISOLATED_TOOL_NAMES = frozenset(
     }
 )
 
-
 def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | None:
     """Explain why a location-revealing call must not run, or None if allowed."""
     if local_session:
@@ -267,11 +265,9 @@ def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | 
         )
     return None
 
-
 def _device_tools_allowed(provider_type: str) -> bool:
     """Local-only (location/media) tools: Local provider, or the explicit override."""
     return provider_type == "local" or ONLINE_PERMISSION_OVERRIDE
-
 
 def _tool_unavailable_reason(
     name: str,
@@ -305,7 +301,6 @@ def _tool_unavailable_reason(
             return "The selected local model does not declare vision support."
     return None
 
-
 def _tools_for_model(
     *,
     provider_type: str,
@@ -324,7 +319,6 @@ def _tools_for_model(
         is None
         or name in OVERRIDE_TOOL_LIST
     ]
-
 
 def _print_tool_catalog(
     entries,
@@ -387,7 +381,6 @@ def _print_tool_catalog(
         )
     console.print(table)
 
-
 async def authorize_network_research(
     tool_name: str,
     tool_args: dict[str, Any],
@@ -407,11 +400,9 @@ async def authorize_network_research(
         session_consent_state=session_consent_state,
     )
 
-
 def _bind_tools(llm, tools_list):
     """Bind the active tool set to an LLM (B1 step 1 helper)."""
     return llm.bind_tools(tools_list)
-
 
 async def _invoke_initial_model_with_fallback(
     *,
@@ -501,7 +492,6 @@ async def _invoke_initial_model_with_fallback(
         )
         return llm, llm_with_tools, selected_model, capabilities, response
 
-
 @dataclass
 class _PreflightState:
     tool_tasks: list
@@ -511,7 +501,6 @@ class _PreflightState:
     authorized_planning_searches: dict
     task_action_seen: bool
     tool_call_count: int
-
 
 async def _preflight_tool_calls(
     *,
@@ -547,9 +536,6 @@ async def _preflight_tool_calls(
             )
             continue
         if schema_read_in_batch and call_name in {
-            "create_task_plan",
-            "revise_task_plan",
-            "update_todo_step",
             "create_skill",
         }:
             state.blocked_tool_messages.append(
@@ -564,7 +550,8 @@ async def _preflight_tool_calls(
                 )
             )
             continue
-        if time.monotonic() - start_time >= MAX_TASK_SECONDS:
+        effective_deadline = step_deadline if step_deadline is not None else deadline
+        if time.monotonic() >= effective_deadline:
             state.blocked_tool_messages.append(
                 ToolMessage(
                     content="Error: Task time budget exhausted; this tool was not run.",
@@ -572,6 +559,12 @@ async def _preflight_tool_calls(
                 )
             )
             continue
+        if (
+            call_name == "update_todo_step"
+            and str(tool_call.get("args", {}).get("status", "")).lower()
+            == "in_progress"
+        ):
+            step_deadline = time.monotonic() + MAX_TASK_SECONDS
         if tool_call_limit is not None and state.tool_call_count >= tool_call_limit:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -587,20 +580,8 @@ async def _preflight_tool_calls(
         _SESSION_STATS.record_tool_call(str(tool_call.get("name") or "unknown"))
         network_authorized = False
         media_capture_authorized = False
-        if planning_only:
-            if state.planning_tool_seen:
-                state.blocked_tool_messages.append(
-                    ToolMessage(
-                        content=(
-                            "Error: Use one planner operation per "
-                            "model step so task selection remains "
-                            "deterministic."
-                        ),
-                        tool_call_id=tool_call.get("id"),
-                    )
-                )
-                continue
-            state.planning_tool_seen = True
+        # Planning mode no longer limits the model to one planner call per
+        # model round; multiple read-only/planner operations may run together.
         if call_name in {"create_task_plan", "revise_task_plan"} and not planning_only:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -618,6 +599,14 @@ async def _preflight_tool_calls(
             "inspect_task_plan",
             "revise_task_plan",
             "web_search",
+            "fetch_webpage",
+            "read_local_file",
+            "list_directory",
+            "search_workspace_files",
+            "search_workspace_text",
+            "search_workspace_symbols",
+            "inspect_workspace_git",
+            "ask_user",
         }:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -769,7 +758,6 @@ async def _preflight_tool_calls(
                     **execution_options,
                 )
             )
-
 
 async def _execute_tool_batch(
     *,
@@ -926,14 +914,12 @@ async def _execute_tool_batch(
 
     return response, False
 
-
 def _select_permission_mode(interactive: bool = True) -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
         console,
         lambda: interactive,
     )
-
 
 async def execute_tool_call(
     tool_call: dict,
@@ -1175,7 +1161,6 @@ async def execute_tool_call(
     )
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
-
 async def _execute_task_tool_call(
     memory: PersistentMemory,
     task_id: str,
@@ -1260,7 +1245,6 @@ async def _execute_task_tool_call(
         )
     return result
 
-
 async def _prepare_session(
     *,
     verbose_startup: bool = False,
@@ -1295,7 +1279,6 @@ async def _prepare_session(
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         await _discard_session_startup()
         raise
-
 
 async def _build_session_setup(
     *,
@@ -1743,7 +1726,6 @@ async def _build_session_setup(
         permission_mode=permission_mode,
     )
 
-
 async def _discard_session_startup() -> None:
     """Release whatever a failed startup already opened."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
@@ -1754,7 +1736,6 @@ async def _discard_session_startup() -> None:
     memory, _ACTIVE_MEMORY = _ACTIVE_MEMORY, None
     if memory is not None:
         memory.close()
-
 
 async def _choose_provider(
     *,
@@ -2207,7 +2188,6 @@ async def _choose_provider(
         available_models=available_models,
     )
 
-
 async def _run_agent_cli_session(
     *,
     verbose_startup: bool = False,
@@ -2303,7 +2283,8 @@ async def _run_agent_cli_session(
         active_code_workspace: CodeTaskWorkspace | None = None
         previous_workspace_root = SandboxManager.get_root()
         base_tools_list = list(tools_list)
-        planning_mode_armed = False
+        planning_mode_persistent = False
+        coding_mode_armed = False
         selected_skill_key: str | None = None
         pending_folder_context = ""
         pending_folder_context_files: tuple[str, ...] = ()
@@ -2533,13 +2514,22 @@ async def _run_agent_cli_session(
                         on_data_reset=clear_context_after_data_reset,
                     )
                     continue
-                if user_input.lower() == "/plan":
-                    planning_mode_armed = True
+                if user_input.lower() == "/plan" or user_input.lower() == "/plan on":
+                    planning_mode_persistent = True
                     console.print(
-                        "[cyan][Planning mode][/cyan] Next request will only "
-                        "create or inspect a SQLite task plan, with an optional "
-                        "consented web search when available. No code execution "
-                        "tools will be available."
+                        "[cyan][Planning mode][/cyan] Planning stays on until a "
+                        "plan is approved or you run /plan off."
+                    )
+                    continue
+                if user_input.lower() == "/plan off":
+                    planning_mode_persistent = False
+                    console.print("[cyan][Planning mode off][/cyan]")
+                    continue
+                if user_input.lower() == "/code":
+                    coding_mode_armed = True
+                    console.print(
+                        "[cyan][Coding mode][/cyan] Next request requires an "
+                        "approved coding plan before edits or commands run."
                     )
                     continue
                 if user_input.lower() == "/skills" or user_input.lower().startswith(
@@ -2831,25 +2821,56 @@ async def _run_agent_cli_session(
                 if not user_input:
                     continue
                 turn_permission_mode = permission_mode
-                planning_only = planning_mode_armed
-                planning_mode_armed = False
+                planning_only = planning_mode_persistent
+                coding_task_requested = coding_mode_armed
+                if planning_only:
+                    active_task_id = get_tool_context().task_id
+                    active_task = (
+                        memory.get_task(active_task_id) if active_task_id else None
+                    )
+                    if (
+                        active_task
+                        and active_task["status"] == "active"
+                        and active_task.get("approved_revision")
+                        == active_task.get("revision")
+                        and active_task.get("approved_digest")
+                        == active_task.get("digest")
+                    ):
+                        planning_only = False
+                planning_mode_persistent = planning_only
+                coding_mode_armed = False
                 planning_research_citations: list[str] = []
                 clear_schema_reads()
                 if planning_only:
                     if capabilities["tools"] is False:
-                        console.print(
-                            "[red]Planning requires a tool-capable model so its "
-                            "todo can be persisted in SQLite.[/red]"
-                        )
+                        try:
+                            from .text_planning import create_text_plan
+
+                            create_text_plan(
+                                memory, session_id, user_input, llm, console
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            console.print(
+                                "[red]Text planning failed: "
+                                f"{type(exc).__name__}: {exc}[/red]"
+                            )
                         continue
                     planner_names = {
                         "read_table_schema",
                         "create_task_plan",
                         "inspect_task_plan",
                         "revise_task_plan",
+                        "read_local_file",
+                        "list_directory",
+                        "search_workspace_files",
+                        "search_workspace_text",
+                        "search_workspace_symbols",
+                        "inspect_workspace_git",
+                        "ask_user",
                     }
                     if ENABLE_WEB_RESEARCH:
                         planner_names.add("web_search")
+                        planner_names.add("fetch_webpage")
                     tools_list = [
                         tool for tool in base_tools_list if tool.name in planner_names
                     ]
@@ -2902,19 +2923,18 @@ async def _run_agent_cli_session(
                     user_input = "Use the attached file context to answer my request."
                 clear_captured_images()
 
-                code_task_requested = is_code_task_request(user_input)
                 code_related_request = _is_coding_guidance_request(user_input)
-                if code_task_requested and not planning_only:
-                    approved_coding_scope = _approved_coding_task_scope(
-                        memory,
-                        user_input,
-                    )
+                if coding_task_requested and not planning_only:
+                    approved_coding_scope = _approved_coding_task_scope(memory)
                     if approved_coding_scope is None:
                         console.print(
                             "[yellow][Plan approval required][/yellow] Run /plan, "
-                            "submit this exact coding request to save its SQLite "
-                            "checklist, review and approve it with /tasks (including "
-                            "the source project scope), then repeat the request. "
+                            "save the coding checklist from the approved request, "
+                            "review and approve it with /tasks (including the "
+                            "source project scope), then run /code for the next "
+                            "request. The active approved plan selected in "
+                            "ToolContext is used; you do not need to repeat the "
+                            "original wording. "
                             "No code workspace was created."
                         )
                         continue
@@ -3363,24 +3383,59 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         and active_task["approved_revision"] == active_task["revision"]
                         and active_task["approved_digest"] == active_task["digest"]
                     ):
+                        def _plan_field(step: dict, name: str) -> str:
+                            value = step.get(name)
+                            if isinstance(value, (list, tuple)):
+                                return ", ".join(str(item) for item in value)
+                            return str(value or "")
+
                         active_task_instruction = (
                             "Current user-approved SQLite task plan (reference, "
                             "not authorization beyond its recorded scope): "
                             f"task_id={active_task['task_id']}; "
                             f"revision={active_task['revision']}; "
                             f"type={active_task['task_type']}; "
-                            f"goal={active_task['goal']}; steps="
+                            f"goal={active_task['goal']}; "
+                            f"assumptions={'; '.join(active_task.get('assumptions') or [])}; "
+                            f"constraints={'; '.join(active_task.get('constraints') or [])}; "
+                            "steps="
                             + "; ".join(
-                                f"{step['step_id']} [{step['status']}] "
-                                f"{step['description']}"
+                                " ".join(
+                                    part
+                                    for part in (
+                                        f"{step['step_id']} [{step['status']}] {_plan_field(step, 'description')}",
+                                        (
+                                            "deps=" + _plan_field(step, "dependencies")
+                                            if step.get("dependencies")
+                                            else ""
+                                        ),
+                                        (
+                                            "validation=" + _plan_field(step, "validation")
+                                            if step.get("validation")
+                                            else ""
+                                        ),
+                                        (
+                                            "proof=" + _plan_field(step, "proof")
+                                            if step.get("proof")
+                                            else ""
+                                        ),
+                                        (
+                                            "risks=" + _plan_field(step, "risks")
+                                            if step.get("risks")
+                                            else ""
+                                        ),
+                                        (
+                                            "edge_cases=" + _plan_field(step, "edge_cases")
+                                            if step.get("edge_cases")
+                                            else ""
+                                        ),
+                                    )
+                                    if part
+                                )
                                 for step in active_task["steps"]
                             )
                             + ". Persist truthful progress using update_todo_step "
-                            "only after calling read_table_schema for the task "
-                            "tables. Tailor evidence to reported schema/application "
-                            "limits; semantically summarize it when necessary and "
-                            "never rely on fixed truncation. Update at step "
-                            "boundaries. Model-reported completion is not "
+                            "at step boundaries. Model-reported completion is not "
                             "verification; the user/runtime must verify evidence. "
                             "If blocked by a failed tool, unavailable source, or "
                             "invalid assumption, explain what failed, state what "
@@ -3513,6 +3568,7 @@ Runtime context:
 
                 start_time = time.monotonic()
                 deadline = start_time + MAX_TASK_SECONDS
+                step_deadline: float | None = None
                 (
                     llm,
                     llm_with_tools,
@@ -3822,7 +3878,6 @@ Runtime context:
             continue
         break
 
-
 def _print_context_state(
     stats: dict,
     output_tokens: int,
@@ -3857,12 +3912,10 @@ def _print_context_state(
         maximum = 0
     return used, maximum
 
-
 def _history_with_summary(summary: str, history: list) -> list:
     if not summary:
         return history
     return [AIMessage(content=f"[Earlier in this session] {summary}")] + history
-
 
 async def _summarize_and_save_session(
     console_obj,
@@ -4001,10 +4054,8 @@ async def _summarize_and_save_session(
     _SESSION_STATS.summary_seconds += time.monotonic() - summary_started
     return False
 
-
 def _print_session_statistics() -> None:
     console.print(build_stats_table(_SESSION_STATS, _SESSION_INFO))
-
 
 def _acknowledge_interrupt() -> None:
     task = asyncio.current_task()
@@ -4012,7 +4063,6 @@ def _acknowledge_interrupt() -> None:
         while task.cancelling():
             task.uncancel()
     console.print("\n[yellow][Info] Ctrl+C received; ending session.[/yellow]")
-
 
 async def run_agent_cli_async(
     *,
@@ -4100,7 +4150,6 @@ async def run_agent_cli_async(
         await close_outbound_http_clients()
         close_mcp_sandbox_dirs()
         clear_captured_images()
-
 
 def run_agent_cli(
     *,

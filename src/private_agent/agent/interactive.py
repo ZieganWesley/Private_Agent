@@ -27,6 +27,7 @@ SLASH_COMMANDS = {
     ),
     "/context": "Show or clear queued folder context before the next request.",
     "/plan": "Plan the next task and save its todo checklist in SQLite for review.",
+    "/code": "Require an approved coding plan before the next request edits or runs commands.",
     "/add": "Add a workspace folder's text files to the next request's context.",
     "/skills": "List available skills or select one for your next request.",
     "/status": "Show current provider, model, permissions, workspace, and context state.",

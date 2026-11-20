@@ -148,10 +148,6 @@ def create_task_plan(
     session_id = get_tool_context().task_session_id
     if not session_id:
         return "Error: Planner session is not initialized."
-    try:
-        _require_schema(*sorted(_PLAN_WRITE_TABLES))
-    except ValueError as exc:
-        return f"Error: {exc}"
     memory = _open_memory()
     try:
         task = memory.create_task_plan(
@@ -206,10 +202,6 @@ def update_todo_step(step_id: str, status: str, evidence: str = "") -> str:
     task_id = get_tool_context().task_id
     if not session_id or not task_id:
         return "Error: No task plan is selected. Create or resume one first."
-    try:
-        _require_schema(*sorted(_PLAN_WRITE_TABLES))
-    except ValueError as exc:
-        return f"Error: {exc}"
     memory = _open_memory()
     try:
         task = memory.get_task(task_id)
@@ -248,10 +240,6 @@ def revise_task_plan(
     task_id = get_tool_context().task_id
     if not session_id or not task_id:
         return "Error: No active task plan is selected."
-    try:
-        _require_schema(*sorted(_PLAN_WRITE_TABLES))
-    except ValueError as exc:
-        return f"Error: {exc}"
     memory = _open_memory()
     try:
         task = memory.get_task(task_id)
