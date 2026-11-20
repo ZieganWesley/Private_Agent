@@ -264,7 +264,17 @@ def evaluate_pre_tool_hooks(
     workspace_root: Any = None,
 ) -> tuple[str | None, dict[str, list[dict[str, Any]]]]:
     """Load hooks, run PreToolUse hooks, and return (block_reason, hooks)."""
-    loaded = load_hooks()
+    if workspace_root is None:
+        loaded = load_hooks()
+    else:
+        try:
+            from .config import load_or_create_config, merge_project_config
+
+            loaded = load_hooks(
+                merge_project_config(load_or_create_config(), workspace_root)
+            )
+        except Exception:  # noqa: BLE001 - hook loading must not block tool execution
+            loaded = load_hooks()
     reason = hooks_blocked(
         run_pre_tool_hooks(
             hooks=loaded,

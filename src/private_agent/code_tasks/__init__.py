@@ -100,11 +100,14 @@ def isolation_unavailable_reason() -> str | None:
 def _seatbelt_profile(root: Path, *, allow_network: bool = False) -> str:
     """Return a minimal Seatbelt profile for the workspace."""
     root_text = str(root.resolve())
+    if '"' in root_text or "\n" in root_text or "\r" in root_text:
+        raise ValueError("Workspace path cannot contain a quote or newline.")
+    root_text = root_text.replace("\\", "\\\\").replace('"', '\\"')
     network_rule = "(allow network*)" if allow_network else "(deny network*)"
     return (
         "(version 1)\n"
-        "(allow default)\n"
         f"{network_rule}\n"
+        "(allow default)\n"
         "(deny file-write*)\n"
         f'(allow file-write* (subpath "{root_text}"))\n'
     )

@@ -3631,7 +3631,9 @@ async def test_cli_auto_uses_project_workspace_rag_and_skills(
     monkeypatch.setattr(agent, "WORKSPACE_ROOT_DEFAULT", ".")
     monkeypatch.setattr(agent, "initialize_knowledge_base", initialize_rag)
     monkeypatch.setattr(agent, "load_skills_from_folder", load_skills)
-    monkeypatch.setattr(agent, "_select_permission_mode", lambda: "auto")
+    monkeypatch.setattr(
+        agent, "_select_permission_mode", lambda *args, **kwargs: "auto"
+    )
     monkeypatch.setattr(
         agent,
         "prompt_user_input",

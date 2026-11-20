@@ -74,22 +74,20 @@ from ..config import (
     THINKING_TOGGLE_DEFAULT,
     WEB_RESEARCH_CONSENT,
     WORKSPACE_ROOT_DEFAULT,
+    load_or_create_config,
+    merge_project_config,
 )
 from ..database import PersistentMemory
 from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
 )
-
-# fmt: off
 from ..hooks import (
     evaluate_pre_tool_hooks,
     load_hooks,
     safe_run_post_tool_hooks,
     safe_run_session_start_hooks,
 )
-
-# fmt: on
 from ..rag import (
     initialize_knowledge_base,
     knowledge_base_signature,
@@ -966,7 +964,7 @@ async def execute_tool_call(
     )
 
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
-        name, args, SandboxManager.root_dir
+        name, args, SandboxManager.get_root()
     )[0]
     if _pre_hook_block_reason:
         return ToolMessage(
@@ -1168,10 +1166,12 @@ async def execute_tool_call(
         output_character_count=len(result_text),
     )
     safe_run_post_tool_hooks(
-        hooks=load_hooks(),
+        hooks=load_hooks(
+            merge_project_config(load_or_create_config(), SandboxManager.get_root())
+        ),
         tool_name=name,
         tool_args=args,
-        workspace_root=SandboxManager.root_dir,
+        workspace_root=SandboxManager.get_root(),
     )
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
@@ -1310,12 +1310,6 @@ async def _build_session_setup(
     """Create the memory, RAG index, skills and provider state for a session."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     startup_started = time.monotonic()
-    if not non_interactive and (not interactive or not sys.stdin.isatty()):
-        console.print(
-            "[red]Private Agent requires an interactive terminal. "
-            "Run it from a terminal session.[/red]"
-        )
-        return
     _input = input_provider if input_provider is not None else console.input
     console.print("[bold cyan]Private Agent[/bold cyan]")
 
@@ -1666,7 +1660,7 @@ async def _build_session_setup(
     if verbose_startup:
         console.print(
             f"[bold green][Security][/bold green] Workspace root locked to: "
-            f"{SandboxManager.root_dir}"
+            f"{SandboxManager.get_root()}"
         )
     log_event(
         RUN_LOGGER,
@@ -1718,16 +1712,15 @@ async def _build_session_setup(
     if permission_mode is not None:
         _permission_mode = permission_mode
     else:
-        try:
-            _permission_mode = _select_permission_mode(interactive=interactive)
-        except TypeError:
-            _permission_mode = _select_permission_mode()
+        _permission_mode = _select_permission_mode(interactive=interactive)
     permission_mode = _permission_mode
     if verbose_startup:
         console.print(f"[cyan][Agent Permission Mode][/cyan] {permission_mode.title()}")
     safe_run_session_start_hooks(
-        hooks=load_hooks(),
-        workspace_root=SandboxManager.root_dir,
+        hooks=load_hooks(
+            merge_project_config(load_or_create_config(), SandboxManager.get_root())
+        ),
+        workspace_root=SandboxManager.get_root(),
         session_id=session_id,
     )
     return SessionSetup(
@@ -2116,7 +2109,7 @@ async def _choose_provider(
             "Thinking": (
                 f"{'on' if thinking_enabled else 'off'} (effort: {thinking_effort})"
             ),
-            "Workspace": str(SandboxManager.root_dir),
+            "Workspace": str(SandboxManager.get_root()),
             "Local RAG": "active" if is_rag_active else "off",
             "Skills loaded": len(loaded_skills),
             "Resumed history messages": len(chat_history),
@@ -2155,7 +2148,7 @@ async def _choose_provider(
     startup_summary.add_row("Permission", permission_mode.title())
     startup_summary.add_row(
         "Workspace",
-        str(SandboxManager.root_dir),
+        str(SandboxManager.get_root()),
     )
     startup_summary.add_row(
         "Local RAG",
@@ -2253,7 +2246,7 @@ async def _run_agent_cli_session(
     rag_last_check = setup.rag_last_check
     skills_folder_input = setup.skills_folder_input
     loaded_skills = setup.loaded_skills
-    custom_slash_commands = load_custom_slash_commands(SandboxManager.root_dir)
+    custom_slash_commands = load_custom_slash_commands(SandboxManager.get_root())
     mode_label = setup.mode_label
     session_id = setup.session_id
     network_consent_state = setup.network_consent_state
@@ -2308,7 +2301,7 @@ async def _run_agent_cli_session(
         online_selection = provider_preference.online_selection
         model_selection_failed = False
         active_code_workspace: CodeTaskWorkspace | None = None
-        previous_workspace_root = SandboxManager.root_dir
+        previous_workspace_root = SandboxManager.get_root()
         base_tools_list = list(tools_list)
         planning_mode_armed = False
         selected_skill_key: str | None = None
@@ -2376,7 +2369,7 @@ async def _run_agent_cli_session(
                         user_input = (
                             await prompt_user_input(
                                 console,
-                                SandboxManager.root_dir,
+                                SandboxManager.get_root(),
                                 prompt_message="User: ",
                                 skills=loaded_skills,
                                 history=cli_input_history,
@@ -2465,7 +2458,7 @@ async def _run_agent_cli_session(
                     )
                     table.add_row("Model", selected_model)
                     table.add_row("Permission mode", permission_mode.title())
-                    table.add_row("Workspace", str(SandboxManager.root_dir))
+                    table.add_row("Workspace", str(SandboxManager.get_root()))
                     table.add_row(
                         "RAG",
                         (
@@ -2490,7 +2483,7 @@ async def _run_agent_cli_session(
                         undo_last_turn,
                         memory,
                         session_id,
-                        workspace_root=SandboxManager.root_dir,
+                        workspace_root=SandboxManager.get_root(),
                     )
                     console.print(undo_outcome.message)
                     if undo_outcome.history_changed:
@@ -3405,7 +3398,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 if PROJECT_INSTRUCTIONS_FILE:
                     try:
                         _instructions_path = (
-                            pathlib.Path(SandboxManager.root_dir)
+                            pathlib.Path(SandboxManager.get_root())
                             / PROJECT_INSTRUCTIONS_FILE
                         )
                         if _instructions_path.is_file():
