@@ -53,9 +53,8 @@ _register(
     {
         "apply_workspace_patch",
         "edit_local_file",
-        "write_local_file",
-        "rename_path",
-        "delete_path",
+        "rename_workspace_file",
+        "delete_workspace_file",
         "run_shell_command",
         "run_project_unit_tests",
         "inspect_workspace_git",

@@ -1509,6 +1509,8 @@ async def test_code_rag_retrieval_also_searches_and_deduplicates_local_guidance(
             return [manual_doc, duplicate_doc]
 
     vectorstore = VectorStore()
+    # The rewrite hint is process-global; isolate this test from earlier turns.
+    monkeypatch.setattr(memory_context, "_LAST_RAG_QUERY", "")
     results = await runtime._retrieve_rag_documents(
         vectorstore,
         "implement a parser",

@@ -3576,29 +3576,30 @@ Runtime context:
 
                 start_time = time.monotonic()
                 deadline = start_time + MAX_TASK_SECONDS
-                (
-                    llm,
-                    llm_with_tools,
-                    selected_model,
-                    capabilities,
-                    response,
-                ) = await _invoke_initial_model_with_fallback(
-                    llm=llm,
-                    llm_with_tools=llm_with_tools,
-                    tools_list=tools_list,
-                    messages=messages,
-                    deadline=deadline,
-                    selected_model=selected_model,
-                    provider_type=provider_type,
-                    selected_local_runtime=selected_local_runtime,
-                    available_models=available_models,
-                    capabilities=capabilities,
-                    thinking_enabled=thinking_enabled,
-                    thinking_effort=thinking_effort,
-                    status_message=status_message,
-                    usage=usage,
-                    console=console,
-                )
+                with f_integration.guard_turn_start(_f_state):
+                    (
+                        llm,
+                        llm_with_tools,
+                        selected_model,
+                        capabilities,
+                        response,
+                    ) = await _invoke_initial_model_with_fallback(
+                        llm=llm,
+                        llm_with_tools=llm_with_tools,
+                        tools_list=tools_list,
+                        messages=messages,
+                        deadline=deadline,
+                        selected_model=selected_model,
+                        provider_type=provider_type,
+                        selected_local_runtime=selected_local_runtime,
+                        available_models=available_models,
+                        capabilities=capabilities,
+                        thinking_enabled=thinking_enabled,
+                        thinking_effort=thinking_effort,
+                        status_message=status_message,
+                        usage=usage,
+                        console=console,
+                    )
                 async def _run_agent_turn(response) -> Any:
                     nonlocal tools_list, llm_with_tools
                     iteration = 0

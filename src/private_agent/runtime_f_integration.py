@@ -33,7 +33,6 @@ def gate_capability(tool_call, permission_mode, console, state):
 
     from langchain_core.messages import ToolMessage
 
-
     name = (tool_call.get("args") or {}).get("name")
     interactive = get_tool_context().interactive and sys.stdin.isatty()
     allowed, reason = approve_capability(name, permission_mode, console, interactive)
@@ -63,7 +62,10 @@ def approve_capability(name, permission_mode, console, interactive):
         safe_args={"name": name},
     )
     if not approved:
-        return False, f"Capability escalation to {name} was not approved; no packs changed."
+        return (
+            False,
+            f"Capability escalation to {name} was not approved; no packs changed.",
+        )
     return True, ""
 
 
@@ -91,12 +93,9 @@ def trim_context(text: str, total_tokens: int) -> str:
     return text
 
 
-def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False) -> dict[str, Any]:
-    turn_context_token = None
-    with contextlib.suppress(Exception):
-        from .tools import begin_turn_tool_context
-
-        turn_context_token = begin_turn_tool_context()
+def begin_turn(
+    turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False
+) -> dict[str, Any]:
     plan = task_orchestrator.build_plan(user_input, ["respond to request"])
     run_id = turn_id or uuid.uuid4().hex
     conn: sqlite3.Connection | None = None
@@ -105,14 +104,30 @@ def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool
         timeline.ensure_schema(conn)
     except Exception:  # noqa: BLE001 - timeline unavailable, disable persistence
         conn = None
-    state = {"plan": plan, "iteration": 0, "pending": True, "conn": conn, "run_id": run_id, "started": time.monotonic(), "json_mode": json_mode, "_context_token": turn_context_token}
+    turn_context_token = None
+    with contextlib.suppress(Exception):
+        from .tools import begin_turn_tool_context
+
+        turn_context_token = begin_turn_tool_context()
+    state = {
+        "plan": plan,
+        "iteration": 0,
+        "pending": True,
+        "conn": conn,
+        "run_id": run_id,
+        "started": time.monotonic(),
+        "json_mode": json_mode,
+        "_context_token": turn_context_token,
+    }
     if json_mode:
         with contextlib.suppress(Exception):
             json_output.emit_event({"event": "turn_started", "turn_id": turn_id})
     return state
 
 
-def record_iteration(state: dict[str, Any], step_index: int, pack: str = "Core") -> float:
+def record_iteration(
+    state: dict[str, Any], step_index: int, pack: str = "Core"
+) -> float:
     step_start = time.monotonic()
     state["iteration"] = step_index
     state["pending"] = True
@@ -126,11 +141,19 @@ def record_iteration(state: dict[str, Any], step_index: int, pack: str = "Core")
     if conn is not None:
         with contextlib.suppress(Exception):
             est = timeline.estimate_step(conn, pack)
-            timeline.record_estimate(conn, state["run_id"], step_index, pack, est.seconds, est.confidence)
+            timeline.record_estimate(
+                conn, state["run_id"], step_index, pack, est.seconds, est.confidence
+            )
     return step_start
 
 
-def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, status: str = "ok", complete: bool = False) -> None:
+def finish_iteration(
+    state: dict[str, Any],
+    step_index: int,
+    step_start: float,
+    status: str = "ok",
+    complete: bool = False,
+) -> None:
     state["pending"] = not bool(complete and status == "ok")
     plan = state.get("plan")
     if plan is not None and getattr(plan, "steps", None):
@@ -142,10 +165,24 @@ def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, 
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):
-            timeline.record_actual(conn, state["run_id"], step_index, time.monotonic() - step_start)
+            timeline.record_actual(
+                conn, state["run_id"], step_index, time.monotonic() - step_start
+            )
     if state.get("json_mode"):
         with contextlib.suppress(Exception):
-            json_output.emit_event({"event": "iteration_finished", "step": step_index, "status": status})
+            json_output.emit_event(
+                {"event": "iteration_finished", "step": step_index, "status": status}
+            )
+
+
+@contextlib.contextmanager
+def guard_turn_start(state: dict[str, Any]):
+    """Reset the turn tool context if a turn fails before its tool loop starts."""
+    try:
+        yield
+    except BaseException:  # noqa: BLE001 - a failed turn must not leak its context
+        finish_turn(state)
+        raise
 
 
 def finish_turn(state: dict[str, Any]) -> None:
@@ -166,4 +203,6 @@ def finish_turn(state: dict[str, Any]) -> None:
             conn.close()
     if state.get("json_mode"):
         with contextlib.suppress(Exception):
-            json_output.emit_event({"event": "turn_finished", "turn_id": state.get("run_id")})
+            json_output.emit_event(
+                {"event": "turn_finished", "turn_id": state.get("run_id")}
+            )

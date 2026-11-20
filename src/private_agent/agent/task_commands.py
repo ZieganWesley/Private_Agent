@@ -138,7 +138,9 @@ def _task_plan_markdown(task: dict) -> str:
             lines.extend(f"- {item}" for item in items)
     lines.append("\n## Steps")
     for step in task.get("steps", []):
-        lines.append(f"{step['position']}. **{step['description']}** ({step['status']})")
+        lines.append(
+            f"{step['position']}. **{step['description']}** ({step['status']})"
+        )
         for label, key in (
             ("Depends on", "dependencies"),
             ("Validation", "validation"),
@@ -181,11 +183,7 @@ def _validated_validation_command(value: str, root: pathlib.Path) -> list[str] |
             return None
         if argv[1] == "run" and (len(argv) < 3 or argv[2] != "test"):
             return None
-    elif executable == "cargo" and (len(argv) < 2 or argv[1] != "test"):
-        return None
-    elif executable == "go" and (len(argv) < 2 or argv[1] != "test"):
-        return None
-    elif executable == "make" and (len(argv) < 2 or argv[1] != "test"):
+    elif executable in {"cargo", "go", "make"} and (len(argv) < 2 or argv[1] != "test"):
         return None
 
     # Reject absolute paths and traversal outside the selected workspace.
@@ -249,10 +247,7 @@ def _run_automatic_step_validation(
                         task["task_id"],
                         task["revision"],
                         step["step_id"],
-                        (
-                            f"Automated validation passed: {item}\n"
-                            f"{snippet}"
-                        ).strip(),
+                        (f"Automated validation passed: {item}\n{snippet}").strip(),
                         owner_id=get_tool_context().runtime_owner_id,
                     )
                     console.print(
@@ -510,14 +505,15 @@ def _run_task_management(
                     continue
                 show_task(task)
                 console.print(Markdown(_task_plan_markdown(task)))
-                approval_choice = console.input(
-                    "Approval choice [1 approve, 2 approve and allow edits, "
-                    "3 give feedback and keep planning] (default 1): "
-                ).strip() or "1"
-                if approval_choice == "3":
-                    feedback = console.input(
-                        "Feedback to keep planning: "
+                approval_choice = (
+                    console.input(
+                        "Approval choice [1 approve, 2 approve and allow edits, "
+                        "3 give feedback and keep planning] (default 1): "
                     ).strip()
+                    or "1"
+                )
+                if approval_choice == "3":
+                    feedback = console.input("Feedback to keep planning: ").strip()
                     console.print(
                         "[yellow]Keeping planning. Resubmit the updated "
                         "request with /plan, including this feedback: "
@@ -609,15 +605,11 @@ def _run_task_management(
                         "sources as verified; evidence must be checked and "
                         "recorded separately.[/yellow]"
                     )
-                risky_approval = (
-                    task["task_type"] == "research"
-                    or (
-                        task["task_type"] == "coding"
-                        and (
-                            access_level
-                            in {"full_hitl", "full_governed", "full_monitored"}
-                            or allow_edits
-                        )
+                risky_approval = task["task_type"] == "research" or (
+                    task["task_type"] == "coding"
+                    and (
+                        access_level in {"full_hitl", "full_governed", "full_monitored"}
+                        or allow_edits
                     )
                 )
                 if risky_approval:
@@ -635,8 +627,7 @@ def _run_task_management(
                         continue
                 else:
                     confirmation = console.input(
-                        "Approve this plan? [Y/n/APPROVE "
-                        f"{task_id[:8]}] (default Y): "
+                        f"Approve this plan? [Y/n/APPROVE {task_id[:8]}] (default Y): "
                     ).strip()
                     if confirmation.lower() not in {
                         "",

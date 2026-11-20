@@ -12,16 +12,37 @@ from private_agent.tools import (
     set_tool_context,
 )
 
+_DURABLE_FIELDS = (
+    "task_session_id",
+    "task_id",
+    "code_task",
+    "skill_directory",
+    "skill_registry",
+    "skill_session_id",
+    "subagent_runner",
+    "interactive",
+)
+
 
 @pytest.fixture(autouse=True)
 def restore_tool_context():
     """Restore the shared context after each test."""
     context = get_tool_context()
+    durable = {name: getattr(context, name) for name in _DURABLE_FIELDS}
+    task_ids = dict(context.task_ids)
+    enabled_packs = set(context.enabled_packs)
     original = replace(
         context,
         schema_read_tables=set(context.schema_read_tables or set()),
     )
     yield context
+    # Turns carry durable state back into the shared context, so restore it too.
+    for name, value in durable.items():
+        setattr(context, name, value)
+    context.task_ids.clear()
+    context.task_ids.update(task_ids)
+    context.enabled_packs.clear()
+    context.enabled_packs.update(enabled_packs)
     set_tool_context(original)
 
 
@@ -160,3 +181,65 @@ def test_turn_context_carries_task_state_but_not_enabled_packs():
     assert restored.task_id == "turn-task"
     assert restored.task_ids["turn-session"] == "turn-task"
     assert "Coding" not in restored.enabled_packs
+
+
+@pytest.mark.asyncio
+async def test_interleaved_turns_keep_separate_enabled_packs():
+    import asyncio
+
+    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+
+    ready = {"first": asyncio.Event(), "second": asyncio.Event()}
+    observed = {}
+
+    async def turn(name: str, pack: str, peer: str):
+        token = begin_turn_tool_context()
+        try:
+            get_tool_context().enabled_packs.add(pack)
+            ready[name].set()
+            await ready[peer].wait()
+            first_step = set(get_tool_context().enabled_packs)
+            await asyncio.sleep(0)
+            get_tool_context().enabled_packs.add(f"{pack}-late")
+            observed[name] = (first_step, set(get_tool_context().enabled_packs))
+        finally:
+            reset_turn_tool_context(token)
+
+    # Both turns are in flight at every step, but their packs never cross over.
+    await asyncio.gather(
+        asyncio.create_task(turn("first", "Coding", "second")),
+        asyncio.create_task(turn("second", "Research", "first")),
+    )
+
+    assert observed["first"] == ({"Coding"}, {"Coding", "Coding-late"})
+    assert observed["second"] == ({"Research"}, {"Research", "Research-late"})
+    assert get_tool_context().enabled_packs == set()
+
+
+@pytest.mark.asyncio
+async def test_worker_thread_tool_execution_sees_the_turn_context():
+    import asyncio
+
+    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+
+    token = begin_turn_tool_context()
+    try:
+        turn = get_tool_context()
+        turn.enabled_packs.add("Coding")
+
+        def run_tool_sync():
+            # Mirrors the runtime's asyncio.to_thread(tool_func.invoke, args) path.
+            context = get_tool_context()
+            context.enabled_packs.add("Research")
+            context.task_session_id = "thread-session"
+            context.task_id = "thread-task"
+            set_tool_context(context)
+            return id(context)
+
+        assert await asyncio.to_thread(run_tool_sync) == id(turn)
+
+        assert get_tool_context() is turn
+        assert get_tool_context().enabled_packs == {"Coding", "Research"}
+        assert get_tool_context().task_id == "thread-task"
+    finally:
+        reset_turn_tool_context(token)

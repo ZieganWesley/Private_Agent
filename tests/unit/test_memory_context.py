@@ -1,5 +1,6 @@
 """Unit tests for the extracted memory-context helpers."""
 
+import asyncio
 from unittest.mock import MagicMock
 
 import pytest
@@ -120,9 +121,6 @@ def test_prune_memory_retention_requires_a_skills_directory(tmp_path, monkeypatc
     assert result["skill_files_deleted"] == 0
     assert expired_skill.exists()
     assert any("no skills directory is configured" in line for line in printed)
-
-
-import asyncio
 
 
 def test_rag_followup_rewrite_combines_previous_query():
