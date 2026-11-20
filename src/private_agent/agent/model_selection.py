@@ -252,7 +252,11 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
     allow_remote = False
     if isinstance(model_config, dict):
         raw = model_config.get("allow_remote_hosts", False)
-        allow_remote = raw if isinstance(raw, bool) else str(raw).strip().lower() in {"true", "1", "yes", "on"}
+        allow_remote = (
+            raw
+            if isinstance(raw, bool)
+            else str(raw).strip().lower() in {"true", "1", "yes", "on"}
+        )
     return discover_local_runtimes(
         OLLAMA_BASE_URLS,
         endpoints,
@@ -282,31 +286,18 @@ def select_online_model(use_saved_details: bool | None = None):
 
 
 def fetch_local_chat_models() -> list[str]:
-    client = None
+    """Return chat model names advertised by every reachable local runtime."""
     try:
-        client = _ollama_client(host=OLLAMA_BASE_URL, **ollama_client_kwargs())
-        response = client.list()
-        models_list = (
-            response.get("models", [])
-            if isinstance(response, dict)
-            else getattr(response, "models", [])
-        )
-        chat_models = []
-        embedding_keywords = ["embed", "embedding", "bge", "e5", "nomic-embed"]
-
-        for m in models_list:
-            model_name = (
-                m.get("model", "") if isinstance(m, dict) else getattr(m, "model", "")
-            )
-            if not model_name:
-                continue
-            if any(kw in model_name.lower() for kw in embedding_keywords):
-                continue
-            chat_models.append(model_name)
-        return chat_models
-    except (ValueError, OSError) as e:
-        console.print(f"[red][Warning] Could not connect to Ollama: {e}[/red]")
+        runtimes = _discover_available_local_runtimes()
+    except (ValueError, OSError) as e:  # noqa: BLE001 - discovery boundary
+        console.print(f"[red][Warning] Could not discover local runtimes: {e}[/red]")
         return []
-    finally:
-        if client is not None:
-            _close_ollama_client(client)
+    chat_models: list[str] = []
+    seen: set[str] = set()
+    for runtime in runtimes:
+        for model_name in getattr(runtime, "models", ()) or ():
+            if not model_name or model_name in seen:
+                continue
+            seen.add(model_name)
+            chat_models.append(model_name)
+    return chat_models

@@ -183,10 +183,13 @@ def resolve_config_values(
         "ollama_base_urls", config.get("ollama_base_url", "http://localhost:11434")
     )
     if isinstance(_raw_ollama_urls, str):
-        OLLAMA_BASE_URLS = [_raw_ollama_urls.strip()] if _raw_ollama_urls.strip() else []
+        OLLAMA_BASE_URLS = (
+            [_raw_ollama_urls.strip()] if _raw_ollama_urls.strip() else []
+        )
     elif isinstance(_raw_ollama_urls, list):
         OLLAMA_BASE_URLS = [
-            str(item).strip() for item in _raw_ollama_urls
+            str(item).strip()
+            for item in _raw_ollama_urls
             if isinstance(item, str) and str(item).strip()
         ]
     else:

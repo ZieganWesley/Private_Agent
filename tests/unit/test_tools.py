@@ -978,12 +978,14 @@ def test_unavailable_ollama_returns_no_models_without_raising(monkeypatch):
         def close(self):
             self.closed = True
 
-    client = UnavailableClient()
-    monkeypatch.setattr(model_selection.ollama, "Client", lambda **_kwargs: client)
+    monkeypatch.setattr(
+        model_selection,
+        "_discover_available_local_runtimes",
+        lambda: (_ for _ in ()).throw(ConnectionError("Ollama is not running")),
+    )
     monkeypatch.setattr(agent.console, "print", lambda *_args, **_kwargs: None)
 
     assert model_selection.fetch_local_chat_models() == []
-    assert client.closed
 
 
 def test_agent_current_datetime_context_includes_local_date_and_timezone():

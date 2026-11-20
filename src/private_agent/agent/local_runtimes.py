@@ -148,13 +148,17 @@ def discover_local_runtimes(
         raise ValueError("Discovery timeout must be positive.")
 
     ollama_urls = (
-        ollama_base_url if isinstance(ollama_base_url, (list, tuple)) else [ollama_base_url]
+        ollama_base_url
+        if isinstance(ollama_base_url, (list, tuple))
+        else [ollama_base_url]
     )
     endpoints: list[tuple[str, str, str, str]] = []
     for index, url in enumerate(ollama_urls):
         if not isinstance(url, str) or not url.strip():
             continue
-        name = "Ollama" if index == 0 and len(ollama_urls) == 1 else f"Ollama {index + 1}"
+        name = (
+            "Ollama" if index == 0 and len(ollama_urls) == 1 else f"Ollama {index + 1}"
+        )
         endpoints.append((name, "ollama", url.rstrip("/"), "/api/tags"))
     if isinstance(openai_compatible_endpoints, list):
         for entry in openai_compatible_endpoints[: MAX_DISCOVERY_ENDPOINTS - 1]:
