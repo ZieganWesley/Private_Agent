@@ -608,7 +608,7 @@ project tests and stdio MCP are turned off. Codex and Claude Code sandbox
 commands on macOS (Seatbelt) and Linux, and Codex also on Windows.
 
 **C5. A limited shell tool.**
-- **Status (updated):** Done in 6.3: compound shell syntax, per-call timeout, background process tools, the sandbox status indicator, and CLI wiring of `background_process_indicator()` are implemented and tested.
+- **Status (updated):** Done in 6.3: compound shell syntax, per-call timeout, background process tools, the sandbox status indicator, CLI wiring of `background_process_indicator()`, and persistent working-directory state between shell calls are implemented and tested.
 - The default timeout is 30 seconds (`config.py:698`), too short for many
   builds and test runs.
 - **Fixed:** commands with pipes, `&&`, `||`, redirects and `cd` now run

@@ -1506,11 +1506,15 @@ def _run_shell_with_fake_sandbox(command):
 
 def test_shell_compound_command_runs_through_bash_in_sandbox(temp_workspace):
     command = "cd src && source venv/bin/activate && python --version"
+    wrapped = (
+        "cd /workspace && " + command + "; __pa_status=$?; "
+        "printf '\\n__PA_CWD__:%s\\n' \"$(pwd)\"; exit $__pa_status"
+    )
     result, isolated, run = _run_shell_with_fake_sandbox(command)
 
     assert "Exit Code: 0" in result
-    assert isolated == [(["/bin/bash", "-c", command], SandboxManager.root_dir)]
-    assert run.call_args.args[0] == ["bwrap", "--", "/bin/bash", "-c", command]
+    assert isolated == [(["/bin/bash", "-c", wrapped], SandboxManager.root_dir)]
+    assert run.call_args.args[0] == ["bwrap", "--", "/bin/bash", "-c", wrapped]
     assert run.call_args.kwargs["shell"] is False
 
 
@@ -1524,7 +1528,11 @@ def test_shell_script_host_workspace_paths_point_at_sandbox_mount(temp_workspace
     _result, isolated, _run = _run_shell_with_fake_sandbox(
         f"cd {root}/src && ls {root}"
     )
-    assert isolated[0][0] == ["/bin/bash", "-c", "cd /workspace/src && ls /workspace"]
+    wrapped = (
+        "cd /workspace && cd /workspace/src && ls /workspace; __pa_status=$?; "
+        "printf '\\n__PA_CWD__:%s\\n' \"$(pwd)\"; exit $__pa_status"
+    )
+    assert isolated[0][0] == ["/bin/bash", "-c", wrapped]
 
 
 def test_code_task_blocks_git_inside_compound_command(monkeypatch, temp_workspace):
