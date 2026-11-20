@@ -211,6 +211,7 @@ from .status import (
     SUMMARIZING,
     StatusIndicator,
     context_state_line,
+    status_line,
     summarizing_message,
 )
 from .streaming import (
@@ -3496,7 +3497,9 @@ Runtime context:
                     max_context=effective_context - output_budget,
                     system_prompts=system_prompts,
                 )
-                usage = _print_context_state(context_stats, output_budget)
+                usage = _print_context_state(
+                    context_stats, output_budget, selected_model, turn_permission_mode
+                )
 
                 messages = (
                     system_prompts
@@ -3821,9 +3824,17 @@ Runtime context:
         break
 
 
-def _print_context_state(stats: dict, output_tokens: int) -> tuple[int, int]:
+def _print_context_state(
+    stats: dict,
+    output_tokens: int,
+    model_name: Any = None,
+    permission_mode: Any = "auto",
+) -> tuple[int, int]:
     """Print the context-window gauge and return the ``(used, maximum)`` pair."""
     console.print(context_state_line(stats, output_tokens))
+    console.print(
+        f"[dim]{status_line(model_name, stats.get('tokens', 0), stats.get('max', 0), permission_mode)}[/dim]"
+    )
     return stats["tokens"], stats["max"]
 
 

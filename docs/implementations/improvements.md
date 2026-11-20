@@ -558,6 +558,7 @@ tools, which change often, so check their current docs for exact details.
 #### High impact
 
 **C1. No project instruction file.**
+- **Status (updated):** Deferred to the end of the project, alongside multipart documentation work. Project instruction loading is already implemented (6.1); final C1 closure is documentation/status work only.
 Claude Code reads `CLAUDE.md` and Codex reads `AGENTS.md` to learn a
 project's rules, build commands and conventions. Nothing in this project looks
 for such a file. This is probably the cheapest high-value feature to add.
@@ -601,11 +602,13 @@ a prompt as an argument.
   exist only inside coding tasks.
 
 **C4. Commands only run on Linux.**
+- **Status (updated):** Out of scope for this branch. macOS Seatbelt support exists (6.14), but broader platform equivalence is not being pursued here.
 The sandbox needs Bubblewrap and `prlimit`, so on macOS and Windows the shell,
 project tests and stdio MCP are turned off. Codex and Claude Code sandbox
 commands on macOS (Seatbelt) and Linux, and Codex also on Windows.
 
 **C5. A limited shell tool.**
+- **Status (updated):** Done in 6.3: compound shell syntax, per-call timeout, background process tools, and the sandbox status indicator are implemented and tested.
 - The default timeout is 30 seconds (`config.py:698`), too short for many
   builds and test runs.
 - **Fixed:** commands with pipes, `&&`, `||`, redirects and `cd` now run
@@ -617,36 +620,43 @@ commands on macOS (Seatbelt) and Linux, and Codex also on Windows.
 #### Medium impact
 
 **C6. No subagents.**
+- **Status (updated):** Subagent support exists (6.13); broader routing decisions are deferred until C1 documentation work is complete.
 Claude Code can hand searches or reviews to separate agents with their own
 context. There is nothing like that here.
 
 **C7. No hooks.**
+- **Status (updated):** Done in 6.11: configurable PreToolUse, PostToolUse, and SessionStart hooks with matchers, timeouts, and blocking decisions.
 Claude Code lets users run their own scripts before or after tool calls, for
 example to format code after every edit. There is no hook system here; the
 only "hook" mention in the code turns git hooks off
 (`code_tasks/checkpoints.py:88`).
 
 **C8. No fine-grained permission rules.**
+- **Status (updated):** Done in 6.5: allow/deny permission rules with deny precedence.
 Claude Code allows rules like "always allow `npm test`" and "never read
 `.env`". Here there are only the three modes plus an MCP allow-list, so Auto
 mode asks before every command, including harmless repeated ones.
 
 **C9. Basic skills and no custom commands.**
+- **Status (updated):** Done in 5.6 and 6.10: skill front matter/embeddings with keyword fallback and Markdown custom slash commands.
 - Skills have no front matter, are matched by keyword overlap and are loaded
   whole (see B6).
 - Users cannot add their own slash commands as Markdown files.
 
 **C10. Reading large files.**
+- **Status (updated):** Done in 6.2: offset/limit paging with total line count.
 `read_local_file` takes only a path, with no offset or line limit
 (`tools/schemas.py:15`). Large files are cut off at the byte limit instead of
 being read in pages.
 
 **C11. No git write workflow.**
+- **Status (updated):** Done in 6.12: branch, stage, commit, and optional pull request tools behind permission checks.
 Git access is read-only (`inspect_workspace_git`), and manual git commands are
 blocked inside coding tasks. The agent cannot create branches, commits or pull
 requests for you, which both other tools do.
 
 **C12. Interrupting a turn.**
+- **Status (updated):** Done in 6.4: turn cancellation keeps the session active.
 Ctrl+C triggers the summarize-and-exit flow. Claude Code uses Esc to stop the
 current action and keep the session, and Esc twice to rewind. This project
 does not seem to have a clean way to stop one turn; there are only 3
@@ -655,10 +665,12 @@ interrupt handlers in `runtime.py`.
 #### Lower impact
 
 **C13. Fewer configuration levels.**
+- **Status (updated):** Done in 6.9: user, project, and local settings merge over the base config.
 There is one user config file (`~/.private_agent.conf`), not user, project and
 local settings files that can be committed alongside the code.
 
 **C14. No status line or output styles.**
+- **Status (updated):** Done in 6.15: `status_line()` helper plus CLI rendering of model, context use, and permission mode.
 These are cosmetic but help users see the model, context use and permission
 mode at a glance.
 
