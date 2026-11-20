@@ -239,7 +239,7 @@ class OllamaAdapter:
             log_event(
                 RUN_LOGGER,
                 "provider.adapter_detect_failed",
-                level="DEBUG",
+                level=logging.DEBUG,
                 error=str(exc),
             )
             return None
@@ -264,7 +264,7 @@ class OllamaAdapter:
             log_event(
                 RUN_LOGGER,
                 "provider.adapter_start_failed",
-                level="WARNING",
+                level=logging.WARNING,
                 error=str(exc),
             )
             return False
@@ -289,7 +289,7 @@ class OllamaAdapter:
             log_event(
                 RUN_LOGGER,
                 "provider.capabilities_failed",
-                level="DEBUG",
+                level=logging.DEBUG,
                 error=str(exc),
             )
             return {
@@ -311,7 +311,7 @@ class OllamaAdapter:
             return OllamaEmbeddings(model=model, base_url=base_url)
         except Exception as exc:  # noqa: BLE001 - optional dependency boundary
             log_event(
-                RUN_LOGGER, "provider.embeddings_failed", level="DEBUG", error=str(exc)
+                RUN_LOGGER, "provider.embeddings_failed", level=logging.DEBUG, error=str(exc)
             )
             return None
 
@@ -372,7 +372,7 @@ class OpenAICompatibleAdapter:
                 log_event(
                     RUN_LOGGER,
                     "provider.adapter_detect_failed",
-                    level="DEBUG",
+                    level=logging.DEBUG,
                     error=str(exc),
                 )
                 runtimes = []
@@ -408,7 +408,7 @@ class OpenAICompatibleAdapter:
             log_event(
                 RUN_LOGGER,
                 "provider.capabilities_failed",
-                level="DEBUG",
+                level=logging.DEBUG,
                 error=str(exc),
             )
             return {
@@ -434,7 +434,7 @@ class OpenAICompatibleAdapter:
             )
         except Exception as exc:  # noqa: BLE001 - optional dependency boundary
             log_event(
-                RUN_LOGGER, "provider.embeddings_failed", level="DEBUG", error=str(exc)
+                RUN_LOGGER, "provider.embeddings_failed", level=logging.DEBUG, error=str(exc)
             )
             return None
 

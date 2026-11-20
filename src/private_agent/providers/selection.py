@@ -101,6 +101,19 @@ def installed_but_idle(
     return idle
 
 
+OLLAMA_EXTRA_HINT = (
+    "Ollama support is an optional extra: `pip install 'private-agent[ollama]'`, "
+    "or choose another runtime."
+)
+
+
+def optional_dependency_hint(kind: str, error: BaseException) -> str | None:
+    """Return an install hint when an optional provider package is missing."""
+    if isinstance(error, ImportError) and str(kind) == "ollama":
+        return OLLAMA_EXTRA_HINT
+    return None
+
+
 def requested_provider() -> str:
     """Return the provider name requested on the command line, if any."""
     return os.environ.get(PROVIDER_ENV, "").strip()

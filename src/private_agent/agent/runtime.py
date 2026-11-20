@@ -1826,6 +1826,7 @@ async def _choose_provider(
         installed_but_idle,
         load_last_provider,
         match_runtime,
+        optional_dependency_hint,
         pick_default_model,
         requested_model,
         requested_provider,
@@ -2172,11 +2173,14 @@ async def _choose_provider(
                 error_type=type(exc).__name__,
                 exc_info=True,
             )
+            hint = optional_dependency_hint(local_runtime.kind, exc)
             console.print(
                 f"[red]Could not initialize {local_runtime.name} "
                 f"model '{selected_model}' ({type(exc).__name__}). "
                 "Choose another runtime or online mode.[/red]"
             )
+            if hint:
+                console.print(f"[yellow]{hint}[/yellow]")
             return None
         tools_list = _tools_for_model(
             provider_type=provider_type,
