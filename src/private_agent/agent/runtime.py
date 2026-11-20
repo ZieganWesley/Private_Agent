@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import hashlib
 import importlib.util
 import json
@@ -81,7 +80,16 @@ from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
 )
-from ..hooks import hooks_blocked, load_hooks, run_post_tool_hooks, run_pre_tool_hooks
+
+# fmt: off
+from ..hooks import (
+    evaluate_pre_tool_hooks,
+    load_hooks,
+    safe_run_post_tool_hooks,
+    safe_run_session_start_hooks,
+)
+
+# fmt: on
 from ..rag import (
     initialize_knowledge_base,
     knowledge_base_signature,
@@ -957,18 +965,14 @@ async def execute_tool_call(
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
 
-    _hooks = load_hooks()
-    _pre_hook_results = run_pre_tool_hooks(
-        hooks=_hooks,
-        tool_name=name,
-        tool_args=args,
-        workspace_root=SandboxManager.get_root(),
-    )
-    _pre_hook_block_reason = hooks_blocked(_pre_hook_results)
+    _pre_hook_block_reason = evaluate_pre_tool_hooks(
+        name, args, SandboxManager.root_dir
+    )[0]
     if _pre_hook_block_reason:
-        result = f"Error: Tool call blocked by hook: {_pre_hook_block_reason}"
-        console.print(f"[red][Hook][/red] {result}")
-        return ToolMessage(content=result, tool_call_id=call_id)
+        return ToolMessage(
+            content=f"Error: Tool call blocked by hook: {_pre_hook_block_reason}",
+            tool_call_id=call_id,
+        )
     tool_func = AVAILABLE_TOOLS.get(name)
     _permission_rule_decision, _permission_rule = _evaluate_permission_rules(
         PERMISSION_ALLOW_RULES, PERMISSION_DENY_RULES, name, args
@@ -1163,13 +1167,12 @@ async def execute_tool_call(
         elapsed_seconds=round(time.monotonic() - tool_started, 3),
         output_character_count=len(result_text),
     )
-    with contextlib.suppress(Exception):  # noqa: BLE001 - post-tool hooks are best-effort
-        run_post_tool_hooks(
-            hooks=_hooks,
-            tool_name=name,
-            tool_args=args,
-            workspace_root=SandboxManager.get_root(),
-        )
+    safe_run_post_tool_hooks(
+        hooks=load_hooks(),
+        tool_name=name,
+        tool_args=args,
+        workspace_root=SandboxManager.root_dir,
+    )
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
 
@@ -1290,8 +1293,6 @@ async def _prepare_session(
             permission_mode=permission_mode,
         )
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
-        # Startup owns everything it opened, including SQLite, so a failure
-        # here never leaves a connection or lease task behind.
         await _discard_session_startup()
         raise
 
@@ -1665,7 +1666,7 @@ async def _build_session_setup(
     if verbose_startup:
         console.print(
             f"[bold green][Security][/bold green] Workspace root locked to: "
-            f"{SandboxManager.get_root()}"
+            f"{SandboxManager.root_dir}"
         )
     log_event(
         RUN_LOGGER,
@@ -1724,6 +1725,11 @@ async def _build_session_setup(
     permission_mode = _permission_mode
     if verbose_startup:
         console.print(f"[cyan][Agent Permission Mode][/cyan] {permission_mode.title()}")
+    safe_run_session_start_hooks(
+        hooks=load_hooks(),
+        workspace_root=SandboxManager.root_dir,
+        session_id=session_id,
+    )
     return SessionSetup(
         memory=memory,
         local_runtimes=local_runtimes,
@@ -2110,7 +2116,7 @@ async def _choose_provider(
             "Thinking": (
                 f"{'on' if thinking_enabled else 'off'} (effort: {thinking_effort})"
             ),
-            "Workspace": str(SandboxManager.get_root()),
+            "Workspace": str(SandboxManager.root_dir),
             "Local RAG": "active" if is_rag_active else "off",
             "Skills loaded": len(loaded_skills),
             "Resumed history messages": len(chat_history),
@@ -2149,7 +2155,7 @@ async def _choose_provider(
     startup_summary.add_row("Permission", permission_mode.title())
     startup_summary.add_row(
         "Workspace",
-        str(SandboxManager.get_root()),
+        str(SandboxManager.root_dir),
     )
     startup_summary.add_row(
         "Local RAG",
@@ -2247,7 +2253,7 @@ async def _run_agent_cli_session(
     rag_last_check = setup.rag_last_check
     skills_folder_input = setup.skills_folder_input
     loaded_skills = setup.loaded_skills
-    custom_slash_commands = load_custom_slash_commands(SandboxManager.get_root())
+    custom_slash_commands = load_custom_slash_commands(SandboxManager.root_dir)
     mode_label = setup.mode_label
     session_id = setup.session_id
     network_consent_state = setup.network_consent_state
@@ -2297,7 +2303,7 @@ async def _run_agent_cli_session(
         online_selection = provider_preference.online_selection
         model_selection_failed = False
         active_code_workspace: CodeTaskWorkspace | None = None
-        previous_workspace_root = SandboxManager.get_root()
+        previous_workspace_root = SandboxManager.root_dir
         base_tools_list = list(tools_list)
         planning_mode_armed = False
         selected_skill_key: str | None = None
@@ -2315,7 +2321,6 @@ async def _run_agent_cli_session(
                 startup_memory_context = ""
                 session_summary_saved = False
 
-        # This closure is redefined on every provider-selection iteration and must
         # see the current llm/capabilities after a mid-session model switch, so its
         # late binding of loop-assigned names (B023) is intentional.
         def cleanup_code_task(*, finalize: bool) -> str | None:
@@ -2366,7 +2371,7 @@ async def _run_agent_cli_session(
                         user_input = (
                             await prompt_user_input(
                                 console,
-                                SandboxManager.get_root(),
+                                SandboxManager.root_dir,
                                 prompt_message="User: ",
                                 skills=loaded_skills,
                                 history=cli_input_history,
@@ -2455,7 +2460,7 @@ async def _run_agent_cli_session(
                     )
                     table.add_row("Model", selected_model)
                     table.add_row("Permission mode", permission_mode.title())
-                    table.add_row("Workspace", str(SandboxManager.get_root()))
+                    table.add_row("Workspace", str(SandboxManager.root_dir))
                     table.add_row(
                         "RAG",
                         (
@@ -2480,7 +2485,7 @@ async def _run_agent_cli_session(
                         undo_last_turn,
                         memory,
                         session_id,
-                        workspace_root=SandboxManager.get_root(),
+                        workspace_root=SandboxManager.root_dir,
                     )
                     console.print(undo_outcome.message)
                     if undo_outcome.history_changed:
@@ -2798,8 +2803,6 @@ async def _run_agent_cli_session(
                     continue
                 if user_input.lower() == "exit":
                     if non_interactive:
-                        # Headless runs skip the exit-time summary to avoid an
-                        # extra model call and never block on the terminal.
                         if output == "json":
                             sys.stdout.write(
                                 json.dumps({"response": _LAST_HEADLESS_RESPONSE}) + "\n"
@@ -3397,7 +3400,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 if PROJECT_INSTRUCTIONS_FILE:
                     try:
                         _instructions_path = (
-                            pathlib.Path(SandboxManager.get_root())
+                            pathlib.Path(SandboxManager.root_dir)
                             / PROJECT_INSTRUCTIONS_FILE
                         )
                         if _instructions_path.is_file():

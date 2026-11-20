@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -249,6 +250,36 @@ def run_post_tool_hooks(**kwargs: Any) -> list[HookResult]:
 
 def run_session_start_hooks(**kwargs: Any) -> list[HookResult]:
     return run_hooks("SessionStart", **kwargs)
+
+
+def safe_run_session_start_hooks(**kwargs: Any) -> None:
+    """Run session-start hooks, swallowing errors so startup never fails."""
+    with contextlib.suppress(Exception):  # noqa: BLE001 - session-start hooks are best-effort
+        run_session_start_hooks(**kwargs)
+
+
+def evaluate_pre_tool_hooks(
+    tool_name: str | None,
+    tool_args: Any = None,
+    workspace_root: Any = None,
+) -> tuple[str | None, dict[str, list[dict[str, Any]]]]:
+    """Load hooks, run PreToolUse hooks, and return (block_reason, hooks)."""
+    loaded = load_hooks()
+    reason = hooks_blocked(
+        run_pre_tool_hooks(
+            hooks=loaded,
+            tool_name=tool_name,
+            tool_args=tool_args,
+            workspace_root=workspace_root,
+        )
+    )
+    return reason, loaded
+
+
+def safe_run_post_tool_hooks(**kwargs: Any) -> None:
+    """Run post-tool hooks, swallowing errors so tool results are unaffected."""
+    with contextlib.suppress(Exception):  # noqa: BLE001 - post-tool hooks are best-effort
+        run_post_tool_hooks(**kwargs)
 
 
 def hooks_blocked(results: list[HookResult]) -> str | None:
