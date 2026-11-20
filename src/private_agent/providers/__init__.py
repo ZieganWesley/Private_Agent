@@ -14,6 +14,16 @@ from .adapters import (
     all_presets,
     build_adapter,
 )
+from .selection import (
+    IdleProvider,
+    installed_but_idle,
+    load_last_provider,
+    match_runtime,
+    pick_default_model,
+    requested_model,
+    requested_provider,
+    save_last_provider,
+)
 
 __all__ = [
     "ProviderAdapter",
@@ -23,4 +33,12 @@ __all__ = [
     "OpenAICompatibleAdapter",
     "build_adapter",
     "all_presets",
+    "IdleProvider",
+    "installed_but_idle",
+    "load_last_provider",
+    "match_runtime",
+    "pick_default_model",
+    "requested_model",
+    "requested_provider",
+    "save_last_provider",
 ]

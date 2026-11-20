@@ -5393,3 +5393,80 @@ async def test_tasks_menu_uses_arrow_selection(scripted_local_cli, monkeypatch):
     await run_agent_cli_async()
 
     assert "Task action:" in arrow_calls
+
+
+@pytest.mark.asyncio
+async def test_provider_and_model_flags_skip_startup_menus_and_are_remembered(
+    scripted_local_cli, monkeypatch, tmp_path
+):
+    agent, model, inputs, _workspace, _database_path = scripted_local_cli
+    from private_agent.agent import interactive
+    from private_agent.providers.selection import load_last_provider
+
+    state_file = tmp_path / "last_provider.json"
+    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(state_file))
+    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER", "ollama")
+    monkeypatch.setenv("PRIVATE_AGENT_MODEL", "local-model")
+    arrow_titles: list[str] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_titles.append(title)
+        if "permission" in title.lower():
+            return "2"
+        return "1"
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [
+        AIMessage(content="Flag-selected model answered."),
+        AIMessage(content="Session summary."),
+    ]
+    monkeypatch.setattr(
+        agent,
+        "prompt_user_input",
+        AsyncMock(side_effect=["hello", "exit"]),
+    )
+    inputs.side_effect = lambda prompt="": ""
+
+    await run_agent_cli_async()
+
+    assert not any("provider" in title.lower() for title in arrow_titles)
+    assert not any("model" in title.lower() for title in arrow_titles)
+    remembered = load_last_provider()
+    assert remembered is not None
+    assert remembered["adapter_type"] == "ollama"
+    assert remembered["display_name"] == "Ollama"
+    assert remembered["base_url"].startswith("http")
+    assert remembered["model"] == "local-model"
+
+
+@pytest.mark.asyncio
+async def test_unknown_provider_flag_falls_back_to_the_menu(
+    scripted_local_cli, monkeypatch, tmp_path
+):
+    agent, model, inputs, _workspace, _database_path = scripted_local_cli
+    from private_agent.agent import interactive
+
+    monkeypatch.setenv(
+        "PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "last_provider.json")
+    )
+    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER", "vLLM-not-running")
+    arrow_titles: list[str] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_titles.append(title)
+        if "permission" in title.lower():
+            return "2"
+        return "1"
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [AIMessage(content="Fallback provider answered.")]
+    monkeypatch.setattr(
+        agent,
+        "prompt_user_input",
+        AsyncMock(side_effect=["hello", "exit"]),
+    )
+    inputs.side_effect = lambda prompt="": ""
+
+    await run_agent_cli_async()
+
+    assert any("provider" in title.lower() for title in arrow_titles)

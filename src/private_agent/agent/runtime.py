@@ -1781,6 +1781,32 @@ async def _discard_session_startup() -> None:
         memory.close()
 
 
+def _auto_select_single_provider() -> bool:
+    """Return models.auto_select_single_provider (default: off)."""
+    models_config = APP_CONFIG.get("models", {})
+    raw = (
+        models_config.get("auto_select_single_provider", False)
+        if isinstance(models_config, dict)
+        else False
+    )
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"true", "1", "yes", "on"}
+
+
+def _always_ask_provider() -> bool:
+    """Return the providers.always_ask setting (default: off)."""
+    models_config = APP_CONFIG.get("models", {})
+    raw = (
+        models_config.get("always_ask", False)
+        if isinstance(models_config, dict)
+        else False
+    )
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"true", "1", "yes", "on"}
+
+
 async def _choose_provider(
     *,
     verbose_startup: bool,
@@ -1806,10 +1832,31 @@ async def _choose_provider(
     _input = input_provider if input_provider is not None else console.input
     available_models: list = []
     console.print("\n[bold underline]Model Provider[/bold underline]")
+    from ..providers.selection import (
+        installed_but_idle,
+        load_last_provider,
+        match_runtime,
+        pick_default_model,
+        requested_model,
+        requested_provider,
+        save_last_provider,
+    )
+
+    last_used = load_last_provider() or {}
     for runtime_index, runtime in enumerate(local_runtimes, 1):
+        marker = (
+            " [green](last used)[/green]"
+            if last_used.get("display_name") == runtime.name
+            else ""
+        )
         console.print(
             f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
-            f"— {len(runtime.models)} model(s)"
+            f"— {len(runtime.models)} model(s){marker}"
+        )
+    for idle in installed_but_idle(local_runtimes):
+        console.print(
+            f"  [yellow]–[/yellow] {idle.preset.name} is installed but not running "
+            f"— {idle.start_hint}"
         )
     online_options: list[tuple[int, str, bool]] = []
     next_choice = len(local_runtimes) + 1
@@ -1850,6 +1897,10 @@ async def _choose_provider(
         default_choice = str(online_options[0][0])
     else:
         default_choice = "1" if local_runtimes else str(online_options[0][0])
+    for _index, _runtime in enumerate(local_runtimes, 1):
+        if last_used.get("display_name") == _runtime.name:
+            default_choice = str(_index)
+            break
     last_choice = online_options[-1][0]
     _arrow_choices: list[tuple[str, str]] = []
     for _i, _rt in enumerate(local_runtimes, 1):
@@ -1857,24 +1908,48 @@ async def _choose_provider(
     for _cn, _label, _ in online_options:
         _arrow_choices.append((str(_cn), _label))
     _arrow_choices.append(("0", "Exit"))
-    try:
-        from .interactive import arrow_select as _arrow_select
-
-        _chosen = _arrow_select(
-            "Choose provider:", _arrow_choices, default=default_choice
+    flagged_provider = requested_provider()
+    flagged_runtime = match_runtime(flagged_provider, local_runtimes)
+    if flagged_provider and flagged_runtime is None:
+        console.print(
+            f"[yellow][Provider flag][/yellow] '{flagged_provider}' is not "
+            "reachable; choose from the list below."
         )
-    except Exception:  # noqa: BLE001 - fall back to typed prompt
-        _chosen = None
-    if _chosen is not None:
-        provider_choice = _chosen
+    if flagged_runtime is not None:
+        provider_choice = str(local_runtimes.index(flagged_runtime) + 1)
+        console.print(
+            f"[green][Provider flag][/green] Using {flagged_runtime.name} "
+            "(from --provider)."
+        )
+    elif (
+        len(local_runtimes) == 1
+        and not _always_ask_provider()
+        and _auto_select_single_provider()
+    ):
+        provider_choice = "1"
+        console.print(
+            f"[green][Local runtime][/green] Using {local_runtimes[0].name} "
+            "(only reachable local provider)."
+        )
     else:
-        provider_choice = (
-            _input(
-                f"[cyan]Choose provider [1-{last_choice}] "
-                f"(Default: {default_choice}): [/cyan]"
-            ).strip()
-            or default_choice
-        )
+        try:
+            from .interactive import arrow_select as _arrow_select
+
+            _chosen = _arrow_select(
+                "Choose provider:", _arrow_choices, default=default_choice
+            )
+        except Exception:  # noqa: BLE001 - fall back to typed prompt
+            _chosen = None
+        if _chosen is not None:
+            provider_choice = _chosen
+        else:
+            provider_choice = (
+                _input(
+                    f"[cyan]Choose provider [1-{last_choice}] "
+                    f"(Default: {default_choice}): [/cyan]"
+                ).strip()
+                or default_choice
+            )
     if provider_choice == "0":
         preference.exit_requested = True
         return None
@@ -1946,6 +2021,10 @@ async def _choose_provider(
         if PREFERRED_MODEL in available_models:
             available_models.remove(PREFERRED_MODEL)
             available_models.insert(0, PREFERRED_MODEL)
+        flagged_model = pick_default_model(available_models, requested_model())
+        if requested_model() and flagged_model in available_models:
+            available_models.remove(flagged_model)
+            available_models.insert(0, flagged_model)
         if not available_models:
             console.print(
                 f"[yellow]{local_runtime.name} is running, but it advertises "
@@ -1967,17 +2046,34 @@ async def _choose_provider(
                 f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
                 f"installed in {local_runtime.name}.[/yellow]"
             )
+        requested_exact = next(
+            (
+                model_name
+                for model_name in available_models
+                if model_name.strip().lower() == requested_model().lower()
+            ),
+            None,
+        )
         try:
             from .interactive import arrow_select as _arrow_select
 
-            _model_choice = _arrow_select(
-                "Select model:",
-                [(str(i), m) for i, m in enumerate(available_models, 1)],
-                default="1",
+            _model_choice = (
+                None
+                if requested_exact is not None
+                else _arrow_select(
+                    "Select model:",
+                    [(str(i), m) for i, m in enumerate(available_models, 1)],
+                    default="1",
+                )
             )
         except Exception:  # noqa: BLE001 - arrow UI unavailable; fall back to typed prompt
             _model_choice = None
-        if _model_choice is not None and _model_choice.isdigit():
+        if requested_exact is not None:
+            selected_model = requested_exact
+            console.print(
+                f"[green][Model flag][/green] Using {requested_exact} (from --model)."
+            )
+        elif _model_choice is not None and _model_choice.isdigit():
             _mc = int(_model_choice) - 1
             if 0 <= _mc < len(available_models):
                 selected_model = available_models[_mc]
@@ -2099,6 +2195,12 @@ async def _choose_provider(
             "providers.local_runtime_selected",
             runtime=local_runtime.name,
             runtime_kind=local_runtime.kind,
+            model=selected_model,
+        )
+        save_last_provider(
+            adapter_type=local_runtime.kind,
+            display_name=local_runtime.name,
+            base_url=local_runtime.base_url,
             model=selected_model,
         )
     else:

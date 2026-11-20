@@ -130,6 +130,12 @@ def main():
         help="Preferred local provider name (e.g. Ollama, LM Studio).",
     )
     parser.add_argument(
+        "--model",
+        metavar="NAME",
+        default=None,
+        help="Preferred model name; skips the model menu when available.",
+    )
+    parser.add_argument(
         "--light",
         action="store_true",
         help="Use a light-terminal colour theme.",
@@ -141,6 +147,8 @@ def main():
         os.environ["PRIVATE_AGENT_LIGHT"] = "1"
     if args.provider:
         os.environ["PRIVATE_AGENT_PROVIDER"] = args.provider
+    if args.model:
+        os.environ["PRIVATE_AGENT_MODEL"] = args.model
     if args.list_sessions:
         raise SystemExit(list_saved_sessions())
     originals = []
