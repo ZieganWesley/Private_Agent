@@ -2344,7 +2344,7 @@ For when to do each step, see the implementation order in section L1.
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
 | 6.1 | **Done:** load a project instruction file (`AGENTS.md`, or a name set via `agent.project_instructions_file`) from the workspace root and append it to the system prompt | C1 | 3.1 | Instructions in `AGENTS.md` show up in the model's context |
-| 6.2 | Add `offset` and `limit` (line-based) to `read_local_file`, and report the total line count so the model can page through large files | C10 | — | Large files can be read in chunks |
+| 6.2 | **Done:** add `offset` and `limit` (line-based) to `read_local_file`, and report the total line count so the model can page through large files | C10 | — | Large files can be read in chunks |
 | 6.3 | **Partly done:** pipes, `&&`, `||` and redirects now run through `bash -c` inside the sandbox (commit `3296c63`). Remaining: a per-call timeout (with a maximum) and background processes with tools to read output and stop them | C5 | 4.3, 5.1 | `pytest \| tail`, a 5-minute build and a dev server all work inside the sandbox |
 | 6.4 | Add an Esc / single Ctrl+C handler that cancels the current turn and keeps the session; keep double Ctrl+C for exit | C12 | 4.2 | Stopping a turn does not end the session |
 | 6.5 | Add permission rules in config (`allow` / `deny` lists matching tool names, commands and paths, for example `run_shell_command(pytest *)` or `read_local_file(.env)`) | C8 | 4.3 | Allowed commands run in Auto mode without a prompt; denied ones are refused |

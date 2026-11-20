@@ -16,6 +16,16 @@ class ReadFileInput(BaseModel):
     file_path: str = Field(
         ..., description="Path to the file to read relative to workspace."
     )
+    offset: int = Field(
+        0,
+        ge=0,
+        description="Zero-based starting line number for paged reads.",
+    )
+    limit: int | None = Field(
+        None,
+        ge=1,
+        description="Maximum number of lines to return (omit for all).",
+    )
 
 
 class EditFileInput(BaseModel):

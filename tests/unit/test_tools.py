@@ -251,7 +251,7 @@ def test_file_tools_in_sandbox(temp_workspace):
     assert "Success" in write_res
 
     read_res = read_local_file.invoke({"file_path": file_path})
-    assert read_res == content
+    assert read_res == content + "\n[read_local_file: lines 1-1 of 1 total]"
 
 
 def test_workspace_write_rejects_racing_symlink_replacement(

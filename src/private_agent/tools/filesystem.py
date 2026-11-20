@@ -656,7 +656,7 @@ def _rename_workspace_file_safely(source_path: str, destination_path: str) -> st
 
 
 @tool(args_schema=ReadFileInput)
-def read_local_file(file_path: str) -> str:
+def read_local_file(file_path: str, offset: int = 0, limit: int | None = None) -> str:
     """Read a text file inside the validated workspace with configured size limits."""
     try:
         target = SandboxManager.validate_path(file_path)
@@ -683,7 +683,21 @@ def read_local_file(file_path: str) -> str:
         with target.open("rb") as source:
             while chunk := source.read(FILE_READ_CHUNK_BYTES):
                 chunks.append(chunk)
-        return b"".join(chunks).decode("utf-8", errors="replace")
+        text = b"".join(chunks).decode("utf-8", errors="replace")
+        lines = text.splitlines(keepends=True)
+        total_lines = len(lines)
+        if offset >= total_lines and total_lines > 0:
+            return (
+                f"File '{file_path}' has {total_lines} lines; "
+                f"offset {offset} is out of range."
+            )
+        end = total_lines if limit is None else min(total_lines, offset + limit)
+        selected = lines[offset:end]
+        body = "".join(selected)
+        return (
+            f"{body}\n[read_local_file: lines {offset + 1}-{end} of "
+            f"{total_lines} total]"
+        )
     except (ValueError, OSError) as exc:
         return f"Error reading file: {exc}"
 
