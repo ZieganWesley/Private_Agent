@@ -27,6 +27,46 @@ def rebuild_tools(base_tools_list, user_input, llm):
     return tools_list, llm_with_tools
 
 
+def gate_capability(tool_call, permission_mode, console, state):
+    """Approve an enable_capability call; append a blocked message if denied."""
+    import sys
+
+    from langchain_core.messages import ToolMessage
+
+    from .tools import get_tool_context
+
+    name = (tool_call.get("args") or {}).get("name")
+    interactive = get_tool_context().interactive and sys.stdin.isatty()
+    allowed, reason = approve_capability(name, permission_mode, console, interactive)
+    if not allowed:
+        state.blocked_tool_messages.append(
+            ToolMessage(content=reason, tool_call_id=str(tool_call.get("id") or ""))
+        )
+    else:
+        state.capability_approved = True
+    return allowed
+
+
+def approve_capability(name, permission_mode, console, interactive):
+    """Return (allowed, reason) for an enable_capability request."""
+    if name not in ("Coding", "Research"):
+        return True, ""
+    if permission_mode == "full":
+        return True, ""
+    if not interactive:
+        return False, f"Switching to {name} requires interactive approval."
+    choice = (
+        console.input(
+            f"[yellow]Approve switching to {name} capability? [y/N]: [/yellow]"
+        )
+        .strip()
+        .lower()
+    )
+    if choice != "y":
+        return False, f"Capability escalation to {name} was not approved; no packs changed."
+    return True, ""
+
+
 def get_plan_summary(state: dict[str, Any]) -> str:
     plan = (state or {}).get("plan")
     if plan is not None and hasattr(plan, "summary"):

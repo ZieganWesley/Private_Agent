@@ -500,6 +500,7 @@ class _PreflightState:
     authorized_planning_searches: dict
     task_action_seen: bool
     tool_call_count: int
+    capability_approved: bool = False
 async def _preflight_tool_calls(
     *,
     response,
@@ -681,6 +682,8 @@ async def _preflight_tool_calls(
                     tool_call_id=tool_call.get("id"),
                 )
             )
+            continue
+        if call_name == "enable_capability" and not f_integration.gate_capability(tool_call, turn_permission_mode, console, state):
             continue
         if call_name in NETWORK_TOOL_NAMES:
             tool_args = tool_call.get("args", {})
@@ -3597,7 +3600,6 @@ Runtime context:
                     usage=usage,
                     console=console,
                 )
-
                 async def _run_agent_turn(response) -> Any:
                     nonlocal tools_list, llm_with_tools
                     iteration = 0
@@ -3663,7 +3665,6 @@ Runtime context:
                             state.authorized_planning_searches
                         )
                         tool_call_count = state.tool_call_count
-
                         response, stop = await _execute_tool_batch(
                             response=response,
                             session_id=session_id,
@@ -3679,7 +3680,7 @@ Runtime context:
                             console=console,
                         )
                         f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
-                        if any(tc.get("name") == "enable_capability" for tc in (getattr(response, "tool_calls", None) or [])):
+                        if getattr(state, "capability_approved", False):
                             tools_list, llm_with_tools = f_integration.rebuild_tools(base_tools_list, user_input, llm)  # noqa: B023
                         if stop:
                             break

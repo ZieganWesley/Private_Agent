@@ -5032,7 +5032,7 @@ async def test_enable_capability_rebuilds_tool_list_end_to_end(scripted_local_cl
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     model.responses = [
-        AIMessage(content="", tool_calls=[{"name": "enable_capability", "args": {"name": "Coding"}, "id": "e1"}]),
+        AIMessage(content="", tool_calls=[{"name": "enable_capability", "args": {"name": "Planning"}, "id": "e1"}]),
         AIMessage(content="done"),
     ]
 
@@ -5048,4 +5048,4 @@ async def test_enable_capability_rebuilds_tool_list_end_to_end(scripted_local_cl
 
     bound_names = {getattr(t, "name", None) for t in getattr(model, "bound_tools", [])}
     assert "enable_capability" in bound_names
-    assert "write_local_file" in bound_names or "apply_workspace_patch" in bound_names
+    assert "create_task_plan" in bound_names
