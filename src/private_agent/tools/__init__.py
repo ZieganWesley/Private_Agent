@@ -522,6 +522,7 @@ from .shell import (
 )
 from .subagents import run_subagent
 from .web import download_web_file, fetch_webpage, web_search
+from .calculator import calculate
 from .rag_tools import search_documents
 from .documents import create_docx, create_pdf, create_xlsx
 
@@ -571,6 +572,7 @@ AVAILABLE_TOOLS = {
     "record_microphone_audio": record_microphone_audio,
     "transcribe_workspace_audio": transcribe_workspace_audio,
     "search_documents": search_documents,
+    "calculate": calculate,
     "create_docx": create_docx,
     "create_xlsx": create_xlsx,
     "create_pdf": create_pdf,
