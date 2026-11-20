@@ -88,6 +88,7 @@ DEFAULT_CONFIG = {
         "streaming_output": True,
         "visible_reasoning": False,
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
+        "project_instructions_file": "AGENTS.md",
     },
     "memory": {
         "conversation_retention_days": 0,
@@ -485,6 +486,7 @@ MAX_OUTPUT_TOKENS = SETTINGS.max_output_tokens
 STREAMING_OUTPUT = SETTINGS.streaming_output
 VISIBLE_REASONING = SETTINGS.visible_reasoning
 SYSTEM_PROMPT = SETTINGS.system_prompt
+PROJECT_INSTRUCTIONS_FILE = SETTINGS.project_instructions_file
 CONVERSATION_RETENTION_DAYS = SETTINGS.conversation_retention_days
 EPISODE_RETENTION_DAYS = SETTINGS.episode_retention_days
 REGISTERED_SKILL_RETENTION_DAYS = SETTINGS.registered_skill_retention_days
