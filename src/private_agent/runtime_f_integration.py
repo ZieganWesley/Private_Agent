@@ -33,7 +33,6 @@ def gate_capability(tool_call, permission_mode, console, state):
 
     from langchain_core.messages import ToolMessage
 
-    from .tools import get_tool_context
 
     name = (tool_call.get("args") or {}).get("name")
     interactive = get_tool_context().interactive and sys.stdin.isatty()
@@ -93,8 +92,11 @@ def trim_context(text: str, total_tokens: int) -> str:
 
 
 def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False) -> dict[str, Any]:
+    turn_context_token = None
     with contextlib.suppress(Exception):
-        get_tool_context().enabled_packs.clear()
+        from .tools import begin_turn_tool_context
+
+        turn_context_token = begin_turn_tool_context()
     plan = task_orchestrator.build_plan(user_input, ["respond to request"])
     run_id = turn_id or uuid.uuid4().hex
     conn: sqlite3.Connection | None = None
@@ -103,7 +105,7 @@ def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool
         timeline.ensure_schema(conn)
     except Exception:  # noqa: BLE001 - timeline unavailable, disable persistence
         conn = None
-    state = {"plan": plan, "iteration": 0, "pending": True, "conn": conn, "run_id": run_id, "started": time.monotonic(), "json_mode": json_mode}
+    state = {"plan": plan, "iteration": 0, "pending": True, "conn": conn, "run_id": run_id, "started": time.monotonic(), "json_mode": json_mode, "_context_token": turn_context_token}
     if json_mode:
         with contextlib.suppress(Exception):
             json_output.emit_event({"event": "turn_started", "turn_id": turn_id})
@@ -147,6 +149,12 @@ def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, 
 
 
 def finish_turn(state: dict[str, Any]) -> None:
+    token = (state or {}).pop("_context_token", None)
+    if token is not None:
+        with contextlib.suppress(Exception):
+            from .tools import reset_turn_tool_context
+
+            reset_turn_tool_context(token)
     state["pending"] = False
     plan = state.get("plan")
     if plan is not None:

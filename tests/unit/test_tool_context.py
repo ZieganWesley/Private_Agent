@@ -117,3 +117,46 @@ def test_code_task_tools_degrade_when_no_task_is_active(monkeypatch):
         {"label": "step", "paths": ["src/app.py"]}
     )
     assert "No isolated code task is active" in code_tasks.finalize_code_task.invoke({})
+
+
+@pytest.mark.asyncio
+async def test_turn_tool_context_isolates_enabled_packs():
+    import asyncio
+
+    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+
+    async def turn(pack):
+        token = begin_turn_tool_context()
+        try:
+            get_tool_context().enabled_packs.add(pack)
+            await asyncio.sleep(0)
+            return set(get_tool_context().enabled_packs)
+        finally:
+            reset_turn_tool_context(token)
+
+    assert await asyncio.gather(turn("Coding"), turn("Research")) == [
+        {"Coding"},
+        {"Research"},
+    ]
+    assert get_tool_context().enabled_packs == set()
+
+
+def test_turn_context_carries_task_state_but_not_enabled_packs():
+    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+
+    outer = get_tool_context()
+    token = begin_turn_tool_context()
+    try:
+        turn = get_tool_context()
+        turn.task_session_id = "turn-session"
+        turn.task_id = "turn-task"
+        turn.enabled_packs.add("Coding")
+    finally:
+        reset_turn_tool_context(token)
+
+    restored = get_tool_context()
+    assert restored is outer
+    assert restored.task_session_id == "turn-session"
+    assert restored.task_id == "turn-task"
+    assert restored.task_ids["turn-session"] == "turn-task"
+    assert "Coding" not in restored.enabled_packs

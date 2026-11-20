@@ -6,7 +6,7 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import wraps
 from typing import Any
@@ -119,7 +119,6 @@ class ToolContext:
     skill_registry: dict | None = None
     skill_session_id: str | None = None
     code_task: Any = None
-    vectorstore: Any = None
     runtime_owner_id: str | None = None
     schema_read_tables: set | None = None
     interactive: bool = True
@@ -137,45 +136,88 @@ _TOOL_CONTEXT = ToolContext(
     runtime_owner_id=uuid.uuid4().hex,
     schema_read_tables=set(),
 )
+_TOOL_CONTEXT_VAR: contextvars.ContextVar[ToolContext] = contextvars.ContextVar(
+    "private_agent_tool_context", default=_TOOL_CONTEXT
+)
 
 
 def get_tool_context() -> ToolContext:
-    """Return the process-local tool context (single source of truth)."""
+    """Return the turn-local tool context (single source of truth)."""
+    context = _TOOL_CONTEXT_VAR.get()
     if (
-        _TOOL_CONTEXT.task_session_id is not None
-        and _TOOL_CONTEXT.task_session_id in _TOOL_CONTEXT.task_ids
+        context.task_session_id is not None
+        and context.task_session_id in context.task_ids
     ):
-        _TOOL_CONTEXT.task_id = _TOOL_CONTEXT.task_ids[
-            _TOOL_CONTEXT.task_session_id
-        ]
-    return _TOOL_CONTEXT
+        context.task_id = context.task_ids[context.task_session_id]
+    return context
 
 
 def set_tool_context(context: ToolContext) -> None:
-    """Copy a context object into the process-local tool context."""
-    _TOOL_CONTEXT.db_path = context.db_path
-    _TOOL_CONTEXT.session_id = context.session_id
-    _TOOL_CONTEXT.turn_id = context.turn_id
-    _TOOL_CONTEXT.task_session_id = context.task_session_id
-    _TOOL_CONTEXT.task_id = context.task_id
+    """Copy a context object into the current turn-local tool context."""
+    current = _TOOL_CONTEXT_VAR.get()
+    current.db_path = context.db_path
+    current.session_id = context.session_id
+    current.turn_id = context.turn_id
+    current.task_session_id = context.task_session_id
+    current.task_id = context.task_id
     if context.task_session_id is not None and context.task_id is not None:
-        _TOOL_CONTEXT.task_ids[context.task_session_id] = context.task_id
-    _TOOL_CONTEXT.task_ids.update(context.task_ids)
-    _TOOL_CONTEXT.skill_directory = context.skill_directory
-    _TOOL_CONTEXT.skill_registry = context.skill_registry
-    _TOOL_CONTEXT.skill_session_id = context.skill_session_id
-    _TOOL_CONTEXT.code_task = context.code_task
-    _TOOL_CONTEXT.interactive = context.interactive
-    _TOOL_CONTEXT.subagent_runner = context.subagent_runner
+        current.task_ids[context.task_session_id] = context.task_id
+    current.task_ids.update(context.task_ids)
+    current.skill_directory = context.skill_directory
+    current.skill_registry = context.skill_registry
+    current.skill_session_id = context.skill_session_id
+    current.code_task = context.code_task
+    current.interactive = context.interactive
+    current.subagent_runner = context.subagent_runner
     if context.runtime_owner_id is not None:
-        _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
+        current.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:
-        _TOOL_CONTEXT.schema_read_tables = context.schema_read_tables
-    if getattr(context, "enabled_packs", None) is not None and (
-        context.enabled_packs is not _TOOL_CONTEXT.enabled_packs
-    ):
-        _TOOL_CONTEXT.enabled_packs.clear()
-        _TOOL_CONTEXT.enabled_packs.update(context.enabled_packs)
+        current.schema_read_tables = context.schema_read_tables
+    if context.enabled_packs is not current.enabled_packs:
+        current.enabled_packs.clear()
+        current.enabled_packs.update(context.enabled_packs)
+
+
+def begin_turn_tool_context() -> Any:
+    """Create and activate a turn-scoped copy of the tool context."""
+    base = get_tool_context()
+    turn_context = replace(
+        base,
+        enabled_packs=set(),
+        schema_read_tables=set(base.schema_read_tables or set()),
+        task_ids=dict(base.task_ids or {}),
+    )
+    return _TOOL_CONTEXT_VAR.set(turn_context)
+
+
+_TURN_DURABLE_FIELDS = (
+    "task_session_id",
+    "task_id",
+    "code_task",
+    "skill_directory",
+    "skill_registry",
+    "skill_session_id",
+    "subagent_runner",
+    "interactive",
+)
+
+
+def reset_turn_tool_context(token: Any) -> None:
+    """Restore the outer context after a turn.
+
+    State the turn established (active task, code task, skills) carries over;
+    turn-scoped state such as enabled capability packs does not.
+    """
+    turn = _TOOL_CONTEXT_VAR.get()
+    _TOOL_CONTEXT_VAR.reset(token)
+    outer = _TOOL_CONTEXT_VAR.get()
+    if outer is turn:
+        return
+    for name in _TURN_DURABLE_FIELDS:
+        setattr(outer, name, getattr(turn, name))
+    outer.task_ids.update(turn.task_ids)
+    if turn.task_session_id is not None and turn.task_id is not None:
+        outer.task_ids[turn.task_session_id] = turn.task_id
 
 
 # --- NETWORK CONNECTIVITY UTILITY ---
