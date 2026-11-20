@@ -999,7 +999,7 @@ user.
 
 ## Part F: Plan for a Single Combined Runtime with Live Status
 
-**Status (F0-F4 done):** event bus + overlay + capability packs/router + classification/escalation + task orchestrator.
+**Status (F0-F5 done):** event bus + overlay + capability packs/router + classification/escalation + task orchestrator + context manager.
 
 Goal: the chatbot, RAG chatbot, coding agent, research agent and helper become
 **one runtime**, not separate modes the user switches between. Any request
