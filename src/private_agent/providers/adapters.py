@@ -6,6 +6,7 @@ module import time so that online-only sessions never pay for them (I1e).
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from collections.abc import Callable, Mapping
@@ -72,7 +73,7 @@ class ProviderAdapter(Protocol):
 
     def embeddings(self, model: str, *, base_url: str) -> Any | None: ...
 
-    def hardware_status(self, *, base_url: str) -> str: ...
+    def hardware_status(self, *, base_url: str, **kwargs: Any) -> str: ...
 
 
 def _which(name: str) -> bool:
@@ -314,17 +315,27 @@ class OllamaAdapter:
             )
             return None
 
-    def hardware_status(self, *, base_url):
+    def hardware_status(self, *, base_url, mode="auto", client_factory=None):
+        """Return the human-readable hardware report for this Ollama endpoint."""
         try:
-            from ..hardware import status as hw_status
-
-            return (
-                hw_status.ollama_hardware_status(base_url)
-                if hasattr(hw_status, "ollama_hardware_status")
-                else "no standard API"
+            from ..hardware.status import (
+                format_hardware_status,
+                inspect_ollama_hardware,
             )
-        except Exception:  # noqa: BLE001 - optional dependency boundary
-            return "no standard API"
+
+            info = inspect_ollama_hardware(
+                base_url, mode, client_factory=client_factory
+            )
+            return format_hardware_status(info)
+        except Exception as exc:  # noqa: BLE001 - hardware probes are best effort
+            log_event(
+                RUN_LOGGER,
+                "provider.hardware_status_failed",
+                level=logging.DEBUG,
+                provider=self.name,
+                error_type=type(exc).__name__,
+            )
+            return "Hardware status is unavailable for this runtime."
 
 
 class OpenAICompatibleAdapter:
