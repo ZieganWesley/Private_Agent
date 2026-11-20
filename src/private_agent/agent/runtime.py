@@ -35,6 +35,7 @@ from ..code_tasks import (
 from ..config import (
     AGENT_PERMISSION_MODE,
     APP_CONFIG,
+    APPROVED_EXTRA_FOLDERS,
     CODE_OUTPUT_ROOT,
     CONFIG_FILE_PATH,
     CONTEXT_COMPACTION_THRESHOLD,
@@ -1643,6 +1644,7 @@ async def _build_session_setup(
     if not workspace_input:
         workspace_input = "."
     SandboxManager.set_root(workspace_input)
+    SandboxManager.set_approved_extra_folders(APPROVED_EXTRA_FOLDERS)
     if verbose_startup:
         console.print(
             f"[bold green][Security][/bold green] Workspace root locked to: "

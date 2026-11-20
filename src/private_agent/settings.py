@@ -203,6 +203,9 @@ def resolve_config_values(
     PERMISSION_DENY_RULES = list(
         config_section(config, "permissions").get("deny", []) or []
     )
+    APPROVED_EXTRA_FOLDERS = list(
+        config_section(config, "permissions").get("approved_extra_folders", []) or []
+    )
     SYSTEM_PROMPT = (
         _configured_system_prompt.strip()
         if isinstance(_configured_system_prompt, str)
@@ -591,6 +594,7 @@ class Settings:
     system_prompt: str
     permission_allow_rules: list
     permission_deny_rules: list
+    approved_extra_folders: list
     project_instructions_file: str | None
     conversation_retention_days: Any
     episode_retention_days: Any

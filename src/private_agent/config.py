@@ -46,6 +46,7 @@ DEFAULT_CONFIG = {
     "permissions": {
         "allow": [],
         "deny": [],
+        "approved_extra_folders": [],
     },
     "hooks": {},
     "models": {
@@ -551,6 +552,7 @@ VISIBLE_REASONING = SETTINGS.visible_reasoning
 SYSTEM_PROMPT = SETTINGS.system_prompt
 PERMISSION_ALLOW_RULES = SETTINGS.permission_allow_rules
 PERMISSION_DENY_RULES = SETTINGS.permission_deny_rules
+APPROVED_EXTRA_FOLDERS = SETTINGS.approved_extra_folders
 PROJECT_INSTRUCTIONS_FILE = SETTINGS.project_instructions_file
 CONVERSATION_RETENTION_DAYS = SETTINGS.conversation_retention_days
 EPISODE_RETENTION_DAYS = SETTINGS.episode_retention_days
