@@ -210,7 +210,6 @@ from .session_types import ProviderPreference, ProviderSelection, SessionSetup
 from .status import (
     SUMMARIZING,
     StatusIndicator,
-    context_state_line,
     status_line,
     summarizing_message,
 )
@@ -3827,15 +3826,27 @@ Runtime context:
 def _print_context_state(
     stats: dict,
     output_tokens: int,
-    model_name: Any = None,
-    permission_mode: Any = "auto",
+    model_name: str | None = None,
+    permission_mode: str = "auto",
 ) -> tuple[int, int]:
-    """Print the context-window gauge and return the ``(used, maximum)`` pair."""
-    console.print(context_state_line(stats, output_tokens))
+    """Print the consolidated status line and return ``(used, maximum)``."""
+    values = stats if isinstance(stats, dict) else {}
+    context_tokens = values.get("tokens", 0)
+    context_maximum = values.get("max", 0)
     console.print(
-        f"[dim]{status_line(model_name, stats.get('tokens', 0), stats.get('max', 0), permission_mode)}[/dim]"
+        f"[dim]{status_line(model_name, context_tokens, context_maximum, permission_mode, output_tokens)}[/dim]"
     )
-    return stats["tokens"], stats["max"]
+    used = context_tokens
+    try:
+        used = int(context_tokens)
+    except (TypeError, ValueError):
+        used = 0
+    maximum = context_maximum
+    try:
+        maximum = int(context_maximum)
+    except (TypeError, ValueError):
+        maximum = 0
+    return used, maximum
 
 
 def _history_with_summary(summary: str, history: list) -> list:

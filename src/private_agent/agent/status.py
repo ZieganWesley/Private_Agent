@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from rich.markup import escape
+
 from .console import console
 
 LOADING = "loading"
@@ -267,21 +269,24 @@ class StatusIndicator:
 
 
 def status_line(
-    model_name: Any,
+    model_name: str | None = None,
     context_tokens: Any = 0,
     context_maximum: Any = 0,
-    permission_mode: Any = "auto",
+    permission_mode: str = "auto",
+    output_tokens: Any = None,
 ) -> str:
     """Return a compact status line with model, context use and permission mode."""
     percent = context_percent(context_tokens, context_maximum)
     bar = context_bar(context_tokens, context_maximum, width=12)
     parts = [
-        f"model={model_name}",
+        f"model={escape(str(model_name))}",
         f"context={percent}%",
         f"permission={permission_mode}",
     ]
     if bar:
         parts.append(bar)
+    if output_tokens is not None:
+        parts.append(f"output={output_tokens}")
     return " | ".join(parts)
 
 
