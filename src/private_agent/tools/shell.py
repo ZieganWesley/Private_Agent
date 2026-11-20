@@ -38,7 +38,7 @@ def _sandbox_shell_script(command: str, root: Path) -> str:
     args_schema=RunShellInput,
     description="Run an approved command inside the configured OS-isolated workspace",
 )
-def run_shell_command(command: str) -> str:
+def run_shell_command(command: str, timeout: int | None = None) -> str:
     logger.debug("run_shell_command called with command length=" + str(len(command)))
     """Run an approved command inside the configured OS-isolated workspace.
 
@@ -104,18 +104,25 @@ def run_shell_command(command: str) -> str:
                 and getattr(get_tool_context().code_task, "allow_network", False)
             ),
         )
+        effective_timeout = (
+            SHELL_COMMAND_TIMEOUT
+            if timeout is None
+            else min(int(timeout), SHELL_COMMAND_TIMEOUT)
+        )
         result = subprocess.run(
             isolated_command,
             shell=False,
             check=False,
             capture_output=True,
             text=True,
-            timeout=SHELL_COMMAND_TIMEOUT,
+            timeout=effective_timeout,
             env=environment,
         )
         return (
             f"Exit Code: {result.returncode}\nOutput:\n{result.stdout}{result.stderr}"
         )
+    except subprocess.TimeoutExpired:
+        return f"Error: Command timed out after {effective_timeout} seconds."
     except RuntimeError as exc:
         return f"Execution blocked: {exc}"
     except (ValueError, OSError) as exc:

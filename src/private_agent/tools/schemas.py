@@ -35,6 +35,11 @@ class EditFileInput(BaseModel):
 
 class RunShellInput(BaseModel):
     command: str = Field(..., description="Shell command string to execute.")
+    timeout: int | None = Field(
+        None,
+        ge=1,
+        description="Per-call timeout in seconds (clamped to the configured maximum).",
+    )
 
 
 class WebSearchInput(BaseModel):
