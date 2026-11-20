@@ -491,6 +491,7 @@ def resolve_config_values(
         config, "skills", "relevance_embedding_threshold", 0.55
     )
     RAG_CONTEXT_RESULTS = configured_int(config, "agent", "rag_context_results", 5)
+    RAG_DOCUMENTS_ONLY = configured_bool(config, "agent", "rag_documents_only", False)
     RAG_RELEVANCE_THRESHOLD = configured_float(config, "rag", "relevance_threshold", 0.25)
     RAG_INCLUDE_CODING_GUIDANCE = configured_bool(
         config, "rag", "include_coding_guidance", True
@@ -683,6 +684,7 @@ class Settings:
     skill_relevance_word_match_score: float
     skill_relevance_embedding_threshold: float
     rag_context_results: int
+    rag_documents_only: bool
     rag_relevance_threshold: float
     rag_include_coding_guidance: bool
     summary_prompt_sentences: int

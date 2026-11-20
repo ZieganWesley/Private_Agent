@@ -63,6 +63,7 @@ from ..config import (
     PROJECT_INSTRUCTIONS_FILE,
     RAG_AUTO_REFRESH_SECONDS,
     RAG_DOCS_DEFAULT,
+    RAG_DOCUMENTS_ONLY,
     RAG_INDEX_PATH,
     REGISTERED_SKILL_RETENTION_DAYS,
     SKILLS_FOLDER_DEFAULT,
@@ -3302,6 +3303,11 @@ async def _run_agent_cli_session(
                             )
                             console.print(
                                 f"[cyan][RAG State][/cyan] Retrieved {len(relevant_docs)} document/episodic chunks."
+                            )
+                        elif RAG_DOCUMENTS_ONLY:
+                            context_text = (
+                                "No relevant documents were found. Answer that "
+                                "the information is not in the provided documents."
                             )
                     except Exception as exc:  # noqa: BLE001 - retrieval failures come from Chroma/embeddings; use no context
                         reference_id = uuid.uuid4().hex[:8]

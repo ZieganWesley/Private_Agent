@@ -90,6 +90,7 @@ DEFAULT_CONFIG = {
         "context_keep_recent_messages": 6,
         "context_summary_chars": 1500,
         "rag_context_results": 5,
+        "rag_documents_only": False,
         "streaming_output": True,
         "visible_reasoning": False,
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
@@ -267,6 +268,7 @@ _LEGACY_CONFIG_KEYS = {
     "shell_command_timeout_seconds": ("tools", "shell_command_timeout_seconds"),
     "default_history_read_limit": ("tools", "default_history_read_limit"),
     "rag_context_results": ("agent", "rag_context_results"),
+    "rag_documents_only": ("agent", "rag_documents_only"),
     "rag_relevance_threshold": ("rag", "relevance_threshold"),
     "rag_include_coding_guidance": ("rag", "include_coding_guidance"),
     "summary_prompt_sentences": ("agent", "summary_prompt_sentences"),
@@ -642,6 +644,7 @@ SKILL_RELEVANCE_PREFIX_MATCH_SCORE = SETTINGS.skill_relevance_prefix_match_score
 SKILL_RELEVANCE_WORD_MATCH_SCORE = SETTINGS.skill_relevance_word_match_score
 SKILL_RELEVANCE_EMBEDDING_THRESHOLD = SETTINGS.skill_relevance_embedding_threshold
 RAG_CONTEXT_RESULTS = SETTINGS.rag_context_results
+RAG_DOCUMENTS_ONLY = SETTINGS.rag_documents_only
 RAG_RELEVANCE_THRESHOLD = SETTINGS.rag_relevance_threshold
 RAG_INCLUDE_CODING_GUIDANCE = SETTINGS.rag_include_coding_guidance
 SUMMARY_PROMPT_SENTENCES = SETTINGS.summary_prompt_sentences
