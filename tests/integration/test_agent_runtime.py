@@ -183,6 +183,17 @@ def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
     return task
 
 
+def _capture_rendered_text(printed):
+    """Capture console.print output, unwrapping rich Markdown to its source."""
+
+    def _printer(*values, **_kwargs):
+        printed.append(
+            " ".join(getattr(value, "markup", str(value)) for value in values)
+        )
+
+    return _printer
+
+
 @pytest.mark.asyncio
 async def test_cli_requires_a_terminal_before_starting_session(monkeypatch):
     from types import SimpleNamespace
@@ -1310,7 +1321,7 @@ async def test_tool_result_and_failure_are_returned_to_agent(monkeypatch):
     assert "[System Reflection Prompt]" in result.content
     error_panel = next(value for value in printed if isinstance(value, Panel))
     assert isinstance(error_panel.title, Text)
-    assert str(error_panel.title) == "Tool 'example' returned an error"
+    assert str(error_panel.title) == "✗ Tool 'example' returned an error"
     assert isinstance(error_panel.renderable, Text)
     assert "tool unavailable" in error_panel.renderable.plain
     assert "credential-value" not in error_panel.renderable.plain
@@ -2002,7 +2013,7 @@ async def test_runtime_rag_citations_are_prompted_and_shown(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+        _capture_rendered_text(printed),
     )
     monkeypatch.setattr(
         agent,
@@ -2639,7 +2650,7 @@ async def test_runtime_does_not_access_webcam_without_declared_vision(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+        _capture_rendered_text(printed),
     )
     camera = MagicMock(description="Capture a webcam image")
     camera.ainvoke = AsyncMock(return_value="camera-image:unexpected")
@@ -3936,7 +3947,7 @@ async def test_online_tool_failure_redacts_sensitive_args_and_keeps_only_approve
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+        _capture_rendered_text(printed),
     )
 
     def answer_prompt(prompt):
@@ -3992,7 +4003,7 @@ async def test_online_cli_uses_mock_http_boundary_without_unapproved_history(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+        _capture_rendered_text(printed),
     )
     persisted = PersistentMemory(db_path=str(database_path))
     persisted.save_message("previous-session", "human", "private local history")
@@ -4297,7 +4308,7 @@ async def test_online_cli_failure_does_not_print_provider_secrets(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+        _capture_rendered_text(printed),
     )
     inputs.side_effect = [
         "",
@@ -4518,7 +4529,7 @@ async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+        _capture_rendered_text(printed),
     )
     monkeypatch.setattr(
         agent,
@@ -4977,7 +4988,7 @@ async def test_undo_restores_a_file_edited_by_the_last_turn(
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **kwargs: printed.append(" ".join(map(str, values))),
+        _capture_rendered_text(printed),
     )
 
     await run_agent_cli_async()
@@ -5291,3 +5302,94 @@ async def test_turn_context_is_reset_when_the_model_fails_before_the_tool_loop(
 
     assert get_tool_context() is outer
     assert outer.enabled_packs == set()
+
+
+@pytest.mark.asyncio
+async def test_startup_menus_prefer_arrow_selection(scripted_local_cli, monkeypatch):
+    agent, model, inputs, _workspace, _database_path = scripted_local_cli
+    from private_agent.agent import interactive
+
+    arrow_calls: list[tuple[str, list[str]]] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_calls.append((title, [value for value, _label in choices]))
+        lowered = title.lower()
+        if "provider" in lowered:
+            return "1"
+        if "model" in lowered:
+            return "1"
+        if "permission" in lowered:
+            return "2"
+        return None
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [AIMessage(content="Arrow-selected startup works.")]
+    monkeypatch.setattr(
+        agent,
+        "prompt_user_input",
+        AsyncMock(side_effect=["hello", "exit"]),
+    )
+    typed_prompts: list[str] = []
+
+    def typed(prompt=""):
+        typed_prompts.append(str(prompt))
+        return ""
+
+    inputs.side_effect = typed
+
+    await run_agent_cli_async()
+
+    titles = [title for title, _values in arrow_calls]
+    assert any("provider" in title.lower() for title in titles)
+    assert any("model" in title.lower() for title in titles)
+    provider_values = next(
+        values for title, values in arrow_calls if "provider" in title.lower()
+    )
+    assert "0" in provider_values
+    assert not any(
+        "choose provider" in prompt.lower()
+        or "select model choice" in prompt.lower()
+        or "choose permission mode" in prompt.lower()
+        for prompt in typed_prompts
+    )
+
+
+@pytest.mark.asyncio
+async def test_tasks_menu_uses_arrow_selection(scripted_local_cli, monkeypatch):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    from private_agent.agent import interactive
+
+    _install_approved_task(
+        agent,
+        monkeypatch,
+        database_path,
+        "Arrow menu task",
+        "research",
+        [{"description": "Gather evidence"}],
+    )
+    arrow_calls: list[str] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_calls.append(title)
+        if title.startswith("Task action"):
+            return "list" if len(arrow_calls) == 1 else "done"
+        if "permission" in title.lower():
+            return "2"
+        if "provider" in title.lower():
+            return "1"
+        if "model" in title.lower():
+            return "1"
+        return None
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [AIMessage(content="Task reviewed."), AIMessage(content="Done.")]
+    monkeypatch.setattr(
+        agent,
+        "prompt_user_input",
+        AsyncMock(side_effect=["/tasks", "exit"]),
+    )
+    inputs.side_effect = lambda prompt="": ""
+
+    await run_agent_cli_async()
+
+    assert "Task action:" in arrow_calls

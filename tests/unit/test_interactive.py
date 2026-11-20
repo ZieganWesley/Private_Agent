@@ -2012,3 +2012,55 @@ def test_prompt_key_bindings_insert_newline_on_alt_enter_and_ctrl_j():
         by_keys[keys].handler(event)
         buffer.insert_text("line two")
         assert buffer.text == "line one\nline two"
+
+
+def test_arrow_select_returns_none_non_interactive(monkeypatch):
+    from private_agent.agent import interactive
+
+    monkeypatch.setattr(interactive.sys.stdin, "isatty", lambda: False, raising=False)
+    monkeypatch.setattr(interactive.sys.stdout, "isatty", lambda: False, raising=False)
+    assert interactive.arrow_select("Pick", [("1", "one")]) is None
+
+
+def test_arrow_select_runs_application_and_returns_choice(monkeypatch):
+    from prompt_toolkit.application import Application
+
+    from private_agent.agent import interactive
+
+    monkeypatch.setattr(interactive.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(interactive.sys.stdout, "isatty", lambda: True, raising=False)
+    seen = {}
+
+    def fake_run(self, *args, **kwargs):
+        seen["thread"] = __import__("threading").current_thread().name
+        return "2"
+
+    monkeypatch.setattr(Application, "run", fake_run)
+
+    selected = interactive.arrow_select(
+        "Pick", [("1", "one"), ("2", "two")], default="2"
+    )
+
+    assert selected == "2"
+    assert seen["thread"] == "arrow-select"
+
+
+def test_arrow_select_treats_cancel_and_errors_as_no_choice(monkeypatch):
+    from prompt_toolkit.application import Application
+
+    from private_agent.agent import interactive
+
+    monkeypatch.setattr(interactive.sys.stdin, "isatty", lambda: True, raising=False)
+    monkeypatch.setattr(interactive.sys.stdout, "isatty", lambda: True, raising=False)
+
+    def cancelled(self, *args, **kwargs):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(Application, "run", cancelled)
+    assert interactive.arrow_select("Pick", [("1", "one")]) is None
+
+    def broken(self, *args, **kwargs):
+        raise RuntimeError("no terminal")
+
+    monkeypatch.setattr(Application, "run", broken)
+    assert interactive.arrow_select("Pick", [("1", "one")]) is None

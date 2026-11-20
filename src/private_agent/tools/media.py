@@ -10,8 +10,9 @@ import wave
 
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-from rich.console import Console
 from rich.markup import escape
+
+from private_agent.console import console
 
 from ..config import (
     DEFAULT_CAMERA_DEVICE_INDEX,
@@ -34,7 +35,6 @@ from ..sandbox import SandboxManager
 _captured_images: dict[str, bytes] = {}
 _image_capture_count = 0
 _image_lock = threading.Lock()
-console = Console()
 
 
 class WebcamCaptureInput(BaseModel):

@@ -83,17 +83,32 @@ def select_coding_access_level(
     choices = tuple(CODING_ACCESS_LEVELS.items())
     for index, (_, description) in enumerate(choices, 1):
         console.print(f"  {index}. {description}")
-    selection = console.input(
-        "Choose workspace access [1-5] (default: 4, isolated): "
-    ).strip()
     try:
-        choice = int(selection) if selection else 4
-    except ValueError:
-        console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
-        choice = 4
-    if not 1 <= choice <= len(choices):
-        console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
-        choice = 4
+        from .interactive import arrow_select as _arrow_select
+
+        _chosen = _arrow_select(
+            "Coding workspace access:",
+            [(str(i), desc) for i, (_, desc) in enumerate(choices, 1)],
+            default="4",
+        )
+    except Exception:  # noqa: BLE001 - fall back to typed prompt
+        _chosen = None
+    if _chosen is not None and _chosen.isdigit():
+        choice = int(_chosen)
+        if not 1 <= choice <= len(choices):
+            choice = 4
+    else:
+        selection = console.input(
+            "Choose workspace access [1-5] (default: 4, isolated): "
+        ).strip()
+        try:
+            choice = int(selection) if selection else 4
+        except ValueError:
+            console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
+            choice = 4
+        if not 1 <= choice <= len(choices):
+            console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
+            choice = 4
     return choices[choice - 1][0]
 
 
@@ -122,19 +137,29 @@ def prompt_tool_approval(
     name: str,
     description: str,
     safe_args: Any,
+    on_always_allow: Any = None,
 ) -> bool:
     """Prompt the user for approval of a tool call.
 
-    Returns ``True`` when the user approves (answers ``y``).
+    Returns ``True`` when the user approves (answers ``y`` or ``a``).
+    ``a`` approves and, when ``on_always_allow`` is provided, registers the
+    tool as always-allowed for the rest of the session.
     """
     approval = (
         console.input(
             f"[yellow]Approve tool '{name}'? {description}\n"
-            f"Arguments: {safe_args}\nRun? \\[y/N]: [/yellow]"
+            f"Arguments: {safe_args}\nRun? [y/N/a (always allow)]: [/yellow]"
         )
         .strip()
         .lower()
     )
+    if approval == "a":
+        if on_always_allow is not None:
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                on_always_allow(name)
+        return True
     return approval == "y"
 
 
@@ -150,6 +175,18 @@ def select_permission_mode(
     }
     if not is_interactive():
         return configured
+    try:
+        from .interactive import arrow_select
+
+        chosen = arrow_select(
+            "Permission mode:",
+            [(m, labels[m]) for m in ("manual", "auto", "full")],
+            default=configured,
+        )
+        if chosen is not None:
+            return chosen
+    except Exception:  # noqa: BLE001 - fall back to typed prompt
+        pass
     console.print("[bold cyan][Agent Permission Mode][/bold cyan]")
     for number, mode in enumerate(("manual", "auto", "full"), 1):
         console.print(f"  {number}. {labels[mode]}")

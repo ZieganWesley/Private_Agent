@@ -5,11 +5,10 @@ import re
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from rich.console import Console
+
+from private_agent.console import console
 
 from ..config import RAG_RELEVANCE_THRESHOLD, RAG_SIMILARITY_RESULTS
-
-console = Console()
 
 _RRF_K = 60
 _TOKEN_PATTERN = re.compile(r"\w+(?:[.'’\-]\w+)*", re.UNICODE)

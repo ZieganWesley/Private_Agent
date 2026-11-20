@@ -408,11 +408,56 @@ def _run_task_management(
         )
 
     show_tasks()
+    _task_actions = [
+        "list",
+        "view",
+        "approve",
+        "resume",
+        "pause",
+        "cancel",
+        "verify",
+        "validate",
+        "reconcile",
+        "complete",
+        "discard",
+        "delete",
+        "done",
+    ]
     while True:
-        command = console.input(
-            "[cyan]Tasks[/cyan] [list/view/approve/resume/pause/cancel/"
-            "verify/validate/reconcile/complete/discard/delete/done]: "
-        ).strip()
+        command = ""
+        try:
+            from .interactive import arrow_select as _arrow_select
+
+            _chosen_action = _arrow_select(
+                "Task action:",
+                [(a, a) for a in _task_actions],
+                default=None,
+            )
+        except Exception:  # noqa: BLE001 - arrow UI unavailable; fall back to typed prompt
+            _chosen_action = None
+        if _chosen_action is not None:
+            command = _chosen_action.strip()
+            if command.lower() in {
+                "view",
+                "approve",
+                "resume",
+                "pause",
+                "cancel",
+                "verify",
+                "validate",
+                "reconcile",
+                "complete",
+                "discard",
+                "delete",
+            }:
+                _tid = console.input("[cyan]Task id: [/cyan]").strip()
+                if _tid:
+                    command = f"{command} {_tid}"
+        if not command:
+            command = console.input(
+                "[cyan]Tasks[/cyan] [list/view/approve/resume/pause/cancel/"
+                "verify/validate/reconcile/complete/discard/delete/done]: "
+            ).strip()
         if command.lower() in {"done", "exit", "back", "q"}:
             break
         if command.lower() == "list":

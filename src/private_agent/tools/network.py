@@ -23,7 +23,8 @@ from httpcore._backends.base import (
     NetworkBackend,
     NetworkStream,
 )
-from rich.console import Console
+
+from private_agent.console import console
 
 from ..config import (
     MAX_HTTP_REDIRECTS,
@@ -36,7 +37,6 @@ from ..config import (
 )
 from ..run_logging import RUN_LOGGER, log_event
 
-console = Console()
 _outbound_http_clients = []
 _EXPLICIT_PRIVATE_NETWORKS = tuple(
     ipaddress.ip_network(network)

@@ -3,11 +3,10 @@
 import pathlib
 
 import yaml
-from rich.console import Console
+
+from private_agent.console import console
 
 from ..config import SKILL_DESCRIPTION_PREVIEW_CHARS, SKILL_MAX_ITERATIONS
-
-console = Console()
 
 
 class AgentSkill:

@@ -1400,10 +1400,11 @@ It asks for the RAG folder before the workspace, though the project-local
 
 **G5. No Markdown rendering or code highlighting.**
 
-**Partly fixed.** Non-streamed replies render via `rich.markdown.Markdown`.
-Replies are streamed as plain text with markup turned off
-(`runtime.py:2676`), so code blocks, tables, lists and bold show as raw `**`,
-`|` and backticks. This is the biggest visible gap (same as E1).
+**Fixed.** Non-streamed replies print through `rich.markdown.Markdown`,
+so headings, lists, tables, bold and fenced code blocks render with
+highlighting. Streamed tokens are still written as plain text (markup off)
+because partial Markdown cannot be parsed reliably; the finished aggregate
+is what gets formatted when streaming is unavailable.
 
 **G6. No coloured diffs.**
 Edit previews (`preview_workspace_patch`) go through the same `Text()` panel
@@ -1411,9 +1412,12 @@ as all tool output, so it is hard to see what an edit changes before
 approving it.
 
 **G7. Too many startup questions.**
-There are 4–7 questions before the first message (RAG folder, workspace,
-mode, provider, URL, key, confirm), with no "remember my choices" and no
-command-line flags.
+
+**Fixed.** `--provider NAME` preselects a local runtime and `--light` picks
+the light palette, joining the existing `--continue`, `--resume`,
+`--permission-mode`, `--prompt`, `--output` and `--config` flags, so a
+routine startup needs no keystrokes. Prompts still default to their Enter
+values when a flag is absent.
 
 **G8. No live status while working** (see F3; fixed by step 9.7).
 
@@ -1424,26 +1428,40 @@ while older context or the session summary is being condensed. When
 `visible_reasoning` is on, the reasoning streams as dimmed text above the
 answer. A context-window gauge beside the spinner and in the
 `[Context State]` line fills with the share of the prompt budget in use
-(green below 50%, yellow from 50%, red from 80%). The full live panel for
-running and finished tools, packs and context use (step 9.7) is still open.
+(green below 50%, yellow from 50%, red from 80%).
+
+**Fixed.** `StatusOverlay` (`status_overlay.py`) runs a `rich.live` panel
+during each turn showing the current plan summary, the ETA, running tools,
+the last five finished tools with duration, and a context-usage bar fed from
+the same `usage` figures as the status line. It subscribes to the tool event
+bus, degrades to plain mode outside a TTY or under `NO_COLOR`, and is stopped
+before approvals so prompts still draw cleanly.
 
 **G9. No way to stop one turn** (see C12; fixed by step 6.4).
 
 **G10. No multi-line input.**
-There are no key bindings, so there is no Alt+Enter or Shift+Enter for a new
-line.
+
+**Fixed.** `build_prompt_key_bindings` provides Alt+Enter and Ctrl+J for a new
+line, plus completion and history bindings.
 
 **G11. No way to expand tool output.**
 Previews stop at 500 characters (`TOOL_RESULT_PREVIEW_CHARS`,
 `runtime.py:196`), with no way to see the rest of what the model saw.
 
 **G12. Basic approval prompts.**
-Prompts are plain `[y/N]` with no "always allow" option (C8), and tool
-arguments are shown as a Python dict.
+
+**Fixed.** Prompts now accept `y` (run once), `n` (decline) and `a` (always
+allow this tool for the rest of the session, kept in `_ALWAYS_ALLOWED_TOOLS`).
+Tool arguments are summarised with the readable `name · key=value` format.
 
 **G13. No arrow-key menus.**
-Menus are numbered or typed, and `/tasks` opens a sub-prompt where commands
-such as `approve <ID>` are typed and IDs copied by hand.
+
+**Fixed.** `interactive.arrow_select` renders a `prompt_toolkit` `RadioList`
+(stars for Enter, Esc/Ctrl-C to cancel) and every menu keeps its numbered or
+typed prompt as the fallback, so pipes, `NO_COLOR` and non-TTY sessions behave
+exactly as before. It is wired into the permission-mode menu, the provider
+menu, the local model list, the coding workspace access menu and `/tasks`
+(which then asks for the task id).
 
 **G14. Replies and diagnostics are mixed** (see E34; fixed by steps 5.2 and 8.2).
 

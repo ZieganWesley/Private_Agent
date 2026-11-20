@@ -123,9 +123,24 @@ def main():
         default=None,
         help="Permission mode for this run (default: configured).",
     )
+    parser.add_argument(
+        "--provider",
+        metavar="NAME",
+        default=None,
+        help="Preferred local provider name (e.g. Ollama, LM Studio).",
+    )
+    parser.add_argument(
+        "--light",
+        action="store_true",
+        help="Use a light-terminal colour theme.",
+    )
     args = parser.parse_args()
     if args.config:
         os.environ["PRIVATE_AGENT_CONFIG"] = args.config
+    if args.light:
+        os.environ["PRIVATE_AGENT_LIGHT"] = "1"
+    if args.provider:
+        os.environ["PRIVATE_AGENT_PROVIDER"] = args.provider
     if args.list_sessions:
         raise SystemExit(list_saved_sessions())
     originals = []

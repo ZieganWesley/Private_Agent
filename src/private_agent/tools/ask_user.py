@@ -3,7 +3,6 @@
 import sys
 
 from langchain_core.tools import tool
-from rich.console import Console
 
 from .schemas import AskUserInput
 
@@ -11,7 +10,8 @@ from .schemas import AskUserInput
 @tool(args_schema=AskUserInput)
 def ask_user(question: str, options: list[str] | None = None) -> str:
     """Ask the user a clarifying question and return their answer."""
-    console = Console()
+    from private_agent.console import console
+
     console.print(f"[cyan][Question][/cyan] {question}")
     if options:
         for index, option in enumerate(options, 1):

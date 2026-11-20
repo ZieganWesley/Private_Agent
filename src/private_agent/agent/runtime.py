@@ -241,6 +241,7 @@ from .tool_display import (
 )
 from .undo import undo_last_turn
 
+_ALWAYS_ALLOWED_TOOLS: set[str] = set()
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _LAST_HEADLESS_RESPONSE: str = ""
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
@@ -978,7 +979,7 @@ async def execute_tool_call(
         )
     )
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
-        name, args, SandboxManager.get_root()
+        name, args, SandboxManager.get_root_or_none()
     )[0]
     if _pre_hook_block_reason:
         return ToolMessage(
@@ -1072,6 +1073,7 @@ async def execute_tool_call(
         )
         and not (name in LOCAL_MEDIA_TOOL_NAMES and media_capture_authorized)
         and not _permission_rule_allowed
+        and name not in _ALWAYS_ALLOWED_TOOLS
     ):
         if not (get_tool_context().interactive and sys.stdin.isatty()):
             result = (
@@ -1085,6 +1087,7 @@ async def execute_tool_call(
                 name=name,
                 description=description,
                 safe_args=safe_args,
+                on_always_allow=_ALWAYS_ALLOWED_TOOLS.add,
             )
             if not approved:
                 result = "Error: Tool invocation was declined; no action was taken."
@@ -1179,7 +1182,7 @@ async def execute_tool_call(
         output_character_count=len(result_text),
     )
     _hook_output = collect_post_tool_hook_output(
-        tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root()
+        tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root_or_none()
     )
     if _hook_output:
         result_text += "\n\n[Post-tool checks]\n" + _hook_output
@@ -1849,13 +1852,30 @@ async def _choose_provider(
     else:
         default_choice = "1" if local_runtimes else str(online_options[0][0])
     last_choice = online_options[-1][0]
-    provider_choice = (
-        _input(
-            f"[cyan]Choose provider [1-{last_choice}] "
-            f"(Default: {default_choice}): [/cyan]"
-        ).strip()
-        or default_choice
-    )
+    _arrow_choices: list[tuple[str, str]] = []
+    for _i, _rt in enumerate(local_runtimes, 1):
+        _arrow_choices.append((str(_i), _rt.name))
+    for _cn, _label, _ in online_options:
+        _arrow_choices.append((str(_cn), _label))
+    _arrow_choices.append(("0", "Exit"))
+    try:
+        from .interactive import arrow_select as _arrow_select
+
+        _chosen = _arrow_select(
+            "Choose provider:", _arrow_choices, default=default_choice
+        )
+    except Exception:  # noqa: BLE001 - fall back to typed prompt
+        _chosen = None
+    if _chosen is not None:
+        provider_choice = _chosen
+    else:
+        provider_choice = (
+            _input(
+                f"[cyan]Choose provider [1-{last_choice}] "
+                f"(Default: {default_choice}): [/cyan]"
+            ).strip()
+            or default_choice
+        )
     if provider_choice == "0":
         preference.exit_requested = True
         return None
@@ -1948,21 +1968,38 @@ async def _choose_provider(
                 f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
                 f"installed in {local_runtime.name}.[/yellow]"
             )
-        while True:
-            choice_input = _input(
-                f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
-            ).strip()
-            if not choice_input:
+        try:
+            from .interactive import arrow_select as _arrow_select
+
+            _model_choice = _arrow_select(
+                "Select model:",
+                [(str(i), m) for i, m in enumerate(available_models, 1)],
+                default="1",
+            )
+        except Exception:  # noqa: BLE001 - arrow UI unavailable; fall back to typed prompt
+            _model_choice = None
+        if _model_choice is not None and _model_choice.isdigit():
+            _mc = int(_model_choice) - 1
+            if 0 <= _mc < len(available_models):
+                selected_model = available_models[_mc]
+            else:
                 selected_model = available_models[0]
-                break
-            try:
-                choice_idx = int(choice_input) - 1
-                if 0 <= choice_idx < len(available_models):
-                    selected_model = available_models[choice_idx]
+        else:
+            while True:
+                choice_input = _input(
+                    f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
+                ).strip()
+                if not choice_input:
+                    selected_model = available_models[0]
                     break
-            except ValueError:
-                pass
-            console.print("[red][Error] Invalid selection.[/red]")
+                try:
+                    choice_idx = int(choice_input) - 1
+                    if 0 <= choice_idx < len(available_models):
+                        selected_model = available_models[choice_idx]
+                        break
+                except ValueError:
+                    pass
+                console.print("[red][Error] Invalid selection.[/red]")
 
         console.print(
             f"[green][Info] Initializing local model client for: {selected_model}[/green]"
@@ -3894,6 +3931,12 @@ Runtime context:
                 _overlay = StatusOverlay(console)
                 _overlay.set_plan_summary(f_integration.get_plan_summary(_f_state))
                 _overlay.set_eta_deadline(deadline)
+                try:
+                    _used, _maximum = usage
+                    if _maximum:
+                        _overlay.set_context_usage(100.0 * _used / _maximum)
+                except Exception:  # noqa: BLE001 - best effort
+                    pass
                 _overlay.start()
                 try:
                     response = await _run_agent_turn(response)
@@ -3910,10 +3953,10 @@ Runtime context:
                 )
                 if not isinstance(response, AIMessageChunk):
                     console.print(f"\n[bold green]AI ({selected_model}):[/bold green]")
+                    from rich.markdown import Markdown
+
                     console.print(
-                        full_output_content,
-                        markup=False,
-                        highlight=False,
+                        Markdown(full_output_content),
                         soft_wrap=True,
                     )
                 elif not full_output_content and not getattr(
@@ -4017,7 +4060,7 @@ async def run_agent_cli_async(
     """Own runtime resources and restore dynamically registered global tools."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     original_mcp_tools = set(MCP_TOOL_NAMES)
-    original_workspace_root = SandboxManager.root_dir
+    original_workspace_root = SandboxManager.get_root_or_none()
     try:
         await _run_agent_cli_session(
             verbose_startup=verbose_startup,

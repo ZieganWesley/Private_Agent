@@ -5,11 +5,10 @@ import shutil
 import tempfile
 import urllib.parse
 
-from rich.console import Console
+from private_agent.console import console
 
 from .network import mcp_http_client_factory, validate_explicit_service_url
 
-console = Console()
 _mcp_sandbox_dirs = []
 
 

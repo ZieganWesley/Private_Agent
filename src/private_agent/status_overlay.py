@@ -30,6 +30,7 @@ class StatusOverlay:
         self._finished: list[tuple[str, str, float]] = []
         self._plan_summary: str = ""
         self._eta_deadline: float | None = None
+        self._context_percent: float | None = None
         self._lock = threading.Lock()
         self._live: Live | None = None
         self._started = False
@@ -41,6 +42,10 @@ class StatusOverlay:
     def set_eta_deadline(self, deadline: float | None) -> None:
         with self._lock:
             self._eta_deadline = deadline
+
+    def set_context_usage(self, percent: float | None) -> None:
+        with self._lock:
+            self._context_percent = percent
 
     def _render(self) -> Any:
         table = Table(show_header=False, box=None, padding=(0, 1))
@@ -54,6 +59,11 @@ class StatusOverlay:
 
                 remaining = max(0.0, self._eta_deadline - _t.monotonic())
                 table.add_row("ETA:", f"{remaining:.0f}s")
+            if self._context_percent is not None:
+                pct = max(0.0, min(100.0, self._context_percent))
+                filled = int(pct / 10)
+                bar = "#" * filled + "." * (10 - filled)
+                table.add_row("Context:", f"{bar} {pct:.0f}%")
             for _call_id, name in list(self._running.items()):
                 table.add_row(f"~ {name}", "")
             for name, status, dur in self._finished[-5:]:
