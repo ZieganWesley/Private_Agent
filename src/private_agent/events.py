@@ -23,34 +23,6 @@ class Event:
 
 
 @dataclass
-class TurnStarted(Event):
-    turn_id: str = ""
-    packs: tuple[str, ...] = ()
-    complexity: str = "simple"
-
-
-@dataclass
-class TurnFinished(Event):
-    turn_id: str = ""
-    duration: float = 0.0
-    tokens: int = 0
-
-
-@dataclass
-class ModelCallStarted(Event):
-    model: str = ""
-    input_tokens: int = 0
-
-
-@dataclass
-class ModelCallFinished(Event):
-    model: str = ""
-    input_tokens: int = 0
-    output_tokens: int = 0
-    tokens_per_second: float = 0.0
-
-
-@dataclass
 class ToolStarted(Event):
     call_id: str = ""
     tool_name: str = ""
@@ -60,49 +32,11 @@ class ToolStarted(Event):
 
 
 @dataclass
-class ToolProgress(Event):
-    call_id: str = ""
-    message: str = ""
-
-
-@dataclass
 class ToolFinished(Event):
     call_id: str = ""
     status: str = "ok"
     duration: float = 0.0
     output_size: int = 0
-
-
-@dataclass
-class ApprovalRequested(Event):
-    call_id: str = ""
-    kind: str = ""
-
-
-@dataclass
-class ApprovalResolved(Event):
-    call_id: str = ""
-    answer: str = ""
-
-
-@dataclass
-class PlanStepChanged(Event):
-    task_id: str = ""
-    step_id: str = ""
-    old_status: str = ""
-    new_status: str = ""
-
-
-@dataclass
-class EstimateUpdated(Event):
-    task_id: str = ""
-    low_seconds: float = 0.0
-    high_seconds: float = 0.0
-
-
-@dataclass
-class BudgetWarning(Event):
-    message: str = ""
 
 
 Handler = Callable[[Event], None]

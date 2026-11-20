@@ -11,9 +11,9 @@ def test_emit_calls_subscribers():
         received.append(e)
 
     bus.subscribe(events.Event, handler)
-    bus.emit(events.TurnStarted(turn_id="t1"))
+    bus.emit(events.ToolStarted(call_id="c1", tool_name="read"))
     assert len(received) == 1
-    assert isinstance(received[0], events.TurnStarted)
+    assert isinstance(received[0], events.ToolStarted)
 
 
 def test_subscriber_specific_type():
@@ -24,7 +24,7 @@ def test_subscriber_specific_type():
         tool_events.append(e)
 
     bus.subscribe(events.ToolStarted, handler)
-    bus.emit(events.TurnStarted(turn_id="t1"))
+    bus.emit(events.Event())
     bus.emit(events.ToolStarted(call_id="c1", tool_name="read"))
     assert len(tool_events) == 1
     assert tool_events[0].tool_name == "read"
