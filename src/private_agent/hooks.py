@@ -297,3 +297,37 @@ def hooks_blocked(results: list[HookResult]) -> str | None:
         if result.blocked:
             return result.reason or "Blocked by hook"
     return None
+
+
+def collect_post_tool_hook_output(
+    tool_name: str | None = None,
+    tool_args: Any = None,
+    workspace_root: Any = None,
+) -> str:
+    """Run PostToolUse hooks and return their combined output (empty on failure)."""
+    try:
+        if workspace_root is None:
+            loaded = load_hooks()
+        else:
+            from .config import load_or_create_config, merge_project_config
+
+            loaded = load_hooks(
+                merge_project_config(load_or_create_config(), workspace_root)
+            )
+        results = run_post_tool_hooks(
+            hooks=loaded,
+            tool_name=tool_name,
+            tool_args=tool_args,
+            workspace_root=workspace_root,
+        )
+    except Exception:  # noqa: BLE001 - post-tool hooks are best-effort
+        return ""
+    parts: list[str] = []
+    for result in results or []:
+        if getattr(result, "stdout", ""):
+            parts.append(str(result.stdout).strip())
+        if getattr(result, "stderr", ""):
+            parts.append(str(result.stderr).strip())
+        if getattr(result, "reason", ""):
+            parts.append(str(result.reason))
+    return "\n".join(part for part in parts if part)

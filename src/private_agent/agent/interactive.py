@@ -464,3 +464,26 @@ def export_conversation(path, chat_history) -> str:
         format_conversation_export(chat_history), encoding="utf-8"
     )
     return str(destination)
+
+
+def handle_session_command(user_input, chat_history, context_summary, last_user_request, sandbox_root, console):
+    command = (user_input or "").lower()
+    if command == "/new":
+        console.print("[cyan][Command][/cyan] Started a new conversation.")
+        return True, True, user_input, [], "", last_user_request
+    if command == "/retry":
+        if last_user_request:
+            console.print("[cyan][Command][/cyan] Retrying previous request.")
+            return True, False, last_user_request, chat_history, context_summary, last_user_request
+        console.print("[cyan][Command][/cyan] No previous request to retry.")
+        return True, True, user_input, chat_history, context_summary, last_user_request
+    if command.startswith("/export"):
+        try:
+            saved = export_conversation(
+                os.path.join(str(sandbox_root), "conversation_export.md"), chat_history
+            )
+            console.print(f"[cyan][Command][/cyan] Exported conversation to {saved}")
+        except (OSError, ValueError) as exc:
+            console.print(f"[red][Command][/red] Export failed: {exc}")
+        return True, True, user_input, chat_history, context_summary, last_user_request
+    return False, False, user_input, chat_history, context_summary, last_user_request

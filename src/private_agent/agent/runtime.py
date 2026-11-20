@@ -84,9 +84,9 @@ from ..hardware import (
     inspect_ollama_hardware,
 )
 from ..hooks import (
+    collect_post_tool_hook_output,
     evaluate_pre_tool_hooks,
     load_hooks,
-    run_post_tool_hooks,
     safe_run_session_start_hooks,
 )
 from ..rag import (
@@ -134,6 +134,7 @@ from .compaction import (
 from .console import console
 from .interactive import format_help as _format_interactive_help
 from .interactive import (
+    handle_session_command,
     include_file_context,
     include_folder_context,
     load_custom_slash_commands,
@@ -251,7 +252,6 @@ OS_ISOLATED_TOOL_NAMES = frozenset(
         "finalize_code_task",
     }
 )
-
 def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | None:
     """Explain why a location-revealing call must not run, or None if allowed."""
     if local_session:
@@ -266,11 +266,9 @@ def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | 
             "provider; ask the user for a place name and pass it as 'location'."
         )
     return None
-
 def _device_tools_allowed(provider_type: str) -> bool:
     """Local-only (location/media) tools: Local provider, or the explicit override."""
     return provider_type == "local" or ONLINE_PERMISSION_OVERRIDE
-
 def _tool_unavailable_reason(
     name: str,
     *,
@@ -302,7 +300,6 @@ def _tool_unavailable_reason(
         ):
             return "The selected local model does not declare vision support."
     return None
-
 def _tools_for_model(
     *,
     provider_type: str,
@@ -523,7 +520,7 @@ async def _preflight_tool_calls(
     schema_read_in_batch = any(
         call.get("name") == "read_table_schema" for call in response.tool_calls
     )
-    step_deadline = None
+    step_deadline = deadline
     for tool_call in response.tool_calls:
         call_name = tool_call.get("name")
         if get_tool_context().task_id and state.task_action_seen:
@@ -553,7 +550,7 @@ async def _preflight_tool_calls(
                 )
             )
             continue
-        effective_deadline = step_deadline if step_deadline is not None else deadline
+        effective_deadline = step_deadline
         if time.monotonic() >= effective_deadline:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -1154,29 +1151,9 @@ async def execute_tool_call(
         elapsed_seconds=round(time.monotonic() - tool_started, 3),
         output_character_count=len(result_text),
     )
-    try:
-        _post_hook_results = run_post_tool_hooks(
-            hooks=load_hooks(
-                merge_project_config(load_or_create_config(), SandboxManager.get_root())
-            ),
-            tool_name=name,
-            tool_args=args,
-            workspace_root=SandboxManager.get_root(),
-        )
-    except (OSError, ValueError, RuntimeError):
-        _post_hook_results = []
-    _hook_output = []
-    for _hook_result in _post_hook_results or []:
-        if getattr(_hook_result, "stdout", ""):
-            _hook_output.append(_hook_result.stdout.strip())
-        if getattr(_hook_result, "stderr", ""):
-            _hook_output.append(_hook_result.stderr.strip())
-        if getattr(_hook_result, "reason", ""):
-            _hook_output.append(_hook_result.reason)
+    _hook_output = collect_post_tool_hook_output(tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root())
     if _hook_output:
-        result_text += "\n\n[Post-tool checks]\n" + "\n".join(
-            part for part in _hook_output if part
-        )
+        result_text += "\n\n[Post-tool checks]\n" + _hook_output
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
 async def _execute_task_tool_call(
@@ -2402,37 +2379,13 @@ async def _run_agent_cli_session(
                     )
                 if user_input and not user_input.startswith("/"):
                     last_user_request = user_input
-                if user_input.lower() == "/new":
-                    chat_history = []
-                    context_summary = ""
-                    console.print("[cyan][Command][/cyan] Started a new conversation.")
-                    continue
-                if user_input.lower() == "/retry":
-                    if last_user_request:
-                        user_input = last_user_request
-                        console.print(
-                            "[cyan][Command][/cyan] Retrying previous request."
-                        )
-                    else:
-                        console.print(
-                            "[cyan][Command][/cyan] No previous request to retry."
-                        )
-                        continue
-                if user_input.lower().startswith("/export"):
-                    from .interactive import export_conversation
-
-                    export_path = os.path.join(
-                        str(SandboxManager.get_root()), "conversation_export.md"
+                _handled, _cont, user_input, chat_history, context_summary, last_user_request = (
+                    handle_session_command(
+                        user_input, chat_history, context_summary,
+                        last_user_request, SandboxManager.get_root(), console,
                     )
-                    try:
-                        saved = export_conversation(export_path, chat_history)
-                        console.print(
-                            f"[cyan][Command][/cyan] Exported conversation to {saved}"
-                        )
-                    except (OSError, ValueError) as exc:
-                        console.print(
-                            f"[red][Command][/red] Export failed: {exc}"
-                        )
+                )
+                if _handled and _cont:
                     continue
                 if user_input.lower() == "/help":
                     console.print(_format_interactive_help())
@@ -2905,7 +2858,7 @@ async def _run_agent_cli_session(
                             create_text_plan(
                                 memory, session_id, user_input, llm, console
                             )
-                        except Exception as exc:  # noqa: BLE001
+                        except Exception as exc:  # noqa: BLE001 - text planning is optional; report failure
                             console.print(
                                 "[red]Text planning failed: "
                                 f"{type(exc).__name__}: {exc}[/red]"
@@ -3357,10 +3310,7 @@ async def _run_agent_cli_session(
                                 f"[cyan][RAG State][/cyan] Retrieved {len(relevant_docs)} document/episodic chunks."
                             )
                         elif RAG_DOCUMENTS_ONLY:
-                            context_text = (
-                                "No relevant documents were found. Answer that "
-                                "the information is not in the provided documents."
-                            )
+                            context_text = "No relevant documents were found. Answer that the information is not in the provided documents."
                     except Exception as exc:  # noqa: BLE001 - retrieval failures come from Chroma/embeddings; use no context
                         reference_id = uuid.uuid4().hex[:8]
                         console.print(
