@@ -152,12 +152,55 @@ def _task_plan_markdown(task: dict) -> str:
     return "\n".join(lines)
 
 
-def _looks_like_validation_command(value: str) -> bool:
+SHELL_METACHARACTERS = frozenset(";&|<>$`\\\n\r")
+VALIDATION_EXECUTABLES = frozenset(
+    {"pytest", "python", "python3", "npm", "pnpm", "yarn", "cargo", "go", "make"}
+)
+
+
+def _validated_validation_command(value: str, root: pathlib.Path) -> list[str] | None:
+    """Return a safe argv for a validation command, or None when unsafe."""
     stripped = value.strip()
-    if not stripped or "\n" in stripped:
-        return False
-    first = stripped.split()[0].lower()
-    return first in {"pytest", "python", "python3", "npm", "pnpm", "yarn", "cargo", "go", "make"} or "pytest" in stripped.lower()
+    if not stripped or any(char in stripped for char in SHELL_METACHARACTERS):
+        return None
+    try:
+        argv = shlex.split(stripped, posix=True)
+    except ValueError:
+        return None
+    if not argv or len(argv) > 64:
+        return None
+    executable = pathlib.Path(argv[0]).name.lower()
+    if executable not in VALIDATION_EXECUTABLES:
+        return None
+    # Keep interpreters and package runners restricted to test commands.
+    if executable in {"python", "python3"}:
+        if len(argv) < 3 or argv[1] != "-m" or argv[2] not in {"pytest", "unittest"}:
+            return None
+    elif executable in {"npm", "pnpm", "yarn"}:
+        if len(argv) < 2 or argv[1] not in {"test", "run"}:
+            return None
+        if argv[1] == "run" and (len(argv) < 3 or argv[2] != "test"):
+            return None
+    elif executable == "cargo" and (len(argv) < 2 or argv[1] != "test"):
+        return None
+    elif executable == "go" and (len(argv) < 2 or argv[1] != "test"):
+        return None
+    elif executable == "make" and (len(argv) < 2 or argv[1] != "test"):
+        return None
+
+    # Reject absolute paths and traversal outside the selected workspace.
+    for token in argv[1:]:
+        if token.startswith("-"):
+            continue
+        candidate = pathlib.Path(token)
+        if candidate.is_absolute():
+            try:
+                candidate.resolve().relative_to(root.resolve())
+            except ValueError:
+                return None
+        elif ".." in candidate.parts:
+            return None
+    return argv
 
 
 def _run_automatic_step_validation(
@@ -169,24 +212,31 @@ def _run_automatic_step_validation(
         root = SandboxManager.get_root()
     except RuntimeError:
         return
+    if not root.exists() or not root.is_dir():
+        return
     for step in task.get("steps", []):
         if step.get("status") in {"verified", "skipped"}:
             continue
         for item in step.get("validation", []):
-            if not _looks_like_validation_command(item):
+            argv = _validated_validation_command(item, root)
+            if argv is None:
+                console.print(
+                    f"[yellow]Skipping unsafe or unsupported validation command: "
+                    f"{item}[/yellow]"
+                )
                 continue
             console.print(
                 f"[cyan]Running automatic validation for {step['step_id']}: {item}[/cyan]"
             )
             try:
                 completed = subprocess.run(
-                    shlex.split(item),
+                    argv,
                     cwd=str(root),
                     capture_output=True,
                     text=True,
                     timeout=120,
                 )
-            except (OSError, subprocess.SubprocessError) as exc:
+            except (OSError, subprocess.SubprocessError, ValueError) as exc:
                 console.print(
                     f"[yellow]Automatic validation could not run: {exc}[/yellow]"
                 )
