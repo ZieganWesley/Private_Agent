@@ -56,3 +56,4 @@ class ProviderPreference:
 
     online_preference: bool | None = None
     online_selection: dict[str, Any] | None = field(default=None)
+    exit_requested: bool = False

@@ -339,10 +339,14 @@ def initialize_knowledge_base(
         if candidate.is_dir():
             valid_paths.append(candidate)
         else:
-            console.print(
-                f"[yellow][Warning] Provided KB path '{candidate}' is not a "
-                f"valid directory. Skipping it.[/yellow]"
-            )
+            try:
+                candidate.mkdir(parents=True, exist_ok=True)
+                valid_paths.append(candidate)
+            except OSError:
+                console.print(
+                    f"[yellow][Warning] Provided KB path '{candidate}' is not a "
+                    f"valid directory. Skipping it.[/yellow]"
+                )
     if not valid_paths:
         return None
 

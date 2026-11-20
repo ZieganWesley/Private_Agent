@@ -1542,6 +1542,27 @@ async def _build_session_setup(
                 elapsed_seconds=round(time.monotonic() - mcp_started, 3),
             )
 
+    if project_resources.workspace is not None:
+        workspace_input = str(project_resources.workspace)
+    else:
+        workspace_input = (
+            WORKSPACE_ROOT_DEFAULT
+            if WORKSPACE_ROOT_DEFAULT != "."
+            else _input(
+                "[cyan]Enter workspace root path for security sandbox "
+                "(Press Enter for current dir): [/cyan]"
+            ).strip()
+        )
+    if not workspace_input:
+        workspace_input = "."
+    SandboxManager.set_root(workspace_input)
+    SandboxManager.set_approved_extra_folders(APPROVED_EXTRA_FOLDERS)
+    if verbose_startup:
+        console.print(
+            f"[bold green][Security][/bold green] Workspace root locked to: "
+            f"{SandboxManager.get_root()}"
+        )
+
     if project_resources.rag is not None:
         docs_input = str(project_resources.rag)
     elif rag_docs_default:
@@ -1558,19 +1579,24 @@ async def _build_session_setup(
         ).strip()
     rag_init_started = time.monotonic()
     try:
-        with console.status("[bold cyan]Indexing local knowledge base...[/bold cyan]"):
-            vectorstore = initialize_knowledge_base(
-                docs_input if docs_input else None,
-                index_path=RAG_INDEX_PATH,
-                confirm_rebuild=lambda detail: (
-                    _input(
-                        f"[yellow]RAG index state is damaged: {detail}\n"
-                        "Preserve the existing index as a timestamped backup and rebuild? "
-                        "Type REBUILD to confirm: [/yellow]"
-                    ).strip()
-                    == "REBUILD"
-                ),
-            )
+        if docs_input:
+            with console.status(
+                "[bold cyan]Indexing local knowledge base...[/bold cyan]"
+            ):
+                vectorstore = initialize_knowledge_base(
+                    docs_input,
+                    index_path=RAG_INDEX_PATH,
+                    confirm_rebuild=lambda detail: (
+                        _input(
+                            f"[yellow]RAG index state is damaged: {detail}\n"
+                            "Preserve the existing index as a timestamped backup and rebuild? "
+                            "Type REBUILD to confirm: [/yellow]"
+                        ).strip()
+                        == "REBUILD"
+                    ),
+                )
+        else:
+            vectorstore = None
     except Exception as exc:  # noqa: BLE001 - Chroma/embedding failures must not block startup
         vectorstore = None
         reference_id = uuid.uuid4().hex[:8]
@@ -1659,26 +1685,6 @@ async def _build_session_setup(
             f"Active Mode Indicator: {mode_label}"
         )
 
-    if project_resources.workspace is not None:
-        workspace_input = str(project_resources.workspace)
-    else:
-        workspace_input = (
-            WORKSPACE_ROOT_DEFAULT
-            if WORKSPACE_ROOT_DEFAULT != "."
-            else _input(
-                "[cyan]Enter workspace root path for security sandbox "
-                "(Press Enter for current dir): [/cyan]"
-            ).strip()
-        )
-    if not workspace_input:
-        workspace_input = "."
-    SandboxManager.set_root(workspace_input)
-    SandboxManager.set_approved_extra_folders(APPROVED_EXTRA_FOLDERS)
-    if verbose_startup:
-        console.print(
-            f"[bold green][Security][/bold green] Workspace root locked to: "
-            f"{SandboxManager.get_root()}"
-        )
     log_event(
         RUN_LOGGER,
         "agent.startup_completed",
@@ -1837,6 +1843,7 @@ async def _choose_provider(
         )
     for choice_number, label, _use_saved_details in online_options:
         console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
+    console.print("  [cyan]0.[/cyan] Exit")
     if preference.online_preference is not None or _has_saved_online_config(APP_CONFIG):
         default_choice = str(online_options[0][0])
     else:
@@ -1849,6 +1856,9 @@ async def _choose_provider(
         ).strip()
         or default_choice
     )
+    if provider_choice == "0":
+        preference.exit_requested = True
+        return None
     selected_online_option = next(
         (option for option in online_options if provider_choice == str(option[0])),
         None,
@@ -2294,6 +2304,8 @@ async def _run_agent_cli_session(
             input_provider=input_provider,
         )
         if selection is None:
+            if provider_preference.exit_requested:
+                return
             if non_interactive:
                 get_event_bus().subscribe(Event, json_output.emit_event)
                 return
