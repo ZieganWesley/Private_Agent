@@ -5305,3 +5305,94 @@ async def test_turn_context_is_reset_when_the_model_fails_before_the_tool_loop(
 
     assert get_tool_context() is outer
     assert outer.enabled_packs == set()
+
+
+@pytest.mark.asyncio
+async def test_startup_menus_prefer_arrow_selection(scripted_local_cli, monkeypatch):
+    agent, model, inputs, _workspace, _database_path = scripted_local_cli
+    from private_agent.agent import interactive
+
+    arrow_calls: list[tuple[str, list[str]]] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_calls.append((title, [value for value, _label in choices]))
+        lowered = title.lower()
+        if "provider" in lowered:
+            return "1"
+        if "model" in lowered:
+            return "1"
+        if "permission" in lowered:
+            return "2"
+        return None
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [AIMessage(content="Arrow-selected startup works.")]
+    monkeypatch.setattr(
+        agent,
+        "prompt_user_input",
+        AsyncMock(side_effect=["hello", "exit"]),
+    )
+    typed_prompts: list[str] = []
+
+    def typed(prompt=""):
+        typed_prompts.append(str(prompt))
+        return ""
+
+    inputs.side_effect = typed
+
+    await run_agent_cli_async()
+
+    titles = [title for title, _values in arrow_calls]
+    assert any("provider" in title.lower() for title in titles)
+    assert any("model" in title.lower() for title in titles)
+    provider_values = next(
+        values for title, values in arrow_calls if "provider" in title.lower()
+    )
+    assert "0" in provider_values
+    assert not any(
+        "choose provider" in prompt.lower()
+        or "select model choice" in prompt.lower()
+        or "choose permission mode" in prompt.lower()
+        for prompt in typed_prompts
+    )
+
+
+@pytest.mark.asyncio
+async def test_tasks_menu_uses_arrow_selection(scripted_local_cli, monkeypatch):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    from private_agent.agent import interactive
+
+    _install_approved_task(
+        agent,
+        monkeypatch,
+        database_path,
+        "Arrow menu task",
+        "research",
+        [{"description": "Gather evidence"}],
+    )
+    arrow_calls: list[str] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_calls.append(title)
+        if title.startswith("Task action"):
+            return "list" if len(arrow_calls) == 1 else "done"
+        if "permission" in title.lower():
+            return "2"
+        if "provider" in title.lower():
+            return "1"
+        if "model" in title.lower():
+            return "1"
+        return None
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [AIMessage(content="Task reviewed."), AIMessage(content="Done.")]
+    monkeypatch.setattr(
+        agent,
+        "prompt_user_input",
+        AsyncMock(side_effect=["/tasks", "exit"]),
+    )
+    inputs.side_effect = lambda prompt="": ""
+
+    await run_agent_cli_async()
+
+    assert "Task action:" in arrow_calls
