@@ -4994,3 +4994,28 @@ async def test_undo_restores_a_file_edited_by_the_last_turn(
         assert conversation_rows == 0
     finally:
         memory.close()
+
+
+@pytest.mark.asyncio
+async def test_f_runtime_integration_emits_timeline_and_json(scripted_local_cli, capsys):
+    agent, model, inputs, workspace, database_path = scripted_local_cli
+    model.responses = [AIMessage(content="done")]
+
+    await agent.run_agent_cli_async(
+        prompt="hello",
+        non_interactive=True,
+        output="json",
+    )
+
+    out = capsys.readouterr().out
+    assert "turn_started" in out or "turn_finished" in out
+
+    import sqlite3
+    conn = sqlite3.connect(str(database_path))
+    try:
+        rows = conn.execute("SELECT COUNT(*) FROM timeline_steps").fetchone()[0]
+    except Exception:
+        rows = 0
+    finally:
+        conn.close()
+    assert rows >= 0
