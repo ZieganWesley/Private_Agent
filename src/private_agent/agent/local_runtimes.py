@@ -123,7 +123,7 @@ def _probe_endpoint(
 
 
 def discover_local_runtimes(
-    ollama_base_url: str,
+    ollama_base_url: Any,
     openai_compatible_endpoints: Any,
     *,
     client_factory: Callable[..., Any],
@@ -147,9 +147,15 @@ def discover_local_runtimes(
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("Discovery timeout must be positive.")
 
-    endpoints: list[tuple[str, str, str, str]] = [
-        ("Ollama", "ollama", ollama_base_url.rstrip("/"), "/api/tags")
-    ]
+    ollama_urls = (
+        ollama_base_url if isinstance(ollama_base_url, (list, tuple)) else [ollama_base_url]
+    )
+    endpoints: list[tuple[str, str, str, str]] = []
+    for index, url in enumerate(ollama_urls):
+        if not isinstance(url, str) or not url.strip():
+            continue
+        name = "Ollama" if index == 0 and len(ollama_urls) == 1 else f"Ollama {index + 1}"
+        endpoints.append((name, "ollama", url.rstrip("/"), "/api/tags"))
     if isinstance(openai_compatible_endpoints, list):
         for entry in openai_compatible_endpoints[: MAX_DISCOVERY_ENDPOINTS - 1]:
             if not isinstance(entry, dict):

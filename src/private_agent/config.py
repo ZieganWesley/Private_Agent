@@ -538,6 +538,7 @@ ONLINE_PERMISSION_OVERRIDE = SETTINGS.online_permission_override
 EMBEDDING_MODEL = SETTINGS.embedding_model
 RAG_INDEX_PATH = SETTINGS.rag_index_path
 OLLAMA_BASE_URL = SETTINGS.ollama_base_url
+OLLAMA_BASE_URLS = SETTINGS.ollama_base_urls
 HARDWARE_ACCELERATION_MODE = SETTINGS.hardware_acceleration_mode
 PREFERRED_MODEL = SETTINGS.preferred_model
 MAX_TOOL_ITERATIONS = SETTINGS.max_tool_iterations

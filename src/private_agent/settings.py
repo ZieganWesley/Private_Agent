@@ -176,7 +176,21 @@ def resolve_config_values(
         config_section(config, "paths").get("rag_index"),
         default_paths["rag_index"],
     )
-    OLLAMA_BASE_URL = str(config.get("ollama_base_url", "http://localhost:11434"))
+    _raw_ollama_urls = config.get(
+        "ollama_base_urls", config.get("ollama_base_url", "http://localhost:11434")
+    )
+    if isinstance(_raw_ollama_urls, str):
+        OLLAMA_BASE_URLS = [_raw_ollama_urls.strip()] if _raw_ollama_urls.strip() else []
+    elif isinstance(_raw_ollama_urls, list):
+        OLLAMA_BASE_URLS = [
+            str(item).strip() for item in _raw_ollama_urls
+            if isinstance(item, str) and str(item).strip()
+        ]
+    else:
+        OLLAMA_BASE_URLS = []
+    if not OLLAMA_BASE_URLS:
+        OLLAMA_BASE_URLS = ["http://localhost:11434"]
+    OLLAMA_BASE_URL = OLLAMA_BASE_URLS[0]
     HARDWARE_ACCELERATION_MODE = normalize_acceleration_mode(
         config.get("hardware_acceleration", "auto")
     )
@@ -582,6 +596,7 @@ class Settings:
     embedding_model: str
     rag_index_path: str
     ollama_base_url: str
+    ollama_base_urls: list[str]
     hardware_acceleration_mode: str
     preferred_model: str | None
     max_tool_iterations: int

@@ -24,6 +24,7 @@ from ..config import (
     MAX_TOOL_ITERATIONS,
     MODEL_TEMPERATURE,
     OLLAMA_BASE_URL,
+    OLLAMA_BASE_URLS,
     ONLINE_MAX_RETRIES,
     ONLINE_MODEL_LIST_LIMIT,
     ONLINE_MODEL_LIST_TIMEOUT,
@@ -253,7 +254,7 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
         raw = model_config.get("allow_remote_hosts", False)
         allow_remote = raw if isinstance(raw, bool) else str(raw).strip().lower() in {"true", "1", "yes", "on"}
     return discover_local_runtimes(
-        OLLAMA_BASE_URL,
+        OLLAMA_BASE_URLS,
         endpoints,
         client_factory=public_only_sync_client,
         allow_remote=allow_remote,
