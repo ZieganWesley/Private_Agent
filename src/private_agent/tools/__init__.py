@@ -469,6 +469,9 @@ def create_skill(name: str, description: str, instructions: str) -> str:
 # Import after network helpers are defined; web.py depends on this shared policy layer.
 from .filesystem import (
     apply_workspace_patch,
+    commit_git_changes,
+    create_git_branch,
+    create_pull_request,
     delete_workspace_file,
     edit_local_file,
     inspect_workspace_git,
@@ -479,6 +482,7 @@ from .filesystem import (
     search_workspace_files,
     search_workspace_symbols,
     search_workspace_text,
+    stage_git_changes,
 )
 from .location import fetch_current_location, get_weather
 from .memory import (
@@ -504,6 +508,10 @@ AVAILABLE_TOOLS = {
     "search_workspace_text": search_workspace_text,
     "search_workspace_symbols": search_workspace_symbols,
     "inspect_workspace_git": inspect_workspace_git,
+    "create_git_branch": create_git_branch,
+    "stage_git_changes": stage_git_changes,
+    "commit_git_changes": commit_git_changes,
+    "create_pull_request": create_pull_request,
     "edit_local_file": edit_local_file,
     "preview_workspace_patch": preview_workspace_patch,
     "apply_workspace_patch": apply_workspace_patch,

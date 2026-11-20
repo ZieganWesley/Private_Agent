@@ -25,6 +25,9 @@ from ..sandbox import SandboxManager
 from ..snapshots import SnapshotError, record_snapshot
 from .schemas import (
     ApplyWorkspacePatchInput,
+    CommitGitChangesInput,
+    CreateGitBranchInput,
+    CreatePullRequestInput,
     DeleteWorkspaceFileInput,
     EditFileInput,
     InspectWorkspaceGitInput,
@@ -35,6 +38,7 @@ from .schemas import (
     SearchWorkspaceFilesInput,
     SearchWorkspaceSymbolsInput,
     SearchWorkspaceTextInput,
+    StageGitChangesInput,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -959,6 +963,154 @@ def inspect_workspace_git(action: str, directory: str = ".") -> str:
         return output
     except (OSError, ValueError) as exc:
         return f"Error inspecting workspace Git {action}: {exc}"
+
+
+def _git_write_environment() -> dict[str, str]:
+    return {
+        **os.environ,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_PAGER": "cat",
+        "PAGER": "cat",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+
+
+def _git_repository_root(directory: str):
+    root, target = _validate_search_directory(directory)
+    environment = _git_write_environment()
+    repository_command = [
+        "git",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.pager=cat",
+        "-C",
+        str(target),
+        "rev-parse",
+        "--show-toplevel",
+    ]
+    code, output, _, timed_out = _run_git_bounded(repository_command, environment)
+    if timed_out:
+        raise ValueError("Git operation timed out.")
+    if code != 0:
+        raise ValueError(
+            "No Git repository was found in the requested workspace directory."
+        )
+    repository_root = Path(output.strip()).resolve()
+    if not repository_root.is_relative_to(root):
+        raise ValueError("Git repository root is outside the active workspace.")
+    return root, target, repository_root, environment
+
+
+@tool(args_schema=CreateGitBranchInput)
+def create_git_branch(branch_name: str, directory: str = ".") -> str:
+    """Create and check out a new Git branch in the workspace repository."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        command = [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.pager=cat",
+            "-C",
+            str(target),
+            "checkout",
+            "-b",
+            branch_name,
+        ]
+        code, output, _, timed_out = _run_git_bounded(command, environment)
+        if timed_out:
+            return "Error: Git branch creation timed out."
+        if code != 0:
+            return f"Git branch creation failed: {output.strip()[:1000]}"
+        return f"Created and checked out branch '{branch_name}'."
+    except (OSError, ValueError) as exc:
+        return f"Error creating Git branch: {exc}"
+
+
+@tool(args_schema=StageGitChangesInput)
+def stage_git_changes(paths: list[str] | None = None, directory: str = ".") -> str:
+    """Stage workspace changes for the next commit."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        selected_paths = paths or ["."]
+        command = [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.pager=cat",
+            "-C",
+            str(target),
+            "add",
+            "--",
+            *selected_paths,
+        ]
+        code, output, _, timed_out = _run_git_bounded(command, environment)
+        if timed_out:
+            return "Error: Git staging timed out."
+        if code != 0:
+            return f"Git staging failed: {output.strip()[:1000]}"
+        return f"Staged {len(selected_paths)} path(s)."
+    except (OSError, ValueError) as exc:
+        return f"Error staging Git changes: {exc}"
+
+
+@tool(args_schema=CommitGitChangesInput)
+def commit_git_changes(message: str, directory: str = ".") -> str:
+    """Create a Git commit with the staged changes."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        command = [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.pager=cat",
+            "-C",
+            str(target),
+            "commit",
+            "-m",
+            message,
+        ]
+        code, output, _, timed_out = _run_git_bounded(command, environment)
+        if timed_out:
+            return "Error: Git commit timed out."
+        if code != 0:
+            return f"Git commit failed: {output.strip()[:1000]}"
+        return output.strip() or "Committed changes."
+    except (OSError, ValueError) as exc:
+        return f"Error creating Git commit: {exc}"
+
+
+@tool(args_schema=CreatePullRequestInput)
+def create_pull_request(
+    title: str, body: str = "", base: str | None = None, directory: str = "."
+) -> str:
+    """Create a pull request with the GitHub CLI when it is available."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        command = ["gh", "pr", "create", "--title", title, "--body", body]
+        if base:
+            command.extend(["--base", base])
+        completed = subprocess.run(
+            command,
+            cwd=str(target),
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_INSPECTION_TIMEOUT_SECONDS,
+        )
+        if completed.returncode != 0:
+            error = completed.stderr.strip() or completed.stdout.strip()
+            return f"Pull request creation failed: {error[:1000]}"
+        return completed.stdout.strip() or "Pull request created."
+    except FileNotFoundError:
+        return "Error: GitHub CLI (gh) is not installed."
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        return f"Error creating pull request: {exc}"
 
 
 @tool(args_schema=PreviewWorkspacePatchInput)

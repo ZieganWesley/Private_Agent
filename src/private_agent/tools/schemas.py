@@ -132,6 +132,28 @@ class DeleteWorkspaceFileInput(BaseModel):
     file_path: str = Field(..., min_length=1, max_length=1024)
 
 
+class CreateGitBranchInput(BaseModel):
+    branch_name: str = Field(..., min_length=1, max_length=255)
+    directory: str = Field(default=".", max_length=1024)
+
+
+class StageGitChangesInput(BaseModel):
+    paths: list[str] = Field(default_factory=lambda: ["."])
+    directory: str = Field(default=".", max_length=1024)
+
+
+class CommitGitChangesInput(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4096)
+    directory: str = Field(default=".", max_length=1024)
+
+
+class CreatePullRequestInput(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    body: str = Field(default="", max_length=10000)
+    base: str | None = Field(default=None, max_length=255)
+    directory: str = Field(default=".", max_length=1024)
+
+
 class InspectWorkspaceGitInput(BaseModel):
     action: Literal["status", "diff", "log", "branches"]
     directory: str = Field(default=".", max_length=1024)
