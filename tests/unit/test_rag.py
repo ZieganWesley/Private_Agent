@@ -808,3 +808,12 @@ def test_tokenizer_fallback_warns_visibly(monkeypatch, capsys):
     prompts._report_tokenizer_fallback("load", OSError("offline"))
 
     assert "Tokenizer warning" in capsys.readouterr().err
+
+
+def test_initialize_knowledge_base_creates_missing_folder(tmp_path):
+    from private_agent.rag import indexing
+
+    missing = tmp_path / "does_not_exist" / "rag"
+    assert not missing.exists()
+    result = indexing.initialize_knowledge_base(str(missing))
+    assert missing.is_dir()
