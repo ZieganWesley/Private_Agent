@@ -537,6 +537,7 @@ MODEL_TEMPERATURE = SETTINGS.model_temperature
 ONLINE_PERMISSION_OVERRIDE = SETTINGS.online_permission_override
 EMBEDDING_MODEL = SETTINGS.embedding_model
 EMBEDDING_PROVIDER = SETTINGS.embedding_provider
+EMBEDDING_BASE_URL = SETTINGS.embedding_base_url
 RAG_INDEX_PATH = SETTINGS.rag_index_path
 OLLAMA_BASE_URL = SETTINGS.ollama_base_url
 OLLAMA_BASE_URLS = SETTINGS.ollama_base_urls

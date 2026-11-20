@@ -488,6 +488,7 @@ def test_rag_corrupt_vector_database_can_be_explicitly_preserved_and_rebuilt(
     recorded = _read_index_state(index / ".index_state.json")
     for fingerprint in recorded.values():
         assert fingerprint.pop("chunking")
+        assert fingerprint.pop("embedding") == indexing.embedding_signature()
     assert recorded == {
         str(source.resolve()): {
             "mtime_ns": source.stat().st_mtime_ns,
@@ -817,3 +818,131 @@ def test_initialize_knowledge_base_creates_missing_folder(tmp_path):
     assert not missing.exists()
     indexing.initialize_knowledge_base(str(missing))
     assert missing.is_dir()
+
+
+def test_embedding_signature_records_provider_model_and_endpoint(monkeypatch):
+    from private_agent.rag import indexing
+
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "ollama")
+    monkeypatch.setattr(indexing, "EMBEDDING_MODEL", "nomic-embed-text")
+    assert indexing.embedding_signature() == "ollama:nomic-embed-text"
+
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "none")
+    assert indexing.embedding_signature() == "none"
+
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "openai-compatible")
+    monkeypatch.setattr(indexing, "EMBEDDING_MODEL", "text-embedding-bge")
+    monkeypatch.setattr(indexing, "EMBEDDING_BASE_URL", "http://127.0.0.1:1234/v1/")
+    assert (
+        indexing.embedding_signature()
+        == "openai-compatible:text-embedding-bge@http://127.0.0.1:1234/v1"
+    )
+
+
+def test_changing_the_embedder_rebuilds_the_whole_index(tmp_path, monkeypatch, capsys):
+    from private_agent.rag import indexing
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    source = docs / "notes.txt"
+    source.write_text("embedding rebuild source", encoding="utf-8")
+    index = tmp_path / "index"
+    index.mkdir()
+    (index / "chroma.sqlite3").touch()
+    state_path = index / ".index_state.json"
+    state_path.write_text(
+        json.dumps(
+            {
+                str(source.resolve()): {
+                    "mtime_ns": source.stat().st_mtime_ns,
+                    "size": source.stat().st_size,
+                    "chunking": "default",
+                    "embedding": "ollama:previous-embedder",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    added = []
+
+    class ExistingVectorStore:
+        def __init__(self, **kwargs):
+            pass
+
+        def get(self, where):
+            return {"ids": ["old-chunk"]}
+
+        def add_documents(self, documents, ids):
+            added.extend(ids)
+
+        def delete(self, *, ids=None, where=None):
+            return None
+
+    monkeypatch.setattr(indexing, "OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(indexing, "Chroma", lambda **kwargs: ExistingVectorStore())
+
+    retriever = initialize_knowledge_base(str(docs), index_path=str(index))
+
+    assert retriever is not None
+    assert len(added) == 1
+    assert "embedding provider or model changed" in capsys.readouterr().out
+    recorded = indexing._read_index_state(state_path)
+    assert {fingerprint["embedding"] for fingerprint in recorded.values()} == {
+        indexing.embedding_signature()
+    }
+
+
+def test_embeddings_can_come_from_an_openai_compatible_adapter(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from private_agent.providers import adapters
+    from private_agent.rag import indexing
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "notes.txt").write_text("lm studio only machine", encoding="utf-8")
+    index = tmp_path / "index"
+    seen = {}
+
+    def fake_embeddings(self, model, *, base_url):
+        seen["model"] = model
+        seen["base_url"] = base_url
+        return object()
+
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "openai-compatible")
+    monkeypatch.setattr(indexing, "EMBEDDING_BASE_URL", "http://127.0.0.1:1234/v1")
+    monkeypatch.setattr(adapters.OpenAICompatibleAdapter, "embeddings", fake_embeddings)
+    monkeypatch.setattr(
+        indexing,
+        "Chroma",
+        SimpleNamespace(
+            from_documents=lambda documents, embeddings, **kwargs: MagicMock(),
+        ),
+    )
+
+    retriever = initialize_knowledge_base(str(docs), index_path=str(index))
+
+    assert retriever is not None
+    assert seen["base_url"] == "http://127.0.0.1:1234/v1"
+    assert seen["model"] == indexing.EMBEDDING_MODEL
+
+
+def test_missing_openai_compatible_embedding_client_fails_closed(tmp_path, monkeypatch):
+    from private_agent.providers import adapters
+    from private_agent.rag import indexing
+
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "notes.txt").write_text("no embeddings here", encoding="utf-8")
+
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "openai-compatible")
+    monkeypatch.setattr(
+        adapters.OpenAICompatibleAdapter,
+        "embeddings",
+        lambda self, model, *, base_url: None,
+    )
+
+    assert (
+        initialize_knowledge_base(str(docs), index_path=str(tmp_path / "index-missing"))
+        is None
+    )

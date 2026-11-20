@@ -31,6 +31,7 @@ from ..config import (
     CHUNKING_SIZE,
     CHUNKING_STRATEGY,
     CHUNKING_UNIT,
+    EMBEDDING_BASE_URL,
     EMBEDDING_MODEL,
     EMBEDDING_PROVIDER,
     HARDWARE_ACCELERATION_MODE,
@@ -110,6 +111,15 @@ def _iter_source_files(root: pathlib.Path):
                 continue
             seen_files.add(identity)
             yield file_path, file_stat
+
+
+def embedding_signature() -> str:
+    """Identify the embedder that produced an index (provider, model, endpoint)."""
+    if EMBEDDING_PROVIDER == "ollama":
+        return f"ollama:{EMBEDDING_MODEL}"
+    if EMBEDDING_PROVIDER == "none":
+        return "none"
+    return f"{EMBEDDING_PROVIDER}:{EMBEDDING_MODEL}@{EMBEDDING_BASE_URL.rstrip('/')}"
 
 
 def _source_fingerprint(file_path: pathlib.Path, file_stat) -> dict:
@@ -382,17 +392,44 @@ def initialize_knowledge_base(
         )
         return None
 
+    signature = embedding_signature()
+    recorded_signatures = {
+        str(fingerprint.get("embedding"))
+        for fingerprint in index_state.values()
+        if isinstance(fingerprint, dict) and fingerprint.get("embedding")
+    }
+    if recorded_signatures and signature not in recorded_signatures:
+        console.print(
+            "[yellow][RAG] The embedding provider or model changed "
+            f"({', '.join(sorted(recorded_signatures))} -> {signature}); "
+            "rebuilding the index.[/yellow]"
+        )
+
     console.print(
-        f"[cyan][Info] Initializing local embedding model '{EMBEDDING_MODEL}' via Ollama...[/cyan]"
+        f"[cyan][Info] Initializing local embedding model '{EMBEDDING_MODEL}' via "
+        f"{EMBEDDING_PROVIDER}...[/cyan]"
     )
     try:
-        embeddings = OllamaEmbeddings(
-            model=EMBEDDING_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            **ollama_langchain_client_kwargs(),
-            **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
-        )
-        track_ollama_http_clients(embeddings)
+        if EMBEDDING_PROVIDER == "ollama":
+            embeddings = OllamaEmbeddings(
+                model=EMBEDDING_MODEL,
+                base_url=OLLAMA_BASE_URL,
+                **ollama_langchain_client_kwargs(),
+                **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
+            )
+            track_ollama_http_clients(embeddings)
+        else:
+            from ..providers.adapters import OpenAICompatibleAdapter
+
+            embeddings = OpenAICompatibleAdapter().embeddings(
+                EMBEDDING_MODEL, base_url=EMBEDDING_BASE_URL
+            )
+            if embeddings is None:
+                console.print(
+                    "[red][Error] Could not create the embedding client for "
+                    f"'{EMBEDDING_BASE_URL}'.[/red]"
+                )
+                return None
     except (ValueError, OSError, TypeError, RuntimeError) as e:  # noqa: BLE001 - optional dependency boundary
         console.print(f"[red][Error] Could not bind embedding model: {e}[/red]")
         return None
@@ -441,6 +478,7 @@ def initialize_knowledge_base(
             source_fingerprint = {
                 **_source_fingerprint(file_path, stat),
                 "chunking": chunking.signature(),
+                "embedding": signature,
             }
 
             if ext == ".pdf":

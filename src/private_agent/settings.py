@@ -173,7 +173,16 @@ def resolve_config_values(
     )
     EMBEDDING_MODEL = str(config.get("embedding_model", "nomic-embed-text"))
     EMBEDDING_PROVIDER = configured_choice(
-        config, "rag", "embedding_provider", "ollama", ("ollama", "none")
+        config,
+        "rag",
+        "embedding_provider",
+        "ollama",
+        ("ollama", "openai-compatible", "none"),
+    )
+    EMBEDDING_BASE_URL = str(
+        config_section(config, "rag").get(
+            "embedding_base_url", "http://127.0.0.1:1234/v1"
+        )
     )
     RAG_INDEX_PATH = configured_path(
         config_section(config, "paths").get("rag_index"),
@@ -601,6 +610,7 @@ class Settings:
     online_permission_override: bool
     embedding_model: str
     embedding_provider: str
+    embedding_base_url: str
     rag_index_path: str
     ollama_base_url: str
     ollama_base_urls: list[str]
