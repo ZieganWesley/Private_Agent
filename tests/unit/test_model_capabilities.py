@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from private_agent.agent.model_capabilities import (
+    capabilities_from_family,
     capabilities_from_llamacpp_props,
     capabilities_from_model_entry,
     detect_openai_compatible_capabilities,
@@ -295,3 +296,51 @@ def test_merge_keeps_first_known_value_and_mirrors_function_calls():
     assert merged["function_calls"] is True
     assert merged["vision"] is True
     assert merged["context_window"] == 2048
+
+
+def test_family_table_fills_capabilities_for_known_models():
+    qwen = capabilities_from_family("qwen3:8b")
+    assert qwen["tools"] is True
+    assert qwen["thinking"] is True
+    assert qwen["vision"] is False
+
+    assert capabilities_from_family("llava:13b")["vision"] is True
+    assert capabilities_from_family("gemma3:4b")["tools"] is False
+    assert capabilities_from_family("deepseek-r1:7b")["thinking"] is True
+
+
+def test_family_table_picks_the_most_specific_match():
+    coder = capabilities_from_family("qwen2.5-coder:7b")
+    assert coder["thinking"] is False
+    assert coder["tools"] is True
+
+    vl = capabilities_from_family("qwen2.5-vl:7b")
+    assert vl["vision"] is True
+
+
+def test_family_table_leaves_unknown_models_unknown():
+    assert capabilities_from_family("totally-unknown-model") == {
+        "tools": None,
+        "function_calls": None,
+        "structured_output": None,
+        "thinking": None,
+        "vision": None,
+        "audio": None,
+        "context_window": None,
+    }
+    assert capabilities_from_family("")["tools"] is None
+
+
+def test_server_report_wins_over_the_family_table():
+    props = {
+        "default_generation_settings": {"id": 0, "n_ctx": 4096},
+        "chat_template_caps": {"supports_tools": False},
+        "modalities": {"vision": True},
+    }
+    detected, _client = _detect(
+        {"http://127.0.0.1:8080/props": props}, model="qwen3:8b"
+    )
+
+    assert detected["tools"] is False  # server says no tools, family table says yes
+    assert detected["context_window"] == 4096
+    assert detected["vision"] is True
