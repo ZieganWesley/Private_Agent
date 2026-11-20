@@ -66,9 +66,11 @@ def _probe_endpoint(
     path: str,
     client_factory: Callable[..., Any],
     timeout: float,
+    *,
+    allow_remote: bool = False,
 ) -> LocalRuntime | None:
     """Probe one loopback endpoint and return its local runtime when reachable."""
-    if not _is_loopback_url(base_url):
+    if not allow_remote and not _is_loopback_url(base_url):
         log_event(
             RUN_LOGGER,
             "provider.local_endpoint_rejected",
@@ -126,6 +128,7 @@ def discover_local_runtimes(
     *,
     client_factory: Callable[..., Any],
     timeout: float = DISCOVERY_TIMEOUT_SECONDS,
+    allow_remote: bool = False,
 ) -> list[LocalRuntime]:
     """Find reachable local model runtimes with bounded parallel probes.
 
@@ -187,6 +190,7 @@ def discover_local_runtimes(
                 path,
                 client_factory,
                 timeout,
+                allow_remote=allow_remote,
             )
             for name, kind, base_url, path in unique_endpoints
         ]

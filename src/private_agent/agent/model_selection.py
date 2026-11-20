@@ -248,10 +248,15 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
         if isinstance(model_config, dict)
         else []
     )
+    allow_remote = False
+    if isinstance(model_config, dict):
+        raw = model_config.get("allow_remote_hosts", False)
+        allow_remote = raw if isinstance(raw, bool) else str(raw).strip().lower() in {"true", "1", "yes", "on"}
     return discover_local_runtimes(
         OLLAMA_BASE_URL,
         endpoints,
         client_factory=public_only_sync_client,
+        allow_remote=allow_remote,
     )
 
 
