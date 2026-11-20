@@ -89,7 +89,7 @@ DEFAULT_CONFIG = {
         "context_compaction_threshold": 0.8,
         "context_keep_recent_messages": 6,
         "context_summary_chars": 1500,
-        "rag_context_results": 2,
+        "rag_context_results": 5,
         "streaming_output": True,
         "visible_reasoning": False,
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
@@ -117,7 +117,9 @@ DEFAULT_CONFIG = {
         "max_documents": 20000,
         "chunk_size_chars": 1200,
         "chunk_overlap_chars": 200,
-        "similarity_results": 4,
+        "similarity_results": 6,
+        "relevance_threshold": 0.25,
+        "include_coding_guidance": True,
         "sqlite_max_rows_per_table": 5000,
         "auto_refresh_seconds": 30,
     },
@@ -265,6 +267,8 @@ _LEGACY_CONFIG_KEYS = {
     "shell_command_timeout_seconds": ("tools", "shell_command_timeout_seconds"),
     "default_history_read_limit": ("tools", "default_history_read_limit"),
     "rag_context_results": ("agent", "rag_context_results"),
+    "rag_relevance_threshold": ("rag", "relevance_threshold"),
+    "rag_include_coding_guidance": ("rag", "include_coding_guidance"),
     "summary_prompt_sentences": ("agent", "summary_prompt_sentences"),
     "DEBUG_LOG_ENABLED": ("logging", "debug_enabled"),
     "mcp_auto_approve_tools": ("mcp", "auto_approve_tools"),
@@ -638,6 +642,8 @@ SKILL_RELEVANCE_PREFIX_MATCH_SCORE = SETTINGS.skill_relevance_prefix_match_score
 SKILL_RELEVANCE_WORD_MATCH_SCORE = SETTINGS.skill_relevance_word_match_score
 SKILL_RELEVANCE_EMBEDDING_THRESHOLD = SETTINGS.skill_relevance_embedding_threshold
 RAG_CONTEXT_RESULTS = SETTINGS.rag_context_results
+RAG_RELEVANCE_THRESHOLD = SETTINGS.rag_relevance_threshold
+RAG_INCLUDE_CODING_GUIDANCE = SETTINGS.rag_include_coding_guidance
 SUMMARY_PROMPT_SENTENCES = SETTINGS.summary_prompt_sentences
 CONTEXT_COMPACTION_THRESHOLD = SETTINGS.context_compaction_threshold
 CONTEXT_KEEP_RECENT_MESSAGES = SETTINGS.context_keep_recent_messages

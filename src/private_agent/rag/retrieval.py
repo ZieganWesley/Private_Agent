@@ -7,7 +7,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from rich.console import Console
 
-from ..config import RAG_SIMILARITY_RESULTS
+from ..config import RAG_RELEVANCE_THRESHOLD, RAG_SIMILARITY_RESULTS
 
 console = Console()
 
@@ -74,7 +74,29 @@ class HybridRAGRetriever:
     def similarity_search(
         self, query: str, k: int = RAG_SIMILARITY_RESULTS
     ) -> list[Document]:
-        vector_results = self.vectorstore.similarity_search(query, k=k)
+        threshold = RAG_RELEVANCE_THRESHOLD
+        vector_results = None
+        scored_method = getattr(
+            self.vectorstore, "similarity_search_with_relevance_scores", None
+        )
+        if callable(scored_method):
+            try:
+                scored = scored_method(query, k=k)
+            except Exception:  # noqa: BLE001 - backend-specific failure
+                scored = None
+            if isinstance(scored, list) and scored and all(
+                isinstance(item, tuple) and len(item) == 2 for item in scored
+            ):
+                vector_results = [
+                    doc for doc, score in scored if score >= threshold
+                ]
+                if not vector_results:
+                    return []
+        if vector_results is None:
+            vector_results = self.vectorstore.similarity_search(query, k=k)
+            if threshold > 0:
+                # No scores available; keep results to preserve behaviour.
+                pass
         query_tokens = _tokenize(query)
         if not self.bm25 or not self.documents or not query_tokens:
             return vector_results[:k]
