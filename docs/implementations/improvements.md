@@ -1000,7 +1000,7 @@ user.
 ## Part F: Plan for a Single Combined Runtime with Live Status
 
 **Status (F0-F7 done):** all F stages implemented (event bus, overlay, capability packs/router, classification/escalation, task orchestrator, context manager, timeline, JSON output). Runtime integration wires capability filtering, JSON subscription, timeline, and json_output into the shared turn loop; context_manager now trims enriched input; task_orchestrator tracks a single plan step status. enable_capability remains a placeholder.
-**Final step:** verify UI consistency across all screens (status overlay, tool display, interactive prompts) in both live and plain (NO_COLOR/non-tty) modes.
+**Final step:** done - verified UI consistency across status overlay, tool display, and interactive prompts in both live and plain (NO_COLOR/non-tty) modes (83 tests pass).
 
 Goal: the chatbot, RAG chatbot, coding agent, research agent and helper become
 **one runtime**, not separate modes the user switches between. Any request
