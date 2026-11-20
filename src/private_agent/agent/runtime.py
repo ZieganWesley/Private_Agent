@@ -3787,6 +3787,8 @@ Runtime context:
                     return response
 
                 _overlay = StatusOverlay(console)
+                _overlay.set_plan_summary(f_integration.get_plan_summary(_f_state))
+                _overlay.set_eta_deadline(deadline)
                 _overlay.start()
                 try:
                     response = await _run_agent_turn(response)

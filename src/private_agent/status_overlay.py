@@ -28,13 +28,31 @@ class StatusOverlay:
         self.console = console
         self._running: dict[str, str] = {}
         self._finished: list[tuple[str, str, float]] = []
+        self._plan_summary: str = ""
+        self._eta_deadline: float | None = None
         self._lock = threading.Lock()
         self._live: Live | None = None
         self._started = False
 
+    def set_plan_summary(self, text: str) -> None:
+        with self._lock:
+            self._plan_summary = text or ""
+
+    def set_eta_deadline(self, deadline: float | None) -> None:
+        with self._lock:
+            self._eta_deadline = deadline
+
     def _render(self) -> Any:
         table = Table(show_header=False, box=None, padding=(0, 1))
         with self._lock:
+            if self._plan_summary:
+                table.add_row("Plan:", "")
+                for line in self._plan_summary.splitlines()[:6]:
+                    table.add_row(f"  {line}", "")
+            if self._eta_deadline is not None:
+                import time as _t
+                remaining = max(0.0, self._eta_deadline - _t.monotonic())
+                table.add_row("ETA:", f"{remaining:.0f}s")
             for _call_id, name in list(self._running.items()):
                 table.add_row(f"~ {name}", "")
             for name, status, dur in self._finished[-5:]:
