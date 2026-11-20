@@ -163,9 +163,6 @@ def _new_base_tool_context(task_key: Any = None) -> ToolContext:
     )
 
 
-# Retained as a template for callers/tests that reference the historical
-# module-level instance; the live per-context base is created lazily below.
-_TOOL_CONTEXT = _new_base_tool_context()
 _TOOL_CONTEXT_VAR: contextvars.ContextVar = contextvars.ContextVar(
     "private_agent_tool_context", default=_TOOL_CONTEXT_UNSET
 )
@@ -184,16 +181,20 @@ def get_tool_context() -> ToolContext:
         context = _new_base_tool_context(task_key=key)
         _TOOL_CONTEXT_VAR.set(context)
     elif key is not None and getattr(context, "task_key", None) != key:
-        # Inherited from a different asyncio task: clone so concurrent turns
-        # do not mutate a shared base context. Threads (key is None) keep the
-        # propagated object for asyncio.to_thread tool execution. Copy mutable
-        # containers so task state cannot leak through shared references.
+        # Inherited from a different asyncio task: clone (with copied mutable
+        # containers) so concurrent turns cannot mutate a shared base context.
+        # Threads (key is None) keep the propagated object for to_thread.
         context = replace(
             context,
             task_key=key,
             task_ids=dict(context.task_ids or {}),
             schema_read_tables=set(context.schema_read_tables or set()),
             enabled_packs=set(context.enabled_packs or set()),
+            skill_registry=(
+                dict(context.skill_registry)
+                if isinstance(context.skill_registry, dict)
+                else context.skill_registry
+            ),
         )
         _TOOL_CONTEXT_VAR.set(context)
     if (
@@ -224,7 +225,13 @@ def set_tool_context(context: ToolContext) -> None:
     if context.runtime_owner_id is not None:
         current.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:
-        current.schema_read_tables = context.schema_read_tables
+        current.schema_read_tables = set(context.schema_read_tables)
+    if context.skill_registry is not None:
+        current.skill_registry = (
+            dict(context.skill_registry)
+            if isinstance(context.skill_registry, dict)
+            else context.skill_registry
+        )
     if context.enabled_packs is not current.enabled_packs:
         current.enabled_packs.clear()
         current.enabled_packs.update(context.enabled_packs)
@@ -238,6 +245,11 @@ def begin_turn_tool_context() -> Any:
         enabled_packs=set(),
         schema_read_tables=set(base.schema_read_tables or set()),
         task_ids=dict(base.task_ids or {}),
+        skill_registry=(
+            dict(base.skill_registry)
+            if isinstance(base.skill_registry, dict)
+            else base.skill_registry
+        ),
     )
     return _TOOL_CONTEXT_VAR.set(turn_context)
 
