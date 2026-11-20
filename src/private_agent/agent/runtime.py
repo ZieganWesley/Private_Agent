@@ -618,6 +618,13 @@ async def _preflight_tool_calls(
             "inspect_task_plan",
             "revise_task_plan",
             "web_search",
+            "fetch_webpage",
+            "read_local_file",
+            "list_directory",
+            "search_workspace_files",
+            "search_workspace_text",
+            "search_workspace_symbols",
+            "inspect_workspace_git",
         }:
             state.blocked_tool_messages.append(
                 ToolMessage(
@@ -2847,9 +2854,16 @@ async def _run_agent_cli_session(
                         "create_task_plan",
                         "inspect_task_plan",
                         "revise_task_plan",
+                        "read_local_file",
+                        "list_directory",
+                        "search_workspace_files",
+                        "search_workspace_text",
+                        "search_workspace_symbols",
+                        "inspect_workspace_git",
                     }
                     if ENABLE_WEB_RESEARCH:
                         planner_names.add("web_search")
+                        planner_names.add("fetch_webpage")
                     tools_list = [
                         tool for tool in base_tools_list if tool.name in planner_names
                     ]
