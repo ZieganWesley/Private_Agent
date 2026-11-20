@@ -132,3 +132,45 @@ def test_requested_flags_read_the_environment(monkeypatch):
     monkeypatch.delenv("PRIVATE_AGENT_MODEL")
     assert requested_provider() == ""
     assert requested_model() == ""
+
+
+def test_provider_loss_guidance_lists_reachable_alternatives():
+    from private_agent.agent.provider_resume import provider_loss_guidance
+
+    runtimes = [
+        SimpleNamespace(name="Ollama", models=("qwen3:8b",)),
+        SimpleNamespace(name="LM Studio", models=("a", "b")),
+    ]
+
+    message = provider_loss_guidance(
+        runtime_name="LM Studio", session_id="s-1", discover=lambda: runtimes
+    )
+
+    assert "LM Studio stopped answering" in message
+    assert "Ollama (1 model(s))" in message
+    assert "--resume s-1 --provider 'Ollama'" in message
+    assert "LM Studio (2 model(s))" not in message
+
+
+def test_provider_loss_guidance_handles_no_alternatives():
+    from private_agent.agent.provider_resume import provider_loss_guidance
+
+    message = provider_loss_guidance(
+        runtime_name="Ollama", session_id="s-1", discover=lambda: []
+    )
+
+    assert "No other local provider is reachable" in message
+    assert "ollama serve" in message
+
+
+def test_provider_loss_guidance_survives_a_failing_discovery():
+    from private_agent.agent.provider_resume import provider_loss_guidance
+
+    def exploding():
+        raise OSError("probe failed")
+
+    message = provider_loss_guidance(
+        runtime_name="Ollama", session_id="s-1", discover=exploding
+    )
+
+    assert "No other local provider is reachable" in message

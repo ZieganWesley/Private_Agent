@@ -7,6 +7,7 @@ from ..run_logging import RUN_LOGGER, log_event
 
 __all__ = [
     "always_ask_provider",
+    "provider_loss_guidance",
     "auto_select_single_provider",
     "provider_record_for_resume",
     "match_runtime_by_address",
@@ -133,3 +134,44 @@ def auto_select_single_provider(app_config) -> bool:
 def always_ask_provider(app_config) -> bool:
     """Return models.always_ask (default: off)."""
     return _config_flag(app_config.get("models", {}), "always_ask")
+
+
+def provider_loss_guidance(*, runtime_name, session_id, discover):
+    """Explain what to do when the active local provider stops answering.
+
+    ``discover`` returns the reachable runtimes (a callable so this stays
+    cheap when there is no failure). Returns an empty string when nothing
+    useful can be said.
+    """
+    try:
+        reachable = [
+            runtime
+            for runtime in discover()
+            if str(getattr(runtime, "name", "")) != str(runtime_name)
+        ]
+    except (OSError, RuntimeError):
+        reachable = []
+    lines = [
+        f"[yellow][Provider lost][/yellow] {runtime_name} stopped answering; "
+        "the turn was not completed."
+    ]
+    if reachable:
+        lines.append(
+            "Still reachable: "
+            + ", ".join(
+                f"{getattr(runtime, 'name', '?')} "
+                f"({len(getattr(runtime, 'models', ()) or ())} model(s))"
+                for runtime in reachable
+            )
+        )
+        lines.append(
+            "Start it again, or continue this session on another provider with "
+            f"`private-agent --resume {session_id} --provider "
+            f"'{getattr(reachable[0], 'name', '')}'`."
+        )
+    else:
+        lines.append(
+            "No other local provider is reachable. Start one (for example "
+            "`ollama serve`) and resume this session, or continue online."
+        )
+    return "\n".join(lines)

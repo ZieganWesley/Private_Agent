@@ -202,6 +202,7 @@ from .provider_resume import (
     auto_select_single_provider,
     match_runtime_by_address,
     persist_provider_choice,
+    provider_loss_guidance,
     provider_record_for_resume,
 )
 from .providers import (
@@ -484,6 +485,14 @@ async def _invoke_initial_model_with_fallback(
         if fallback_model is None:
             if provider_type == "online":
                 raise RuntimeError(_online_request_failure(e)) from None
+            if selected_local_runtime is not None:
+                console.print(
+                    provider_loss_guidance(
+                        runtime_name=selected_local_runtime.name,
+                        session_id=get_tool_context().session_id or "<session id>",
+                        discover=_discover_available_local_runtimes,
+                    )
+                )
             raise RuntimeError(f"Local model request failed: {e}") from e
         console.print(
             f"[yellow][Model fallback] {selected_model} rejected tool use; "
