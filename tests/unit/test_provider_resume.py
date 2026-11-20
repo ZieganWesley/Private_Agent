@@ -186,3 +186,166 @@ def test_persisting_a_weaker_provider_warns_about_the_lost_capabilities(tmp_path
     assert any("tool calling" in message for message in printed)
     assert any("context window shrank" in message for message in printed)
     memory.close()
+
+
+def _idle_provider(name="Ollama", start_hint="Run `ollama serve`."):
+    from private_agent.providers.adapters import ProviderPreset
+    from private_agent.providers.selection import IdleProvider
+
+    return IdleProvider(
+        preset=ProviderPreset(
+            name=name,
+            kind="ollama",
+            default_ports=(11434,),
+            install_check=lambda: True,
+            start_hint=start_hint,
+        ),
+        start_hint=start_hint,
+    )
+
+
+def _record(display_name="Ollama", base_url="http://127.0.0.1:11434"):
+    return ProviderRecord("ollama", display_name, base_url, "qwen3:8b")
+
+
+class _Recorder:
+    def __init__(self):
+        self.messages = []
+
+    def print(self, message, **_kwargs):
+        self.messages.append(str(message))
+
+
+def test_start_offer_is_skipped_when_the_provider_is_not_installed():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    runtimes = [object()]
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=_record(),
+        idle_providers=[],
+        runtimes=runtimes,
+        refresh=lambda: [],
+        input_fn=lambda _prompt: "y",
+    )
+
+    assert (result, matched) == (runtimes, None)
+    assert console.messages == []
+
+
+def test_start_offer_does_nothing_without_consent():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    started = []
+    runtimes = [object()]
+
+    def start_provider(name):
+        started.append(name)
+        return True
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=_record(),
+        idle_providers=[_idle_provider()],
+        runtimes=runtimes,
+        refresh=lambda: [],
+        input_fn=lambda _prompt: "",
+        start_provider=start_provider,
+    )
+
+    assert (result, matched) == (runtimes, None)
+    assert started == []
+    assert any("is not running" in message for message in console.messages)
+    assert any("ollama serve" in message for message in console.messages)
+
+
+def test_start_offer_waits_for_the_restarted_provider():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    restarted = SimpleNamespace(
+        name="Ollama", base_url="http://127.0.0.1:11434", models=("qwen3:8b",)
+    )
+    polls = []
+
+    def refresh():
+        polls.append(True)
+        return [restarted] if len(polls) >= 2 else []
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=_record(),
+        idle_providers=[_idle_provider()],
+        runtimes=[],
+        refresh=refresh,
+        input_fn=lambda _prompt: "yes",
+        start_provider=lambda _name: True,
+        sleep=lambda _seconds: None,
+    )
+
+    assert matched is restarted
+    assert result == [restarted]
+    assert len(polls) == 2
+    assert any("running again" in message for message in console.messages)
+
+
+def test_start_offer_reports_a_failed_launch_and_a_provider_that_stays_down():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    result, matched = offer_provider_start(
+        console=console,
+        record=_record(),
+        idle_providers=[_idle_provider()],
+        runtimes=[],
+        refresh=lambda: [],
+        input_fn=lambda _prompt: "y",
+        start_provider=lambda _name: False,
+    )
+
+    assert (result, matched) == ([], None)
+    assert any("Could not start Ollama" in message for message in console.messages)
+
+    console = _Recorder()
+    sleeps = []
+    result, matched = offer_provider_start(
+        console=console,
+        record=_record(),
+        idle_providers=[_idle_provider()],
+        runtimes=[],
+        refresh=lambda: [],
+        input_fn=lambda _prompt: "y",
+        start_provider=lambda _name: True,
+        sleep=sleeps.append,
+        attempts=3,
+        delay=0.5,
+    )
+
+    assert (result, matched) == ([], None)
+    assert sleeps == [0.5, 0.5]
+    assert any("did not answer" in message for message in console.messages)
+
+
+def test_start_offer_is_skipped_when_not_interactive():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    asked = []
+    runtimes = [object()]
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=_record(),
+        idle_providers=[_idle_provider()],
+        runtimes=runtimes,
+        refresh=lambda: [],
+        input_fn=lambda prompt: asked.append(prompt) or "y",
+        interactive=False,
+    )
+
+    assert (result, matched) == (runtimes, None)
+    assert asked == []
+    assert console.messages == []

@@ -2,6 +2,7 @@
 
 import logging
 import sqlite3
+import time
 
 from ..run_logging import RUN_LOGGER, log_event
 
@@ -13,6 +14,7 @@ __all__ = [
     "warn_capability_changes",
     "provider_record_for_resume",
     "match_runtime_by_address",
+    "offer_provider_start",
     "persist_provider_choice",
 ]
 
@@ -81,6 +83,87 @@ def match_runtime_by_address(base_url, runtimes):
         if str(getattr(runtime, "base_url", "")).rstrip("/").lower() == wanted:
             return runtime
     return None
+
+
+def _start_provider(name: str) -> bool:
+    """Ask an adapter to launch a provider with explicit user consent."""
+    from ..providers.adapters import build_adapter
+
+    try:
+        return bool(build_adapter(name).start(consent=True))
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def offer_provider_start(
+    *,
+    console,
+    record,
+    idle_providers,
+    runtimes,
+    refresh,
+    input_fn,
+    interactive=True,
+    start_provider=None,
+    sleep=None,
+    attempts=6,
+    delay=1.0,
+):
+    """Offer to start an installed but idle provider.
+
+    Returns ``(runtimes, match)`` where ``match`` is the restarted provider when
+    it came back. Only providers the user already has installed are offered, and
+    nothing is launched without an explicit yes.
+    """
+    if record is None or not interactive:
+        return runtimes, None
+    name = str(record.display_name)
+    idle = next(
+        (
+            idle_provider
+            for idle_provider in idle_providers
+            if idle_provider.preset.name.lower() == name.lower()
+        ),
+        None,
+    )
+    if idle is None:
+        return runtimes, None
+    console.print(
+        f"[yellow][Resume][/yellow] {name} (recorded for this session) is not running."
+    )
+    if idle.start_hint:
+        console.print(f"  Start it with: {idle.start_hint}")
+    try:
+        answer = input_fn(f"[cyan]Start {name} now? [y/N]: [/cyan]").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return runtimes, None
+    if answer not in {"y", "yes"}:
+        return runtimes, None
+    from ..providers.selection import match_runtime
+
+    start = start_provider or _start_provider
+    if not start(name):
+        console.print(
+            f"[yellow][Resume][/yellow] Could not start {name} automatically; "
+            "start it yourself and resume again."
+        )
+        return runtimes, None
+    pause = sleep or time.sleep
+    for attempt in range(max(int(attempts), 1)):
+        current = refresh()
+        matched = match_runtime(name, current) or match_runtime_by_address(
+            record.base_url, current
+        )
+        if matched is not None:
+            console.print(f"[green][Resume][/green] {name} is running again.")
+            return current, matched
+        if attempt + 1 < max(int(attempts), 1):
+            pause(delay)
+    console.print(
+        f"[yellow][Resume][/yellow] {name} did not answer after starting; "
+        "continuing without it."
+    )
+    return refresh(), None
 
 
 def persist_provider_choice(

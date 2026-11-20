@@ -205,6 +205,9 @@ from .provider_resume import (
     provider_loss_guidance,
     provider_record_for_resume,
 )
+from .provider_resume import (
+    offer_provider_start as _offer_provider_start,
+)
 from .providers import (
     has_saved_online_config as _has_saved_online_config,
 )
@@ -1856,20 +1859,15 @@ async def _choose_provider(
             resumed_record.display_name, local_runtimes
         ) or match_runtime_by_address(resumed_record.base_url, local_runtimes)
         if resumed_runtime is None:
-            console.print(
-                f"[yellow][Resume][/yellow] {resumed_record.display_name} "
-                f"(recorded for this session) is not running."
+            local_runtimes[:], resumed_runtime = _offer_provider_start(
+                console=console,
+                record=resumed_record,
+                idle_providers=idle_providers,
+                runtimes=local_runtimes,
+                refresh=_discover_available_local_runtimes,
+                input_fn=_input,
+                interactive=interactive,
             )
-            start_hint = next(
-                (
-                    idle.start_hint
-                    for idle in idle_providers
-                    if idle.preset.name.lower() == resumed_record.display_name.lower()
-                ),
-                None,
-            )
-            if start_hint:
-                console.print(f"  Start it with: {start_hint}")
     online_options: list[tuple[int, str, bool]] = []
     next_choice = len(local_runtimes) + 1
     if preference.online_preference is not None:
