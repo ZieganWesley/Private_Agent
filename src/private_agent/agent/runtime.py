@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -80,6 +81,7 @@ from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
 )
+from ..hooks import hooks_blocked, load_hooks, run_post_tool_hooks, run_pre_tool_hooks
 from ..rag import (
     initialize_knowledge_base,
     knowledge_base_signature,
@@ -955,6 +957,18 @@ async def execute_tool_call(
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
 
+    _hooks = load_hooks()
+    _pre_hook_results = run_pre_tool_hooks(
+        hooks=_hooks,
+        tool_name=name,
+        tool_args=args,
+        workspace_root=SandboxManager.get_root(),
+    )
+    _pre_hook_block_reason = hooks_blocked(_pre_hook_results)
+    if _pre_hook_block_reason:
+        result = f"Error: Tool call blocked by hook: {_pre_hook_block_reason}"
+        console.print(f"[red][Hook][/red] {result}")
+        return ToolMessage(content=result, tool_call_id=call_id)
     tool_func = AVAILABLE_TOOLS.get(name)
     _permission_rule_decision, _permission_rule = _evaluate_permission_rules(
         PERMISSION_ALLOW_RULES, PERMISSION_DENY_RULES, name, args
@@ -1149,6 +1163,13 @@ async def execute_tool_call(
         elapsed_seconds=round(time.monotonic() - tool_started, 3),
         output_character_count=len(result_text),
     )
+    with contextlib.suppress(Exception):  # noqa: BLE001 - post-tool hooks are best-effort
+        run_post_tool_hooks(
+            hooks=_hooks,
+            tool_name=name,
+            tool_args=args,
+            workspace_root=SandboxManager.get_root(),
+        )
     return ToolMessage(content=result_text, tool_call_id=call_id)
 
 

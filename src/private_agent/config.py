@@ -47,6 +47,7 @@ DEFAULT_CONFIG = {
         "allow": [],
         "deny": [],
     },
+    "hooks": {},
     "models": {
         "ollama_base_url": "http://localhost:11434",
         "local_openai_compatible_endpoints": [

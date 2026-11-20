@@ -119,7 +119,7 @@ def load_custom_slash_commands(workspace_root=None) -> dict[str, str]:
         for path in sorted(root.glob("*.md")):
             try:
                 content = path.read_text(encoding="utf-8").strip()
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             commands[f"/{path.stem}"] = content
     return commands
