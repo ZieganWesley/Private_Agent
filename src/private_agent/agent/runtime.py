@@ -28,6 +28,7 @@ from rich.table import Table
 from .. import capabilities as capability_packs
 from .. import code_tasks as code_tasks_module
 from .. import json_output
+from .. import runtime_f_integration as f_integration
 from ..code_tasks import (
     CodeTaskWorkspace,
     checkpoint_code_task,
@@ -490,7 +491,6 @@ async def _invoke_initial_model_with_fallback(
             thinking_enabled=thinking_enabled,
         )
         return llm, llm_with_tools, selected_model, capabilities, response
-
 @dataclass
 class _PreflightState:
     tool_tasks: list
@@ -3576,6 +3576,7 @@ Runtime context:
                 )
 
                 turn_id = uuid.uuid4().hex
+                _f_state = f_integration.begin_turn(turn_id, user_input, effective_context)
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
@@ -3613,6 +3614,7 @@ Runtime context:
                         tool_iteration_limit is None or iteration < tool_iteration_limit  # noqa: B023
                     ):
                         iteration += 1
+                        _iter_start = f_integration.record_iteration(_f_state, iteration)  # noqa: B023
                         if (
                             iteration == 1
                             and response.content
@@ -3684,6 +3686,7 @@ Runtime context:
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
+                        f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
                         if stop:
                             break
 
@@ -3794,6 +3797,7 @@ Runtime context:
                 try:
                     response = await _run_agent_turn(response)
                 finally:
+                    f_integration.finish_turn(_f_state)
                     _overlay.stop()
                 elapsed_time = time.monotonic() - start_time
 
