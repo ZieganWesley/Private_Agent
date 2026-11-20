@@ -1,6 +1,7 @@
 """Interactive CLI command/file completion and explicit file context."""
 
 import os
+import pathlib
 import re
 import shlex
 import sys
@@ -104,6 +105,24 @@ def format_help() -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def load_custom_slash_commands(workspace_root=None) -> dict[str, str]:
+    """Load custom slash commands from Markdown files (user then project level)."""
+    commands: dict[str, str] = {}
+    roots = [pathlib.Path.home() / ".private_agent" / "commands"]
+    if workspace_root is not None:
+        roots.append(pathlib.Path(workspace_root) / ".private_agent" / "commands")
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.glob("*.md")):
+            try:
+                content = path.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            commands[f"/{path.stem}"] = content
+    return commands
 
 
 class AgentCompleter(Completer):

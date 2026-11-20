@@ -127,6 +127,7 @@ from .interactive import format_help as _format_interactive_help
 from .interactive import (
     include_file_context,
     include_folder_context,
+    load_custom_slash_commands,
     prompt_user_input,
 )
 from .learning import _record_code_task_validation
@@ -2225,6 +2226,7 @@ async def _run_agent_cli_session(
     rag_last_check = setup.rag_last_check
     skills_folder_input = setup.skills_folder_input
     loaded_skills = setup.loaded_skills
+    custom_slash_commands = load_custom_slash_commands(SandboxManager.get_root())
     mode_label = setup.mode_label
     session_id = setup.session_id
     network_consent_state = setup.network_consent_state
@@ -2352,6 +2354,26 @@ async def _run_agent_cli_session(
                 except (KeyboardInterrupt, EOFError, asyncio.CancelledError):
                     _acknowledge_interrupt()
                     user_input = "exit"
+                _custom_command_name = ""
+                if user_input.startswith("/"):
+                    _custom_command_name = user_input.split(None, 1)[0].lower()
+                if _custom_command_name in custom_slash_commands:
+                    _custom_command_args = user_input[
+                        len(_custom_command_name) :
+                    ].strip()
+                    _custom_command_content = custom_slash_commands[
+                        _custom_command_name
+                    ]
+                    if _custom_command_args:
+                        _custom_command_content = (
+                            _custom_command_content
+                            + "\n\nArguments: "
+                            + _custom_command_args
+                        )
+                    user_input = _custom_command_content
+                    console.print(
+                        f"[cyan][Command][/cyan] Running {_custom_command_name}"
+                    )
                 if user_input.lower() == "/help":
                     console.print(_format_interactive_help())
                     continue
