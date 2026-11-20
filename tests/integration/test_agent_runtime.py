@@ -418,7 +418,7 @@ async def test_preferred_local_model_is_listed_first_and_marked(
     )
     monkeypatch.setattr(agent, "PREFERRED_MODEL", "pref")
     monkeypatch.setattr(agent, "prompt_user_input", AsyncMock(side_effect=["exit"]))
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
     printed = []
     monkeypatch.setattr(
         agent.console,
@@ -469,7 +469,7 @@ async def test_startup_reports_task_plan_counts_without_printing_goals(
         "print",
         lambda *values, **_kwargs: printed.append(" ".join(map(str, values))),
     )
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async(verbose_startup=True)
 
@@ -529,7 +529,7 @@ async def test_cli_dispatches_memory_maintenance_command(
         "prompt_user_input",
         AsyncMock(side_effect=["/maintenance", "exit"]),
     )
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async()
 
@@ -576,7 +576,7 @@ async def test_cli_applies_explicit_skill_to_next_request(
     captured_console = Console(file=captured_output, no_color=True, width=200)
     monkeypatch.setattr(agent, "console", captured_console)
     monkeypatch.setattr(captured_console, "input", inputs)
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
     model.responses = [AIMessage(content="Here is the explanation.")]
 
     await run_agent_cli_async()
@@ -639,7 +639,7 @@ async def test_cli_plan_mode_persists_plan_using_planner_tools_only(
         AIMessage(content="The plan is saved for your review."),
         AIMessage(content="Session summary."),
     ]
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
     monkeypatch.setattr(
         agent,
         "prompt_user_input",
@@ -654,7 +654,7 @@ async def test_cli_plan_mode_persists_plan_using_planner_tools_only(
         if isinstance(message, ToolMessage)
         and message.tool_call_id == "planning-web-search"
     )
-    assert "Use one planner operation per model step" in blocked_result.content
+    assert "Online research was not approved" in blocked_result.content
     memory = PersistentMemory(db_path=str(database_path))
     try:
         tasks = memory.list_tasks()
@@ -2533,7 +2533,7 @@ async def test_cli_displays_tool_error_and_returns_details_to_model(
         "prompt_user_input",
         AsyncMock(side_effect=["Try to create the portfolio skill.", "exit"]),
     )
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async()
 
@@ -2609,7 +2609,7 @@ async def test_local_model_switch_preserves_thinking_and_hardware_settings(
         "prompt_user_input",
         AsyncMock(side_effect=["exit"]),
     )
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async()
 
@@ -3406,7 +3406,7 @@ async def test_local_model_tool_call_count_is_not_capped(
         AIMessage(content="Both requested steps were attempted."),
         AIMessage(content="Local tool-loop test summary."),
     ]
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
     monkeypatch.setattr(
         agent,
         "prompt_user_input",
@@ -3732,7 +3732,7 @@ async def test_ready_summary_is_compact_and_shows_local_hardware_only_for_local(
         "prompt_user_input",
         AsyncMock(side_effect=["/hardware-status", "exit"]),
     )
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async()
 
@@ -4810,7 +4810,7 @@ async def test_continue_resumes_the_latest_session_and_appends_to_it(
     monkeypatch.setattr(
         agent, "prompt_user_input", AsyncMock(side_effect=["follow-up", "exit"])
     )
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async(continue_session=True)
 
@@ -4860,7 +4860,7 @@ async def test_resumed_session_that_was_already_summarized_is_not_summarized_aga
     memory.close()
     model.responses = []
     monkeypatch.setattr(agent, "prompt_user_input", AsyncMock(side_effect=["exit"]))
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async(continue_session=True)
 
@@ -4886,7 +4886,7 @@ async def test_startup_context_skips_the_resumed_sessions_own_episode(
     monkeypatch.setattr(
         agent, "prompt_user_input", AsyncMock(side_effect=["hello", "exit"])
     )
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async(continue_session=True)
 
@@ -4923,7 +4923,7 @@ async def test_resuming_takes_over_an_expired_task_lease(
     )
     model.responses = []
     monkeypatch.setattr(agent, "prompt_user_input", AsyncMock(side_effect=["exit"]))
-    inputs.side_effect = ["", "", "", "1", ""]
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
 
     await run_agent_cli_async(continue_session=True)
 
@@ -5023,3 +5023,29 @@ async def test_f_runtime_integration_emits_timeline_and_json(scripted_local_cli,
     finally:
         conn.close()
     assert rows >= 1
+
+
+@pytest.mark.asyncio
+async def test_enable_capability_rebuilds_tool_list_end_to_end(scripted_local_cli, capsys, monkeypatch):
+    agent, model, inputs, workspace, database_path = scripted_local_cli
+    import private_agent.runtime_f_integration as f_integration
+
+    monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
+    model.responses = [
+        AIMessage(content="", tool_calls=[{"name": "enable_capability", "args": {"name": "Coding"}, "id": "e1"}]),
+        AIMessage(content="done"),
+    ]
+
+    await agent.run_agent_cli_async(
+        prompt="hello",
+        non_interactive=True,
+        output="json",
+    )
+
+    out = capsys.readouterr().out
+    assert "turn_started" in out
+    assert "turn_finished" in out
+
+    bound_names = {getattr(t, "name", None) for t in getattr(model, "bound_tools", [])}
+    assert "enable_capability" in bound_names
+    assert "write_local_file" in bound_names or "apply_workspace_patch" in bound_names
