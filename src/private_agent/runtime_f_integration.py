@@ -55,14 +55,15 @@ def approve_capability(name, permission_mode, console, interactive):
         return True, ""
     if not interactive:
         return False, f"Switching to {name} requires interactive approval."
-    choice = (
-        console.input(
-            f"[yellow]Approve switching to {name} capability? [y/N]: [/yellow]"
-        )
-        .strip()
-        .lower()
+    from .agent.permissions import prompt_tool_approval
+
+    approved = prompt_tool_approval(
+        console=console,
+        name=f"enable_capability ({name})",
+        description=f"switch the session to {name} capability",
+        safe_args={"name": name},
     )
-    if choice != "y":
+    if not approved:
         return False, f"Capability escalation to {name} was not approved; no packs changed."
     return True, ""
 
