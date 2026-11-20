@@ -24,4 +24,4 @@
 
 - Branch `g-tui-ui` pushed and mergeable into `main` (fast-forward).
 - G1–G4, G15–G16 implemented; light toggle functional.
-- Remaining G items: G5 (Markdown, deferred), G7 (startup flags), G8 (full live panel), G10 (done), G12 (approval prompts), G13 (arrow menus), G24 (narrow terminals). G17–G19, G21 done.
+- Remaining G items: G5 (Markdown, deferred), G8 (full live panel - partial), G13 (arrow menus - partial). Done: G1, G2, G3, G4, G6, G7, G10, G11, G12, G14, G15, G16, G17, G18, G19, G20, G21, G22, G23, G24. Shared console across modules.
