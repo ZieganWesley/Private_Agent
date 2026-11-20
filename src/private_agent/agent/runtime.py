@@ -1852,13 +1852,30 @@ async def _choose_provider(
     else:
         default_choice = "1" if local_runtimes else str(online_options[0][0])
     last_choice = online_options[-1][0]
-    provider_choice = (
-        _input(
-            f"[cyan]Choose provider [1-{last_choice}] "
-            f"(Default: {default_choice}): [/cyan]"
-        ).strip()
-        or default_choice
-    )
+    _arrow_choices: list[tuple[str, str]] = []
+    for _i, _rt in enumerate(local_runtimes, 1):
+        _arrow_choices.append((str(_i), _rt.name))
+    for _cn, _label, _ in online_options:
+        _arrow_choices.append((str(_cn), _label))
+    _arrow_choices.append(("0", "Exit"))
+    try:
+        from .interactive import arrow_select as _arrow_select
+
+        _chosen = _arrow_select(
+            "Choose provider:", _arrow_choices, default=default_choice
+        )
+    except Exception:  # noqa: BLE001 - fall back to typed prompt
+        _chosen = None
+    if _chosen is not None:
+        provider_choice = _chosen
+    else:
+        provider_choice = (
+            _input(
+                f"[cyan]Choose provider [1-{last_choice}] "
+                f"(Default: {default_choice}): [/cyan]"
+            ).strip()
+            or default_choice
+        )
     if provider_choice == "0":
         preference.exit_requested = True
         return None
@@ -1951,21 +1968,38 @@ async def _choose_provider(
                 f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
                 f"installed in {local_runtime.name}.[/yellow]"
             )
-        while True:
-            choice_input = _input(
-                f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
-            ).strip()
-            if not choice_input:
+        try:
+            from .interactive import arrow_select as _arrow_select
+
+            _model_choice = _arrow_select(
+                "Select model:",
+                [(str(i), m) for i, m in enumerate(available_models, 1)],
+                default="1",
+            )
+        except Exception:  # noqa: BLE001 - arrow UI unavailable; fall back to typed prompt
+            _model_choice = None
+        if _model_choice is not None and _model_choice.isdigit():
+            _mc = int(_model_choice) - 1
+            if 0 <= _mc < len(available_models):
+                selected_model = available_models[_mc]
+            else:
                 selected_model = available_models[0]
-                break
-            try:
-                choice_idx = int(choice_input) - 1
-                if 0 <= choice_idx < len(available_models):
-                    selected_model = available_models[choice_idx]
+        else:
+            while True:
+                choice_input = _input(
+                    f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
+                ).strip()
+                if not choice_input:
+                    selected_model = available_models[0]
                     break
-            except ValueError:
-                pass
-            console.print("[red][Error] Invalid selection.[/red]")
+                try:
+                    choice_idx = int(choice_input) - 1
+                    if 0 <= choice_idx < len(available_models):
+                        selected_model = available_models[choice_idx]
+                        break
+                except ValueError:
+                    pass
+                console.print("[red][Error] Invalid selection.[/red]")
 
         console.print(
             f"[green][Info] Initializing local model client for: {selected_model}[/green]"
