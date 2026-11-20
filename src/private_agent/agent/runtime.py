@@ -25,7 +25,10 @@ from langchain_core.messages import (
 from prompt_toolkit.history import InMemoryHistory
 from rich.table import Table
 
+from .. import capabilities as capability_packs
 from .. import code_tasks as code_tasks_module
+from .. import json_output
+from .. import runtime_f_integration as f_integration
 from ..code_tasks import (
     CodeTaskWorkspace,
     checkpoint_code_task,
@@ -79,6 +82,7 @@ from ..config import (
     merge_project_config,
 )
 from ..database import PersistentMemory
+from ..events import Event, ToolFinished, ToolStarted, get_event_bus
 from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
@@ -100,6 +104,7 @@ from ..skills import (
     load_skills_from_folder,
     match_skill_by_relevancy,
 )
+from ..status_overlay import StatusOverlay
 from ..tools import (
     AVAILABLE_TOOLS,
     LOCAL_MEDIA_TOOL_NAMES,
@@ -318,7 +323,6 @@ def _tools_for_model(
         is None
         or name in OVERRIDE_TOOL_LIST
     ]
-
 def _print_tool_catalog(
     entries,
     *,
@@ -379,7 +383,6 @@ def _print_tool_catalog(
             style=("red strike" if overridden else "strike") if unavailable else None,
         )
     console.print(table)
-
 async def authorize_network_research(
     tool_name: str,
     tool_args: dict[str, Any],
@@ -398,11 +401,9 @@ async def authorize_network_research(
         is_interactive=lambda: get_tool_context().interactive and sys.stdin.isatty(),
         session_consent_state=session_consent_state,
     )
-
 def _bind_tools(llm, tools_list):
     """Bind the active tool set to an LLM (B1 step 1 helper)."""
     return llm.bind_tools(tools_list)
-
 async def _invoke_initial_model_with_fallback(
     *,
     llm,
@@ -490,7 +491,6 @@ async def _invoke_initial_model_with_fallback(
             thinking_enabled=thinking_enabled,
         )
         return llm, llm_with_tools, selected_model, capabilities, response
-
 @dataclass
 class _PreflightState:
     tool_tasks: list
@@ -500,7 +500,6 @@ class _PreflightState:
     authorized_planning_searches: dict
     task_action_seen: bool
     tool_call_count: int
-
 async def _preflight_tool_calls(
     *,
     response,
@@ -758,7 +757,6 @@ async def _preflight_tool_calls(
                     **execution_options,
                 )
             )
-
 async def _execute_tool_batch(
     *,
     response,
@@ -911,16 +909,13 @@ async def _execute_tool_batch(
             "was not verified."
         )
         return response, True
-
     return response, False
-
 def _select_permission_mode(interactive: bool = True) -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
         console,
         lambda: interactive,
     )
-
 async def execute_tool_call(
     tool_call: dict,
     *,
@@ -948,7 +943,7 @@ async def execute_tool_call(
         f"[yellow][Tool Execution][/yellow] Calling '{name}' "
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
-
+    get_event_bus().emit(ToolStarted(call_id=str(call_id or ""), tool_name=str(name or ""), args_summary=str(safe_args), started_at=tool_started))
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
         name, args, SandboxManager.get_root()
     )[0]
@@ -1111,7 +1106,6 @@ async def execute_tool_call(
             )
     else:
         result = f"Error: Tool {name} not found."
-
     result_text = _redact_sensitive_values(str(result), args)
     has_error = _tool_result_is_error(result_text)
     if len(result_text) > max_output_chars:
@@ -1154,8 +1148,8 @@ async def execute_tool_call(
     _hook_output = collect_post_tool_hook_output(tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root())
     if _hook_output:
         result_text += "\n\n[Post-tool checks]\n" + _hook_output
+    get_event_bus().emit(ToolFinished(call_id=str(call_id or ""), status="ok", duration=time.monotonic() - tool_started, output_size=len(result_text)))
     return ToolMessage(content=result_text, tool_call_id=call_id)
-
 async def _execute_task_tool_call(
     memory: PersistentMemory,
     task_id: str,
@@ -1185,7 +1179,6 @@ async def _execute_task_tool_call(
             content=f"Error: {error_details}",
             tool_call_id=call_id,
         )
-
     try:
         with logging_context(task_id=task_id):
             result = await execute_tool_call(tool_call, **execution_options)
@@ -1209,7 +1202,6 @@ async def _execute_task_tool_call(
                 exc_info=True,
             )
         raise
-
     result_text = str(result.content)
     lowered_result = result_text.casefold()
     outcome_status = (
@@ -2255,6 +2247,7 @@ async def _run_agent_cli_session(
         )
         if selection is None:
             if non_interactive:
+                get_event_bus().subscribe(Event, json_output.emit_event)
                 return
             continue
         provider_type = selection.provider_type
@@ -2902,7 +2895,7 @@ async def _run_agent_cli_session(
                 elif (
                     active_code_workspace is None and capabilities["tools"] is not False
                 ):
-                    tools_list = list(base_tools_list)
+                    tools_list = capability_packs.filter_tools_list(base_tools_list, user_input)
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; continue without tools
@@ -3551,6 +3544,7 @@ Runtime context:
                     user_input,
                     budget=prompt_budget,
                 )
+                enriched_input = f_integration.trim_context(enriched_input, prompt_budget)
                 prompt_history = trim_history_to_context_budget(
                     chat_history,
                     enriched_input,
@@ -3573,6 +3567,7 @@ Runtime context:
                 )
 
                 turn_id = uuid.uuid4().hex
+                _f_state = f_integration.begin_turn(turn_id, user_input, effective_context, non_interactive)
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
@@ -3610,6 +3605,7 @@ Runtime context:
                         tool_iteration_limit is None or iteration < tool_iteration_limit  # noqa: B023
                     ):
                         iteration += 1
+                        _iter_start = f_integration.record_iteration(_f_state, iteration)  # noqa: B023
                         if (
                             iteration == 1
                             and response.content
@@ -3681,6 +3677,7 @@ Runtime context:
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
+                        f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
                         if stop:
                             break
 
@@ -3696,6 +3693,9 @@ Runtime context:
                             model_name=selected_model,  # noqa: B023
                         )
                         usage = (messages_tokens(messages), context_stats["max"])  # noqa: B023
+                        _plan_summary = f_integration.get_plan_summary(_f_state)  # noqa: B023
+                        if _plan_summary:
+                            messages.append(SystemMessage(content=f"[Task plan]\n{_plan_summary}"))  # noqa: B023
                         try:
                             response = await _invoke_with_status(
                                 llm_with_tools,  # noqa: B023
@@ -3786,7 +3786,15 @@ Runtime context:
 
                     return response
 
-                response = await _run_agent_turn(response)
+                _overlay = StatusOverlay(console)
+                _overlay.set_plan_summary(f_integration.get_plan_summary(_f_state))
+                _overlay.set_eta_deadline(deadline)
+                _overlay.start()
+                try:
+                    response = await _run_agent_turn(response)
+                finally:
+                    f_integration.finish_turn(_f_state)
+                    _overlay.stop()
                 elapsed_time = time.monotonic() - start_time
 
                 content = response.content

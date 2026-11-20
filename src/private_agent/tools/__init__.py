@@ -481,6 +481,10 @@ def create_skill(name: str, description: str, instructions: str) -> str:
 
 
 # Import after network helpers are defined; web.py depends on this shared policy layer.
+from .ask_user import ask_user
+from .calculator import calculate
+from .capabilities_tool import enable_capability
+from .documents import create_docx, create_pdf, create_xlsx
 from .filesystem import (
     apply_workspace_patch,
     commit_git_changes,
@@ -498,7 +502,6 @@ from .filesystem import (
     search_workspace_text,
     stage_git_changes,
 )
-from .ask_user import ask_user
 from .location import fetch_current_location, get_weather
 from .memory import (
     delete_chat_history_entry_from_sqlite,
@@ -513,6 +516,7 @@ from .planner import (
     revise_task_plan,
     update_todo_step,
 )
+from .rag_tools import search_documents
 from .shell import (
     get_background_process_status,
     list_background_processes,
@@ -522,9 +526,6 @@ from .shell import (
 )
 from .subagents import run_subagent
 from .web import download_web_file, fetch_webpage, web_search
-from .calculator import calculate
-from .rag_tools import search_documents
-from .documents import create_docx, create_pdf, create_xlsx
 
 AVAILABLE_TOOLS = {
     "get_local_datetime": get_local_datetime,
@@ -561,6 +562,7 @@ AVAILABLE_TOOLS = {
     "create_skill": create_skill,
     "create_task_plan": create_task_plan,
     "ask_user": ask_user,
+    "enable_capability": enable_capability,
     "inspect_task_plan": inspect_task_plan,
     "read_table_schema": read_table_schema,
     "update_todo_step": update_todo_step,

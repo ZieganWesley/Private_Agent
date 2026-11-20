@@ -4994,3 +4994,32 @@ async def test_undo_restores_a_file_edited_by_the_last_turn(
         assert conversation_rows == 0
     finally:
         memory.close()
+
+
+@pytest.mark.asyncio
+async def test_f_runtime_integration_emits_timeline_and_json(scripted_local_cli, capsys, monkeypatch):
+    agent, model, inputs, workspace, database_path = scripted_local_cli
+    import private_agent.runtime_f_integration as f_integration
+    monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
+    model.responses = [
+        AIMessage(content="", tool_calls=[{"name": "calculate", "args": {"expression": "2+2"}, "id": "c1"}]),
+        AIMessage(content="done"),
+    ]
+
+    await agent.run_agent_cli_async(
+        prompt="hello",
+        non_interactive=True,
+        output="json",
+    )
+
+    out = capsys.readouterr().out
+    assert "turn_started" in out
+    assert "turn_finished" in out
+
+    import sqlite3
+    conn = sqlite3.connect(str(database_path))
+    try:
+        rows = conn.execute("SELECT COUNT(*) FROM agent_step_timings").fetchone()[0]
+    finally:
+        conn.close()
+    assert rows >= 1
