@@ -498,7 +498,13 @@ from .planner import (
     revise_task_plan,
     update_todo_step,
 )
-from .shell import run_shell_command
+from .shell import (
+    get_background_process_status,
+    list_background_processes,
+    run_shell_command,
+    start_background_process,
+    stop_background_process,
+)
 from .web import download_web_file, fetch_webpage, web_search
 
 AVAILABLE_TOOLS = {
@@ -518,6 +524,10 @@ AVAILABLE_TOOLS = {
     "rename_workspace_file": rename_workspace_file,
     "delete_workspace_file": delete_workspace_file,
     "run_shell_command": run_shell_command,
+    "start_background_process": start_background_process,
+    "get_background_process_status": get_background_process_status,
+    "stop_background_process": stop_background_process,
+    "list_background_processes": list_background_processes,
     "web_search": web_search,
     "list_directory": list_directory,
     "fetch_webpage": fetch_webpage,

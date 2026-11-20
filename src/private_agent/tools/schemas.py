@@ -42,6 +42,23 @@ class RunShellInput(BaseModel):
     )
 
 
+class StartBackgroundProcessInput(BaseModel):
+    command: str = Field(..., description="Shell command to run in the background.")
+    timeout: int | None = Field(
+        None,
+        ge=1,
+        description="Optional startup timeout in seconds.",
+    )
+
+
+class BackgroundProcessIdInput(BaseModel):
+    process_id: str = Field(..., min_length=1, max_length=128)
+
+
+class ListBackgroundProcessesInput(BaseModel):
+    pass
+
+
 class WebSearchInput(BaseModel):
     query: str = Field(..., description="Search query string.")
 
