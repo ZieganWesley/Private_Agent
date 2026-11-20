@@ -88,14 +88,13 @@ def _probe_endpoint(
             response = client.get(f"{base_url.rstrip('/')}{path}")
             response.raise_for_status()
             models = _extract_models(response.json())
-        if kind == "ollama":
             embedding_markers = ("embed", "embedding", "bge", "e5", "nomic-embed")
             models = tuple(
                 model
                 for model in models
                 if not any(marker in model.lower() for marker in embedding_markers)
             )
-        return LocalRuntime(name, kind, base_url.rstrip("/"), models)
+            return LocalRuntime(name, kind, base_url.rstrip("/"), models)
     except (httpx.HTTPError, ValueError, ConnectionError, OSError) as exc:
         log_event(
             RUN_LOGGER,
