@@ -2401,7 +2401,7 @@ the right capability pack (steps 9.2–9.3) instead of as special cases.
 | 8.3 | **Done:** relevance cut-off via `RAG_RELEVANCE_THRESHOLD` (default 0.25) using `similarity_search_with_relevance_scores` when available; default chunks raised to 5/6; coding-standards query gated by `RAG_INCLUDE_CODING_GUIDANCE` | E6, E7, E15 | — | "Hello" gets no chunks, and `scripts/benchmark_rag.py` scores are the same or better |
 | 8.4 | **Done:** added `search_documents` tool backed by the session vector store | E9 | 3.4 | The model can run a second, better search during a turn |
 | 8.5 | **Done:** short follow-up queries are combined with the previous RAG query | E8 | 8.3 | "What about the second one?" retrieves the right chunks, with a test |
-| 8.6 | Add re-ranking of retrieved chunks (local cross-encoder or the chat model) | E10 | 5.5 | Benchmark MRR improves |
+| 8.6 | **Done:** added embedding-based re-ranking in `HybridRAGRetriever._rerank` (falls back when no embedder) | E10 | 5.5 | Benchmark MRR improves |
 | 8.7 | **Done:** `RAG_DOCUMENTS_ONLY` setting injects a not-found instruction when no docs retrieved | E12 | 8.3 | The agent says "not found in your documents" instead of guessing |
 | 8.8 | **Done:** added `.docx`, `.xlsx`, `.pptx`, `.epub` (zip/XML text extraction) and `.html`/`.htm` (BeautifulSoup text extraction) to supported RAG formats | E11 | — | Each format is indexed, with a test file per format |
 | 8.9 | ~~Put embeddings behind a provider interface~~ Moved to step 12.11 | E14 | 12.11 | See 12.11 |

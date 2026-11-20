@@ -71,6 +71,38 @@ class HybridRAGRetriever:
                 "to pure vector similarity search.[/yellow]"
             )
 
+    def _rerank(self, query: str, documents: list[Document]) -> list[Document]:
+        """Re-rank documents by embedding similarity when an embedder is available."""
+        if not documents:
+            return documents
+        embeddings = getattr(self.vectorstore, "embeddings", None)
+        if embeddings is None or not hasattr(embeddings, "embed_query"):
+            return documents
+        try:
+            query_vec = embeddings.embed_query(query)
+            doc_vecs = embeddings.embed_documents(
+                [getattr(d, "page_content", "") or "" for d in documents]
+            )
+        except (AttributeError, ValueError, RuntimeError, TypeError):
+            return documents
+        if not query_vec or not doc_vecs or len(doc_vecs) != len(documents):
+            return documents
+
+        def _cosine(a, b):
+            dot = sum(x * y for x, y in zip(a, b, strict=False))
+            na = sum(x * x for x in a) ** 0.5
+            nb = sum(x * x for x in b) ** 0.5
+            if na == 0 or nb == 0:
+                return 0.0
+            return dot / (na * nb)
+
+        scored = sorted(
+            zip(documents, doc_vecs, strict=False),
+            key=lambda item: _cosine(query_vec, item[1]),
+            reverse=True,
+        )
+        return [doc for doc, _ in scored]
+
     def similarity_search(
         self, query: str, k: int = RAG_SIMILARITY_RESULTS
     ) -> list[Document]:
@@ -99,7 +131,7 @@ class HybridRAGRetriever:
                 pass
         query_tokens = _tokenize(query)
         if not self.bm25 or not self.documents or not query_tokens:
-            return vector_results[:k]
+            return self._rerank(query, vector_results[:k])
 
         bm25_scores = self.bm25.get_scores(query_tokens)
         top_scored_docs = heapq.nsmallest(
@@ -111,4 +143,5 @@ class HybridRAGRetriever:
             self.documents[index] for index, score in top_scored_docs if score > 0
         ]
 
-        return _reciprocal_rank_fusion((vector_results, bm25_results), k)
+        fused = _reciprocal_rank_fusion((vector_results, bm25_results), k)
+        return self._rerank(query, fused)
