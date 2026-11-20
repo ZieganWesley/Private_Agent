@@ -19,6 +19,7 @@ def test_route_packs_attachment_adds_coding():
 def test_tools_for_packs():
     tools = capabilities.tools_for_packs({"Core"})
     assert "read_local_file" in tools
+    assert "get_local_datetime" in tools
     assert "web_search" not in tools
 
 
@@ -112,3 +113,21 @@ def test_gate_capability_coding_approved_interactive(monkeypatch):
         is False
     )
     assert state2.blocked_tool_messages
+
+
+def test_every_pack_tool_name_is_registered():
+    """A pack that names an unregistered tool can never gate the real one.
+
+    ``filter_tools_list`` preserves tools no pack mentions, so a stale pack name
+    silently leaves the actual tool always available. Derive the registry from
+    the real tool objects rather than a hand-maintained list so a rename on
+    either side fails here.
+    """
+    import private_agent.tools as tools_mod
+    from private_agent import code_tasks
+
+    # Code-task tools are injected into AVAILABLE_TOOLS only for code-task turns.
+    registered = set(tools_mod.AVAILABLE_TOOLS)
+    registered.add(code_tasks.run_project_unit_tests.name)
+
+    assert capabilities.unknown_pack_tools(registered) == {}

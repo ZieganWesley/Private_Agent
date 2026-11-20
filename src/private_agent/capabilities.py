@@ -10,7 +10,7 @@ BASELINE_PACKS = {"Core", "Knowledge", "Media", "Memory", "MCP", "Helper"}
 
 CORE_TOOLS = frozenset(
     {
-        "get_current_datetime",
+        "get_local_datetime",
         "read_local_file",
         "search_workspace_text",
         "list_directory",
@@ -180,6 +180,22 @@ def _all_pack_tools() -> set[str]:
         names |= pack.tools
     names |= CORE_TOOLS
     return names
+
+
+def unknown_pack_tools(registered: Iterable[str]) -> dict[str, list[str]]:
+    """Return pack name -> sorted tool names the registry does not provide.
+
+    ``filter_tools_list`` preserves any tool that no pack mentions, so a pack
+    naming a tool that is not registered silently leaves the real tool always
+    available instead of gated. Callers pass the live registry so a rename on
+    either side is caught instead of being maintained by hand.
+    """
+    available = set(registered)
+    return {
+        name: sorted(pack.tools - available)
+        for name, pack in PACKS.items()
+        if pack.tools - available
+    }
 
 
 def filter_tools_list(tools_list, user_input=""):
