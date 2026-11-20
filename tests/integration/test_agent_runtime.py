@@ -1310,7 +1310,7 @@ async def test_tool_result_and_failure_are_returned_to_agent(monkeypatch):
     assert "[System Reflection Prompt]" in result.content
     error_panel = next(value for value in printed if isinstance(value, Panel))
     assert isinstance(error_panel.title, Text)
-    assert str(error_panel.title) == "Tool 'example' returned an error"
+    assert str(error_panel.title) == "✗ Tool 'example' returned an error"
     assert isinstance(error_panel.renderable, Text)
     assert "tool unavailable" in error_panel.renderable.plain
     assert "credential-value" not in error_panel.renderable.plain

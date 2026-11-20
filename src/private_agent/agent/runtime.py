@@ -979,7 +979,7 @@ async def execute_tool_call(
         )
     )
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
-        name, args, SandboxManager.get_root()
+        name, args, SandboxManager.root_dir
     )[0]
     if _pre_hook_block_reason:
         return ToolMessage(
@@ -1182,7 +1182,7 @@ async def execute_tool_call(
         output_character_count=len(result_text),
     )
     _hook_output = collect_post_tool_hook_output(
-        tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root()
+        tool_name=name, tool_args=args, workspace_root=SandboxManager.root_dir
     )
     if _hook_output:
         result_text += "\n\n[Post-tool checks]\n" + _hook_output

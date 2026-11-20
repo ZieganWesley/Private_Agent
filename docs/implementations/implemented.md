@@ -44,6 +44,8 @@ Branch `g-remaining`; `main` untouched.
 | G20–G23 | Done | Readable tool requests, ✓/✗ status symbols, grouped `/help`, per-turn details |
 | G24 | Done | Narrow-terminal friendly layout via `soft_wrap` and compact status lines |
 
-Verification: `ruff check src` clean; `pytest` -> 1033 passed, 12 skipped, 1 pre-existing
-failure (`tests/integration/test_agent_runtime.py::test_tool_result_and_failure_are_returned_to_agent`),
-which also fails on `main` and is caused by the sandbox root being unset in that test environment.
+Verification: `ruff check src` clean; `pytest` -> 1038 passed, 12 skipped, 0 failures.
+`execute_tool_call` now tolerates an unset `SandboxManager` root by passing
+`SandboxManager.root_dir` (possibly `None`) to the hook evaluators, which
+already handle that case; the stale tool-panel title assertion was updated to
+the new `✗`-prefixed title from G20.
