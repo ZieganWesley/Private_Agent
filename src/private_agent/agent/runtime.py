@@ -3720,18 +3720,10 @@ Runtime context:
             _acknowledge_interrupt()
             if non_interactive:
                 return
-            if not session_summary_saved:
-                await _summarize_and_save_session(
-                    console,
-                    memory,
-                    llm,
-                    session_id,
-                    _history_with_summary(context_summary, chat_history),
-                    provider_type,
-                    model_name=selected_model,
-                )
-            _print_session_statistics()
-            return
+            console.print(
+                "[yellow]Turn interrupted; session kept. Press Ctrl+C twice to exit.[/yellow]"
+            )
+            continue
         except RuntimeError as rte:
             cleanup_code_task(finalize=False)
             log_event(
