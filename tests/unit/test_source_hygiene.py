@@ -129,3 +129,23 @@ def test_every_blind_exception_handler_carries_a_written_justification():
         if not match.group(1).strip(" -:\t"):
             offenders.append(f"{path}:{lineno} needs a reason after the noqa")
     assert offenders == []
+
+
+def test_log_event_never_uses_a_string_level():
+    """log_event passes ``level`` to logging, so it must be an int (Part I)."""
+    offenders = []
+    for path in sorted(SOURCE_ROOT.rglob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if not isinstance(node, ast.Call) or _dotted_name(node.func) != "log_event":
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != "level":
+                    continue
+                if isinstance(keyword.value, ast.Constant) and isinstance(
+                    keyword.value.value, str
+                ):
+                    offenders.append(
+                        f"{path.relative_to(SOURCE_ROOT)}:{node.lineno}: "
+                        f"level={keyword.value.value!r}"
+                    )
+    assert offenders == []

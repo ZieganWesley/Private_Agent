@@ -50,7 +50,7 @@ def test_hardware_acceleration_policy_options():
 
 
 def test_local_chat_model_applies_configured_acceleration_mode():
-    from private_agent.agent import runtime as agent
+    from private_agent.agent import model_selection
 
     for mode, expected in (
         ("auto", {}),
@@ -63,7 +63,7 @@ def test_local_chat_model_applies_configured_acceleration_mode():
             ),
             patch("private_agent.agent.model_selection.ChatOllama") as chat_model,
         ):
-            agent._make_chat_model(
+            model_selection._make_chat_model(
                 "test-model",
                 thinking_enabled=False,
                 thinking_effort="medium",
@@ -85,7 +85,7 @@ def test_local_chat_model_applies_configured_acceleration_mode():
         patch("private_agent.agent.model_selection.HARDWARE_ACCELERATION_MODE", "auto"),
         patch("private_agent.agent.model_selection.ChatOllama") as chat_model,
     ):
-        agent._make_chat_model(
+        model_selection._make_chat_model(
             "test-model",
             thinking_enabled=False,
             thinking_effort="high",

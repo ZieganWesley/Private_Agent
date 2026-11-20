@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+try:
+    import ollama
+except Exception:  # noqa: BLE001 - optional dependency
+    ollama = None
+
 import logging
 import sys
 from collections.abc import Sequence
 from getpass import getpass
 from typing import Any
-
-import ollama
-from langchain_ollama import ChatOllama
 
 from ..config import (
     APP_CONFIG,
@@ -22,6 +24,7 @@ from ..config import (
     MAX_TOOL_ITERATIONS,
     MODEL_TEMPERATURE,
     OLLAMA_BASE_URL,
+    OLLAMA_BASE_URLS,
     ONLINE_MAX_RETRIES,
     ONLINE_MODEL_LIST_LIMIT,
     ONLINE_MODEL_LIST_TIMEOUT,
@@ -39,7 +42,7 @@ from ..tools import (
     track_ollama_http_clients,
 )
 from .console import console
-from .local_runtimes import LocalRuntime, discover_local_runtimes
+from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
 from .model_capabilities import detect_openai_compatible_capabilities
 from .providers import create_local_chat_model as _create_local_chat_model
 from .providers import (
@@ -53,6 +56,20 @@ from .providers import select_online_model as _select_online_model
 from .providers import validate_online_base_url as _validate_online_base_url
 
 _MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] = {}
+
+
+def _ollama_client(*args, **kwargs):
+    """Lazily import and build an Ollama client (keeps ollama optional)."""
+    import ollama as _ollama
+
+    return _ollama.Client(*args, **kwargs)
+
+
+def ChatOllama(*args, **kwargs):
+    """Lazily import ChatOllama (keeps langchain_ollama optional)."""
+    from langchain_ollama import ChatOllama as _ChatOllama
+
+    return _ChatOllama(*args, **kwargs)
 
 
 def _close_ollama_client(client):
@@ -79,7 +96,7 @@ def inspect_model_capabilities(
     return _inspect_local_model_capabilities(
         model_name,
         base_url=OLLAMA_BASE_URL,
-        client_factory=ollama.Client,
+        client_factory=_ollama_client,
         client_kwargs=ollama_client_kwargs,
         capability_cache=_MODEL_CAPABILITIES_CACHE,
         max_cache_entries=MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
@@ -213,6 +230,11 @@ def _make_selected_local_chat_model(
     capabilities: dict,
 ):
     """Build a chat model using the selected local runtime's supported API."""
+    if not _is_loopback_url(runtime.base_url):
+        console.print(
+            f"[yellow][Remote host][/yellow] {runtime.base_url} is not on this "
+            "machine; prompts and model responses leave the local device."
+        )
     if runtime.kind == "ollama":
         return _make_chat_model(
             model_name,
@@ -232,10 +254,32 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
         if isinstance(model_config, dict)
         else []
     )
+    allow_remote = False
+    if isinstance(model_config, dict):
+        raw = model_config.get("allow_remote_hosts", False)
+        allow_remote = (
+            raw
+            if isinstance(raw, bool)
+            else str(raw).strip().lower() in {"true", "1", "yes", "on"}
+        )
+    configured = endpoints if isinstance(endpoints, list) else []
+    from ..providers.selection import preset_probe_endpoints
+
+    endpoints = configured + [
+        entry
+        for entry in preset_probe_endpoints(configured)
+        if entry["base_url"]
+        not in {
+            str(e.get("base_url", "")).rstrip("/")
+            for e in configured
+            if isinstance(e, dict)
+        }
+    ]
     return discover_local_runtimes(
-        OLLAMA_BASE_URL,
+        OLLAMA_BASE_URLS,
         endpoints,
         client_factory=public_only_sync_client,
+        allow_remote=allow_remote,
     )
 
 
@@ -260,31 +304,18 @@ def select_online_model(use_saved_details: bool | None = None):
 
 
 def fetch_local_chat_models() -> list[str]:
-    client = None
+    """Return chat model names advertised by every reachable local runtime."""
     try:
-        client = ollama.Client(host=OLLAMA_BASE_URL, **ollama_client_kwargs())
-        response = client.list()
-        models_list = (
-            response.get("models", [])
-            if isinstance(response, dict)
-            else getattr(response, "models", [])
-        )
-        chat_models = []
-        embedding_keywords = ["embed", "embedding", "bge", "e5", "nomic-embed"]
-
-        for m in models_list:
-            model_name = (
-                m.get("model", "") if isinstance(m, dict) else getattr(m, "model", "")
-            )
-            if not model_name:
-                continue
-            if any(kw in model_name.lower() for kw in embedding_keywords):
-                continue
-            chat_models.append(model_name)
-        return chat_models
-    except (ValueError, OSError) as e:
-        console.print(f"[red][Warning] Could not connect to Ollama: {e}[/red]")
+        runtimes = _discover_available_local_runtimes()
+    except (ValueError, OSError) as e:  # noqa: BLE001 - discovery boundary
+        console.print(f"[red][Warning] Could not discover local runtimes: {e}[/red]")
         return []
-    finally:
-        if client is not None:
-            _close_ollama_client(client)
+    chat_models: list[str] = []
+    seen: set[str] = set()
+    for runtime in runtimes:
+        for model_name in getattr(runtime, "models", ()) or ():
+            if not model_name or model_name in seen:
+                continue
+            seen.add(model_name)
+            chat_models.append(model_name)
+    return chat_models

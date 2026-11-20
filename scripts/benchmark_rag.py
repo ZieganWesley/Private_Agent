@@ -12,7 +12,8 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
-from private_agent.config import HARDWARE_ACCELERATION_MODE, OLLAMA_BASE_URL
+from private_agent.agent.model_selection import _discover_available_local_runtimes
+from private_agent.config import HARDWARE_ACCELERATION_MODE
 from private_agent.hardware import format_hardware_status, inspect_ollama_hardware
 from private_agent.rag import initialize_knowledge_base
 from private_agent.tools import close_outbound_http_clients
@@ -161,6 +162,36 @@ def _parse_args(argv=None):
     return args
 
 
+def _runtime_hardware_reports() -> list[tuple[str, str]]:
+    """Return a hardware report per reachable local runtime, when available."""
+    try:
+        runtimes = _discover_available_local_runtimes()
+    except (OSError, RuntimeError) as exc:
+        console.print(f"[yellow]Could not discover local runtimes: {exc}[/yellow]")
+        return []
+    reports: list[tuple[str, str]] = []
+    for runtime in runtimes:
+        if getattr(runtime, "kind", "") != "ollama":
+            reports.append(
+                (
+                    runtime.name,
+                    "This runtime does not expose a standardized "
+                    "hardware-placement API.",
+                )
+            )
+            continue
+        try:
+            info = inspect_ollama_hardware(
+                runtime.base_url,
+                HARDWARE_ACCELERATION_MODE,
+            )
+        except (OSError, RuntimeError) as exc:
+            reports.append((runtime.name, f"Hardware status unavailable: {exc}"))
+            continue
+        reports.append((runtime.name, format_hardware_status(info)))
+    return reports
+
+
 def main(argv=None) -> int:
     args = _parse_args(argv)
     documents_root = args.documents.expanduser().resolve()
@@ -169,7 +200,7 @@ def main(argv=None) -> int:
     queries = load_labeled_queries(args.queries.expanduser())
     console.print(
         "[cyan]Building a temporary local RAG index; "
-        "document contents are sent only to the configured Ollama endpoint.[/cyan]"
+        "document contents are sent only to the configured local provider.[/cyan]"
     )
     try:
         with TemporaryDirectory(prefix="private-agent-rag-benchmark-") as temporary:
@@ -183,7 +214,7 @@ def main(argv=None) -> int:
             if retriever is None:
                 raise RuntimeError(
                     "Could not initialize the temporary RAG index; check local "
-                    "Ollama availability, embedding model, and document limits."
+                    "provider availability, embedding model, and document limits."
                 )
             metrics = _benchmark_queries(
                 retriever,
@@ -193,10 +224,7 @@ def main(argv=None) -> int:
                 args.repeats,
             )
             metrics["indexing_seconds"] = indexing_seconds
-            hardware = inspect_ollama_hardware(
-                OLLAMA_BASE_URL,
-                HARDWARE_ACCELERATION_MODE,
-            )
+            runtime_hardware = _runtime_hardware_reports()
             console.print(
                 f"[green]RAG benchmark[/green] "
                 f"({metrics['queries']} queries × {metrics['repeats']} repeats, "
@@ -213,10 +241,15 @@ def main(argv=None) -> int:
                 "Mean reciprocal rank", f"{metrics['mean_reciprocal_rank']:.3f}"
             )
             console.print(table)
-            console.print(
-                "[bold cyan]Ollama hardware status[/bold cyan]\n"
-                + format_hardware_status(hardware)
-            )
+            for runtime_name, report in runtime_hardware:
+                console.print(
+                    f"[bold cyan]{runtime_name} hardware status[/bold cyan]\n{report}"
+                )
+            if not runtime_hardware:
+                console.print(
+                    "[cyan]No local provider is running; hardware placement was "
+                    "not inspected.[/cyan]"
+                )
             del retriever
     finally:
         asyncio.run(close_outbound_http_clients())

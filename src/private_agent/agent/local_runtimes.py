@@ -66,9 +66,11 @@ def _probe_endpoint(
     path: str,
     client_factory: Callable[..., Any],
     timeout: float,
+    *,
+    allow_remote: bool = False,
 ) -> LocalRuntime | None:
     """Probe one loopback endpoint and return its local runtime when reachable."""
-    if not _is_loopback_url(base_url):
+    if not allow_remote and not _is_loopback_url(base_url):
         log_event(
             RUN_LOGGER,
             "provider.local_endpoint_rejected",
@@ -88,14 +90,17 @@ def _probe_endpoint(
             response = client.get(f"{base_url.rstrip('/')}{path}")
             response.raise_for_status()
             models = _extract_models(response.json())
-        if kind == "ollama":
             embedding_markers = ("embed", "embedding", "bge", "e5", "nomic-embed")
             models = tuple(
                 model
                 for model in models
                 if not any(marker in model.lower() for marker in embedding_markers)
             )
-        return LocalRuntime(name, kind, base_url.rstrip("/"), models)
+            if kind == "openai-compatible":
+                from ..providers.identify import identify_server
+
+                name = identify_server(client, base_url) or name
+            return LocalRuntime(name, kind, base_url.rstrip("/"), models)
     except (httpx.HTTPError, ValueError, ConnectionError, OSError) as exc:
         log_event(
             RUN_LOGGER,
@@ -122,11 +127,12 @@ def _probe_endpoint(
 
 
 def discover_local_runtimes(
-    ollama_base_url: str,
+    ollama_base_url: Any,
     openai_compatible_endpoints: Any,
     *,
     client_factory: Callable[..., Any],
     timeout: float = DISCOVERY_TIMEOUT_SECONDS,
+    allow_remote: bool = False,
 ) -> list[LocalRuntime]:
     """Find reachable local model runtimes with bounded parallel probes.
 
@@ -145,9 +151,19 @@ def discover_local_runtimes(
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("Discovery timeout must be positive.")
 
-    endpoints: list[tuple[str, str, str, str]] = [
-        ("Ollama", "ollama", ollama_base_url.rstrip("/"), "/api/tags")
-    ]
+    ollama_urls = (
+        ollama_base_url
+        if isinstance(ollama_base_url, (list, tuple))
+        else [ollama_base_url]
+    )
+    endpoints: list[tuple[str, str, str, str]] = []
+    for index, url in enumerate(ollama_urls):
+        if not isinstance(url, str) or not url.strip():
+            continue
+        name = (
+            "Ollama" if index == 0 and len(ollama_urls) == 1 else f"Ollama {index + 1}"
+        )
+        endpoints.append((name, "ollama", url.rstrip("/"), "/api/tags"))
     if isinstance(openai_compatible_endpoints, list):
         for entry in openai_compatible_endpoints[: MAX_DISCOVERY_ENDPOINTS - 1]:
             if not isinstance(entry, dict):
@@ -188,6 +204,7 @@ def discover_local_runtimes(
                 path,
                 client_factory,
                 timeout,
+                allow_remote=allow_remote,
             )
             for name, kind, base_url, path in unique_endpoints
         ]

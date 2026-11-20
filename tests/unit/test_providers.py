@@ -300,3 +300,111 @@ def test_online_capabilities_treat_a_raising_profile_as_unknown():
     unknown = online_capabilities(ExplodingProfile(), True)
 
     assert all(value is None for value in unknown.values())
+
+
+def _fake_runtime_client(responses):
+    from types import SimpleNamespace
+
+    class FakeClient:
+        is_closed = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def get(self, url):
+            return SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda: responses[url],
+            )
+
+    return lambda **_kwargs: FakeClient()
+
+
+def test_discovery_lists_every_configured_ollama_server():
+    from private_agent.agent.local_runtimes import discover_local_runtimes
+
+    responses = {
+        "http://127.0.0.1:11434/api/tags": {"models": [{"name": "first:latest"}]},
+        "http://127.0.0.1:11435/api/tags": {"models": [{"name": "second:latest"}]},
+    }
+
+    runtimes = discover_local_runtimes(
+        ["http://127.0.0.1:11434", "http://127.0.0.1:11435"],
+        [],
+        client_factory=_fake_runtime_client(responses),
+    )
+
+    assert [(runtime.name, runtime.models) for runtime in runtimes] == [
+        ("Ollama 1", ("first:latest",)),
+        ("Ollama 2", ("second:latest",)),
+    ]
+
+
+def test_embedding_models_are_filtered_out_for_openai_compatible_servers():
+    from private_agent.agent.local_runtimes import discover_local_runtimes
+
+    responses = {
+        "http://127.0.0.1:11434/api/tags": {"models": []},
+        "http://127.0.0.1:1234/v1/models": {
+            "data": [{"id": "qwen3-8b"}, {"id": "text-embedding-nomic"}]
+        },
+    }
+
+    runtimes = discover_local_runtimes(
+        "http://127.0.0.1:11434",
+        [{"name": "LM Studio", "base_url": "http://127.0.0.1:1234/v1"}],
+        client_factory=_fake_runtime_client(responses),
+    )
+
+    assert [runtime.models for runtime in runtimes] == [(), ("qwen3-8b",)]
+
+
+def test_non_loopback_endpoint_is_used_only_when_remote_hosts_are_allowed():
+    from private_agent.agent.local_runtimes import discover_local_runtimes
+
+    responses = {
+        "http://127.0.0.1:11434/api/tags": {"models": []},
+        "https://models.example.test/v1/models": {"data": [{"id": "remote"}]},
+    }
+
+    rejected = discover_local_runtimes(
+        "http://127.0.0.1:11434",
+        [{"name": "remote", "base_url": "https://models.example.test/v1"}],
+        client_factory=_fake_runtime_client(responses),
+    )
+    accepted = discover_local_runtimes(
+        "http://127.0.0.1:11434",
+        [{"name": "remote", "base_url": "https://models.example.test/v1"}],
+        client_factory=_fake_runtime_client(responses),
+        allow_remote=True,
+    )
+
+    assert [runtime.name for runtime in rejected] == ["Ollama"]
+    assert [(runtime.name, runtime.models) for runtime in accepted] == [
+        ("Ollama", ()),
+        ("remote", ("remote",)),
+    ]
+
+
+def test_fetch_local_chat_models_merges_every_reachable_runtime(monkeypatch):
+    from types import SimpleNamespace
+
+    from private_agent.agent import model_selection
+
+    monkeypatch.setattr(
+        model_selection,
+        "_discover_available_local_runtimes",
+        lambda: [
+            SimpleNamespace(name="Ollama", models=("qwen3:8b", "shared:latest")),
+            SimpleNamespace(name="LM Studio", models=("shared:latest", "llama:3")),
+        ],
+    )
+
+    assert model_selection.fetch_local_chat_models() == [
+        "qwen3:8b",
+        "shared:latest",
+        "llama:3",
+    ]

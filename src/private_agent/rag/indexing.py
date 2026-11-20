@@ -13,7 +13,11 @@ from urllib.parse import quote
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_ollama import OllamaEmbeddings
+
+try:
+    from langchain_ollama import OllamaEmbeddings
+except Exception:  # noqa: BLE001 - optional dependency
+    OllamaEmbeddings = None
 
 from private_agent.console import console
 
@@ -27,7 +31,9 @@ from ..config import (
     CHUNKING_SIZE,
     CHUNKING_STRATEGY,
     CHUNKING_UNIT,
+    EMBEDDING_BASE_URL,
     EMBEDDING_MODEL,
+    EMBEDDING_PROVIDER,
     HARDWARE_ACCELERATION_MODE,
     OLLAMA_BASE_URL,
     RAG_INDEX_PATH,
@@ -105,6 +111,15 @@ def _iter_source_files(root: pathlib.Path):
                 continue
             seen_files.add(identity)
             yield file_path, file_stat
+
+
+def embedding_signature() -> str:
+    """Identify the embedder that produced an index (provider, model, endpoint)."""
+    if EMBEDDING_PROVIDER == "ollama":
+        return f"ollama:{EMBEDDING_MODEL}"
+    if EMBEDDING_PROVIDER == "none":
+        return "none"
+    return f"{EMBEDDING_PROVIDER}:{EMBEDDING_MODEL}@{EMBEDDING_BASE_URL.rstrip('/')}"
 
 
 def _source_fingerprint(file_path: pathlib.Path, file_stat) -> dict:
@@ -371,18 +386,57 @@ def initialize_knowledge_base(
         )
         index_state = {}
 
+    if EMBEDDING_PROVIDER == "none":
+        console.print(
+            "[cyan][Info] Embedding provider disabled; RAG will use keyword search only.[/cyan]"
+        )
+        return None
+
+    signature = embedding_signature()
+    recorded_signatures = {
+        str(fingerprint.get("embedding"))
+        for fingerprint in index_state.values()
+        if isinstance(fingerprint, dict) and fingerprint.get("embedding")
+    }
+    if recorded_signatures and signature not in recorded_signatures:
+        console.print(
+            "[yellow][RAG] The embedding provider or model changed "
+            f"({', '.join(sorted(recorded_signatures))} -> {signature}); "
+            "rebuilding the index.[/yellow]"
+        )
+
     console.print(
-        f"[cyan][Info] Initializing local embedding model '{EMBEDDING_MODEL}' via Ollama...[/cyan]"
+        f"[cyan][Info] Initializing local embedding model '{EMBEDDING_MODEL}' via "
+        f"{EMBEDDING_PROVIDER}...[/cyan]"
     )
     try:
-        embeddings = OllamaEmbeddings(
-            model=EMBEDDING_MODEL,
-            base_url=OLLAMA_BASE_URL,
-            **ollama_langchain_client_kwargs(),
-            **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
-        )
-        track_ollama_http_clients(embeddings)
-    except (ValueError, OSError) as e:
+        if EMBEDDING_PROVIDER == "ollama":
+            embeddings = OllamaEmbeddings(
+                model=EMBEDDING_MODEL,
+                base_url=OLLAMA_BASE_URL,
+                **ollama_langchain_client_kwargs(),
+                **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
+            )
+            track_ollama_http_clients(embeddings)
+        else:
+            from ..agent.local_runtimes import _is_loopback_url
+            from ..providers.adapters import OpenAICompatibleAdapter
+
+            if not _is_loopback_url(EMBEDDING_BASE_URL):
+                console.print(
+                    f"[yellow][Remote host][/yellow] {EMBEDDING_BASE_URL} is not "
+                    "on this machine; document chunks leave the local device."
+                )
+            embeddings = OpenAICompatibleAdapter().embeddings(
+                EMBEDDING_MODEL, base_url=EMBEDDING_BASE_URL
+            )
+            if embeddings is None:
+                console.print(
+                    "[red][Error] Could not create the embedding client for "
+                    f"'{EMBEDDING_BASE_URL}'.[/red]"
+                )
+                return None
+    except (ValueError, OSError, TypeError, RuntimeError) as e:  # noqa: BLE001 - optional dependency boundary
         console.print(f"[red][Error] Could not bind embedding model: {e}[/red]")
         return None
 
@@ -430,6 +484,7 @@ def initialize_knowledge_base(
             source_fingerprint = {
                 **_source_fingerprint(file_path, stat),
                 "chunking": chunking.signature(),
+                "embedding": signature,
             }
 
             if ext == ".pdf":

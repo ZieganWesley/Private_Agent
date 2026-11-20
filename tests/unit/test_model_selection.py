@@ -143,3 +143,46 @@ def test_model_capability_overrides_for_compatible_runtimes(monkeypatch):
     detect.assert_called_once()
     assert detect.call_args.kwargs["base_url"] == "http://127.0.0.1:1234/v1"
     assert detect.call_args.kwargs["overrides"] is None
+
+
+def test_remote_local_runtime_warns_that_traffic_leaves_the_machine(
+    monkeypatch, capsys
+):
+    remote_model = object()
+    monkeypatch.setattr(
+        model_selection,
+        "_make_local_openai_compatible_chat_model",
+        MagicMock(return_value=remote_model),
+    )
+    runtime = LocalRuntime(
+        "vLLM", "openai-compatible", "http://192.168.1.20:8000/v1", ("m",)
+    )
+
+    assert (
+        model_selection._make_selected_local_chat_model(
+            runtime,
+            "m",
+            thinking_enabled=False,
+            thinking_effort="medium",
+            capabilities={},
+        )
+        is remote_model
+    )
+    assert "is not on this machine" in capsys.readouterr().out
+
+
+def test_loopback_local_runtime_does_not_warn(monkeypatch, capsys):
+    monkeypatch.setattr(
+        model_selection,
+        "_make_local_openai_compatible_chat_model",
+        MagicMock(return_value=object()),
+    )
+    runtime = LocalRuntime(
+        "LM Studio", "openai-compatible", "http://127.0.0.1:1234/v1", ("m",)
+    )
+
+    model_selection._make_selected_local_chat_model(
+        runtime, "m", thinking_enabled=False, thinking_effort="medium", capabilities={}
+    )
+
+    assert "Remote host" not in capsys.readouterr().out

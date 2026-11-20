@@ -50,6 +50,45 @@ _CONTEXT_FIELDS = (
 )
 _LMSTUDIO_MODEL_PATHS = ("/api/v1/models", "/api/v0/models")
 
+# Last-resort knowledge for model families whose servers report nothing.
+# Names are matched case-insensitively as substrings, longest first, so a more
+# specific entry always wins over a shorter one that also matches.
+MODEL_FAMILY_CAPABILITIES: dict[str, dict[str, bool | int | None]] = {
+    "qwen3": {"tools": True, "thinking": True, "vision": False, "audio": False},
+    "qwen2.5-coder": {
+        "tools": True,
+        "thinking": False,
+        "vision": False,
+        "audio": False,
+    },
+    "qwen2.5-vl": {"tools": True, "thinking": False, "vision": True, "audio": False},
+    "qwen2.5": {"tools": True, "thinking": False, "vision": False, "audio": False},
+    "llava": {"tools": False, "thinking": False, "vision": True, "audio": False},
+    "llama3.2-vision": {
+        "tools": True,
+        "thinking": False,
+        "vision": True,
+        "audio": False,
+    },
+    "llama3": {"tools": True, "thinking": False, "vision": False, "audio": False},
+    "deepseek-r1": {"tools": False, "thinking": True, "vision": False, "audio": False},
+    "deepseek-coder": {
+        "tools": True,
+        "thinking": False,
+        "vision": False,
+        "audio": False,
+    },
+    "mistral": {"tools": True, "thinking": False, "vision": False, "audio": False},
+    "mixtral": {"tools": True, "thinking": False, "vision": False, "audio": False},
+    "phi4": {"tools": True, "thinking": False, "vision": False, "audio": False},
+    "gemma": {"tools": False, "thinking": False, "vision": False, "audio": False},
+    "granite": {"tools": True, "thinking": False, "vision": False, "audio": False},
+    "command-r": {"tools": True, "thinking": False, "vision": False, "audio": False},
+    "nomic-embed": {"tools": False, "thinking": False, "vision": False, "audio": False},
+}
+
+_FAMILY_MATCH_ORDER = sorted(MODEL_FAMILY_CAPABILITIES, key=len, reverse=True)
+
 
 def unknown_capabilities() -> dict[str, bool | int | None]:
     return dict.fromkeys(CAPABILITY_KEYS)
@@ -82,6 +121,20 @@ def merge_capabilities(
         if result["context_window"] is None:
             result["context_window"] = _positive_int(source.get("context_window"))
     result["function_calls"] = result["tools"]
+    return result
+
+
+def capabilities_from_family(model_name: str) -> dict[str, bool | int | None]:
+    """Look up a known model family; unknown families stay None (unknown)."""
+    result = unknown_capabilities()
+    lowered = str(model_name or "").lower()
+    if not lowered:
+        return result
+    for family in _FAMILY_MATCH_ORDER:
+        if family in lowered:
+            for key, value in MODEL_FAMILY_CAPABILITIES[family].items():
+                result[key] = value
+            break
     return result
 
 
@@ -276,7 +329,8 @@ def detect_openai_compatible_capabilities(
                 error_type=type(exc).__name__,
                 exc_info=True,
             )
-        detected = merge_capabilities(*sources)
+        # Server-reported values win; the family table only fills the gaps.
+        detected = merge_capabilities(*sources, capabilities_from_family(model_name))
         if capability_cache is not None:
             if len(capability_cache) >= max_cache_entries:
                 capability_cache.clear()

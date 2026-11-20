@@ -14,7 +14,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-import ollama
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -156,7 +155,6 @@ from .memory_context import (
 from .model_selection import (
     _discover_available_local_runtimes,
     _effective_context_window,
-    _make_chat_model,
     _make_selected_local_chat_model,
     inspect_model_capabilities,
     inspect_openai_compatible_model_capabilities,
@@ -197,6 +195,17 @@ from .prompts import (
 )
 from .prompts import (
     current_datetime_context as _current_datetime_context,
+)
+from .provider_fallback import _bind_tools, _invoke_initial_model_with_fallback
+from .provider_resume import (
+    always_ask_provider,
+    auto_select_single_provider,
+    match_runtime_by_address,
+    persist_provider_choice,
+    provider_record_for_resume,
+)
+from .provider_resume import (
+    offer_provider_start as _offer_provider_start,
 )
 from .providers import (
     has_saved_online_config as _has_saved_online_config,
@@ -409,100 +418,6 @@ async def authorize_network_research(
         is_interactive=lambda: get_tool_context().interactive and sys.stdin.isatty(),
         session_consent_state=session_consent_state,
     )
-
-
-def _bind_tools(llm, tools_list):
-    """Bind the active tool set to an LLM (B1 step 1 helper)."""
-    return llm.bind_tools(tools_list)
-
-
-async def _invoke_initial_model_with_fallback(
-    *,
-    llm,
-    llm_with_tools,
-    tools_list,
-    messages,
-    deadline,
-    selected_model,
-    provider_type,
-    selected_local_runtime,
-    available_models,
-    capabilities,
-    thinking_enabled,
-    thinking_effort,
-    status_message,
-    usage,
-    console,
-):
-    """Invoke the model, falling back to a tool-capable local model if needed."""
-    try:
-        response = await _invoke_with_status(
-            llm_with_tools,
-            messages,
-            deadline,
-            model_name=selected_model,
-            status_message=status_message,
-            local_model=provider_type == "local",
-            thinking_enabled=thinking_enabled,
-            context_usage=usage,
-        )
-        return llm, llm_with_tools, selected_model, capabilities, response
-    except Exception as e:  # noqa: BLE001 - inspects any model error to detect missing tool support, then re-raises
-        error_text = str(e).lower()
-        tool_unsupported = any(
-            marker in error_text
-            for marker in (
-                "does not support tools",
-                "tool calling is not supported",
-                "tools are not supported",
-            )
-        )
-        fallback_model = (
-            next(
-                (
-                    candidate
-                    for candidate in available_models
-                    if candidate != selected_model
-                    and inspect_model_capabilities(candidate)["tools"] is True
-                ),
-                None,
-            )
-            if (
-                tool_unsupported
-                and provider_type == "local"
-                and selected_local_runtime is not None
-                and selected_local_runtime.kind == "ollama"
-            )
-            else None
-        )
-        if fallback_model is None:
-            if provider_type == "online":
-                raise RuntimeError(_online_request_failure(e)) from None
-            raise RuntimeError(f"Local model request failed: {e}") from e
-        console.print(
-            f"[yellow][Model fallback] {selected_model} rejected tool use; "
-            f"retrying with {fallback_model}.[/yellow]"
-        )
-        selected_model = fallback_model
-        capabilities = inspect_model_capabilities(selected_model)
-        llm = _make_chat_model(
-            selected_model,
-            thinking_enabled=thinking_enabled,
-            thinking_effort=thinking_effort,
-            supports_thinking=capabilities["thinking"],
-            context_window=capabilities.get("context_window"),
-        )
-        llm_with_tools = _bind_tools(llm, tools_list)
-        response = await _invoke_with_status(
-            llm_with_tools,
-            messages,
-            deadline,
-            model_name=selected_model,
-            status_message="Generating response...",
-            local_model=provider_type == "local",
-            thinking_enabled=thinking_enabled,
-        )
-        return llm, llm_with_tools, selected_model, capabilities, response
 
 
 @dataclass
@@ -1391,7 +1306,7 @@ async def _build_session_setup(
                     hardware_info = inspect_ollama_hardware(
                         runtime.base_url,
                         HARDWARE_ACCELERATION_MODE,
-                        client_factory=lambda **kwargs: ollama.Client(
+                        client_factory=lambda **kwargs: __import__("ollama").Client(
                             **kwargs, **ollama_client_kwargs()
                         ),
                     )
@@ -1807,11 +1722,49 @@ async def _choose_provider(
     _input = input_provider if input_provider is not None else console.input
     available_models: list = []
     console.print("\n[bold underline]Model Provider[/bold underline]")
+    from ..providers.selection import (
+        installed_but_idle,
+        load_last_provider,
+        match_runtime,
+        optional_dependency_hint,
+        pick_default_model,
+        requested_model,
+        requested_provider,
+    )
+
+    last_used = load_last_provider() or {}
     for runtime_index, runtime in enumerate(local_runtimes, 1):
+        marker = (
+            " [green](last used)[/green]"
+            if last_used.get("display_name") == runtime.name
+            else ""
+        )
         console.print(
             f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
-            f"— {len(runtime.models)} model(s)"
+            f"— {len(runtime.models)} model(s){marker}"
         )
+    idle_providers = installed_but_idle(local_runtimes)
+    for idle in idle_providers:
+        console.print(
+            f"  [yellow]–[/yellow] {idle.preset.name} is installed but not running "
+            f"— {idle.start_hint}"
+        )
+    resumed_record = provider_record_for_resume(memory, session_id)
+    resumed_runtime = None
+    if resumed_record is not None:
+        resumed_runtime = match_runtime(
+            resumed_record.display_name, local_runtimes
+        ) or match_runtime_by_address(resumed_record.base_url, local_runtimes)
+        if resumed_runtime is None:
+            local_runtimes[:], resumed_runtime = _offer_provider_start(
+                console=console,
+                record=resumed_record,
+                idle_providers=idle_providers,
+                runtimes=local_runtimes,
+                refresh=_discover_available_local_runtimes,
+                input_fn=_input,
+                interactive=interactive,
+            )
     online_options: list[tuple[int, str, bool]] = []
     next_choice = len(local_runtimes) + 1
     if preference.online_preference is not None:
@@ -1851,6 +1804,10 @@ async def _choose_provider(
         default_choice = str(online_options[0][0])
     else:
         default_choice = "1" if local_runtimes else str(online_options[0][0])
+    for _index, _runtime in enumerate(local_runtimes, 1):
+        if last_used.get("display_name") == _runtime.name:
+            default_choice = str(_index)
+            break
     last_choice = online_options[-1][0]
     _arrow_choices: list[tuple[str, str]] = []
     for _i, _rt in enumerate(local_runtimes, 1):
@@ -1858,24 +1815,68 @@ async def _choose_provider(
     for _cn, _label, _ in online_options:
         _arrow_choices.append((str(_cn), _label))
     _arrow_choices.append(("0", "Exit"))
-    try:
-        from .interactive import arrow_select as _arrow_select
-
-        _chosen = _arrow_select(
-            "Choose provider:", _arrow_choices, default=default_choice
+    flagged_provider = requested_provider()
+    flagged_runtime = match_runtime(flagged_provider, local_runtimes)
+    if flagged_provider and flagged_runtime is None:
+        console.print(
+            f"[yellow][Provider flag][/yellow] '{flagged_provider}' is not "
+            "reachable; choose from the list below."
         )
-    except Exception:  # noqa: BLE001 - fall back to typed prompt
-        _chosen = None
-    if _chosen is not None:
-        provider_choice = _chosen
+    preselected_model: str | None = None
+    if flagged_runtime is not None:
+        provider_choice = str(local_runtimes.index(flagged_runtime) + 1)
+        console.print(
+            f"[green][Provider flag][/green] Using {flagged_runtime.name} "
+            "(from --provider)."
+        )
+    elif resumed_runtime is not None:
+        provider_choice = str(local_runtimes.index(resumed_runtime) + 1)
+        resumed_models = list(resumed_runtime.models)
+        if resumed_record.model in resumed_models:
+            preselected_model = resumed_record.model
+            console.print(
+                f"[green][Resume][/green] Continuing with {resumed_runtime.name} "
+                f"· {resumed_record.model} (recorded provider)."
+            )
+        elif resumed_models:
+            console.print(
+                f"[yellow][Resume][/yellow] {resumed_runtime.name} no longer has "
+                f"'{resumed_record.model}'; choosing the closest available model."
+            )
+        else:
+            console.print(
+                f"[yellow][Resume][/yellow] {resumed_runtime.name} is running but "
+                "advertises no chat models."
+            )
+    elif (
+        len(local_runtimes) == 1
+        and not always_ask_provider(APP_CONFIG)
+        and auto_select_single_provider(APP_CONFIG)
+    ):
+        provider_choice = "1"
+        console.print(
+            f"[green][Local runtime][/green] Using {local_runtimes[0].name} "
+            "(only reachable local provider)."
+        )
     else:
-        provider_choice = (
-            _input(
-                f"[cyan]Choose provider [1-{last_choice}] "
-                f"(Default: {default_choice}): [/cyan]"
-            ).strip()
-            or default_choice
-        )
+        try:
+            from .interactive import arrow_select as _arrow_select
+
+            _chosen = _arrow_select(
+                "Choose provider:", _arrow_choices, default=default_choice
+            )
+        except Exception:  # noqa: BLE001 - fall back to typed prompt
+            _chosen = None
+        if _chosen is not None:
+            provider_choice = _chosen
+        else:
+            provider_choice = (
+                _input(
+                    f"[cyan]Choose provider [1-{last_choice}] "
+                    f"(Default: {default_choice}): [/cyan]"
+                ).strip()
+                or default_choice
+            )
     if provider_choice == "0":
         preference.exit_requested = True
         return None
@@ -1947,6 +1948,11 @@ async def _choose_provider(
         if PREFERRED_MODEL in available_models:
             available_models.remove(PREFERRED_MODEL)
             available_models.insert(0, PREFERRED_MODEL)
+        model_preference = requested_model() or preselected_model or ""
+        flagged_model = pick_default_model(available_models, model_preference)
+        if model_preference and flagged_model in available_models:
+            available_models.remove(flagged_model)
+            available_models.insert(0, flagged_model)
         if not available_models:
             console.print(
                 f"[yellow]{local_runtime.name} is running, but it advertises "
@@ -1968,17 +1974,34 @@ async def _choose_provider(
                 f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
                 f"installed in {local_runtime.name}.[/yellow]"
             )
+        requested_exact = next(
+            (
+                model_name
+                for model_name in available_models
+                if model_name.strip().lower() == requested_model().lower()
+            ),
+            None,
+        )
+        if requested_exact is not None:
+            preselected_model = requested_exact
         try:
             from .interactive import arrow_select as _arrow_select
 
-            _model_choice = _arrow_select(
-                "Select model:",
-                [(str(i), m) for i, m in enumerate(available_models, 1)],
-                default="1",
+            _model_choice = (
+                None
+                if preselected_model is not None
+                else _arrow_select(
+                    "Select model:",
+                    [(str(i), m) for i, m in enumerate(available_models, 1)],
+                    default="1",
+                )
             )
         except Exception:  # noqa: BLE001 - arrow UI unavailable; fall back to typed prompt
             _model_choice = None
-        if _model_choice is not None and _model_choice.isdigit():
+        if preselected_model is not None:
+            selected_model = preselected_model
+            console.print(f"[green][Model][/green] Using {preselected_model}.")
+        elif _model_choice is not None and _model_choice.isdigit():
             _mc = int(_model_choice) - 1
             if 0 <= _mc < len(available_models):
                 selected_model = available_models[_mc]
@@ -2045,11 +2068,14 @@ async def _choose_provider(
                 error_type=type(exc).__name__,
                 exc_info=True,
             )
+            hint = optional_dependency_hint(local_runtime.kind, exc)
             console.print(
                 f"[red]Could not initialize {local_runtime.name} "
                 f"model '{selected_model}' ({type(exc).__name__}). "
                 "Choose another runtime or online mode.[/red]"
             )
+            if hint:
+                console.print(f"[yellow]{hint}[/yellow]")
             return None
         tools_list = _tools_for_model(
             provider_type=provider_type,
@@ -2101,6 +2127,15 @@ async def _choose_provider(
             runtime=local_runtime.name,
             runtime_kind=local_runtime.kind,
             model=selected_model,
+        )
+        persist_provider_choice(
+            console=console,
+            memory=memory,
+            session_id=session_id,
+            runtime=local_runtime,
+            model=selected_model,
+            capabilities=capabilities,
+            previous=resumed_record,
         )
     else:
         console.print(f"[red]Select a provider from 1 to {last_choice}.[/red]")
@@ -2229,7 +2264,7 @@ async def _choose_provider(
             hardware_info = inspect_ollama_hardware(
                 selected_local_runtime.base_url,
                 HARDWARE_ACCELERATION_MODE,
-                client_factory=lambda **kwargs: ollama.Client(
+                client_factory=lambda **kwargs: __import__("ollama").Client(
                     **kwargs, **ollama_client_kwargs()
                 ),
             )
@@ -2846,7 +2881,7 @@ async def _run_agent_cli_session(
                         hardware_info = inspect_ollama_hardware(
                             selected_local_runtime.base_url,
                             HARDWARE_ACCELERATION_MODE,
-                            client_factory=lambda **kwargs: ollama.Client(
+                            client_factory=lambda **kwargs: __import__("ollama").Client(
                                 **kwargs, **ollama_client_kwargs()
                             ),
                         )
@@ -3706,6 +3741,7 @@ Runtime context:
                         selected_model,
                         capabilities,
                         response,
+                        selected_local_runtime,
                     ) = await _invoke_initial_model_with_fallback(
                         llm=llm,
                         llm_with_tools=llm_with_tools,
@@ -3722,7 +3758,16 @@ Runtime context:
                         status_message=status_message,
                         usage=usage,
                         console=console,
+                        memory=memory,
+                        session_id=session_id,
+                        interactive=interactive,
+                        input_fn=console.input,
+                        discover=_discover_available_local_runtimes,
                     )
+                    if selected_local_runtime is not None:
+                        available_models = list(
+                            selected_local_runtime.models or available_models
+                        )
 
                 async def _run_agent_turn(response) -> Any:
                     nonlocal tools_list, llm_with_tools

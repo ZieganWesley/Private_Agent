@@ -160,6 +160,8 @@ environment whenever you use it):
 ```sh
 python -m venv .venv && source .venv/bin/activate
 python -m pip install .
+# Optional: Ollama support (skip it to use LM Studio or another local server only)
+python -m pip install ".[ollama]"
 # Optional: media input (webcam, video, microphone, Whisper)
 python -m pip install ".[media]"
 # Development and tests

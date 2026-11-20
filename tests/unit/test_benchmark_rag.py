@@ -6,6 +6,7 @@ from langchain_core.documents import Document
 from scripts.benchmark_rag import (
     _benchmark_queries,
     _retrieval_metrics,
+    _runtime_hardware_reports,
     load_labeled_queries,
 )
 
@@ -101,3 +102,61 @@ def test_benchmark_reports_recall_mrr_and_latency_statistics(tmp_path):
     assert result["mean_reciprocal_rank"] == 1
     assert result["median_latency_ms"] >= 0
     assert result["mean_latency_ms"] >= 0
+
+
+def test_hardware_reports_cover_every_reachable_runtime(monkeypatch):
+    import scripts.benchmark_rag as benchmark
+
+    monkeypatch.setattr(
+        benchmark,
+        "_discover_available_local_runtimes",
+        lambda: [
+            benchmark_runtime("Ollama", "ollama", "http://127.0.0.1:11434"),
+            benchmark_runtime(
+                "LM Studio", "openai-compatible", "http://127.0.0.1:1234"
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        benchmark, "inspect_ollama_hardware", lambda *args, **kwargs: {}
+    )
+    monkeypatch.setattr(benchmark, "format_hardware_status", lambda info: "OLLAMA")
+
+    reports = _runtime_hardware_reports()
+
+    assert [name for name, _report in reports] == ["Ollama", "LM Studio"]
+    assert reports[0][1] == "OLLAMA"
+    assert "standardized" in reports[1][1]
+
+
+def test_hardware_reports_are_empty_without_local_providers(monkeypatch):
+    import scripts.benchmark_rag as benchmark
+
+    monkeypatch.setattr(benchmark, "_discover_available_local_runtimes", lambda: [])
+
+    assert _runtime_hardware_reports() == []
+
+
+def test_hardware_reports_survive_a_failing_probe(monkeypatch):
+    import scripts.benchmark_rag as benchmark
+
+    monkeypatch.setattr(
+        benchmark,
+        "_discover_available_local_runtimes",
+        lambda: [benchmark_runtime("Ollama", "ollama", "http://127.0.0.1:11434")],
+    )
+
+    def exploding(*_args, **_kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(benchmark, "inspect_ollama_hardware", exploding)
+
+    reports = _runtime_hardware_reports()
+
+    assert reports == [("Ollama", "Hardware status unavailable: connection refused")]
+
+
+def benchmark_runtime(name, kind, base_url):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(name=name, kind=kind, base_url=base_url, models=())

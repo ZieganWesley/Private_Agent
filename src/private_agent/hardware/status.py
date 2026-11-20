@@ -4,8 +4,6 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlsplit
 
-import ollama
-
 ACCELERATION_MODES = frozenset({"auto", "cpu", "accelerator"})
 
 
@@ -62,7 +60,7 @@ def inspect_ollama_hardware(
         ),
         "error": None,
     }
-    factory = client_factory or ollama.Client
+    factory = client_factory or (lambda **kwargs: __import__("ollama").Client(**kwargs))
     client = None
     try:
         client = factory(host=base_url)

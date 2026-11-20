@@ -172,11 +172,40 @@ def resolve_config_values(
         config, "models", "online_permission_override", False
     )
     EMBEDDING_MODEL = str(config.get("embedding_model", "nomic-embed-text"))
+    EMBEDDING_PROVIDER = configured_choice(
+        config,
+        "rag",
+        "embedding_provider",
+        "ollama",
+        ("ollama", "openai-compatible", "none"),
+    )
+    EMBEDDING_BASE_URL = str(
+        config_section(config, "rag").get(
+            "embedding_base_url", "http://127.0.0.1:1234/v1"
+        )
+    )
     RAG_INDEX_PATH = configured_path(
         config_section(config, "paths").get("rag_index"),
         default_paths["rag_index"],
     )
-    OLLAMA_BASE_URL = str(config.get("ollama_base_url", "http://localhost:11434"))
+    _raw_ollama_urls = config.get(
+        "ollama_base_urls", config.get("ollama_base_url", "http://localhost:11434")
+    )
+    if isinstance(_raw_ollama_urls, str):
+        OLLAMA_BASE_URLS = (
+            [_raw_ollama_urls.strip()] if _raw_ollama_urls.strip() else []
+        )
+    elif isinstance(_raw_ollama_urls, list):
+        OLLAMA_BASE_URLS = [
+            str(item).strip()
+            for item in _raw_ollama_urls
+            if isinstance(item, str) and str(item).strip()
+        ]
+    else:
+        OLLAMA_BASE_URLS = []
+    if not OLLAMA_BASE_URLS:
+        OLLAMA_BASE_URLS = ["http://localhost:11434"]
+    OLLAMA_BASE_URL = OLLAMA_BASE_URLS[0]
     HARDWARE_ACCELERATION_MODE = normalize_acceleration_mode(
         config.get("hardware_acceleration", "auto")
     )
@@ -580,8 +609,11 @@ class Settings:
     model_temperature: float
     online_permission_override: bool
     embedding_model: str
+    embedding_provider: str
+    embedding_base_url: str
     rag_index_path: str
     ollama_base_url: str
+    ollama_base_urls: list[str]
     hardware_acceleration_mode: str
     preferred_model: str | None
     max_tool_iterations: int
