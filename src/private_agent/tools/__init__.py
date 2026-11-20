@@ -126,24 +126,47 @@ class ToolContext:
     enabled_packs: set = field(default_factory=set)
 
 
-_TOOL_CONTEXT = ToolContext(
-    db_path=os.path.abspath(DEFAULT_DB_PATH),
-    skill_directory=(
-        os.path.abspath(os.path.expanduser(SKILLS_FOLDER_DEFAULT))
-        if SKILLS_FOLDER_DEFAULT
-        else None
-    ),
-    runtime_owner_id=uuid.uuid4().hex,
-    schema_read_tables=set(),
-)
-_TOOL_CONTEXT_VAR: contextvars.ContextVar[ToolContext] = contextvars.ContextVar(
-    "private_agent_tool_context", default=_TOOL_CONTEXT
+_TOOL_CONTEXT_UNSET = object()
+
+
+def _new_base_tool_context() -> ToolContext:
+    """Create a fresh per-execution-context base ToolContext.
+
+    Each execution context (asyncio task, thread) materialises its own base
+    instance on first access, so concurrent turns no longer share a single
+    process-global mutable context. Turn-scoped copies are derived from it.
+    """
+    return ToolContext(
+        db_path=os.path.abspath(DEFAULT_DB_PATH),
+        skill_directory=(
+            os.path.abspath(os.path.expanduser(SKILLS_FOLDER_DEFAULT))
+            if SKILLS_FOLDER_DEFAULT
+            else None
+        ),
+        runtime_owner_id=uuid.uuid4().hex,
+        schema_read_tables=set(),
+    )
+
+
+# Retained as a template for callers/tests that reference the historical
+# module-level instance; the live per-context base is created lazily below.
+_TOOL_CONTEXT = _new_base_tool_context()
+_TOOL_CONTEXT_VAR: contextvars.ContextVar = contextvars.ContextVar(
+    "private_agent_tool_context", default=_TOOL_CONTEXT_UNSET
 )
 
 
 def get_tool_context() -> ToolContext:
-    """Return the turn-local tool context (single source of truth)."""
+    """Return the turn-local tool context (single source of truth).
+
+    Materialises a per-execution-context base on first access instead of
+    returning a shared process-global instance, so concurrent turns/threads
+    do not mutate the same context object.
+    """
     context = _TOOL_CONTEXT_VAR.get()
+    if context is _TOOL_CONTEXT_UNSET:
+        context = _new_base_tool_context()
+        _TOOL_CONTEXT_VAR.set(context)
     if (
         context.task_session_id is not None
         and context.task_session_id in context.task_ids
@@ -154,7 +177,7 @@ def get_tool_context() -> ToolContext:
 
 def set_tool_context(context: ToolContext) -> None:
     """Copy a context object into the current turn-local tool context."""
-    current = _TOOL_CONTEXT_VAR.get()
+    current = get_tool_context()
     current.db_path = context.db_path
     current.session_id = context.session_id
     current.turn_id = context.turn_id
@@ -211,6 +234,9 @@ def reset_turn_tool_context(token: Any) -> None:
     turn = _TOOL_CONTEXT_VAR.get()
     _TOOL_CONTEXT_VAR.reset(token)
     outer = _TOOL_CONTEXT_VAR.get()
+    if outer is _TOOL_CONTEXT_UNSET:
+        outer = _new_base_tool_context()
+        _TOOL_CONTEXT_VAR.set(outer)
     if outer is turn:
         return
     for name in _TURN_DURABLE_FIELDS:
@@ -263,7 +289,7 @@ MCP_TOOL_TRANSPORTS = {}
 
 def clear_schema_reads() -> None:
     """Require the model to inspect write-target schemas for each user turn."""
-    _TOOL_CONTEXT.schema_read_tables.clear()
+    get_tool_context().schema_read_tables.clear()
 
 
 def describe_tool_catalog() -> list[dict[str, str]]:

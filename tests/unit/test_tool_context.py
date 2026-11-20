@@ -217,6 +217,47 @@ async def test_interleaved_turns_keep_separate_enabled_packs():
 
 
 @pytest.mark.asyncio
+async def test_concurrent_turns_keep_separate_enabled_packs():
+    """Concurrent turns must not share enabled packs or their base context."""
+    import asyncio
+
+    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+
+    bases = {}
+    observed = {}
+
+    async def turn(name: str, pack: str, peer: str):
+        token = begin_turn_tool_context()
+        base = get_tool_context()
+        bases[name] = id(base)
+        try:
+            get_tool_context().enabled_packs.add(pack)
+            # Simulate enable_capability landing on this turn's context.
+            from private_agent import capabilities as _caps
+
+            _caps.enable_capability(pack)
+            ready_event = turn_events[name]
+            peer_event = turn_events[peer]
+            ready_event.set()
+            await peer_event.wait()
+            observed[name] = set(get_tool_context().enabled_packs)
+            await asyncio.sleep(0)
+        finally:
+            reset_turn_tool_context(token)
+
+    turn_events = {"first": asyncio.Event(), "second": asyncio.Event()}
+    await asyncio.gather(
+        asyncio.create_task(turn("first", "Coding", "second")),
+        asyncio.create_task(turn("second", "Research", "first")),
+    )
+
+    assert bases["first"] != bases["second"]
+    assert observed["first"] == {"Coding"}
+    assert observed["second"] == {"Research"}
+    assert get_tool_context().enabled_packs == set()
+
+
+@pytest.mark.asyncio
 async def test_worker_thread_tool_execution_sees_the_turn_context():
     import asyncio
 
