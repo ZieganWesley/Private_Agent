@@ -33,6 +33,34 @@ logger = logging.getLogger(__name__)
 
 _SANDBOX_SHELL = "/bin/bash"
 _SANDBOX_WORKSPACE = "/workspace"
+_SHELL_CWD_LOCK = threading.RLock()
+_SHELL_CWD = _SANDBOX_WORKSPACE
+
+
+def _current_shell_cwd(sandbox_root: Path) -> str:
+    """Return the sandbox path used as the starting directory for shell calls."""
+    global _SHELL_CWD
+    with _SHELL_CWD_LOCK:
+        candidate = _SHELL_CWD
+    if not isinstance(candidate, str) or not candidate.startswith(_SANDBOX_WORKSPACE):
+        candidate = _SANDBOX_WORKSPACE
+    relative = candidate[len(_SANDBOX_WORKSPACE) :].lstrip("/")
+    host_dir = sandbox_root / relative if relative else sandbox_root
+    try:
+        if not host_dir.is_dir():
+            candidate = _SANDBOX_WORKSPACE
+    except OSError:
+        candidate = _SANDBOX_WORKSPACE
+    with _SHELL_CWD_LOCK:
+        _SHELL_CWD = candidate
+    return candidate
+
+
+def reset_shell_cwd() -> None:
+    """Reset persisted shell state to the workspace root."""
+    global _SHELL_CWD
+    with _SHELL_CWD_LOCK:
+        _SHELL_CWD = _SANDBOX_WORKSPACE
 
 
 def _sandbox_shell_script(command: str, root: Path) -> str:
@@ -101,10 +129,18 @@ def run_shell_command(command: str, timeout: int | None = None) -> str:
             else SandboxManager.get_root()
         )
         if use_shell:
+            shell_state_command = (
+                f"cd {shlex.quote(_current_shell_cwd(sandbox_root))} && {command}"
+            )
+            shell_state_command = (
+                f"{shell_state_command}; __pa_status=$?; "
+                f"printf '\\n__PA_CWD__:%s\\n' \"$(pwd)\"; "
+                f"exit $__pa_status"
+            )
             command_args = [
                 _SANDBOX_SHELL,
                 "-c",
-                _sandbox_shell_script(command, sandbox_root),
+                _sandbox_shell_script(shell_state_command, sandbox_root),
             ]
         isolated_command, environment = code_tasks._isolated_command(
             command_args,
@@ -128,9 +164,21 @@ def run_shell_command(command: str, timeout: int | None = None) -> str:
             timeout=effective_timeout,
             env=environment,
         )
-        return (
-            f"Exit Code: {result.returncode}\nOutput:\n{result.stdout}{result.stderr}"
-        )
+        stdout = result.stdout
+        cwd_match = re.search(r"\n__PA_CWD__:(.+?)(?:\n|$)", stdout)
+        if cwd_match:
+            new_cwd = cwd_match.group(1).strip()
+            if new_cwd.startswith(_SANDBOX_WORKSPACE):
+                relative = new_cwd[len(_SANDBOX_WORKSPACE) :].lstrip("/")
+                host_dir = sandbox_root / relative if relative else sandbox_root
+                try:
+                    if host_dir.is_dir():
+                        with _SHELL_CWD_LOCK:
+                            _SHELL_CWD = new_cwd
+                except OSError:
+                    pass
+            stdout = re.sub(r"\n__PA_CWD__:[^\n]*", "", stdout, count=1)
+        return f"Exit Code: {result.returncode}\nOutput:\n{stdout}{result.stderr}"
     except subprocess.TimeoutExpired:
         return f"Error: Command timed out after {effective_timeout} seconds."
     except RuntimeError as exc:
@@ -203,6 +251,7 @@ def start_background_process(command: str, timeout: int | None = None) -> str:
             else SandboxManager.get_root()
         )
         if use_shell:
+            command = f"cd {shlex.quote(_current_shell_cwd(sandbox_root))} && {command}"
             command_args = [
                 _SANDBOX_SHELL,
                 "-c",

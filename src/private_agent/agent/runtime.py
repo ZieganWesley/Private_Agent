@@ -210,7 +210,7 @@ from .session_types import ProviderPreference, ProviderSelection, SessionSetup
 from .status import (
     SUMMARIZING,
     StatusIndicator,
-    context_state_line,
+    status_line,
     summarizing_message,
 )
 from .streaming import (
@@ -3496,7 +3496,9 @@ Runtime context:
                     max_context=effective_context - output_budget,
                     system_prompts=system_prompts,
                 )
-                usage = _print_context_state(context_stats, output_budget)
+                usage = _print_context_state(
+                    context_stats, output_budget, selected_model, turn_permission_mode
+                )
 
                 messages = (
                     system_prompts
@@ -3821,10 +3823,39 @@ Runtime context:
         break
 
 
-def _print_context_state(stats: dict, output_tokens: int) -> tuple[int, int]:
-    """Print the context-window gauge and return the ``(used, maximum)`` pair."""
-    console.print(context_state_line(stats, output_tokens))
-    return stats["tokens"], stats["max"]
+def _print_context_state(
+    stats: dict,
+    output_tokens: int,
+    model_name: str | None = None,
+    permission_mode: str = "auto",
+) -> tuple[int, int]:
+    """Print the consolidated status line and return ``(used, maximum)``."""
+    values = stats if isinstance(stats, dict) else {}
+    context_tokens = values.get("tokens", 0)
+    context_maximum = values.get("max", 0)
+    try:
+        from ..tools.shell import background_process_indicator
+
+        process_status = background_process_indicator()
+    except (ImportError, OSError, RuntimeError, ValueError):  # pragma: no cover
+        process_status = ""
+    status_text = status_line(
+        model_name, context_tokens, context_maximum, permission_mode, output_tokens
+    )
+    if process_status:
+        status_text = f"{status_text} | {process_status}"
+    console.print(f"[dim]{status_text}[/dim]")
+    used = context_tokens
+    try:
+        used = int(context_tokens)
+    except (TypeError, ValueError):
+        used = 0
+    maximum = context_maximum
+    try:
+        maximum = int(context_maximum)
+    except (TypeError, ValueError):
+        maximum = 0
+    return used, maximum
 
 
 def _history_with_summary(summary: str, history: list) -> list:
