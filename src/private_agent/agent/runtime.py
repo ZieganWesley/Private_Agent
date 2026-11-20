@@ -155,7 +155,6 @@ from .memory_context import (
 from .model_selection import (
     _discover_available_local_runtimes,
     _effective_context_window,
-    _make_chat_model,
     _make_selected_local_chat_model,
     inspect_model_capabilities,
     inspect_openai_compatible_model_capabilities,
@@ -197,12 +196,12 @@ from .prompts import (
 from .prompts import (
     current_datetime_context as _current_datetime_context,
 )
+from .provider_fallback import _bind_tools, _invoke_initial_model_with_fallback
 from .provider_resume import (
     always_ask_provider,
     auto_select_single_provider,
     match_runtime_by_address,
     persist_provider_choice,
-    provider_loss_guidance,
     provider_record_for_resume,
 )
 from .provider_resume import (
@@ -419,108 +418,6 @@ async def authorize_network_research(
         is_interactive=lambda: get_tool_context().interactive and sys.stdin.isatty(),
         session_consent_state=session_consent_state,
     )
-
-
-def _bind_tools(llm, tools_list):
-    """Bind the active tool set to an LLM (B1 step 1 helper)."""
-    return llm.bind_tools(tools_list)
-
-
-async def _invoke_initial_model_with_fallback(
-    *,
-    llm,
-    llm_with_tools,
-    tools_list,
-    messages,
-    deadline,
-    selected_model,
-    provider_type,
-    selected_local_runtime,
-    available_models,
-    capabilities,
-    thinking_enabled,
-    thinking_effort,
-    status_message,
-    usage,
-    console,
-):
-    """Invoke the model, falling back to a tool-capable local model if needed."""
-    try:
-        response = await _invoke_with_status(
-            llm_with_tools,
-            messages,
-            deadline,
-            model_name=selected_model,
-            status_message=status_message,
-            local_model=provider_type == "local",
-            thinking_enabled=thinking_enabled,
-            context_usage=usage,
-        )
-        return llm, llm_with_tools, selected_model, capabilities, response
-    except Exception as e:  # noqa: BLE001 - inspects any model error to detect missing tool support, then re-raises
-        error_text = str(e).lower()
-        tool_unsupported = any(
-            marker in error_text
-            for marker in (
-                "does not support tools",
-                "tool calling is not supported",
-                "tools are not supported",
-            )
-        )
-        fallback_model = (
-            next(
-                (
-                    candidate
-                    for candidate in available_models
-                    if candidate != selected_model
-                    and inspect_model_capabilities(candidate)["tools"] is True
-                ),
-                None,
-            )
-            if (
-                tool_unsupported
-                and provider_type == "local"
-                and selected_local_runtime is not None
-                and selected_local_runtime.kind == "ollama"
-            )
-            else None
-        )
-        if fallback_model is None:
-            if provider_type == "online":
-                raise RuntimeError(_online_request_failure(e)) from None
-            if selected_local_runtime is not None:
-                console.print(
-                    provider_loss_guidance(
-                        runtime_name=selected_local_runtime.name,
-                        session_id=get_tool_context().session_id or "<session id>",
-                        discover=_discover_available_local_runtimes,
-                    )
-                )
-            raise RuntimeError(f"Local model request failed: {e}") from e
-        console.print(
-            f"[yellow][Model fallback] {selected_model} rejected tool use; "
-            f"retrying with {fallback_model}.[/yellow]"
-        )
-        selected_model = fallback_model
-        capabilities = inspect_model_capabilities(selected_model)
-        llm = _make_chat_model(
-            selected_model,
-            thinking_enabled=thinking_enabled,
-            thinking_effort=thinking_effort,
-            supports_thinking=capabilities["thinking"],
-            context_window=capabilities.get("context_window"),
-        )
-        llm_with_tools = _bind_tools(llm, tools_list)
-        response = await _invoke_with_status(
-            llm_with_tools,
-            messages,
-            deadline,
-            model_name=selected_model,
-            status_message="Generating response...",
-            local_model=provider_type == "local",
-            thinking_enabled=thinking_enabled,
-        )
-        return llm, llm_with_tools, selected_model, capabilities, response
 
 
 @dataclass
@@ -3844,6 +3741,7 @@ Runtime context:
                         selected_model,
                         capabilities,
                         response,
+                        selected_local_runtime,
                     ) = await _invoke_initial_model_with_fallback(
                         llm=llm,
                         llm_with_tools=llm_with_tools,
@@ -3860,7 +3758,16 @@ Runtime context:
                         status_message=status_message,
                         usage=usage,
                         console=console,
+                        memory=memory,
+                        session_id=session_id,
+                        interactive=interactive,
+                        input_fn=console.input,
+                        discover=_discover_available_local_runtimes,
                     )
+                    if selected_local_runtime is not None:
+                        available_models = list(
+                            selected_local_runtime.models or available_models
+                        )
 
                 async def _run_agent_turn(response) -> Any:
                     nonlocal tools_list, llm_with_tools

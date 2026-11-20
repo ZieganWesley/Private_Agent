@@ -20,6 +20,7 @@ from private_agent.agent import (
     execute_tool_call,
     memory_context,
     model_selection,
+    provider_fallback,
     run_agent_cli_async,
     streaming,
     tool_display,
@@ -2623,7 +2624,7 @@ async def test_local_model_switch_preserves_thinking_and_hardware_settings(
     monkeypatch.setattr(agent, "THINKING_TOGGLE_DEFAULT", True)
     monkeypatch.setattr(agent, "THINKING_EFFORT_DEFAULT", "high")
     monkeypatch.setattr(agent, "HARDWARE_ACCELERATION_MODE", "cpu")
-    monkeypatch.setattr(agent, "_make_chat_model", make_model)
+    monkeypatch.setattr(provider_fallback, "_make_chat_model", make_model)
     monkeypatch.setattr(model_selection, "_make_chat_model", make_model)
     monkeypatch.setattr(
         agent,
@@ -3124,7 +3125,7 @@ async def test_local_tool_incompatibility_fallback_preserves_task_context_and_po
     def make_fallback_model(name, **kwargs):
         return IncompatiblePrimary() if name == "primary-model" else fallback
 
-    monkeypatch.setattr(agent, "_make_chat_model", make_fallback_model)
+    monkeypatch.setattr(provider_fallback, "_make_chat_model", make_fallback_model)
     monkeypatch.setattr(model_selection, "_make_chat_model", make_fallback_model)
     monkeypatch.setattr(
         agent,
@@ -3198,7 +3199,12 @@ async def test_local_runtime_does_not_fallback_on_unrecognized_request_failure(
         },
     )
     monkeypatch.setattr(
-        agent,
+        provider_fallback,
+        "_make_chat_model",
+        lambda name, **kwargs: primary if name == "primary-model" else Fallback(),
+    )
+    monkeypatch.setattr(
+        model_selection,
         "_make_chat_model",
         lambda name, **kwargs: primary if name == "primary-model" else Fallback(),
     )
