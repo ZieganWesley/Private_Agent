@@ -289,18 +289,34 @@ def reset_turn_tool_context(token: Any) -> None:
 
 
 # --- NETWORK CONNECTIVITY UTILITY ---
+_INTERNET_CHECK_CACHE_TTL_SECONDS = 30.0
+_INTERNET_CHECK_CACHE: dict[tuple[str, int, float], tuple[float, bool]] = {}
+_INTERNET_CHECK_CACHE_LOCK = threading.Lock()
+
+
 def check_internet_connection(
     host: str = INTERNET_CHECK_HOST,
     port: int = INTERNET_CHECK_PORT,
     timeout: float = INTERNET_CHECK_TIMEOUT,
 ) -> bool:
     """Quick socket probe to check active TCP-level internet reachability."""
+    cache_key = (str(host), int(port), float(timeout))
+    now = time.monotonic() if "time" in globals() else __import__("time").monotonic()
+    with _INTERNET_CHECK_CACHE_LOCK:
+        cached = _INTERNET_CHECK_CACHE.get(cache_key)
+        if cached is not None and now - cached[0] < _INTERNET_CHECK_CACHE_TTL_SECONDS:
+            return cached[1]
     try:
         with socket.create_connection((host, port), timeout=timeout):
             pass
-        return True
+        result = True
     except OSError:
-        return False
+        result = False
+    with _INTERNET_CHECK_CACHE_LOCK:
+        _INTERNET_CHECK_CACHE[cache_key] = (now, result)
+        while len(_INTERNET_CHECK_CACHE) > 64:
+            _INTERNET_CHECK_CACHE.pop(next(iter(_INTERNET_CHECK_CACHE)))
+    return result
 
 
 NETWORK_TOOL_NAMES = frozenset(

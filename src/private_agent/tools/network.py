@@ -43,6 +43,42 @@ _EXPLICIT_PRIVATE_NETWORKS = tuple(
     for network in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")
 )
 
+_DNS_CACHE_TTL_SECONDS = 60.0
+_DNS_CACHE_MAX_ENTRIES = 256
+_DNS_CACHE: dict[tuple[str, int, bool, int], tuple[float, list[str]]] = {}
+_DNS_CACHE_LOCK = threading.Lock()
+
+
+def _dns_cache_key(host: str, port: int, allow_loopback: bool, resolver_id: int = 0) -> tuple[str, int, bool, int]:
+    return (host.casefold(), int(port), bool(allow_loopback), int(resolver_id))
+
+
+def _cached_dns_records(key: tuple[str, int, bool, int]) -> list[str] | None:
+    now = time.monotonic()
+    with _DNS_CACHE_LOCK:
+        entry = _DNS_CACHE.get(key)
+        if entry is None:
+            return None
+        stored_at, records = entry
+        if now - stored_at >= _DNS_CACHE_TTL_SECONDS:
+            _DNS_CACHE.pop(key, None)
+            return None
+        return list(records)
+
+
+def _store_dns_records(key: tuple[str, int, bool, int], records: list[str]) -> None:
+    now = time.monotonic()
+    with _DNS_CACHE_LOCK:
+        _DNS_CACHE[key] = (now, list(records))
+        while len(_DNS_CACHE) > _DNS_CACHE_MAX_ENTRIES:
+            _DNS_CACHE.pop(next(iter(_DNS_CACHE)))
+
+
+def clear_dns_cache() -> None:
+    with _DNS_CACHE_LOCK:
+        _DNS_CACHE.clear()
+
+
 _RESOLVER_SCRIPT = (
     "import json,socket,sys;"
     "records=socket.getaddrinfo(sys.argv[1],int(sys.argv[2]),0,socket.SOCK_STREAM);"
@@ -171,18 +207,22 @@ def _resolve_validated_peer(
     deadline = time.monotonic() + min(max(0.0, timeout), NETWORK_REQUEST_TIMEOUT)
     if deadline <= time.monotonic():
         raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.")
-    try:
-        literal_address = ipaddress.ip_address(host.split("%", 1)[0])
-        records = [str(literal_address)]
-    except ValueError:
+    cache_key = _dns_cache_key(host, port, allow_loopback, id(_getaddrinfo_with_timeout))
+    records = _cached_dns_records(cache_key)
+    if records is None:
         try:
-            records = _getaddrinfo_with_timeout(
-                host,
-                port,
-                max(0.0, deadline - time.monotonic()),
-            )
-        except httpcore.ConnectTimeout as exc:
-            raise OSError("Outbound DNS resolution timed out.") from exc
+            literal_address = ipaddress.ip_address(host.split("%", 1)[0])
+            records = [str(literal_address)]
+        except ValueError:
+            try:
+                records = _getaddrinfo_with_timeout(
+                    host,
+                    port,
+                    max(0.0, deadline - time.monotonic()),
+                )
+            except httpcore.ConnectTimeout as exc:
+                raise OSError("Outbound DNS resolution timed out.") from exc
+        _store_dns_records(cache_key, records)
     return _validated_peer_addresses(host, records, allow_loopback)
 
 
@@ -195,15 +235,19 @@ async def _resolve_validated_peer_async(
     deadline = time.monotonic() + min(max(0.0, timeout), NETWORK_REQUEST_TIMEOUT)
     if deadline <= time.monotonic():
         raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.")
-    try:
-        literal_address = ipaddress.ip_address(host.split("%", 1)[0])
-        records = [str(literal_address)]
-    except ValueError:
-        records = await _getaddrinfo_async_with_timeout(
-            host,
-            port,
-            max(0.0, deadline - time.monotonic()),
-        )
+    cache_key = _dns_cache_key(host, port, allow_loopback, id(_getaddrinfo_async_with_timeout))
+    records = _cached_dns_records(cache_key)
+    if records is None:
+        try:
+            literal_address = ipaddress.ip_address(host.split("%", 1)[0])
+            records = [str(literal_address)]
+        except ValueError:
+            records = await _getaddrinfo_async_with_timeout(
+                host,
+                port,
+                max(0.0, deadline - time.monotonic()),
+            )
+        _store_dns_records(cache_key, records)
     return _validated_peer_addresses(host, records, allow_loopback)
 
 
