@@ -757,7 +757,6 @@ async def _preflight_tool_calls(
                     **execution_options,
                 )
             )
-
 async def _execute_tool_batch(
     *,
     response,
@@ -910,16 +909,13 @@ async def _execute_tool_batch(
             "was not verified."
         )
         return response, True
-
     return response, False
-
 def _select_permission_mode(interactive: bool = True) -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
         console,
         lambda: interactive,
     )
-
 async def execute_tool_call(
     tool_call: dict,
     *,
@@ -948,7 +944,6 @@ async def execute_tool_call(
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
     get_event_bus().emit(ToolStarted(call_id=str(call_id or ""), tool_name=str(name or ""), args_summary=str(safe_args), started_at=tool_started))
-
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
         name, args, SandboxManager.get_root()
     )[0]
@@ -1111,7 +1106,6 @@ async def execute_tool_call(
             )
     else:
         result = f"Error: Tool {name} not found."
-
     result_text = _redact_sensitive_values(str(result), args)
     has_error = _tool_result_is_error(result_text)
     if len(result_text) > max_output_chars:
@@ -1156,7 +1150,6 @@ async def execute_tool_call(
         result_text += "\n\n[Post-tool checks]\n" + _hook_output
     get_event_bus().emit(ToolFinished(call_id=str(call_id or ""), status="ok", duration=time.monotonic() - tool_started, output_size=len(result_text)))
     return ToolMessage(content=result_text, tool_call_id=call_id)
-
 async def _execute_task_tool_call(
     memory: PersistentMemory,
     task_id: str,
@@ -1186,7 +1179,6 @@ async def _execute_task_tool_call(
             content=f"Error: {error_details}",
             tool_call_id=call_id,
         )
-
     try:
         with logging_context(task_id=task_id):
             result = await execute_tool_call(tool_call, **execution_options)
@@ -1210,7 +1202,6 @@ async def _execute_task_tool_call(
                 exc_info=True,
             )
         raise
-
     result_text = str(result.content)
     lowered_result = result_text.casefold()
     outcome_status = (
@@ -3610,11 +3601,17 @@ Runtime context:
                 async def _run_agent_turn(response) -> Any:
                     iteration = 0
                     tool_call_count = 0
-                    while getattr(response, "tool_calls", None) and (
+                    while (
+                        getattr(response, "tool_calls", None)
+                        or not f_integration.is_plan_complete(_f_state)  # noqa: B023
+                    ) and (
                         tool_iteration_limit is None or iteration < tool_iteration_limit  # noqa: B023
                     ):
                         iteration += 1
                         _iter_start = f_integration.record_iteration(_f_state, iteration)  # noqa: B023
+                        if not getattr(response, "tool_calls", None):
+                            f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok", True)  # noqa: B023
+                            break
                         if (
                             iteration == 1
                             and response.content
@@ -3686,7 +3683,10 @@ Runtime context:
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
-                        f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
+                        f_integration.finish_iteration(
+                            _f_state, iteration, _iter_start, "ok",  # noqa: B023
+                            not bool(getattr(response, "tool_calls", None)),
+                        )
                         if stop:
                             break
 

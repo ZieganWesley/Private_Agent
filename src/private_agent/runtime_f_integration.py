@@ -12,6 +12,15 @@ from . import context_manager, json_output, task_orchestrator, timeline
 from .config import DEFAULT_DB_PATH
 
 
+def is_plan_complete(state: dict[str, Any]) -> bool:
+    plan = (state or {}).get("plan")
+    fn = getattr(plan, "is_complete", None)
+    try:
+        return bool(fn()) if callable(fn) else False
+    except Exception:  # noqa: BLE001  # plan may be None/partial
+        return False
+
+
 def trim_context(text: str, total_tokens: int) -> str:
     """Trim text to the context budget using context_manager."""
     with contextlib.suppress(Exception):
@@ -42,7 +51,7 @@ def record_iteration(state: dict[str, Any], step_index: int, pack: str = "Core")
     if plan is not None:
         with contextlib.suppress(Exception):
             if not plan.steps:
-                plan.add_step("tool iteration", {pack})
+                plan.add_step("execute request", {pack})
             plan.mark(0, "running")
     conn = state.get("conn")
     if conn is not None:
@@ -52,11 +61,14 @@ def record_iteration(state: dict[str, Any], step_index: int, pack: str = "Core")
     return step_start
 
 
-def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, status: str = "ok") -> None:
+def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, status: str = "ok", complete: bool = False) -> None:
     plan = state.get("plan")
     if plan is not None and getattr(plan, "steps", None):
         with contextlib.suppress(Exception):
-            plan.mark(0, "done" if status == "ok" else "failed")
+            if complete and status == "ok":
+                plan.mark(0, "done")
+            elif status != "ok":
+                plan.mark(0, "failed")
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):
