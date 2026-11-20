@@ -143,9 +143,7 @@ def get_tool_context() -> ToolContext:
         _TOOL_CONTEXT.task_session_id is not None
         and _TOOL_CONTEXT.task_session_id in _TOOL_CONTEXT.task_ids
     ):
-        _TOOL_CONTEXT.task_id = _TOOL_CONTEXT.task_ids[
-            _TOOL_CONTEXT.task_session_id
-        ]
+        _TOOL_CONTEXT.task_id = _TOOL_CONTEXT.task_ids[_TOOL_CONTEXT.task_session_id]
     return _TOOL_CONTEXT
 
 
@@ -480,6 +478,7 @@ def create_skill(name: str, description: str, instructions: str) -> str:
 
 
 # Import after network helpers are defined; web.py depends on this shared policy layer.
+from .ask_user import ask_user
 from .filesystem import (
     apply_workspace_patch,
     commit_git_changes,
@@ -497,7 +496,6 @@ from .filesystem import (
     search_workspace_text,
     stage_git_changes,
 )
-from .ask_user import ask_user
 from .location import fetch_current_location, get_weather
 from .memory import (
     delete_chat_history_entry_from_sqlite,

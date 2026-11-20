@@ -57,4 +57,3 @@ def create_text_plan(memory, session_id, user_input, llm, console) -> None:
     console.print(
         "[green]Text plan saved in SQLite; review and approve it with /tasks.[/green]"
     )
-PY
