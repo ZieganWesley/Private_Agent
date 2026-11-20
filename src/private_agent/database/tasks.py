@@ -445,6 +445,28 @@ class TaskMixin:
                 self._refresh_task_resume_capsule(task_id)
         return [row[0] for row in rows]
 
+    def get_session_active_task(self, session_id: str) -> dict | None:
+        """Return this session's newest active plan, if it has one."""
+        if not session_id:
+            return None
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT task_id FROM agent_tasks WHERE originating_session_id = ? "
+                "AND status = 'active' ORDER BY updated_at DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            return self.get_task(row[0])
+        except ValueError as exc:
+            _LOGGER.warning(
+                "Ignoring malformed active task id=%s error=%s",
+                row[0],
+                str(exc)[:160],
+            )
+            return None
+
     def get_task(self, task_id: str) -> dict | None:
         with self._lock:
             task = self.conn.execute(

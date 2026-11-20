@@ -266,6 +266,25 @@ class StatusIndicator:
         return False
 
 
+def status_line(
+    model_name: Any,
+    context_tokens: Any = 0,
+    context_maximum: Any = 0,
+    permission_mode: Any = "auto",
+) -> str:
+    """Return a compact status line with model, context use and permission mode."""
+    percent = context_percent(context_tokens, context_maximum)
+    bar = context_bar(context_tokens, context_maximum, width=12)
+    parts = [
+        f"model={model_name}",
+        f"context={percent}%",
+        f"permission={permission_mode}",
+    ]
+    if bar:
+        parts.append(bar)
+    return " | ".join(parts)
+
+
 def _default_console() -> Any:
     """Return the shared CLI console as it is bound right now."""
     return console

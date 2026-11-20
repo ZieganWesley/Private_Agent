@@ -236,6 +236,7 @@ class ConnectionMixin:
                     ("episode_outcome", "TEXT"),
                     ("episode_task_id", "TEXT"),
                     ("skill_task_id", "TEXT"),
+                    ("turn_id", "TEXT"),
                 ):
                     if column not in columns:
                         self.conn.execute(

@@ -277,3 +277,15 @@ def test_indicator_honours_every_known_phase(phase):
 
     spinner, style = status.phase_spinner(phase)
     assert console.created[0].kwargs == {"spinner": spinner, "spinner_style": style}
+
+
+def test_status_line_includes_model_context_and_permission():
+    line = status.status_line("gpt-test", 2500, 10000, "full")
+    assert "model=gpt-test" in line
+    assert "context=25.0%" in line
+    assert "permission=full" in line
+
+
+def test_status_line_handles_missing_context():
+    line = status.status_line("local", 0, 0, "auto")
+    assert line == "model=local | context=0.0% | permission=auto"

@@ -110,6 +110,8 @@ class ToolContext:
     """Snapshot of the mutable runtime state tools depend on (B3 step 1)."""
 
     db_path: str
+    session_id: str | None = None
+    turn_id: str | None = None
     task_session_id: str | None = None
     task_id: str | None = None
     skill_directory: str | None = None
@@ -118,6 +120,8 @@ class ToolContext:
     code_task: Any = None
     runtime_owner_id: str | None = None
     schema_read_tables: set | None = None
+    interactive: bool = True
+    subagent_runner: Any = None
 
 
 _TOOL_CONTEXT = ToolContext(
@@ -140,12 +144,16 @@ def get_tool_context() -> ToolContext:
 def set_tool_context(context: ToolContext) -> None:
     """Copy a context object into the process-local tool context."""
     _TOOL_CONTEXT.db_path = context.db_path
+    _TOOL_CONTEXT.session_id = context.session_id
+    _TOOL_CONTEXT.turn_id = context.turn_id
     _TOOL_CONTEXT.task_session_id = context.task_session_id
     _TOOL_CONTEXT.task_id = context.task_id
     _TOOL_CONTEXT.skill_directory = context.skill_directory
     _TOOL_CONTEXT.skill_registry = context.skill_registry
     _TOOL_CONTEXT.skill_session_id = context.skill_session_id
     _TOOL_CONTEXT.code_task = context.code_task
+    _TOOL_CONTEXT.interactive = context.interactive
+    _TOOL_CONTEXT.subagent_runner = context.subagent_runner
     if context.runtime_owner_id is not None:
         _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:
@@ -463,6 +471,9 @@ def create_skill(name: str, description: str, instructions: str) -> str:
 # Import after network helpers are defined; web.py depends on this shared policy layer.
 from .filesystem import (
     apply_workspace_patch,
+    commit_git_changes,
+    create_git_branch,
+    create_pull_request,
     delete_workspace_file,
     edit_local_file,
     inspect_workspace_git,
@@ -473,6 +484,7 @@ from .filesystem import (
     search_workspace_files,
     search_workspace_symbols,
     search_workspace_text,
+    stage_git_changes,
 )
 from .location import fetch_current_location, get_weather
 from .memory import (
@@ -488,7 +500,14 @@ from .planner import (
     revise_task_plan,
     update_todo_step,
 )
-from .shell import run_shell_command
+from .shell import (
+    get_background_process_status,
+    list_background_processes,
+    run_shell_command,
+    start_background_process,
+    stop_background_process,
+)
+from .subagents import run_subagent
 from .web import download_web_file, fetch_webpage, web_search
 
 AVAILABLE_TOOLS = {
@@ -498,12 +517,21 @@ AVAILABLE_TOOLS = {
     "search_workspace_text": search_workspace_text,
     "search_workspace_symbols": search_workspace_symbols,
     "inspect_workspace_git": inspect_workspace_git,
+    "create_git_branch": create_git_branch,
+    "stage_git_changes": stage_git_changes,
+    "commit_git_changes": commit_git_changes,
+    "create_pull_request": create_pull_request,
     "edit_local_file": edit_local_file,
     "preview_workspace_patch": preview_workspace_patch,
     "apply_workspace_patch": apply_workspace_patch,
     "rename_workspace_file": rename_workspace_file,
     "delete_workspace_file": delete_workspace_file,
     "run_shell_command": run_shell_command,
+    "run_subagent": run_subagent,
+    "start_background_process": start_background_process,
+    "get_background_process_status": get_background_process_status,
+    "stop_background_process": stop_background_process,
+    "list_background_processes": list_background_processes,
     "web_search": web_search,
     "list_directory": list_directory,
     "fetch_webpage": fetch_webpage,

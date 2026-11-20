@@ -568,13 +568,37 @@ This project's only flag is `--verbose-startup` (`cli.py`), and it exits when
 not run in an interactive terminal. There is no JSON output and no way to pass
 a prompt as an argument.
 
+- **Non-interactive done (step 6.8):** `private-agent -p "prompt"` runs a single
+  prompt and exits without a terminal. `--output text|json` selects the final
+  answer format, `--permission-mode` overrides the configured mode, and startup
+  questions default to their Enter values. Tools that need approval return a
+  denial `ToolMessage` advising `--permission-mode full` instead of prompting,
+  and online consent, shell history deletion and terminal-only paths fail
+  closed. The exit-time session summary is skipped to avoid an extra model call.
+
 **C3. No session resume and no undo.**
-- Both tools can continue a past conversation (`--continue` / `--resume`).
-  Here, past sessions only come back as summaries; the conversation itself
-  cannot be resumed. Only plans can be resumed.
+- **Resume done (step 6.6):** `private-agent --continue` reopens the most recent
+  session, `--resume <session_id>` reopens a named one and `--list-sessions`
+  shows the ids, all with the saved message history. A resumed session now
+  skips the resume prompt, is not summarized twice, keeps its own episode out
+  of the startup memory context, and reclaims its active plan lease when the
+  earlier process is gone. Provider and model are still not recorded, so a
+  resumed conversation runs on whatever the current startup selects (12.9).
+- **Undo done (step 6.7):** `/undo` restores the workspace edits of the last
+  agent turn and rewinds that turn's saved conversation messages. Snapshots
+  now carry a session/turn manifest (`.agent_snapshots/index.jsonl`), update
+  messages in `chat_history` record their `turn_id`, and each file is restored
+  atomically and checksum-verified, so a failed restore never leaves half a
+  file. Files the turn created are removed again.
+- Limits: only workspace edits made through the file tools are recorded (shell
+  commands, MCP tools, edits made before this step and paths outside the active
+  workspace have no manifest entry; their old `.bak` files stay harmless).
+  `/undo` steps back one turn at a time, and when a file cannot be restored the
+  conversation is kept and the failure is reported so the undo can be retried.
+  Provider and model recording is still step 12.9.
 - Claude Code can rewind code and conversation to a checkpoint. Here, edits
-  are copied to `.agent_snapshots/`, but there is no command to restore them.
-  Git checkpoints exist only inside coding tasks.
+  are copied to `.agent_snapshots/` and `/undo` restores them. Git checkpoints
+  exist only inside coding tasks.
 
 **C4. Commands only run on Linux.**
 The sandbox needs Bubblewrap and `prlimit`, so on macOS and Windows the shell,
@@ -1644,10 +1668,11 @@ true: embedding-model filtering only runs for Ollama.
 
 - **I1p. Nothing records which provider was used.** `chat_history` has no
   provider or model column (`database/memory.py:234`), and `agent_tasks` has
-  none either. Conversations cannot be resumed at all yet (C3), and task plans
-  resumed through `/tasks` simply use whatever provider the current session
-  has, with no check that it suits the plan (for example vision or tool
-  support).
+  none either. Conversations can be resumed since step 6.6, but a resumed
+  conversation still runs on whatever provider and model the current startup
+  selects, and task plans resumed through `/tasks` have no check that the
+  provider suits the plan (for example vision or tool support). Step 12.9
+  covers recording the provider and falling back on resume.
 
 ### I2. Target behaviour
 
@@ -2239,7 +2264,7 @@ order, because its steps depend on Stage 4 work.
 | 121 | 7.7 | Automatic step validation | Medium | 6.3 |
 | 122 | 8.17 | Calculator / sandboxed Python tool | Medium | 6.3 |
 | 123 | 6.6 | Session resume (`--continue`, `--resume`) | Hard | 4.2, 4.5 |
-| 124 | 6.7 | `/rewind` from snapshots | Medium | 6.6 |
+| 124 | 6.7 | `/undo` from snapshots | Medium | 6.6 |
 | 125 | 8.11 | Chat commands (`/new`, `/retry`, `/edit`, `/export`) | Medium | 6.6 |
 | 126 | 6.13 | Subagents | Hard | 3.4, 4.2 |
 | 127 | 9.2 | Capability packs | Hard | 3.4, 4.2 |
@@ -2318,21 +2343,21 @@ For when to do each step, see the implementation order in section L1.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 6.1 | Load a project instruction file (`AGENTS.md`, with an optional project-specific name set in config) from the workspace root and add it to the system prompt | C1 | 3.1 | Instructions in `AGENTS.md` show up in the model's context, with a test |
-| 6.2 | Add `offset` and `limit` (line-based) to `read_local_file`, and report the total line count so the model can page through large files | C10 | — | Large files can be read in chunks |
-| 6.3 | **Partly done:** pipes, `&&`, `||` and redirects now run through `bash -c` inside the sandbox (commit `3296c63`). Remaining: a per-call timeout (with a maximum) and background processes with tools to read output and stop them | C5 | 4.3, 5.1 | `pytest \| tail`, a 5-minute build and a dev server all work inside the sandbox |
-| 6.4 | Add an Esc / single Ctrl+C handler that cancels the current turn and keeps the session; keep double Ctrl+C for exit | C12 | 4.2 | Stopping a turn does not end the session |
-| 6.5 | Add permission rules in config (`allow` / `deny` lists matching tool names, commands and paths, for example `run_shell_command(pytest *)` or `read_local_file(.env)`) | C8 | 4.3 | Allowed commands run in Auto mode without a prompt; denied ones are refused |
-| 6.6 | Save full conversations per session and add `--continue` (last session) and `--resume` (pick a session). Provider fallback on resume is step 12.9 | C3 | 4.2, 4.5 | A resumed session continues with its full message history |
-| 6.7 | Add `/rewind` to restore files from `.agent_snapshots/` (and the conversation) to an earlier turn | C3 | 6.6 | An edit can be undone from the prompt, with a test |
-| 6.8 | Add a non-interactive mode: `private-agent -p "prompt"` with `--output text\|json`, using the permission rules from 6.5 instead of prompts | C2 | 4.2, 6.5 | The agent can run from a script or CI job without a terminal |
-| 6.9 | Add project-level config (`.private_agent/settings.json` in the workspace) and a local override file, merged over the user config | C13 | 3.1 | Project settings apply only inside that project |
-| 6.10 | Add custom slash commands loaded from Markdown files in a commands folder (user and project level) | C9 | 4.4 | A new `.md` file becomes a `/command` |
-| 6.11 | Add hooks in config: scripts that run before or after tool calls and at session start, able to block a call | C7 | 4.2, 4.3 | A post-edit formatter hook runs after every file edit |
-| 6.12 | Add git write tools (create branch, stage, commit) behind permission checks, and optional PR creation through `gh` | C11 | 4.3, 6.5 | The agent can commit its work on a new branch after approval |
-| 6.13 | Add subagents: a tool that starts a separate agent loop with its own context and a limited tool set, and returns only its summary | C6 | 4.2, 3.4 | A search can be delegated without filling the main context |
-| 6.14 | ~~Add a macOS sandbox using Seatbelt~~ Moved to steps 11.7–11.8 | C4 | 11.8 | See 11.8 |
-| 6.15 | ~~Add a status line showing model, context use and permission mode~~ Replaced by step 9.7 | C14 | 9.7 | See 9.7 |
+| 6.1 | **Done:** load a project instruction file (`AGENTS.md`, or a name set via `agent.project_instructions_file`) from the workspace root and append it to the system prompt | C1 | 3.1 | Instructions in `AGENTS.md` show up in the model's context |
+| 6.2 | **Done:** add `offset` and `limit` (line-based) to `read_local_file`, and report the total line count so the model can page through large files | C10 | — | Large files can be read in chunks |
+| 6.3 | **Done:** pipes, `&&`, `||` and redirects run through `bash -c`; per-call `timeout` added; background process tools (`start_background_process`, `get_background_process_status`, `stop_background_process`, `list_background_processes`) with status indicator | C5 | 4.3, 5.1 | `pytest \| tail`, a 5-minute build and a dev server all work inside the sandbox |
+| 6.4 | **Done:** a Ctrl+C during a turn cancels that turn and keeps the session (double Ctrl+C exits) | C12 | 4.2 | Stopping a turn does not end the session |
+| 6.5 | **Done:** permission rules in config (`permissions.allow` / `permissions.deny` lists matching tool names, commands and paths, e.g. `run_shell_command(pytest *)` or `read_local_file(.env)`); deny takes precedence and allowed calls skip approval | C8 | 4.3 | Allowed commands run in Auto mode without a prompt; denied ones are refused |
+| 6.6 | **Done:** conversations were already saved per session; `--continue` reopens the most recent session, `--resume <session_id>` reopens a named one and `--list-sessions` lists ids with message counts and last activity (no interactive picker). A resumed run loads the saved history, skips the resume prompt, does not summarize an already-summarized session again, keeps that session's own episode out of the startup memory context, and reclaims its active plan lease when the earlier owner is gone. Provider fallback on resume is step 12.9 | C3 | 4.2, 4.5 | A resumed session continues with its full message history |
+| 6.7 | **Done:** `/undo` restores the files the last agent turn changed and rewinds that turn's saved conversation. `sandbox/linux.py` and `tools/filesystem.py` now return the backup they wrote and append a `{target, backup, session_id, turn_id, size, sha256, action}` line to `.agent_snapshots/index.jsonl` (sidecar manifest beside the backups rather than a DB table, so snapshots survive a database reset or a different `paths.database`); undo takes the earliest snapshot per file in the turn, restores through a temp file plus `os.replace` after a checksum check, removes files the turn created, and writes an `undo` marker so a turn cannot be undone twice. `chat_history.turn_id` (additive migration) and `save_message(..., turn_id=)` give the turn identity; `delete_turn_messages` rewinds the conversation. Failures (missing or changed backup, unwritable or symlinked target, unreadable manifest, sqlite error) are reported without touching the current file, and the conversation is only rewound after every file was restored | C3 | 6.6 | An edit can be undone from the prompt, with a test |
+| 6.8 | **Done:** `private-agent -p "prompt"` runs one prompt and exits without a terminal; `--output text\|json` and `--permission-mode` are accepted, startup questions default to their Enter values, approval-needing tools return a denial `ToolMessage` advising `--permission-mode full`, and online consent/history deletion fail closed. The exit-time summary is skipped | C2 | 4.2, 6.5 | The agent can run from a script or CI job without a terminal |
+| 6.9 | **Done:** project-level config (`.private_agent/settings.json` and `.private_agent/settings.local.json` in the workspace) merged over the user config | C13 | 3.1 | Project settings apply only inside that project |
+| 6.10 | **Done:** custom slash commands loaded from Markdown files in `~/.private_agent/commands` and `<workspace>/.private_agent/commands` | C9 | 4.4 | A new `.md` file becomes a `/command` |
+| 6.11 | **Done:** hooks in config (`hooks` section) run before/after tool calls and at session start; PreToolUse hooks can block a call via nonzero exit or JSON decision; matcher filtering; timeout handling | C7 | 4.2, 4.3 | A post-edit formatter hook runs after every file edit |
+| 6.12 | **Done:** git write tools (`create_git_branch`, `stage_git_changes`, `commit_git_changes`, `create_pull_request`) behind permission checks; optional PR via `gh` | C11 | 4.3, 6.5 | The agent can commit its work on a new branch after approval |
+| 6.13 | **Done:** `run_subagent` tool starts a focused agent loop with a limited tool set and returns only its summary; wired into runtime sessions | C6 | 4.2, 3.4 | A search can be delegated without filling the main context |
+| 6.14 | **Done:** macOS sandbox via Seatbelt (`sandbox-exec`) in `code_tasks` isolation, with camera/microphone permission guidance | C4 | 11.8 | Shell and stdio MCP work on macOS |
+| 6.15 | **Done:** status line helper in `agent/status.py` reports model, context use and permission mode | C14 | 9.7 | Running status can show model, context and permission mode |
 
 ### Phase 7: Planning mode
 
@@ -2520,9 +2545,9 @@ follow it.
 ### Progress tracker
 
 Track progress by stage (section L1), since that is the order of work. The
-phase list below shows coverage by topic. Last updated 2026-11-19, after the
-Part A/Part B audit and step 5.7 (web search providers) on
-`audit-a-b-completion` (all 850 tests pass, 12 skipped, 0 failed).
+phase list below shows coverage by topic. Last updated 2026-11-20, after
+step 6.8 (non-interactive mode) on `headless-mode` (all 924 tests pass, 12 skipped,
+0 failed).
 
 - [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
@@ -2537,7 +2562,7 @@ By phase:
 - [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
 - [ ] Phase 5: Improve individual features (5.1–5.9; 5.1, 5.3, 5.4, 5.5, 5.6 and 5.7 done)
-- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15)
+- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15; 6.6, 6.7 and 6.8 done)
 - [ ] Phase 7: Planning mode (7.1–7.10)
 - [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)
 - [ ] Phase 9: Single combined runtime and live status (9.1–9.11)

@@ -75,14 +75,42 @@ def _run_git(
 
 def isolation_unavailable_reason() -> str | None:
     """Explain why OS-isolated project commands cannot run on this host."""
-    if platform.system() != "Linux":
-        return "OS-level command isolation is currently supported only on Linux."
+    system = platform.system()
+    if system == "Darwin":
+        if not shutil.which("sandbox-exec"):
+            return (
+                "Install macOS sandbox support (sandbox-exec) for filesystem, "
+                "network, and resource isolation. Grant Terminal or the agent "
+                "camera and microphone permissions in System Settings if those "
+                "features are needed."
+            )
+        return None
+    if system != "Linux":
+        return (
+            "OS-level command isolation is currently supported only on Linux and macOS."
+        )
     if not shutil.which("bwrap") or not shutil.which("prlimit"):
         return (
             "Install Bubblewrap (bwrap) and util-linux (prlimit) for "
             "filesystem, network, and resource isolation."
         )
     return None
+
+
+def _seatbelt_profile(root: Path, *, allow_network: bool = False) -> str:
+    """Return a minimal Seatbelt profile for the workspace."""
+    root_text = str(root.resolve())
+    if '"' in root_text or "\n" in root_text or "\r" in root_text:
+        raise ValueError("Workspace path cannot contain a quote or newline.")
+    root_text = root_text.replace("\\", "\\\\").replace('"', '\\"')
+    network_rule = "(allow network*)" if allow_network else "(deny network*)"
+    return (
+        "(version 1)\n"
+        f"{network_rule}\n"
+        "(allow default)\n"
+        "(deny file-write*)\n"
+        f'(allow file-write* (subpath "{root_text}"))\n'
+    )
 
 
 def _isolated_command(
@@ -94,6 +122,14 @@ def _isolated_command(
     unavailable_reason = isolation_unavailable_reason()
     if unavailable_reason:
         raise RuntimeError(f"Command execution is disabled: {unavailable_reason}")
+    if platform.system() == "Darwin":
+        sandbox_exec = shutil.which("sandbox-exec")
+        if not sandbox_exec:
+            raise RuntimeError(
+                "Command execution is disabled: macOS sandbox support is unavailable."
+            )
+        profile = _seatbelt_profile(root, allow_network=allow_network)
+        return ([sandbox_exec, "-p", profile, *command], dict(os.environ))
     bwrap = shutil.which("bwrap")
     prlimit = shutil.which("prlimit")
     root = root.resolve()

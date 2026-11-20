@@ -1,5 +1,7 @@
 """Permission policy helpers for agent tool calls."""
 
+import fnmatch
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -261,3 +263,46 @@ async def authorize_network_research(
         if choice != "y":
             return False, "Online research was not approved; no request was made."
     return True, ""
+
+
+def _permission_rule_target(name: str, args: Any) -> str:
+    if not isinstance(args, dict):
+        return ""
+    if name == "run_shell_command":
+        return str(args.get("command", ""))
+    for key in ("file_path", "path", "dir_path", "target_path"):
+        if key in args and args.get(key) is not None:
+            return str(args.get(key))
+    return " ".join(str(value) for value in args.values())
+
+
+def permission_rule_matches(rule: str, name: str, args: Any) -> bool:
+    """Return True if a permission rule string matches a tool call."""
+    rule = (rule or "").strip()
+    match = re.match(r"^([A-Za-z0-9_]+)(?:\((.*)\))?$", rule)
+    if not match:
+        return False
+    tool_name = match.group(1)
+    if tool_name != name:
+        return False
+    arg_pattern = match.group(2)
+    if arg_pattern is None:
+        return True
+    arg_pattern = arg_pattern.strip()
+    if not arg_pattern:
+        return True
+    target = _permission_rule_target(name, args)
+    return fnmatch.fnmatch(target, arg_pattern)
+
+
+def evaluate_permission_rules(
+    allow_rules: Any, deny_rules: Any, name: str, args: Any
+) -> tuple[str | None, str | None]:
+    """Return ("deny"/"allow", rule) if a rule matches, else (None, None)."""
+    for rule in list(deny_rules or []):
+        if permission_rule_matches(str(rule), name, args):
+            return "deny", str(rule)
+    for rule in list(allow_rules or []):
+        if permission_rule_matches(str(rule), name, args):
+            return "allow", str(rule)
+    return None, None

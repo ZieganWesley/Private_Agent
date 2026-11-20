@@ -43,6 +43,11 @@ DEFAULT_CONFIG = {
         "rag_documents": "~/.private_agent/rag/",
         "rag_index": "~/.private_agent/rag_index",
     },
+    "permissions": {
+        "allow": [],
+        "deny": [],
+    },
+    "hooks": {},
     "models": {
         "ollama_base_url": "http://localhost:11434",
         "local_openai_compatible_endpoints": [
@@ -88,6 +93,7 @@ DEFAULT_CONFIG = {
         "streaming_output": True,
         "visible_reasoning": False,
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
+        "project_instructions_file": "AGENTS.md",
     },
     "memory": {
         "conversation_retention_days": 0,
@@ -350,6 +356,55 @@ def _persist_categorized_config(config: dict) -> None:
         )
 
 
+def _deep_merge_config(base: dict, override: dict) -> dict:
+    """Recursively merge override into base, returning a new dict."""
+    result = {key: value for key, value in (base or {}).items()}
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge_config(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def discover_project_config_paths(workspace_root=None) -> list[pathlib.Path]:
+    """Return candidate project-level config files for a workspace."""
+    root = (
+        pathlib.Path(workspace_root)
+        if workspace_root is not None
+        else pathlib.Path.cwd()
+    )
+    base = root / ".private_agent"
+    return [base / "settings.json", base / "settings.local.json"]
+
+
+def load_project_config(workspace_root=None) -> dict:
+    """Load and merge project-level config files for a workspace."""
+    merged: dict = {}
+    for path in discover_project_config_paths(workspace_root):
+        if not path.is_file():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8").strip()
+            if not content:
+                continue
+            data = json.loads(content)
+            if isinstance(data, dict):
+                merged = _deep_merge_config(merged, data)
+        except (json.JSONDecodeError, ValueError, OSError) as exc:
+            warnings.warn(
+                f"Malformed project configuration in {path}: {exc}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+    return merged
+
+
+def merge_project_config(config: dict, workspace_root=None) -> dict:
+    """Merge project-level config over an already merged config."""
+    return _deep_merge_config(config or {}, load_project_config(workspace_root))
+
+
 def load_or_create_config() -> dict:
     """Load the per-user config, creating it with defaults when missing."""
     if not CONFIG_FILE_PATH.exists():
@@ -369,7 +424,8 @@ def load_or_create_config() -> dict:
                 RuntimeWarning,
                 stacklevel=2,
             )
-            return _merge_config(DEFAULT_CONFIG)
+            merged = _merge_config(DEFAULT_CONFIG)
+            return _deep_merge_config(merged, load_project_config())
 
     try:
         if CONFIG_FILE_PATH.is_dir():
@@ -379,7 +435,8 @@ def load_or_create_config() -> dict:
 
         content = CONFIG_FILE_PATH.read_text(encoding="utf-8").strip()
         if not content:
-            return _merge_config(DEFAULT_CONFIG)
+            merged = _merge_config(DEFAULT_CONFIG)
+            return _deep_merge_config(merged, load_project_config())
 
         config = json.loads(content)
         if not isinstance(config, dict):
@@ -388,6 +445,7 @@ def load_or_create_config() -> dict:
             )
 
         merged = _merge_config(config)
+        merged = _deep_merge_config(merged, load_project_config())
         _persist_categorized_config(_categorized_config_for_file(config, merged))
         return merged
     except (
@@ -485,6 +543,9 @@ MAX_OUTPUT_TOKENS = SETTINGS.max_output_tokens
 STREAMING_OUTPUT = SETTINGS.streaming_output
 VISIBLE_REASONING = SETTINGS.visible_reasoning
 SYSTEM_PROMPT = SETTINGS.system_prompt
+PERMISSION_ALLOW_RULES = SETTINGS.permission_allow_rules
+PERMISSION_DENY_RULES = SETTINGS.permission_deny_rules
+PROJECT_INSTRUCTIONS_FILE = SETTINGS.project_instructions_file
 CONVERSATION_RETENTION_DAYS = SETTINGS.conversation_retention_days
 EPISODE_RETENTION_DAYS = SETTINGS.episode_retention_days
 REGISTERED_SKILL_RETENTION_DAYS = SETTINGS.registered_skill_retention_days

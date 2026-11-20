@@ -16,6 +16,16 @@ class ReadFileInput(BaseModel):
     file_path: str = Field(
         ..., description="Path to the file to read relative to workspace."
     )
+    offset: int = Field(
+        0,
+        ge=0,
+        description="Zero-based starting line number for paged reads.",
+    )
+    limit: int | None = Field(
+        None,
+        ge=1,
+        description="Maximum number of lines to return (omit for all).",
+    )
 
 
 class EditFileInput(BaseModel):
@@ -23,8 +33,46 @@ class EditFileInput(BaseModel):
     content: str = Field(..., description="Full text content to write into the file.")
 
 
+class RunSubagentInput(BaseModel):
+    task: str = Field(
+        ..., min_length=1, description="Task for the subagent to complete."
+    )
+    allowed_tools: list[str] | None = Field(
+        default=None,
+        description="Optional allowlist of tool names the subagent may use.",
+    )
+    max_iterations: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of agent loop iterations for the subagent.",
+    )
+
+
 class RunShellInput(BaseModel):
     command: str = Field(..., description="Shell command string to execute.")
+    timeout: int | None = Field(
+        None,
+        ge=1,
+        description="Per-call timeout in seconds (clamped to the configured maximum).",
+    )
+
+
+class StartBackgroundProcessInput(BaseModel):
+    command: str = Field(..., description="Shell command to run in the background.")
+    timeout: int | None = Field(
+        None,
+        ge=1,
+        description="Optional startup timeout in seconds.",
+    )
+
+
+class BackgroundProcessIdInput(BaseModel):
+    process_id: str = Field(..., min_length=1, max_length=128)
+
+
+class ListBackgroundProcessesInput(BaseModel):
+    pass
 
 
 class WebSearchInput(BaseModel):
@@ -115,6 +163,28 @@ class RenameWorkspaceFileInput(BaseModel):
 
 class DeleteWorkspaceFileInput(BaseModel):
     file_path: str = Field(..., min_length=1, max_length=1024)
+
+
+class CreateGitBranchInput(BaseModel):
+    branch_name: str = Field(..., min_length=1, max_length=255)
+    directory: str = Field(default=".", max_length=1024)
+
+
+class StageGitChangesInput(BaseModel):
+    paths: list[str] = Field(default_factory=lambda: ["."])
+    directory: str = Field(default=".", max_length=1024)
+
+
+class CommitGitChangesInput(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4096)
+    directory: str = Field(default=".", max_length=1024)
+
+
+class CreatePullRequestInput(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    body: str = Field(default="", max_length=10000)
+    base: str | None = Field(default=None, max_length=255)
+    directory: str = Field(default=".", max_length=1024)
 
 
 class InspectWorkspaceGitInput(BaseModel):

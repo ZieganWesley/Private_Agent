@@ -194,6 +194,15 @@ def resolve_config_values(
     STREAMING_OUTPUT = configured_bool(config, "agent", "streaming_output", True)
     VISIBLE_REASONING = configured_bool(config, "agent", "visible_reasoning", False)
     _configured_system_prompt = config_section(config, "agent").get("system_prompt")
+    PROJECT_INSTRUCTIONS_FILE = config_section(config, "agent").get(
+        "project_instructions_file", "AGENTS.md"
+    )
+    PERMISSION_ALLOW_RULES = list(
+        config_section(config, "permissions").get("allow", []) or []
+    )
+    PERMISSION_DENY_RULES = list(
+        config_section(config, "permissions").get("deny", []) or []
+    )
     SYSTEM_PROMPT = (
         _configured_system_prompt.strip()
         if isinstance(_configured_system_prompt, str)
@@ -575,6 +584,9 @@ class Settings:
     streaming_output: bool
     visible_reasoning: bool
     system_prompt: str
+    permission_allow_rules: list
+    permission_deny_rules: list
+    project_instructions_file: str | None
     conversation_retention_days: Any
     episode_retention_days: Any
     registered_skill_retention_days: Any

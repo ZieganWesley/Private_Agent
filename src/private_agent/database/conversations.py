@@ -19,12 +19,38 @@ from ..config import (
 class ConversationMixin:
     """Conversation history, summaries and retention."""
 
-    def save_message(self, session_id: str, role: str, content: str):
+    def save_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        *,
+        turn_id: str | None = None,
+    ) -> int:
+        """Store one message and return its row id.
+
+        ``turn_id`` ties the human/AI pair of an agent turn together so `/undo`
+        can rewind exactly that turn; older callers that omit it keep working.
+        """
         with self._lock, self.conn:
-            self.conn.execute(
-                "INSERT INTO chat_history (session_id, role, content) VALUES (?, ?, ?)",
-                (session_id, role, content),
+            cursor = self.conn.execute(
+                "INSERT INTO chat_history (session_id, role, content, turn_id) "
+                "VALUES (?, ?, ?, ?)",
+                (session_id, role, content, turn_id),
             )
+            return int(cursor.lastrowid or 0)
+
+    def delete_turn_messages(self, session_id: str, turn_id: str) -> int:
+        """Remove the conversation rows of one turn and return how many went."""
+        if not session_id or not turn_id:
+            return 0
+        with self._lock, self.conn:
+            cursor = self.conn.execute(
+                "DELETE FROM chat_history WHERE session_id = ? AND turn_id = ? "
+                "AND role IN ('human', 'ai')",
+                (session_id, turn_id),
+            )
+            return int(cursor.rowcount or 0)
 
     def get_history(
         self,
@@ -83,6 +109,45 @@ class ConversationMixin:
             )
             rows = cursor.fetchall()
         return [row[0] for row in rows]
+
+    def session_exists(self, session_id: str) -> bool:
+        """Return whether any saved row belongs to this session id."""
+        if not session_id:
+            return False
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT 1 FROM chat_history WHERE session_id = ? LIMIT 1",
+                (session_id,),
+            ).fetchone()
+        return row is not None
+
+    def ends_with_summary(self, session_id: str) -> bool:
+        """Return whether a summary is already the newest saved row."""
+        if not session_id:
+            return False
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT role FROM chat_history WHERE session_id = ? "
+                "AND role != 'skill' ORDER BY id DESC LIMIT 1",
+                (session_id,),
+            ).fetchone()
+        return bool(row) and row[0] == "summary"
+
+    def list_sessions_with_metadata(self, limit: int = 20) -> list[dict]:
+        """Return recent session ids with message counts and last activity."""
+        limit = max(1, min(int(limit), 200))
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT session_id, COUNT(*), MAX(timestamp) FROM chat_history "
+                "WHERE role NOT IN ('summary', 'skill') "
+                "AND session_id IS NOT NULL "
+                "GROUP BY session_id ORDER BY MAX(id) DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {"session_id": row[0], "messages": int(row[1]), "last_at": row[2]}
+            for row in rows
+        ]
 
     def count_conversation_messages(self) -> int:
         """Count saved chat/tool messages, excluding summaries and skill links."""

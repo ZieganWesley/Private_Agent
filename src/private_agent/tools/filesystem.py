@@ -3,6 +3,8 @@
 import contextlib
 import difflib
 import fnmatch
+import hashlib
+import logging
 import os
 import re
 import selectors
@@ -20,8 +22,12 @@ from ..config import (
     MAX_READ_FILE_BYTES,
 )
 from ..sandbox import SandboxManager
+from ..snapshots import SnapshotError, record_snapshot
 from .schemas import (
     ApplyWorkspacePatchInput,
+    CommitGitChangesInput,
+    CreateGitBranchInput,
+    CreatePullRequestInput,
     DeleteWorkspaceFileInput,
     EditFileInput,
     InspectWorkspaceGitInput,
@@ -32,7 +38,10 @@ from .schemas import (
     SearchWorkspaceFilesInput,
     SearchWorkspaceSymbolsInput,
     SearchWorkspaceTextInput,
+    StageGitChangesInput,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 _MAX_SEARCH_FILES = 10_000
 _MAX_SEARCH_BYTES = 16 * 1024 * 1024
@@ -286,7 +295,12 @@ def _snapshot_file_descriptor(
     name: str,
     *,
     max_bytes: int | None = None,
-) -> None:
+) -> tuple[str, int, str]:
+    """Copy the open file into the snapshot directory and hash what was copied.
+
+    Returns ``(backup_name, size, sha256)`` so the caller can record a manifest
+    entry without reading the backup a second time.
+    """
     root_fd = os.open(
         SandboxManager.get_root().resolve(),
         os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
@@ -309,6 +323,7 @@ def _snapshot_file_descriptor(
             )
             backup_fd_closed = False
             source_stat = os.fstat(file_fd)
+            digest = hashlib.sha256()
             try:
                 offset = 0
                 while chunk := os.pread(file_fd, 1024 * 1024, offset):
@@ -316,6 +331,7 @@ def _snapshot_file_descriptor(
                         raise ValueError(
                             "Workspace file grew beyond the snapshot size limit."
                         )
+                    digest.update(chunk)
                     view = memoryview(chunk)
                     while view:
                         written = os.write(backup_fd, view)
@@ -338,10 +354,47 @@ def _snapshot_file_descriptor(
             finally:
                 if not backup_fd_closed:
                     os.close(backup_fd)
+            return snapshot_name, offset, digest.hexdigest()
         finally:
             os.close(snapshot_fd)
     finally:
         os.close(root_fd)
+
+
+def _record_edit_snapshot(
+    file_path: str,
+    backup: tuple[str, int, str] | None,
+    *,
+    action: str | None = None,
+) -> None:
+    """Record the edit for `/undo`; never fail the edit because of the manifest.
+
+    ``backup`` is the tuple returned by :func:`_snapshot_file_descriptor` for a
+    pre-existing file, or ``None`` for a path this turn created.
+    """
+    from . import get_tool_context
+
+    context = get_tool_context()
+    if not context.session_id or not context.turn_id:
+        return
+    resolved_action = action or ("modify" if backup is not None else "create")
+    try:
+        record_snapshot(
+            root=SandboxManager.get_root(),
+            target=file_path,
+            backup=backup[0] if backup is not None else None,
+            action=resolved_action,
+            size=backup[1] if backup is not None else 0,
+            sha256=backup[2] if backup is not None else "",
+            session_id=context.session_id,
+            turn_id=context.turn_id,
+        )
+    except (OSError, ValueError, SnapshotError) as exc:
+        _LOGGER.warning(
+            "Could not record the snapshot manifest entry for %s: %s",
+            file_path,
+            str(exc)[:200],
+        )
 
 
 def _read_file_descriptor(file_fd: int, file_stat: os.stat_result) -> str:
@@ -454,6 +507,7 @@ def _write_workspace_file_safely(file_path: str, content: bytes) -> None:
             )
         except FileNotFoundError:
             original_stat = None
+        backup = None
         if original_stat is not None:
             if not stat.S_ISREG(original_stat.st_mode):
                 raise ValueError("Only regular workspace files can be overwritten.")
@@ -468,8 +522,9 @@ def _write_workspace_file_safely(file_path: str, content: bytes) -> None:
                 original_stat.st_ino,
             ) or opened_stat.st_nlink > 1:
                 raise OSError("Workspace file changed before the write.")
-            _snapshot_file_descriptor(file_fd, name)
+            backup = _snapshot_file_descriptor(file_fd, name)
         _write_workspace_replacement(parent_fd, name, original_stat, content)
+        _record_edit_snapshot(file_path, backup)
     finally:
         if file_fd is not None:
             os.close(file_fd)
@@ -479,7 +534,7 @@ def _write_workspace_file_safely(file_path: str, content: bytes) -> None:
 def _delete_workspace_file_safely(file_path: str) -> None:
     parent_fd, name, file_fd, original_stat = _open_workspace_file(file_path)
     try:
-        _snapshot_file_descriptor(file_fd, name)
+        backup = _snapshot_file_descriptor(file_fd, name)
         current_stat = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
         if not stat.S_ISREG(current_stat.st_mode) or (
             current_stat.st_dev,
@@ -487,6 +542,7 @@ def _delete_workspace_file_safely(file_path: str) -> None:
         ) != (original_stat.st_dev, original_stat.st_ino):
             raise OSError("Workspace file changed during deletion.")
         os.unlink(name, dir_fd=parent_fd)
+        _record_edit_snapshot(file_path, backup)
     finally:
         os.close(file_fd)
         os.close(parent_fd)
@@ -528,8 +584,9 @@ def _apply_workspace_patch_safely(
         )
         if not diff:
             return "Patch contains no changes."
-        _snapshot_file_descriptor(file_fd, name, max_bytes=MAX_READ_FILE_BYTES)
+        backup = _snapshot_file_descriptor(file_fd, name, max_bytes=MAX_READ_FILE_BYTES)
         _write_workspace_replacement(parent_fd, name, original_stat, updated_bytes)
+        _record_edit_snapshot(file_path, backup)
         return f"Success: Applied patch to '{file_path}'.\n{diff}"
     finally:
         os.close(file_fd)
@@ -559,7 +616,7 @@ def _rename_workspace_file_safely(source_path: str, destination_path: str) -> st
         else:
             raise FileExistsError(f"Destination '{destination_path}' already exists.")
 
-        _snapshot_file_descriptor(source_fd, source_name)
+        backup = _snapshot_file_descriptor(source_fd, source_name)
         os.link(
             source_name,
             destination_name,
@@ -592,6 +649,8 @@ def _rename_workspace_file_safely(source_path: str, destination_path: str) -> st
         except (ValueError, OSError):
             os.unlink(destination_name, dir_fd=destination_parent_fd)
             raise
+        _record_edit_snapshot(source_path, backup)
+        _record_edit_snapshot(destination_path, None, action="create")
         return f"Success: Renamed '{source_path}' to '{destination_path}'."
     finally:
         if destination_parent_fd is not None:
@@ -601,7 +660,7 @@ def _rename_workspace_file_safely(source_path: str, destination_path: str) -> st
 
 
 @tool(args_schema=ReadFileInput)
-def read_local_file(file_path: str) -> str:
+def read_local_file(file_path: str, offset: int = 0, limit: int | None = None) -> str:
     """Read a text file inside the validated workspace with configured size limits."""
     try:
         target = SandboxManager.validate_path(file_path)
@@ -628,7 +687,21 @@ def read_local_file(file_path: str) -> str:
         with target.open("rb") as source:
             while chunk := source.read(FILE_READ_CHUNK_BYTES):
                 chunks.append(chunk)
-        return b"".join(chunks).decode("utf-8", errors="replace")
+        text = b"".join(chunks).decode("utf-8", errors="replace")
+        lines = text.splitlines(keepends=True)
+        total_lines = len(lines)
+        if offset >= total_lines and total_lines > 0:
+            return (
+                f"File '{file_path}' has {total_lines} lines; "
+                f"offset {offset} is out of range."
+            )
+        end = total_lines if limit is None else min(total_lines, offset + limit)
+        selected = lines[offset:end]
+        body = "".join(selected)
+        return (
+            f"{body}\n[read_local_file: lines {offset + 1}-{end} of "
+            f"{total_lines} total]"
+        )
     except (ValueError, OSError) as exc:
         return f"Error reading file: {exc}"
 
@@ -890,6 +963,154 @@ def inspect_workspace_git(action: str, directory: str = ".") -> str:
         return output
     except (OSError, ValueError) as exc:
         return f"Error inspecting workspace Git {action}: {exc}"
+
+
+def _git_write_environment() -> dict[str, str]:
+    return {
+        **os.environ,
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": os.devnull,
+        "GIT_PAGER": "cat",
+        "PAGER": "cat",
+        "GIT_TERMINAL_PROMPT": "0",
+    }
+
+
+def _git_repository_root(directory: str):
+    root, target = _validate_search_directory(directory)
+    environment = _git_write_environment()
+    repository_command = [
+        "git",
+        "-c",
+        "core.fsmonitor=false",
+        "-c",
+        "core.pager=cat",
+        "-C",
+        str(target),
+        "rev-parse",
+        "--show-toplevel",
+    ]
+    code, output, _, timed_out = _run_git_bounded(repository_command, environment)
+    if timed_out:
+        raise ValueError("Git operation timed out.")
+    if code != 0:
+        raise ValueError(
+            "No Git repository was found in the requested workspace directory."
+        )
+    repository_root = Path(output.strip()).resolve()
+    if not repository_root.is_relative_to(root):
+        raise ValueError("Git repository root is outside the active workspace.")
+    return root, target, repository_root, environment
+
+
+@tool(args_schema=CreateGitBranchInput)
+def create_git_branch(branch_name: str, directory: str = ".") -> str:
+    """Create and check out a new Git branch in the workspace repository."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        command = [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.pager=cat",
+            "-C",
+            str(target),
+            "checkout",
+            "-b",
+            branch_name,
+        ]
+        code, output, _, timed_out = _run_git_bounded(command, environment)
+        if timed_out:
+            return "Error: Git branch creation timed out."
+        if code != 0:
+            return f"Git branch creation failed: {output.strip()[:1000]}"
+        return f"Created and checked out branch '{branch_name}'."
+    except (OSError, ValueError) as exc:
+        return f"Error creating Git branch: {exc}"
+
+
+@tool(args_schema=StageGitChangesInput)
+def stage_git_changes(paths: list[str] | None = None, directory: str = ".") -> str:
+    """Stage workspace changes for the next commit."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        selected_paths = paths or ["."]
+        command = [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.pager=cat",
+            "-C",
+            str(target),
+            "add",
+            "--",
+            *selected_paths,
+        ]
+        code, output, _, timed_out = _run_git_bounded(command, environment)
+        if timed_out:
+            return "Error: Git staging timed out."
+        if code != 0:
+            return f"Git staging failed: {output.strip()[:1000]}"
+        return f"Staged {len(selected_paths)} path(s)."
+    except (OSError, ValueError) as exc:
+        return f"Error staging Git changes: {exc}"
+
+
+@tool(args_schema=CommitGitChangesInput)
+def commit_git_changes(message: str, directory: str = ".") -> str:
+    """Create a Git commit with the staged changes."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        command = [
+            "git",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.pager=cat",
+            "-C",
+            str(target),
+            "commit",
+            "-m",
+            message,
+        ]
+        code, output, _, timed_out = _run_git_bounded(command, environment)
+        if timed_out:
+            return "Error: Git commit timed out."
+        if code != 0:
+            return f"Git commit failed: {output.strip()[:1000]}"
+        return output.strip() or "Committed changes."
+    except (OSError, ValueError) as exc:
+        return f"Error creating Git commit: {exc}"
+
+
+@tool(args_schema=CreatePullRequestInput)
+def create_pull_request(
+    title: str, body: str = "", base: str | None = None, directory: str = "."
+) -> str:
+    """Create a pull request with the GitHub CLI when it is available."""
+    try:
+        _, target, _, environment = _git_repository_root(directory)
+        command = ["gh", "pr", "create", "--title", title, "--body", body]
+        if base:
+            command.extend(["--base", base])
+        completed = subprocess.run(
+            command,
+            cwd=str(target),
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=_GIT_INSPECTION_TIMEOUT_SECONDS,
+        )
+        if completed.returncode != 0:
+            error = completed.stderr.strip() or completed.stdout.strip()
+            return f"Pull request creation failed: {error[:1000]}"
+        return completed.stdout.strip() or "Pull request created."
+    except FileNotFoundError:
+        return "Error: GitHub CLI (gh) is not installed."
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        return f"Error creating pull request: {exc}"
 
 
 @tool(args_schema=PreviewWorkspacePatchInput)
