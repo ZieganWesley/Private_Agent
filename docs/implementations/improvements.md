@@ -2379,7 +2379,7 @@ order (section L1); the rest come after the shared agent loop.
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
 | 7.1 | **Done:** planning mode now exposes read-only tools (`read_local_file`, `list_directory`, `search_workspace_*`, `inspect_workspace_git`, `fetch_webpage` with consent) | D1, D9 | — | A coding plan can quote real file names and code, with a test |
-| 7.2 | Drop the `read_table_schema` requirement and the one-call-per-round limit for planner tools, and make most step fields optional | D4 | — | A plan can be saved in one model round |
+| 7.2 | **Done:** removed `read_table_schema` requirement and one-call-per-round limit for planner tools; step list fields are optional | D4 | — | A plan can be saved in one model round |
 | 7.3 | Include the whole approved plan when running it, as readable text with validation criteria, risks, assumptions and constraints | D5 | — | The execution prompt contains every step field, with a test |
 | 7.4 | Replace the regex gate: require an approved plan at the edit and command tools themselves (or through an explicit `/code` command), not from the wording of the message, and fix the blocked-request hint | D2, D10 | 4.3 | Questions are never blocked, and every edit inside a coding task needs an approved plan |
 | 7.5 | Make `/plan` a mode that stays on until the plan is approved or `/plan off`, and add an `ask_user` tool for clarifying questions | D3 | 4.2, 4.4 | A plan can be refined over several messages |

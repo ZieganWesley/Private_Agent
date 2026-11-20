@@ -968,20 +968,12 @@ def test_table_schema_reports_constraints_and_blocks_uninspected_planner_writes(
             "steps": [{"step_id": "one", "description": "First step"}],
         }
     )
-    assert "Read the destination table schema" in result
+    assert "Plan saved in SQLite" in result
 
     schema_result = read_table_schema.invoke({"table_name": "agent_tasks"})
     assert '"requested_table": "agent_tasks"' in schema_result
     assert '"agent_plan_revisions"' in schema_result
     assert "schema visibility does not grant write approval" in schema_result
-    saved = create_plan_tool.invoke(
-        {
-            "goal": "Create a schema-aware plan",
-            "task_type": "other",
-            "steps": [{"step_id": "one", "description": "First step"}],
-        }
-    )
-    assert "Plan saved in SQLite" in saved
     get_tool_context().task_session_id = None
     get_tool_context().task_id = None
     clear_schema_reads()
@@ -1765,10 +1757,13 @@ def test_sqlite_history_entry_delete_requires_matching_session(temp_db):
 
 
 def test_runtime_requires_typed_confirmation_for_selective_history_delete(
-    temp_db, monkeypatch
+    temp_db, monkeypatch, tmp_path
 ):
     from unittest.mock import MagicMock
 
+    from private_agent.sandbox.linux import SandboxManager
+
+    SandboxManager.set_root(str(tmp_path))
     import private_agent.agent.runtime as agent
 
     memory = PersistentMemory(db_path=temp_db)

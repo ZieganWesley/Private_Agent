@@ -547,9 +547,6 @@ async def _preflight_tool_calls(
             )
             continue
         if schema_read_in_batch and call_name in {
-            "create_task_plan",
-            "revise_task_plan",
-            "update_todo_step",
             "create_skill",
         }:
             state.blocked_tool_messages.append(
@@ -587,20 +584,8 @@ async def _preflight_tool_calls(
         _SESSION_STATS.record_tool_call(str(tool_call.get("name") or "unknown"))
         network_authorized = False
         media_capture_authorized = False
-        if planning_only:
-            if state.planning_tool_seen:
-                state.blocked_tool_messages.append(
-                    ToolMessage(
-                        content=(
-                            "Error: Use one planner operation per "
-                            "model step so task selection remains "
-                            "deterministic."
-                        ),
-                        tool_call_id=tool_call.get("id"),
-                    )
-                )
-                continue
-            state.planning_tool_seen = True
+        # Planning mode no longer limits the model to one planner call per
+        # model round; multiple read-only/planner operations may run together.
         if call_name in {"create_task_plan", "revise_task_plan"} and not planning_only:
             state.blocked_tool_messages.append(
                 ToolMessage(
