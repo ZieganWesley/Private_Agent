@@ -3693,6 +3693,9 @@ Runtime context:
                             model_name=selected_model,  # noqa: B023
                         )
                         usage = (messages_tokens(messages), context_stats["max"])  # noqa: B023
+                        _plan_summary = f_integration.get_plan_summary(_f_state)  # noqa: B023
+                        if _plan_summary:
+                            messages.append(SystemMessage(content=f"[Task plan]\n{_plan_summary}"))  # noqa: B023
                         try:
                             response = await _invoke_with_status(
                                 llm_with_tools,  # noqa: B023

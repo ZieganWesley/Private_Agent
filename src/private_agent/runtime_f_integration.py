@@ -8,11 +8,23 @@ import time
 import uuid
 from typing import Any
 
-from . import context_manager, json_output, timeline
+from . import context_manager, json_output, task_orchestrator, timeline
 from .config import DEFAULT_DB_PATH
 
 
+def get_plan_summary(state: dict[str, Any]) -> str:
+    plan = (state or {}).get("plan")
+    if plan is not None and hasattr(plan, "summary"):
+        with contextlib.suppress(Exception):
+            return str(plan.summary())
+    return ""
+
+
 def is_plan_complete(state: dict[str, Any]) -> bool:
+    plan = (state or {}).get("plan")
+    if plan is not None and hasattr(plan, "is_complete"):
+        with contextlib.suppress(Exception):
+            return bool(plan.is_complete())
     return not bool((state or {}).get("pending", False))
 
 
@@ -25,6 +37,7 @@ def trim_context(text: str, total_tokens: int) -> str:
 
 
 def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False) -> dict[str, Any]:
+    plan = task_orchestrator.build_plan(user_input, ["respond to request"])
     run_id = turn_id or uuid.uuid4().hex
     conn: sqlite3.Connection | None = None
     try:
@@ -32,7 +45,7 @@ def begin_turn(turn_id: str, user_input: str, total_tokens: int, json_mode: bool
         timeline.ensure_schema(conn)
     except Exception:  # noqa: BLE001 - timeline unavailable, disable persistence
         conn = None
-    state = {"iteration": 0, "pending": True, "conn": conn, "run_id": run_id, "started": time.monotonic(), "json_mode": json_mode}
+    state = {"plan": plan, "iteration": 0, "pending": True, "conn": conn, "run_id": run_id, "started": time.monotonic(), "json_mode": json_mode}
     if json_mode:
         with contextlib.suppress(Exception):
             json_output.emit_event({"event": "turn_started", "turn_id": turn_id})
@@ -43,6 +56,12 @@ def record_iteration(state: dict[str, Any], step_index: int, pack: str = "Core")
     step_start = time.monotonic()
     state["iteration"] = step_index
     state["pending"] = True
+    plan = state.get("plan")
+    if plan is not None:
+        with contextlib.suppress(Exception):
+            if not plan.steps:
+                plan.add_step("execute request", {pack})
+            plan.mark(0, "running")
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):
@@ -53,6 +72,13 @@ def record_iteration(state: dict[str, Any], step_index: int, pack: str = "Core")
 
 def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, status: str = "ok", complete: bool = False) -> None:
     state["pending"] = not bool(complete and status == "ok")
+    plan = state.get("plan")
+    if plan is not None and getattr(plan, "steps", None):
+        with contextlib.suppress(Exception):
+            if complete and status == "ok":
+                plan.mark(0, "done")
+            elif status != "ok":
+                plan.mark(0, "failed")
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):
@@ -64,6 +90,10 @@ def finish_iteration(state: dict[str, Any], step_index: int, step_start: float, 
 
 def finish_turn(state: dict[str, Any]) -> None:
     state["pending"] = False
+    plan = state.get("plan")
+    if plan is not None:
+        with contextlib.suppress(Exception):
+            plan.mark(0, "done")
     conn = state.get("conn")
     if conn is not None:
         with contextlib.suppress(Exception):
