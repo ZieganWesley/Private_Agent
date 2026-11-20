@@ -131,3 +131,16 @@ construction.
   when the user declines or no other provider is reachable.
 - The module-size guard forced the resume/flag helpers out of `runtime.py` into
   `agent/provider_resume.py` (`runtime.py` stays below the 4300-line limit).
+
+## Part J — Performance (partial)
+
+Branch `j-k-performance-optimization`.
+
+| ID | Status | Where |
+|---|---|---|
+| J2 | Partly fixed | `rag/indexing.py` imports Chroma and Ollama embeddings lazily via `_ensure_rag_dependencies()` |
+| J5 | Fixed | `tools/network.py` caches validated DNS records for 60 s (bounded, rules re-checked) |
+| J6 | Fixed | `tools/__init__.py` caches internet-connectivity probes for 30 s |
+| J7/J8 | Partly fixed | `rag/indexing.py` keeps parsed chunks for unchanged files in `_CHUNK_CACHE` |
+
+Verification: `ruff check .` clean; `pytest` -> 1120 passed, 12 skipped, 1 warning.
