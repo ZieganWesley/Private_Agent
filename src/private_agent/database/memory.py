@@ -5,6 +5,7 @@ from .conversations import ConversationMixin
 from .episodes import EpisodeMixin
 from .learning import LearningMixin
 from .maintenance import MaintenanceMixin
+from .provider_records import ProviderRecordMixin
 from .skills import SkillMixin
 from .task_actions import TaskActionMixin
 from .tasks import TaskMixin
@@ -19,6 +20,7 @@ class PersistentMemory(
     EpisodeMixin,
     SkillMixin,
     MaintenanceMixin,
+    ProviderRecordMixin,
 ):
     """SQLite-backed store for conversations, tasks, learning and episodes."""
 
@@ -32,4 +34,5 @@ class PersistentMemory(
         "agent_task_actions",
         "agent_learned_items",
         "agent_learning_settings",
+        "session_providers",
     }

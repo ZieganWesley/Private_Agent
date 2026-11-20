@@ -1946,7 +1946,17 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
 
     await run_agent_cli_async()
 
-    inputs.side_effect = ["", "", "", "y", "", "1", "", "exit"]
+    # The resumed session now restores its recorded provider and model, so the
+    # provider and model menus are no longer part of this script.
+    def resumed_input(prompt=""):
+        text = str(prompt)
+        if "Resume latest session" in text:
+            return "y"
+        if "User:" in text:
+            return "exit"
+        return ""
+
+    inputs.side_effect = resumed_input
     await run_agent_cli_async()
 
     memory = PersistentMemory(db_path=str(database_path))
@@ -5470,3 +5480,123 @@ async def test_unknown_provider_flag_falls_back_to_the_menu(
     await run_agent_cli_async()
 
     assert any("provider" in title.lower() for title in arrow_titles)
+
+
+@pytest.mark.asyncio
+async def test_resumed_session_reuses_the_recorded_provider_without_prompts(
+    scripted_local_cli, monkeypatch, tmp_path
+):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    from private_agent.database import PersistentMemory
+    from private_agent.providers.adapters import ProviderRecord
+
+    monkeypatch.setenv(
+        "PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "last_provider.json")
+    )
+    model.responses = [
+        AIMessage(content="First answer."),
+        AIMessage(content="Session summary."),
+    ]
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["hello", "exit"])
+    )
+    inputs.side_effect = lambda prompt="": ""
+    await run_agent_cli_async()
+
+    memory = PersistentMemory(db_path=str(database_path))
+    session_id = memory.get_latest_session_id()
+    assert session_id is not None
+    memory.record_session_provider(
+        session_id,
+        ProviderRecord("ollama", "Ollama", "http://127.0.0.1:11434", "local-model"),
+    )
+    memory.close()
+
+    from private_agent.agent import interactive
+
+    arrow_titles: list[str] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_titles.append(title)
+        return "2" if "permission" in title.lower() else "1"
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [
+        AIMessage(content="Resumed answer."),
+        AIMessage(content="Session summary."),
+    ]
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["continue", "exit"])
+    )
+
+    await run_agent_cli_async(resume_session=session_id)
+
+    assert not any("provider" in title.lower() for title in arrow_titles)
+    assert not any("model" in title.lower() for title in arrow_titles)
+
+    memory = PersistentMemory(db_path=str(database_path))
+    stored = memory.get_session_provider(session_id)
+    memory.close()
+    assert stored is not None
+    assert stored.model == "local-model"
+
+
+@pytest.mark.asyncio
+async def test_resume_with_a_stopped_provider_falls_back_to_the_menu(
+    scripted_local_cli, monkeypatch, tmp_path
+):
+    agent, model, inputs, _workspace, database_path = scripted_local_cli
+    from private_agent.database import PersistentMemory
+    from private_agent.providers.adapters import ProviderRecord
+
+    monkeypatch.setenv(
+        "PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "last_provider.json")
+    )
+    model.responses = [
+        AIMessage(content="First answer."),
+        AIMessage(content="Session summary."),
+    ]
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["hello", "exit"])
+    )
+    inputs.side_effect = lambda prompt="": ""
+    await run_agent_cli_async()
+
+    memory = PersistentMemory(db_path=str(database_path))
+    session_id = memory.get_latest_session_id()
+    assert session_id is not None
+    memory.record_session_provider(
+        session_id,
+        ProviderRecord(
+            "openai-compatible", "LM Studio", "http://127.0.0.1:1234/v1", "q"
+        ),
+    )
+    memory.close()
+
+    from private_agent.agent import interactive
+
+    arrow_titles: list[str] = []
+
+    def fake_arrow(title, choices, *, default=None):
+        arrow_titles.append(title)
+        return "2" if "permission" in title.lower() else "1"
+
+    monkeypatch.setattr(interactive, "arrow_select", fake_arrow)
+    model.responses = [
+        AIMessage(content="Fallback answer."),
+        AIMessage(content="Session summary."),
+    ]
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["hello", "exit"])
+    )
+    inputs.side_effect = lambda prompt="": ""
+
+    await run_agent_cli_async(resume_session=session_id)
+
+    assert any("provider" in title.lower() for title in arrow_titles)
+
+    memory = PersistentMemory(db_path=str(database_path))
+    stored = memory.get_session_provider(session_id)
+    memory.close()
+    assert stored is not None
+    assert stored.display_name == "Ollama"

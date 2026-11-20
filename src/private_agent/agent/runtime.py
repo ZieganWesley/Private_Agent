@@ -197,6 +197,13 @@ from .prompts import (
 from .prompts import (
     current_datetime_context as _current_datetime_context,
 )
+from .provider_resume import (
+    always_ask_provider,
+    auto_select_single_provider,
+    match_runtime_by_address,
+    persist_provider_choice,
+    provider_record_for_resume,
+)
 from .providers import (
     has_saved_online_config as _has_saved_online_config,
 )
@@ -1781,32 +1788,6 @@ async def _discard_session_startup() -> None:
         memory.close()
 
 
-def _auto_select_single_provider() -> bool:
-    """Return models.auto_select_single_provider (default: off)."""
-    models_config = APP_CONFIG.get("models", {})
-    raw = (
-        models_config.get("auto_select_single_provider", False)
-        if isinstance(models_config, dict)
-        else False
-    )
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in {"true", "1", "yes", "on"}
-
-
-def _always_ask_provider() -> bool:
-    """Return the providers.always_ask setting (default: off)."""
-    models_config = APP_CONFIG.get("models", {})
-    raw = (
-        models_config.get("always_ask", False)
-        if isinstance(models_config, dict)
-        else False
-    )
-    if isinstance(raw, bool):
-        return raw
-    return str(raw).strip().lower() in {"true", "1", "yes", "on"}
-
-
 async def _choose_provider(
     *,
     verbose_startup: bool,
@@ -1839,7 +1820,6 @@ async def _choose_provider(
         pick_default_model,
         requested_model,
         requested_provider,
-        save_last_provider,
     )
 
     last_used = load_last_provider() or {}
@@ -1853,11 +1833,33 @@ async def _choose_provider(
             f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
             f"— {len(runtime.models)} model(s){marker}"
         )
-    for idle in installed_but_idle(local_runtimes):
+    idle_providers = installed_but_idle(local_runtimes)
+    for idle in idle_providers:
         console.print(
             f"  [yellow]–[/yellow] {idle.preset.name} is installed but not running "
             f"— {idle.start_hint}"
         )
+    resumed_record = provider_record_for_resume(memory, session_id)
+    resumed_runtime = None
+    if resumed_record is not None:
+        resumed_runtime = match_runtime(
+            resumed_record.display_name, local_runtimes
+        ) or match_runtime_by_address(resumed_record.base_url, local_runtimes)
+        if resumed_runtime is None:
+            console.print(
+                f"[yellow][Resume][/yellow] {resumed_record.display_name} "
+                f"(recorded for this session) is not running."
+            )
+            start_hint = next(
+                (
+                    idle.start_hint
+                    for idle in idle_providers
+                    if idle.preset.name.lower() == resumed_record.display_name.lower()
+                ),
+                None,
+            )
+            if start_hint:
+                console.print(f"  Start it with: {start_hint}")
     online_options: list[tuple[int, str, bool]] = []
     next_choice = len(local_runtimes) + 1
     if preference.online_preference is not None:
@@ -1915,16 +1917,36 @@ async def _choose_provider(
             f"[yellow][Provider flag][/yellow] '{flagged_provider}' is not "
             "reachable; choose from the list below."
         )
+    preselected_model: str | None = None
     if flagged_runtime is not None:
         provider_choice = str(local_runtimes.index(flagged_runtime) + 1)
         console.print(
             f"[green][Provider flag][/green] Using {flagged_runtime.name} "
             "(from --provider)."
         )
+    elif resumed_runtime is not None:
+        provider_choice = str(local_runtimes.index(resumed_runtime) + 1)
+        resumed_models = list(resumed_runtime.models)
+        if resumed_record.model in resumed_models:
+            preselected_model = resumed_record.model
+            console.print(
+                f"[green][Resume][/green] Continuing with {resumed_runtime.name} "
+                f"· {resumed_record.model} (recorded provider)."
+            )
+        elif resumed_models:
+            console.print(
+                f"[yellow][Resume][/yellow] {resumed_runtime.name} no longer has "
+                f"'{resumed_record.model}'; choosing the closest available model."
+            )
+        else:
+            console.print(
+                f"[yellow][Resume][/yellow] {resumed_runtime.name} is running but "
+                "advertises no chat models."
+            )
     elif (
         len(local_runtimes) == 1
-        and not _always_ask_provider()
-        and _auto_select_single_provider()
+        and not always_ask_provider(APP_CONFIG)
+        and auto_select_single_provider(APP_CONFIG)
     ):
         provider_choice = "1"
         console.print(
@@ -2021,8 +2043,9 @@ async def _choose_provider(
         if PREFERRED_MODEL in available_models:
             available_models.remove(PREFERRED_MODEL)
             available_models.insert(0, PREFERRED_MODEL)
-        flagged_model = pick_default_model(available_models, requested_model())
-        if requested_model() and flagged_model in available_models:
+        model_preference = requested_model() or preselected_model or ""
+        flagged_model = pick_default_model(available_models, model_preference)
+        if model_preference and flagged_model in available_models:
             available_models.remove(flagged_model)
             available_models.insert(0, flagged_model)
         if not available_models:
@@ -2054,12 +2077,14 @@ async def _choose_provider(
             ),
             None,
         )
+        if requested_exact is not None:
+            preselected_model = requested_exact
         try:
             from .interactive import arrow_select as _arrow_select
 
             _model_choice = (
                 None
-                if requested_exact is not None
+                if preselected_model is not None
                 else _arrow_select(
                     "Select model:",
                     [(str(i), m) for i, m in enumerate(available_models, 1)],
@@ -2068,11 +2093,9 @@ async def _choose_provider(
             )
         except Exception:  # noqa: BLE001 - arrow UI unavailable; fall back to typed prompt
             _model_choice = None
-        if requested_exact is not None:
-            selected_model = requested_exact
-            console.print(
-                f"[green][Model flag][/green] Using {requested_exact} (from --model)."
-            )
+        if preselected_model is not None:
+            selected_model = preselected_model
+            console.print(f"[green][Model][/green] Using {preselected_model}.")
         elif _model_choice is not None and _model_choice.isdigit():
             _mc = int(_model_choice) - 1
             if 0 <= _mc < len(available_models):
@@ -2197,11 +2220,14 @@ async def _choose_provider(
             runtime_kind=local_runtime.kind,
             model=selected_model,
         )
-        save_last_provider(
-            adapter_type=local_runtime.kind,
-            display_name=local_runtime.name,
-            base_url=local_runtime.base_url,
+        persist_provider_choice(
+            console=console,
+            memory=memory,
+            session_id=session_id,
+            runtime=local_runtime,
             model=selected_model,
+            capabilities=capabilities,
+            previous=resumed_record,
         )
     else:
         console.print(f"[red]Select a provider from 1 to {last_choice}.[/red]")
