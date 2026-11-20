@@ -13,6 +13,7 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
@@ -115,6 +116,38 @@ def _planning_search_citations(result: str) -> list[str]:
         if len(citations) >= 10:
             break
     return citations
+
+
+def _task_plan_markdown(task: dict) -> str:
+    """Render a task plan as Markdown for approval and feedback."""
+    lines = [f"# {task['goal']}", ""]
+    lines.append(
+        f"- ID: `{task['task_id']}`\n- Type: {task['task_type']}\n"
+        f"- Revision: {task['revision']}\n- Status: {task['status']}"
+    )
+    plan = task.get("plan") or {}
+    for label, key in (
+        ("Assumptions", "assumptions"),
+        ("Constraints", "constraints"),
+    ):
+        items = plan.get(key, [])
+        if items:
+            lines.append(f"\n## {label}")
+            lines.extend(f"- {item}" for item in items)
+    lines.append("\n## Steps")
+    for step in task.get("steps", []):
+        lines.append(f"{step['position']}. **{step['description']}** ({step['status']})")
+        for label, key in (
+            ("Depends on", "dependencies"),
+            ("Validation", "validation"),
+            ("Proof", "proof"),
+            ("Risks", "risks"),
+            ("Edge cases", "edge_cases"),
+        ):
+            items = step.get(key, [])
+            if items:
+                lines.append(f"   - {label}: " + "; ".join(items))
+    return "\n".join(lines)
 
 
 def _run_task_management(
@@ -355,6 +388,30 @@ def _run_task_management(
                     )
                     continue
                 show_task(task)
+                console.print(Markdown(_task_plan_markdown(task)))
+                approval_choice = console.input(
+                    "Approval choice [1 approve, 2 approve and allow edits, "
+                    "3 give feedback and keep planning] (default 1): "
+                ).strip() or "1"
+                if approval_choice == "3":
+                    feedback = console.input(
+                        "Feedback to keep planning: "
+                    ).strip()
+                    console.print(
+                        "[yellow]Keeping planning. Resubmit the updated "
+                        "request with /plan, including this feedback: "
+                        f"{feedback}[/yellow]"
+                    )
+                    continue
+                if approval_choice not in {"1", "2", "3"}:
+                    console.print(
+                        "[yellow]Plan approval declined; no task actions ran. "
+                        f"To retry, enter approve {task_id[:12]} and type the exact "
+                        f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
+                        "leave Tasks and submit the updated request with /plan.[/yellow]"
+                    )
+                    continue
+                allow_edits = approval_choice == "2"
                 if task["task_type"] == "coding":
                     access_level = _select_coding_access_level(
                         console,
@@ -431,18 +488,45 @@ def _run_task_management(
                         "sources as verified; evidence must be checked and "
                         "recorded separately.[/yellow]"
                     )
-                confirmation = console.input(
-                    f"Approve exact revision {task['revision']}? "
-                    f"Type APPROVE {task_id[:8]}: "
-                ).strip()
-                if confirmation != f"APPROVE {task_id[:8]}":
-                    console.print(
-                        "[yellow]Plan approval declined; no task actions ran. "
-                        f"To retry, enter approve {task_id[:12]} and type the exact "
-                        f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
-                        "leave Tasks and submit the updated request with /plan.[/yellow]"
+                risky_approval = (
+                    task["task_type"] == "research"
+                    or (
+                        task["task_type"] == "coding"
+                        and (
+                            access_level
+                            in {"full_hitl", "full_governed", "full_monitored"}
+                            or allow_edits
+                        )
                     )
-                    continue
+                )
+                if risky_approval:
+                    confirmation = console.input(
+                        f"Approve exact revision {task['revision']}? "
+                        f"Type APPROVE {task_id[:8]}: "
+                    ).strip()
+                    if confirmation != f"APPROVE {task_id[:8]}":
+                        console.print(
+                            "[yellow]Plan approval declined; no task actions ran. "
+                            f"To retry, enter approve {task_id[:12]} and type the exact "
+                            f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
+                            "leave Tasks and submit the updated request with /plan.[/yellow]"
+                        )
+                        continue
+                else:
+                    confirmation = console.input(
+                        "Approve this plan? [Y/n/APPROVE "
+                        f"{task_id[:8]}] (default Y): "
+                    ).strip()
+                    if confirmation.lower() not in {
+                        "",
+                        "y",
+                        "yes",
+                        f"approve {task_id[:8]}".lower(),
+                    }:
+                        console.print(
+                            "[yellow]Plan approval declined; no task actions ran.[/yellow]"
+                        )
+                        continue
                 owner_id = get_tool_context().runtime_owner_id
                 lease = memory.get_task_lease(task_id)
                 takeover = False
