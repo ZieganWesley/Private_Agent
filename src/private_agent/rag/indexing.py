@@ -311,11 +311,17 @@ def initialize_knowledge_base(
         return None
 
     path = pathlib.Path(docs_path).expanduser().resolve()
+    original_path = path
     if not path.is_dir():
-        console.print(
-            f"[yellow][Warning] Provided KB path '{path}' is not a valid directory. Skipping knowledge base initialization.[/yellow]"
-        )
-        return None
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            path = original_path
+        if not path.is_dir():
+            console.print(
+                f"[yellow][Warning] Provided KB path '{original_path}' is not a valid directory. Skipping knowledge base initialization.[/yellow]"
+            )
+            return None
 
     chroma_persist_dir = os.path.abspath(index_path or RAG_INDEX_PATH)
     state_file_path = pathlib.Path(chroma_persist_dir) / ".index_state.json"

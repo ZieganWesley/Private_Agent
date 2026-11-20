@@ -1544,19 +1544,24 @@ async def _build_session_setup(
         ).strip()
     rag_init_started = time.monotonic()
     try:
-        with console.status("[bold cyan]Indexing local knowledge base...[/bold cyan]"):
-            vectorstore = initialize_knowledge_base(
-                docs_input if docs_input else None,
-                index_path=RAG_INDEX_PATH,
-                confirm_rebuild=lambda detail: (
-                    _input(
-                        f"[yellow]RAG index state is damaged: {detail}\n"
-                        "Preserve the existing index as a timestamped backup and rebuild? "
-                        "Type REBUILD to confirm: [/yellow]"
-                    ).strip()
-                    == "REBUILD"
-                ),
-            )
+        if docs_input:
+            with console.status(
+                "[bold cyan]Indexing local knowledge base...[/bold cyan]"
+            ):
+                vectorstore = initialize_knowledge_base(
+                    docs_input,
+                    index_path=RAG_INDEX_PATH,
+                    confirm_rebuild=lambda detail: (
+                        _input(
+                            f"[yellow]RAG index state is damaged: {detail}\n"
+                            "Preserve the existing index as a timestamped backup and rebuild? "
+                            "Type REBUILD to confirm: [/yellow]"
+                        ).strip()
+                        == "REBUILD"
+                    ),
+                )
+        else:
+            vectorstore = None
     except Exception as exc:  # noqa: BLE001 - Chroma/embedding failures must not block startup
         vectorstore = None
         reference_id = uuid.uuid4().hex[:8]
@@ -1822,6 +1827,7 @@ async def _choose_provider(
         )
     for choice_number, label, _use_saved_details in online_options:
         console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
+    console.print("  [cyan]0.[/cyan] Exit")
     if preference.online_preference is not None or _has_saved_online_config(APP_CONFIG):
         default_choice = str(online_options[0][0])
     else:
@@ -1829,11 +1835,15 @@ async def _choose_provider(
     last_choice = online_options[-1][0]
     provider_choice = (
         _input(
-            f"[cyan]Choose provider [1-{last_choice}] "
+            f"[cyan]Choose provider [0-{last_choice}] "
             f"(Default: {default_choice}): [/cyan]"
         ).strip()
         or default_choice
     )
+    if provider_choice.lower() in {"0", "exit", "quit", "q"}:
+        preference.exit_requested = True
+        console.print("[cyan]Exiting provider selection.[/cyan]")
+        return None
     selected_online_option = next(
         (option for option in online_options if provider_choice == str(option[0])),
         None,
@@ -2289,6 +2299,8 @@ async def _run_agent_cli_session(
             input_provider=input_provider,
         )
         if selection is None:
+            if provider_preference.exit_requested:
+                return
             if non_interactive:
                 return
             continue
