@@ -347,6 +347,21 @@ class ConnectionMixin:
                 )
                 self.conn.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS task_providers (
+                        task_id TEXT PRIMARY KEY,
+                        adapter_type TEXT NOT NULL,
+                        display_name TEXT NOT NULL,
+                        base_url TEXT NOT NULL,
+                        model TEXT NOT NULL,
+                        needs_tools BOOLEAN NOT NULL DEFAULT 0,
+                        needs_vision BOOLEAN NOT NULL DEFAULT 0,
+                        context_window INTEGER,
+                        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    )
+                    """
+                )
+                self.conn.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS agent_task_events (
                         event_id TEXT PRIMARY KEY,
                         task_id TEXT NOT NULL REFERENCES agent_tasks(task_id)

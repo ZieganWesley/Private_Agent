@@ -16,11 +16,21 @@ __all__ = [
 
 
 def provider_record_for_resume(memory, session_id):
-    """Return the provider record saved for a session being resumed."""
+    """Return the provider record saved for a session being resumed.
+
+    A task can outlive the session that created it, so when the session has no
+    record of its own fall back to the provider the active task was run with.
+    """
     if memory is None or not session_id:
         return None
     try:
-        return memory.get_session_provider(session_id)
+        record = memory.get_session_provider(session_id)
+        if record is not None:
+            return record
+        active_task = memory.get_session_active_task(session_id)
+        if not active_task:
+            return None
+        return memory.get_task_provider(active_task.get("task_id"))
     except (ValueError, sqlite3.Error) as exc:
         log_event(
             RUN_LOGGER,
@@ -66,9 +76,13 @@ def persist_provider_choice(
         needs_vision=bool((capabilities or {}).get("vision")),
         context_window=(capabilities or {}).get("context_window"),
     )
+    active_task = None
     if memory is not None and session_id:
         try:
             memory.record_session_provider(session_id, record)
+            active_task = memory.get_session_active_task(session_id)
+            if active_task:
+                memory.record_task_provider(active_task["task_id"], record)
         except (ValueError, sqlite3.Error) as exc:
             log_event(
                 RUN_LOGGER,
@@ -81,12 +95,6 @@ def persist_provider_choice(
         or previous.base_url != record.base_url
         or previous.model != record.model
     ):
-        active_task = None
-        try:
-            if memory is not None and session_id:
-                active_task = memory.get_session_active_task(session_id)
-        except (ValueError, sqlite3.Error):
-            active_task = None
         if active_task:
             try:
                 memory._record_task_event(
