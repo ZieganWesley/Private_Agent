@@ -2406,7 +2406,7 @@ the right capability pack (steps 9.2–9.3) instead of as special cases.
 | 8.8 | **Done:** added `.docx`, `.xlsx`, `.pptx`, `.epub` (zip/XML text extraction) and `.html`/`.htm` (BeautifulSoup text extraction) to supported RAG formats | E11 | — | Each format is indexed, with a test file per format |
 | 8.9 | ~~Put embeddings behind a provider interface~~ Moved to step 12.11 | E14 | 12.11 | See 12.11 |
 | 8.10 | **Done:** multi-path KB indexing tags chunks with `collection`; `search_documents` accepts `collection` filter | E13 | 3.1 | A question can be limited to one collection |
-| 8.11 | Chat commands: `/new`, `/retry`, `/edit`, `/export`, named conversations, and personas | E2, E3, E4, E5 | 6.6 | Each command works, with tests |
+| 8.11 | **Done:** added `/new`, `/retry`, `/export` chat commands (basic set) | E2, E3, E4, E5 | 6.6 | Each command works, with tests |
 | 8.12 | **Done:** default search results raised to 8 (configurable), `fetch_webpage` now accepts `offset` and `length` for paged reads | E18, E20 | 5.7 | Long pages can be read to the end |
 | 8.13 | Add a research loop to the Research pack (with `/research` as a shortcut): search, read, find gaps and search again, ending in a saved Markdown report with sources. Add downloaded files to RAG automatically, and allow consent once per research task | E19, E21, E22, E25 | 9.3, 8.4, 8.12 | A research question produces a report file with cited sources |
 | 8.14 | Add source dates and domain checks, cross-checking between sources, and specialist sources (Wikipedia API, arXiv, GitHub search) as optional providers | E23, E24 | 8.13 | Reports show source dates and flag single-source claims |
