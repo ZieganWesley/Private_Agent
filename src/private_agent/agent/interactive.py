@@ -21,6 +21,7 @@ from ..sandbox import SandboxManager
 
 SLASH_COMMANDS = {
     "/help": "Show available commands and file-context syntax.",
+    "/expand": "Show the full output of the most recent tool call.",
     "/list_tools": "List available tools, descriptions, and permission boundaries.",
     "/maintenance": (
         "Review episodes, manage user-confirmed learning, and maintain SQLite/RAG."

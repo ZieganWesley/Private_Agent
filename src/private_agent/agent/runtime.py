@@ -2436,6 +2436,15 @@ async def _run_agent_cli_session(
                 if user_input.lower() == "/help":
                     console.print(_format_interactive_help())
                     continue
+                if user_input.lower().startswith("/expand"):
+                    from .tool_display import expand_last_tool_result
+
+                    full = expand_last_tool_result()
+                    if full is None:
+                        console.print("[yellow]No tool output to expand.[/yellow]")
+                    else:
+                        console.print(full, markup=False, highlight=False)
+                    continue
                 if user_input.lower() == "/context":
                     if not pending_folder_context:
                         console.print(
