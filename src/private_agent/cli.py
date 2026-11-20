@@ -159,6 +159,7 @@ def main():
             "application.startup_completed",
             elapsed_seconds=round(time.monotonic() - startup_started, 3),
         )
+        non_interactive = bool(args.prompt)
         run_agent_cli(
             verbose_startup=args.verbose_startup,
             resume_session=args.resume,
@@ -166,7 +167,9 @@ def main():
             prompt=args.prompt,
             output=args.output,
             permission_mode=args.permission_mode,
-            non_interactive=bool(args.prompt),
+            non_interactive=non_interactive,
+            interactive=not non_interactive,
+            input_provider=(lambda *a, **k: "") if non_interactive else None,
         )
     except KeyboardInterrupt:
         console.print("\n[yellow][Info] Interrupted by user.[/yellow]")

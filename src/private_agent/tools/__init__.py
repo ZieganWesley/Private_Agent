@@ -120,6 +120,7 @@ class ToolContext:
     code_task: Any = None
     runtime_owner_id: str | None = None
     schema_read_tables: set | None = None
+    interactive: bool = True
 
 
 _TOOL_CONTEXT = ToolContext(
@@ -150,6 +151,7 @@ def set_tool_context(context: ToolContext) -> None:
     _TOOL_CONTEXT.skill_registry = context.skill_registry
     _TOOL_CONTEXT.skill_session_id = context.skill_session_id
     _TOOL_CONTEXT.code_task = context.code_task
+    _TOOL_CONTEXT.interactive = context.interactive
     if context.runtime_owner_id is not None:
         _TOOL_CONTEXT.runtime_owner_id = context.runtime_owner_id
     if context.schema_read_tables is not None:

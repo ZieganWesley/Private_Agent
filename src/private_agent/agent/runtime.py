@@ -10,7 +10,6 @@ import re
 import sqlite3
 import sys
 import time
-import types
 import uuid
 from dataclasses import dataclass
 from typing import Any
@@ -389,7 +388,7 @@ async def authorize_network_research(
         consent_policy=WEB_RESEARCH_CONSENT,
         internet_check=has_internet_connection,
         console=console,
-        is_interactive=sys.stdin.isatty,
+        is_interactive=lambda: get_tool_context().interactive and sys.stdin.isatty(),
         session_consent_state=session_consent_state,
     )
 
@@ -913,11 +912,11 @@ async def _execute_tool_batch(
     return response, False
 
 
-def _select_permission_mode() -> str:
+def _select_permission_mode(interactive: bool = True) -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
         console,
-        sys.stdin.isatty,
+        lambda: interactive,
     )
 
 
@@ -986,7 +985,7 @@ async def execute_tool_call(
         "delete_chat_history_from_sqlite",
         "delete_chat_history_entry_from_sqlite",
     }:
-        if not sys.stdin.isatty():
+        if not (get_tool_context().interactive and sys.stdin.isatty()):
             result = "Error: Deleting SQLite history requires interactive confirmation."
         else:
             if name == "delete_chat_history_entry_from_sqlite":
@@ -1026,7 +1025,7 @@ async def execute_tool_call(
         mcp_tool_names=MCP_TOOL_NAMES,
         mcp_auto_approve_tools=MCP_AUTO_APPROVE_TOOLS,
     ) and not (name in LOCAL_MEDIA_TOOL_NAMES and media_capture_authorized):
-        if not sys.stdin.isatty():
+        if not (get_tool_context().interactive and sys.stdin.isatty()):
             result = (
                 "Error: This tool requires interactive approval and was not run. "
                 "Re-run with --permission-mode full to allow it."
@@ -1226,13 +1225,15 @@ async def _prepare_session(
     resume_session: str | None = None,
     continue_session: bool = False,
     non_interactive: bool = False,
+    interactive: bool = True,
+    input_provider=None,
     permission_mode: str | None = None,
 ) -> SessionSetup | None:
     """Discover local resources, open memory and build the session state."""
     global _ACTIVE_MEMORY, _SESSION_INFO, _TASK_LEASE_HEARTBEAT
     _SESSION_STATS.reset()
     _SESSION_INFO.clear()
-    if not non_interactive and not sys.stdin.isatty():
+    if not non_interactive and (not interactive or not sys.stdin.isatty()):
         console.print(
             "[red]Private Agent requires an interactive terminal. "
             "Run it from a terminal session.[/red]"
@@ -1245,6 +1246,8 @@ async def _prepare_session(
             resume_session=resume_session,
             continue_session=continue_session,
             non_interactive=non_interactive,
+            interactive=interactive,
+            input_provider=input_provider,
             permission_mode=permission_mode,
         )
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
@@ -1260,19 +1263,20 @@ async def _build_session_setup(
     resume_session: str | None = None,
     continue_session: bool = False,
     non_interactive: bool = False,
+    interactive: bool = True,
+    input_provider=None,
     permission_mode: str | None = None,
 ) -> SessionSetup:
     """Create the memory, RAG index, skills and provider state for a session."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     startup_started = time.monotonic()
-    if not non_interactive and not sys.stdin.isatty():
+    if not non_interactive and (not interactive or not sys.stdin.isatty()):
         console.print(
             "[red]Private Agent requires an interactive terminal. "
             "Run it from a terminal session.[/red]"
         )
         return
-    if non_interactive:
-        console.input = lambda *args, **kwargs: ""
+    _input = input_provider if input_provider is not None else console.input
     console.print("[bold cyan]Private Agent[/bold cyan]")
 
     invocation_root = pathlib.Path.cwd()
@@ -1491,14 +1495,14 @@ async def _build_session_setup(
     if project_resources.rag is not None:
         docs_input = str(project_resources.rag)
     elif rag_docs_default:
-        rag_override = console.input(
+        rag_override = _input(
             "[yellow]RAG documents directory "
             f"(Enter to use configured path '{rag_docs_default}', or enter a "
             "project-specific path): [/yellow]"
         ).strip()
         docs_input = rag_override or rag_docs_default
     else:
-        docs_input = console.input(
+        docs_input = _input(
             "[yellow]Enter knowledge base (KB) files directory path "
             "(Press Enter to skip): [/yellow]"
         ).strip()
@@ -1509,7 +1513,7 @@ async def _build_session_setup(
                 docs_input if docs_input else None,
                 index_path=RAG_INDEX_PATH,
                 confirm_rebuild=lambda detail: (
-                    console.input(
+                    _input(
                         f"[yellow]RAG index state is damaged: {detail}\n"
                         "Preserve the existing index as a timestamped backup and rebuild? "
                         "Type REBUILD to confirm: [/yellow]"
@@ -1552,7 +1556,7 @@ async def _build_session_setup(
     skills_folder_input = (
         skills_folder_default
         if skills_folder_default
-        else console.input(
+        else _input(
             "[cyan]Enter path to skills folder containing .md files "
             "(Press Enter for none): [/cyan]"
         ).strip()
@@ -1611,7 +1615,7 @@ async def _build_session_setup(
         workspace_input = (
             WORKSPACE_ROOT_DEFAULT
             if WORKSPACE_ROOT_DEFAULT != "."
-            else console.input(
+            else _input(
                 "[cyan]Enter workspace root path for security sandbox "
                 "(Press Enter for current dir): [/cyan]"
             ).strip()
@@ -1634,11 +1638,11 @@ async def _build_session_setup(
 
     resume_prompt = (
         (
-            lambda latest: console.input(
+            lambda latest: _input(
                 f"[cyan]Resume latest session '{latest}'? \\[Y/n]: [/cyan]"
             )
         )
-        if sys.stdin.isatty()
+        if interactive
         else None
     )
     session_id = resolve_session_id(
@@ -1671,9 +1675,14 @@ async def _build_session_setup(
     )
     thinking_enabled = THINKING_TOGGLE_DEFAULT
     thinking_effort = THINKING_EFFORT_DEFAULT
-    permission_mode = (
-        permission_mode if permission_mode is not None else _select_permission_mode()
-    )
+    if permission_mode is not None:
+        _permission_mode = permission_mode
+    else:
+        try:
+            _permission_mode = _select_permission_mode(interactive=interactive)
+        except TypeError:
+            _permission_mode = _select_permission_mode()
+    permission_mode = _permission_mode
     if verbose_startup:
         console.print(f"[cyan][Agent Permission Mode][/cyan] {permission_mode.title()}")
     return SessionSetup(
@@ -1727,8 +1736,11 @@ async def _choose_provider(
     session_id,
     skills_folder_input,
     non_interactive: bool = False,
+    interactive: bool = True,
+    input_provider=None,
 ) -> ProviderSelection | None:
     """Ask for a provider and model, initialise it and print the ready summary."""
+    _input = input_provider if input_provider is not None else console.input
     available_models: list = []
     console.print("\n[bold underline]Model Provider[/bold underline]")
     for runtime_index, runtime in enumerate(local_runtimes, 1):
@@ -1776,7 +1788,7 @@ async def _choose_provider(
         default_choice = "1" if local_runtimes else str(online_options[0][0])
     last_choice = online_options[-1][0]
     provider_choice = (
-        console.input(
+        _input(
             f"[cyan]Choose provider [1-{last_choice}] "
             f"(Default: {default_choice}): [/cyan]"
         ).strip()
@@ -1872,7 +1884,7 @@ async def _choose_provider(
                 f"installed in {local_runtime.name}.[/yellow]"
             )
         while True:
-            choice_input = console.input(
+            choice_input = _input(
                 f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
             ).strip()
             if not choice_input:
@@ -2167,19 +2179,24 @@ async def _run_agent_cli_session(
     output: str = "text",
     permission_mode: str | None = None,
     non_interactive: bool = False,
+    interactive: bool = True,
+    input_provider=None,
 ):
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT, _LAST_HEADLESS_RESPONSE
-    if non_interactive:
-        sys.stdin = types.SimpleNamespace(isatty=lambda: False)
     setup = await _prepare_session(
         verbose_startup=verbose_startup,
         resume_session=resume_session,
         continue_session=continue_session,
         non_interactive=non_interactive,
+        interactive=interactive,
+        input_provider=input_provider,
         permission_mode=permission_mode,
     )
     if setup is None:
         return
+    _tc = get_tool_context()
+    _tc.interactive = interactive
+    set_tool_context(_tc)
     memory = setup.memory
     local_runtimes = setup.local_runtimes
     hardware_status_by_url = setup.hardware_status_by_url
@@ -2217,6 +2234,8 @@ async def _run_agent_cli_session(
             session_id=session_id,
             skills_folder_input=skills_folder_input,
             non_interactive=non_interactive,
+            interactive=interactive,
+            input_provider=input_provider,
         )
         if selection is None:
             if non_interactive:
@@ -3901,6 +3920,8 @@ async def run_agent_cli_async(
     output: str = "text",
     permission_mode: str | None = None,
     non_interactive: bool = False,
+    interactive: bool = True,
+    input_provider=None,
 ):
     """Own runtime resources and restore dynamically registered global tools."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
@@ -3915,6 +3936,8 @@ async def run_agent_cli_async(
             output=output,
             permission_mode=permission_mode,
             non_interactive=non_interactive,
+            interactive=interactive,
+            input_provider=input_provider,
         )
     finally:
         if _TASK_LEASE_HEARTBEAT is not None:
@@ -3985,6 +4008,8 @@ def run_agent_cli(
     output: str = "text",
     permission_mode: str | None = None,
     non_interactive: bool = False,
+    interactive: bool = True,
+    input_provider=None,
 ):
     asyncio.run(
         run_agent_cli_async(
@@ -3995,5 +4020,7 @@ def run_agent_cli(
             output=output,
             permission_mode=permission_mode,
             non_interactive=non_interactive,
+            interactive=interactive,
+            input_provider=input_provider,
         )
     )

@@ -32,6 +32,8 @@ def test_verbose_startup_flag_is_forwarded(monkeypatch):
             "output": "text",
             "permission_mode": None,
             "non_interactive": False,
+            "interactive": True,
+            "input_provider": None,
         }
     ]
 
