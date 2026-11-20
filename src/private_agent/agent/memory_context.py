@@ -248,7 +248,12 @@ async def _retrieve_rag_documents(
     global _LAST_RAG_QUERY
     original_query = query
     previous_query = _LAST_RAG_QUERY
-    if rewrite_query and len(query.split()) <= 4 and previous_query and previous_query != original_query:
+    if (
+        rewrite_query
+        and len(query.split()) <= 4
+        and previous_query
+        and previous_query != original_query
+    ):
         query = f"{previous_query} {query}"
     _LAST_RAG_QUERY = original_query
     documents = await asyncio.to_thread(

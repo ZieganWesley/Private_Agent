@@ -51,6 +51,7 @@ class StatusOverlay:
                     table.add_row(f"  {line}", "")
             if self._eta_deadline is not None:
                 import time as _t
+
                 remaining = max(0.0, self._eta_deadline - _t.monotonic())
                 table.add_row("ETA:", f"{remaining:.0f}s")
             for _call_id, name in list(self._running.items()):

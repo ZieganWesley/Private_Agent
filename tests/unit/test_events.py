@@ -69,7 +69,9 @@ def test_thread_safety():
             counter["n"] += 1
 
     bus.subscribe(events.Event, handler)
-    threads = [threading.Thread(target=lambda: bus.emit(events.Event())) for _ in range(50)]
+    threads = [
+        threading.Thread(target=lambda: bus.emit(events.Event())) for _ in range(50)
+    ]
     for t in threads:
         t.start()
     for t in threads:

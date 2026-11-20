@@ -252,6 +252,8 @@ OS_ISOLATED_TOOL_NAMES = frozenset(
         "finalize_code_task",
     }
 )
+
+
 def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | None:
     """Explain why a location-revealing call must not run, or None if allowed."""
     if local_session:
@@ -266,9 +268,13 @@ def _local_location_refusal(name: str, args: Any, local_session: bool) -> str | 
             "provider; ask the user for a place name and pass it as 'location'."
         )
     return None
+
+
 def _device_tools_allowed(provider_type: str) -> bool:
     """Local-only (location/media) tools: Local provider, or the explicit override."""
     return provider_type == "local" or ONLINE_PERMISSION_OVERRIDE
+
+
 def _tool_unavailable_reason(
     name: str,
     *,
@@ -300,6 +306,8 @@ def _tool_unavailable_reason(
         ):
             return "The selected local model does not declare vision support."
     return None
+
+
 def _tools_for_model(
     *,
     provider_type: str,
@@ -318,6 +326,8 @@ def _tools_for_model(
         is None
         or name in OVERRIDE_TOOL_LIST
     ]
+
+
 def _print_tool_catalog(
     entries,
     *,
@@ -378,6 +388,8 @@ def _print_tool_catalog(
             style=("red strike" if overridden else "strike") if unavailable else None,
         )
     console.print(table)
+
+
 async def authorize_network_research(
     tool_name: str,
     tool_args: dict[str, Any],
@@ -396,9 +408,13 @@ async def authorize_network_research(
         is_interactive=lambda: get_tool_context().interactive and sys.stdin.isatty(),
         session_consent_state=session_consent_state,
     )
+
+
 def _bind_tools(llm, tools_list):
     """Bind the active tool set to an LLM (B1 step 1 helper)."""
     return llm.bind_tools(tools_list)
+
+
 async def _invoke_initial_model_with_fallback(
     *,
     llm,
@@ -486,6 +502,8 @@ async def _invoke_initial_model_with_fallback(
             thinking_enabled=thinking_enabled,
         )
         return llm, llm_with_tools, selected_model, capabilities, response
+
+
 @dataclass
 class _PreflightState:
     tool_tasks: list
@@ -496,6 +514,8 @@ class _PreflightState:
     task_action_seen: bool
     tool_call_count: int
     capability_approved: bool = False
+
+
 async def _preflight_tool_calls(
     *,
     response,
@@ -678,7 +698,9 @@ async def _preflight_tool_calls(
                 )
             )
             continue
-        if call_name == "enable_capability" and not f_integration.gate_capability(tool_call, turn_permission_mode, console, state):
+        if call_name == "enable_capability" and not f_integration.gate_capability(
+            tool_call, turn_permission_mode, console, state
+        ):
             continue
         if call_name in NETWORK_TOOL_NAMES:
             tool_args = tool_call.get("args", {})
@@ -755,6 +777,8 @@ async def _preflight_tool_calls(
                     **execution_options,
                 )
             )
+
+
 async def _execute_tool_batch(
     *,
     response,
@@ -908,12 +932,16 @@ async def _execute_tool_batch(
         )
         return response, True
     return response, False
+
+
 def _select_permission_mode(interactive: bool = True) -> str:
     return _select_permission_mode_impl(
         AGENT_PERMISSION_MODE,
         console,
         lambda: interactive,
     )
+
+
 async def execute_tool_call(
     tool_call: dict,
     *,
@@ -941,7 +969,14 @@ async def execute_tool_call(
         f"[yellow][Tool Execution][/yellow] Calling '{name}' "
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
-    get_event_bus().emit(ToolStarted(call_id=str(call_id or ""), tool_name=str(name or ""), args_summary=str(safe_args), started_at=tool_started))
+    get_event_bus().emit(
+        ToolStarted(
+            call_id=str(call_id or ""),
+            tool_name=str(name or ""),
+            args_summary=str(safe_args),
+            started_at=tool_started,
+        )
+    )
     _pre_hook_block_reason = evaluate_pre_tool_hooks(
         name, args, SandboxManager.get_root()
     )[0]
@@ -1143,11 +1178,22 @@ async def execute_tool_call(
         elapsed_seconds=round(time.monotonic() - tool_started, 3),
         output_character_count=len(result_text),
     )
-    _hook_output = collect_post_tool_hook_output(tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root())
+    _hook_output = collect_post_tool_hook_output(
+        tool_name=name, tool_args=args, workspace_root=SandboxManager.get_root()
+    )
     if _hook_output:
         result_text += "\n\n[Post-tool checks]\n" + _hook_output
-    get_event_bus().emit(ToolFinished(call_id=str(call_id or ""), status="ok", duration=time.monotonic() - tool_started, output_size=len(result_text)))
+    get_event_bus().emit(
+        ToolFinished(
+            call_id=str(call_id or ""),
+            status="ok",
+            duration=time.monotonic() - tool_started,
+            output_size=len(result_text),
+        )
+    )
     return ToolMessage(content=result_text, tool_call_id=call_id)
+
+
 async def _execute_task_tool_call(
     memory: PersistentMemory,
     task_id: str,
@@ -1230,6 +1276,7 @@ async def _execute_task_tool_call(
         )
     return result
 
+
 async def _prepare_session(
     *,
     verbose_startup: bool = False,
@@ -1264,6 +1311,7 @@ async def _prepare_session(
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         await _discard_session_startup()
         raise
+
 
 async def _build_session_setup(
     *,
@@ -1712,6 +1760,7 @@ async def _build_session_setup(
         permission_mode=permission_mode,
     )
 
+
 async def _discard_session_startup() -> None:
     """Release whatever a failed startup already opened."""
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
@@ -1722,6 +1771,7 @@ async def _discard_session_startup() -> None:
     memory, _ACTIVE_MEMORY = _ACTIVE_MEMORY, None
     if memory is not None:
         memory.close()
+
 
 async def _choose_provider(
     *,
@@ -2174,6 +2224,7 @@ async def _choose_provider(
         available_models=available_models,
     )
 
+
 async def _run_agent_cli_session(
     *,
     verbose_startup: bool = False,
@@ -2369,11 +2420,20 @@ async def _run_agent_cli_session(
                     )
                 if user_input and not user_input.startswith("/"):
                     last_user_request = user_input
-                _handled, _cont, user_input, chat_history, context_summary, last_user_request = (
-                    handle_session_command(
-                        user_input, chat_history, context_summary,
-                        last_user_request, SandboxManager.get_root(), console,
-                    )
+                (
+                    _handled,
+                    _cont,
+                    user_input,
+                    chat_history,
+                    context_summary,
+                    last_user_request,
+                ) = handle_session_command(
+                    user_input,
+                    chat_history,
+                    context_summary,
+                    last_user_request,
+                    SandboxManager.get_root(),
+                    console,
                 )
                 if _handled and _cont:
                     continue
@@ -2892,7 +2952,9 @@ async def _run_agent_cli_session(
                 elif (
                     active_code_workspace is None and capabilities["tools"] is not False
                 ):
-                    tools_list = capability_packs.filter_tools_list(base_tools_list, user_input)
+                    tools_list = capability_packs.filter_tools_list(
+                        base_tools_list, user_input
+                    )
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; continue without tools
@@ -3384,6 +3446,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         and active_task["approved_revision"] == active_task["revision"]
                         and active_task["approved_digest"] == active_task["digest"]
                     ):
+
                         def _plan_field(step: dict, name: str) -> str:
                             value = step.get(name)
                             if isinstance(value, (list, tuple)):
@@ -3411,7 +3474,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                             else ""
                                         ),
                                         (
-                                            "validation=" + _plan_field(step, "validation")
+                                            "validation="
+                                            + _plan_field(step, "validation")
                                             if step.get("validation")
                                             else ""
                                         ),
@@ -3426,7 +3490,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                             else ""
                                         ),
                                         (
-                                            "edge_cases=" + _plan_field(step, "edge_cases")
+                                            "edge_cases="
+                                            + _plan_field(step, "edge_cases")
                                             if step.get("edge_cases")
                                             else ""
                                         ),
@@ -3541,7 +3606,9 @@ Runtime context:
                     user_input,
                     budget=prompt_budget,
                 )
-                enriched_input = f_integration.trim_context(enriched_input, prompt_budget)
+                enriched_input = f_integration.trim_context(
+                    enriched_input, prompt_budget
+                )
                 prompt_history = trim_history_to_context_budget(
                     chat_history,
                     enriched_input,
@@ -3564,7 +3631,9 @@ Runtime context:
                 )
 
                 turn_id = uuid.uuid4().hex
-                _f_state = f_integration.begin_turn(turn_id, user_input, effective_context, non_interactive)
+                _f_state = f_integration.begin_turn(
+                    turn_id, user_input, effective_context, non_interactive
+                )
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
@@ -3595,6 +3664,7 @@ Runtime context:
                         usage=usage,
                         console=console,
                     )
+
                 async def _run_agent_turn(response) -> Any:
                     nonlocal tools_list, llm_with_tools
                     iteration = 0
@@ -3603,7 +3673,10 @@ Runtime context:
                         tool_iteration_limit is None or iteration < tool_iteration_limit  # noqa: B023
                     ):
                         iteration += 1
-                        _iter_start = f_integration.record_iteration(_f_state, iteration)  # noqa: B023
+                        _iter_start = f_integration.record_iteration(
+                            _f_state,  # noqa: B023
+                            iteration,
+                        )
                         if (
                             iteration == 1
                             and response.content
@@ -3674,9 +3747,18 @@ Runtime context:
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
-                        f_integration.finish_iteration(_f_state, iteration, _iter_start, "ok")  # noqa: B023
+                        f_integration.finish_iteration(
+                            _f_state,  # noqa: B023
+                            iteration,
+                            _iter_start,
+                            "ok",
+                        )
                         if getattr(state, "capability_approved", False):
-                            tools_list, llm_with_tools = f_integration.rebuild_tools(base_tools_list, user_input, llm)  # noqa: B023
+                            tools_list, llm_with_tools = f_integration.rebuild_tools(
+                                base_tools_list,  # noqa: B023
+                                user_input,  # noqa: B023
+                                llm,  # noqa: B023
+                            )
                         if stop:
                             break
 
@@ -3694,7 +3776,9 @@ Runtime context:
                         usage = (messages_tokens(messages), context_stats["max"])  # noqa: B023
                         _plan_summary = f_integration.get_plan_summary(_f_state)  # noqa: B023
                         if _plan_summary:
-                            messages.append(SystemMessage(content=f"[Task plan]\n{_plan_summary}"))  # noqa: B023
+                            messages.append(  # noqa: B023
+                                SystemMessage(content=f"[Task plan]\n{_plan_summary}")
+                            )
                         try:
                             response = await _invoke_with_status(
                                 llm_with_tools,  # noqa: B023
@@ -3895,6 +3979,7 @@ Runtime context:
             continue
         break
 
+
 async def run_agent_cli_async(
     *,
     verbose_startup: bool = False,
@@ -3981,6 +4066,7 @@ async def run_agent_cli_async(
         await close_outbound_http_clients()
         close_mcp_sandbox_dirs()
         clear_captured_images()
+
 
 def run_agent_cli(
     *,
