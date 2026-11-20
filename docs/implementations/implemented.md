@@ -19,3 +19,9 @@
 - G3: indexing spinner only runs when a docs path is provided.
 - G4: workspace prompt precedes RAG folder prompt.
 - G15/G16: shared `Console` with a named `Theme` (info/success/warning/error/tool/user) and light-toggle env var.
+
+## Section G status
+
+- Branch `g-tui-ui` pushed and mergeable into `main` (fast-forward).
+- G1–G4, G15–G16 implemented; light toggle functional.
+- Remaining G items (G5–G14, G17–G24) pending.
