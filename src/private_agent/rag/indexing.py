@@ -463,6 +463,19 @@ def initialize_knowledge_base(
         console.print(f"[red][Error] Could not bind embedding model: {e}[/red]")
         return None
 
+    # Verify the embedding runtime is actually reachable before indexing, so a
+    # configured-but-absent runtime (for example Ollama on a llama.cpp-only
+    # machine) disables RAG instead of failing on every later search.
+    if hasattr(embeddings, "embed_query"):
+        try:
+            embeddings.embed_query("embedding availability check")
+        except Exception as e:  # noqa: BLE001 - embedding runtimes are optional
+            console.print(
+                f"[yellow][RAG] Embedding runtime is unavailable "
+                f"({type(e).__name__}); continuing without RAG.[/yellow]"
+            )
+            return None
+
     console.print(
         f"[bold green][Chroma DB][/bold green] Initializing local project vector store at: [cyan]{chroma_persist_dir}[/cyan]"
     )
