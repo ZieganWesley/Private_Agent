@@ -6,8 +6,8 @@ import tempfile
 from pathlib import Path
 
 from private_agent.repository_intelligence import (
-    ArchitectureMemory,
     AgentMetrics,
+    ArchitectureMemory,
     build_repository_map,
     classify_memory,
     find_callees,

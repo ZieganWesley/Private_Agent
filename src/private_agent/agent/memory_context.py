@@ -82,7 +82,12 @@ def _build_startup_memory_context(
         for item in ranked_items:
             per_item_scores.append(rank_memories([item])[0].get("_score", 0.0))
         episodes = [
-            ep for _, ep in sorted(zip(per_item_scores, episodes, strict=False), reverse=True)
+            ep
+            for _, ep in sorted(
+                zip(per_item_scores, episodes, strict=False),
+                key=lambda item: item[0],
+                reverse=True,
+            )
         ]
     episode_sections = []
     for episode in episodes:
