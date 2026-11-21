@@ -146,7 +146,7 @@ Branch `j-k-performance-optimization`.
 | J9 | Fixed | `rag/retrieval.py` builds a lazy in-memory FTS5 index at 5,000+ chunks and ranks with `bm25()`; smaller corpora keep `rank_bm25` |
 | J10 | Fixed | `runtime.py` runs episode search, learned preferences, startup retention pruning, history reloads and `/tasks` listing through `asyncio.to_thread` |
 | 13.7 | Fixed | `agent/prompt_prefix.py` splits the system prompt into a stable first message (base prompt, static rules, tool/deadline limits) and a volatile second one |
-| 13.10 | Fixed | `scripts/perf_check.py` + `scripts/perf_baseline.json` guard startup import, fixed-corpus RAG refresh and offline token counting at 20% growth; `.github/workflows/performance.yml` runs it |
+| 13.10 | Fixed | `scripts/perf_check.py` + `scripts/perf_baseline.json` report startup import and fixed-corpus RAG refresh relative to a calibration workload (so runners compare like with like) and fail on 20% growth; `.github/workflows/performance.yml` runs it |
 
 Simplification pass: removed the redundant dict cache inside `check_internet_connection`
 (the 30 s cache in `has_internet_connection` is the single source of truth),
@@ -160,10 +160,13 @@ J4 measurements: plain chat binds 12 tools (~1,372 tokens of tool schema)
 instead of 50 (~6,280 tokens), and the tool list is name-sorted so the
 prompt prefix is byte-identical between turns. J9 measurements at 20,000
 chunks: 1.3 ms per keyword query versus 7.7 ms with BM25 (55 ms to build the
-FTS5 index once). J13.10 baseline on this machine: 1.63 s startup import,
-0.14 s corpus refresh, 1.80 s offline token count.
+FTS5 index once). J13.10 baseline ratios on this machine: startup import at
+5.05x and corpus refresh at 0.47x their calibration workloads (1.61 s and
+0.13 s in wall-clock terms). The baseline file records wall-clock seconds only
+as context, labelled with the measuring machine, and the check compares the
+calibrated ratios, so a slower or faster CI runner does not move the result.
 
-Verification: `ruff check .` clean; `pytest` -> 1138 passed, 12 skipped, 1 warning;
+Verification: `ruff check .` clean; `pytest` -> 1140 passed, 12 skipped, 1 warning;
 `python scripts/perf_check.py` -> performance check passed.
 
 ### K section audit note
