@@ -6,15 +6,22 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-BASELINE_PACKS = {"Core", "Knowledge", "Media", "Memory", "MCP", "Helper"}
+# Plain chat binds only the Core pack (9.2, 13.7); other packs are added by
+# the router or by ``enable_capability`` during a turn.
+BASELINE_PACKS = {"Core"}
 
 CORE_TOOLS = frozenset(
     {
         "get_local_datetime",
         "read_local_file",
         "search_workspace_text",
+        "search_workspace_files",
+        "search_workspace_symbols",
         "list_directory",
         "search_documents",
+        "read_table_schema",
+        "calculate",
+        "run_subagent",
         "ask_user",
         "enable_capability",
     }
@@ -52,23 +59,38 @@ _register(
     "Coding",
     {
         "apply_workspace_patch",
+        "preview_workspace_patch",
         "edit_local_file",
         "rename_workspace_file",
         "delete_workspace_file",
         "run_shell_command",
         "run_project_unit_tests",
         "inspect_workspace_git",
+        "stage_git_changes",
+        "commit_git_changes",
+        "create_git_branch",
+        "create_pull_request",
+        "start_background_process",
+        "stop_background_process",
+        "list_background_processes",
+        "get_background_process_status",
     },
     "Project instructions (AGENTS.md), test after edits.",
 )
 _register(
     "Helper",
-    {"get_weather", "fetch_current_location"},
+    {
+        "get_weather",
+        "fetch_current_location",
+        "create_pdf",
+        "create_docx",
+        "create_xlsx",
+    },
     "Device and privacy rules.",
 )
 _register(
     "Planning",
-    {"create_task_plan", "revise_task_plan", "update_todo_step"},
+    {"create_task_plan", "inspect_task_plan", "revise_task_plan", "update_todo_step"},
     "How to write a plan.",
 )
 _register("MCP", set(), "Server descriptions.")
@@ -98,6 +120,37 @@ _register(
 
 
 _URL_RE = re.compile(r"https?://\S+")
+
+
+def _mentions(text: str, pattern: re.Pattern[str]) -> bool:
+    return pattern.search(text) is not None
+
+
+_CODING_RE = re.compile(
+    r"\b(fix|edit|implement|refactor|test|tests|patch|commit|branch|git|shell|"
+    r"command|build|lint|format|rename|delete|code|script)\b",
+    re.IGNORECASE,
+)
+_RESEARCH_RE = re.compile(
+    r"\b(research|search|latest|web|online|sources?|news|internet)\b",
+    re.IGNORECASE,
+)
+_PLANNING_RE = re.compile(r"\b(plans?|planning|checklist|steps)\b", re.IGNORECASE)
+_MEDIA_RE = re.compile(
+    r"\b(image|images|photo|picture|webcam|camera|video|audio|microphone|"
+    r"record|transcribe|speech)\b",
+    re.IGNORECASE,
+)
+_MEMORY_RE = re.compile(
+    r"\b(history|remember|recall|discuss(?:ed)?|earlier|previous|past|"
+    r"skill|skills|sessions?|conversations?)\b",
+    re.IGNORECASE,
+)
+_HELPER_RE = re.compile(
+    r"\b(weather|forecast|temperature|location|climate|pdf|docx|xlsx|"
+    r"spreadsheet|document)\b",
+    re.IGNORECASE,
+)
 
 
 def route_packs(
@@ -138,15 +191,21 @@ def route_packs(
         packs.add("Coding")
         packs.add("Planning")
     if has_image:
-        packs.add("Helper")
+        packs.add("Media")
 
-    # keyword hints
-    if any(w in text for w in ("fix", "edit", "implement", "refactor", "test")):
+    # Keyword hints; each pack is only sent when the turn mentions it.
+    if _mentions(text, _CODING_RE):
         packs.add("Coding")
-    if any(w in text for w in ("research", "search", "latest", "web")):
+    if _mentions(text, _RESEARCH_RE):
         packs.add("Research")
-    if "plan" in text:
+    if _mentions(text, _PLANNING_RE):
         packs.add("Planning")
+    if _mentions(text, _MEDIA_RE):
+        packs.add("Media")
+    if _mentions(text, _MEMORY_RE):
+        packs.add("Memory")
+    if _mentions(text, _HELPER_RE):
+        packs.add("Helper")
 
     return packs
 
@@ -215,4 +274,7 @@ def filter_tools_list(tools_list, user_input=""):
         name = getattr(t, "name", None)
         if name is None or name in allowed or name not in all_known:
             result.append(t)
+    # A fixed order keeps the tool definitions (and therefore the prompt
+    # prefix) identical between turns that bind the same packs.
+    result.sort(key=lambda tool: str(getattr(tool, "name", "")))
     return result

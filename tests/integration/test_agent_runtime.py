@@ -3146,7 +3146,11 @@ async def test_local_tool_incompatibility_fallback_preserves_task_context_and_po
     await run_agent_cli_async()
 
     assert len(fallback.calls) == 2
-    system_prompt = fallback.calls[0][0].content
+    system_prompt = "\n".join(
+        str(message.content)
+        for message in fallback.calls[0]
+        if isinstance(message, SystemMessage)
+    )
     assert "active permission mode is auto" in system_prompt
     assert "Configured system instructions." in system_prompt
     assert "This is the local Ollama provider." in system_prompt

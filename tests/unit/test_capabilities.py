@@ -1,4 +1,15 @@
+import pytest
+
 from private_agent import capabilities
+
+
+@pytest.fixture(autouse=True)
+def _clear_enabled_packs():
+    from private_agent.tools import get_tool_context
+
+    get_tool_context().enabled_packs.clear()
+    yield
+    get_tool_context().enabled_packs.clear()
 
 
 def test_route_packs_explicit_code():
@@ -53,10 +64,56 @@ def test_all_registered_tools_preserved():
     names = list(tools_mod.AVAILABLE_TOOLS.keys())
     objs = [SimpleNamespace(name=n) for n in names]
     out = capabilities.filter_tools_list(
-        objs, "/code /research /plan fix and search https://example.com"
+        objs,
+        "/code /research /plan fix and search https://example.com weather image "
+        "chat history record audio",
     )
     out_names = {t.name for t in out}
     assert set(names).issubset(out_names)
+
+
+def test_every_registered_tool_belongs_to_a_pack():
+    """Tools outside every pack are always sent, defeating J4 filtering."""
+    import private_agent.tools as tools_mod
+
+    packed = capabilities._all_pack_tools()
+    assert set(tools_mod.AVAILABLE_TOOLS) - packed == set()
+
+
+def test_plain_chat_binds_only_core_tools():
+    from types import SimpleNamespace
+
+    import private_agent.tools as tools_mod
+
+    objs = [SimpleNamespace(name=n) for n in tools_mod.AVAILABLE_TOOLS]
+    out = {tool.name for tool in capabilities.filter_tools_list(objs, "hello there")}
+    assert out == set(capabilities.CORE_TOOLS)
+    assert "web_search" not in out
+    assert "edit_local_file" not in out
+
+
+def test_route_packs_media_memory_and_helper_keywords():
+    assert "Media" in capabilities.route_packs("describe this image")
+    assert "Memory" in capabilities.route_packs("what did we discuss earlier?")
+    assert "Memory" in capabilities.route_packs("remember this for later")
+    assert "Helper" in capabilities.route_packs("what is the weather")
+    assert "Helper" in capabilities.route_packs("make me a pdf")
+
+
+def test_filter_tools_list_is_sorted_for_a_stable_prefix():
+    from types import SimpleNamespace
+
+    tools = [
+        SimpleNamespace(name="web_search"),
+        SimpleNamespace(name="ask_user"),
+        SimpleNamespace(name="get_local_datetime"),
+    ]
+    out = capabilities.filter_tools_list(tools, "search the web")
+    assert [tool.name for tool in out] == [
+        "ask_user",
+        "get_local_datetime",
+        "web_search",
+    ]
 
 
 def test_gate_capability_non_gated_pack():
