@@ -222,6 +222,8 @@ def resolve_config_values(
     )
     STREAMING_OUTPUT = configured_bool(config, "agent", "streaming_output", True)
     VISIBLE_REASONING = configured_bool(config, "agent", "visible_reasoning", False)
+    VERBOSE_TIMINGS = configured_bool(config, "agent", "verbose_timings", False)
+    STATUS_BAR = configured_bool(config, "agent", "status_bar", True)
     _configured_system_prompt = config_section(config, "agent").get("system_prompt")
     PROJECT_INSTRUCTIONS_FILE = config_section(config, "agent").get(
         "project_instructions_file", "AGENTS.md"
@@ -625,6 +627,8 @@ class Settings:
     max_output_tokens: int
     streaming_output: bool
     visible_reasoning: bool
+    verbose_timings: bool
+    status_bar: bool
     system_prompt: str
     permission_allow_rules: list
     permission_deny_rules: list

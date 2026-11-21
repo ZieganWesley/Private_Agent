@@ -78,6 +78,15 @@ def get_plan_summary(state: dict[str, Any]) -> str:
     return ""
 
 
+def is_synthetic_plan(state: dict[str, Any]) -> bool:
+    """Return whether the turn's plan is the default synthetic one."""
+    state = state or {}
+    if "synthetic" in state:
+        return bool(state.get("synthetic"))
+    plan = state.get("plan")
+    return bool(getattr(plan, "synthetic", False))
+
+
 def is_plan_complete(state: dict[str, Any]) -> bool:
     plan = (state or {}).get("plan")
     if plan is not None and hasattr(plan, "is_complete"):
@@ -97,7 +106,9 @@ def trim_context(text: str, total_tokens: int) -> str:
 def begin_turn(
     turn_id: str, user_input: str, total_tokens: int, json_mode: bool = False
 ) -> dict[str, Any]:
-    plan = task_orchestrator.build_plan(user_input, ["respond to request"])
+    plan = task_orchestrator.build_plan(
+        user_input, ["respond to request"], synthetic=True
+    )
     run_id = turn_id or uuid.uuid4().hex
     conn: sqlite3.Connection | None = None
     try:
@@ -112,6 +123,7 @@ def begin_turn(
         turn_context_token = begin_turn_tool_context()
     state = {
         "plan": plan,
+        "synthetic": getattr(plan, "synthetic", False),
         "iteration": 0,
         "pending": True,
         "conn": conn,

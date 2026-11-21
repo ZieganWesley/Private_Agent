@@ -19,7 +19,13 @@ from .prompts import token_count as _token_count
 from .session_state import SESSION_INFO as _SESSION_INFO
 from .session_state import SESSION_STATS as _SESSION_STATS
 from .session_stats import build_stats_table, format_duration
-from .status import SUMMARIZING, StatusIndicator, status_line, summarizing_message
+from .status import (
+    SUMMARIZING,
+    StatusIndicator,
+    StatusState,
+    status_ribbon,
+    summarizing_message,
+)
 
 
 def _print_context_state(
@@ -38,11 +44,22 @@ def _print_context_state(
         process_status = background_process_indicator()
     except (ImportError, OSError, RuntimeError, ValueError):  # pragma: no cover
         process_status = ""
-    status_text = status_line(
-        model_name, context_tokens, context_maximum, permission_mode, output_tokens
+    if process_status.startswith("background_processes="):
+        try:
+            background_processes = int(process_status.split("=", 1)[1])
+        except (TypeError, ValueError):
+            background_processes = 0
+    else:
+        background_processes = 0
+    state = StatusState(
+        model=model_name,
+        context_tokens=context_tokens,
+        context_maximum=context_maximum,
+        permission_mode=permission_mode,
+        output_tokens=output_tokens,
+        background_processes=background_processes,
     )
-    if process_status:
-        status_text = f"{status_text} | {process_status}"
+    status_text = status_ribbon(state)
     console.print(f"[dim]{status_text}[/dim]")
     used = context_tokens
     try:

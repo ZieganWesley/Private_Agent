@@ -19,6 +19,7 @@ class TaskPlan:
     goal: str
     steps: list[TaskStep] = field(default_factory=list)
     revision: int = 0
+    synthetic: bool = False
 
     def add_step(self, description: str, packs: set[str] | None = None) -> TaskStep:
         step = TaskStep(
@@ -42,8 +43,10 @@ class TaskPlan:
         return "\n".join(lines)
 
 
-def build_plan(goal: str, step_descriptions: list[str]) -> TaskPlan:
-    plan = TaskPlan(goal=goal)
+def build_plan(
+    goal: str, step_descriptions: list[str], *, synthetic: bool = False
+) -> TaskPlan:
+    plan = TaskPlan(goal=goal, synthetic=synthetic)
     for desc in step_descriptions:
         plan.add_step(desc)
     return plan

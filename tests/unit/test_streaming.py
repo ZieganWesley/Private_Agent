@@ -108,6 +108,7 @@ def test_generation_rate_reports_provider_tokens(monkeypatch):
         "print",
         lambda *values, **_kwargs: printed.append(values[0]),
     )
+    monkeypatch.setattr(streaming, "VERBOSE_TIMINGS", True)
 
     streaming._display_generation_rate(
         types.SimpleNamespace(

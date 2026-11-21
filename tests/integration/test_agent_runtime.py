@@ -1597,6 +1597,7 @@ def test_generation_rate_prefers_provider_token_usage(monkeypatch):
         "print",
         lambda *values, **kwargs: printed.append((values, kwargs)),
     )
+    monkeypatch.setattr(streaming, "VERBOSE_TIMINGS", True)
 
     streaming._display_generation_rate(
         types.SimpleNamespace(

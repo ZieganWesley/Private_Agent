@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
 import logging
 import time
@@ -14,8 +15,9 @@ from langchain_core.messages import AIMessage, AIMessageChunk
 from rich.panel import Panel
 from rich.text import Text
 
-from ..config import STREAMING_OUTPUT, VISIBLE_REASONING
+from ..config import STREAMING_OUTPUT, VERBOSE_TIMINGS, VISIBLE_REASONING
 from ..run_logging import RUN_LOGGER, log_event
+from ..ui.turn import GenerationStats
 from .console import console
 from .prompts import token_count as _token_count
 from .session_state import SESSION_STATS as _SESSION_STATS
@@ -79,13 +81,25 @@ def _model_response_is_empty(response: Any) -> bool:
     return not content.strip() and not getattr(response, "tool_calls", None)
 
 
-def _display_generation_rate(response: Any, elapsed: float) -> None:
-    """Report model output throughput, preferring provider token usage."""
+def _display_generation_rate(
+    response: Any,
+    elapsed: float,
+    *,
+    first_token_at: float | None = None,
+    started: float | None = None,
+) -> GenerationStats | None:
+    """Compute model output throughput, preferring provider token usage.
+
+    Returns a :class:`GenerationStats` (or ``None`` when there is nothing to
+    report). The ``[Generation]`` line is only printed when ``verbose_timings``
+    is enabled, so it no longer clutters the normal turn flow.
+    """
     usage = getattr(response, "usage_metadata", None)
     if not isinstance(usage, dict):
         usage = {}
     output_tokens = usage.get("output_tokens")
     source = "model-reported"
+    estimated = False
     if (
         not isinstance(output_tokens, int)
         or isinstance(output_tokens, bool)
@@ -105,13 +119,25 @@ def _display_generation_rate(response: Any, elapsed: float) -> None:
             _visible_chunk_text(getattr(response, "content", ""))
         )
         source = "estimated visible"
+        estimated = True
     if output_tokens <= 0:
-        return
-    safe_elapsed = max(elapsed, 0.001)
-    console.print(
-        f"[dim][Generation][/dim] {output_tokens} {source} output tokens "
-        f"in {elapsed:.2f}s ({output_tokens / safe_elapsed:.1f} tokens/s)"
+        return None
+    ttft = 0.0
+    if first_token_at is not None and started is not None:
+        ttft = max(0.0, first_token_at - started)
+    stats = GenerationStats(
+        output_tokens=output_tokens,
+        estimated=estimated,
+        first_token_seconds=ttft,
+        last_token_seconds=elapsed,
     )
+    if VERBOSE_TIMINGS:
+        safe_elapsed = max(elapsed, 0.001)
+        console.print(
+            f"[dim][Generation][/dim] {output_tokens} {source} output tokens "
+            f"in {elapsed:.2f}s ({output_tokens / safe_elapsed:.1f} tokens/s)"
+        )
+    return stats
 
 
 def _display_visible_reasoning(response: Any) -> None:
@@ -304,7 +330,12 @@ async def _invoke_with_budget(
                 first_token_at = None
             elapsed = time.monotonic() - started
             _display_visible_reasoning(aggregate)
-            _display_generation_rate(aggregate, elapsed)
+            _stats = _display_generation_rate(
+                aggregate, elapsed, first_token_at=first_token_at, started=started
+            )
+            if aggregate is not None and _stats is not None:
+                with contextlib.suppress(AttributeError, TypeError):
+                    aggregate.generation_stats = _stats
             _SESSION_STATS.record_model_call(
                 messages,
                 aggregate if aggregate is not None else AIMessageChunk(content=""),
@@ -422,7 +453,10 @@ async def _invoke_with_budget(
             )
     elapsed = time.monotonic() - started
     _display_visible_reasoning(response)
-    _display_generation_rate(response, elapsed)
+    _stats = _display_generation_rate(response, elapsed)
+    if _stats is not None:
+        with contextlib.suppress(AttributeError, TypeError):
+            response.generation_stats = _stats
     _SESSION_STATS.record_model_call(messages, response, elapsed, model_name)
     log_event(
         RUN_LOGGER,
@@ -507,7 +541,7 @@ async def _invoke_with_status(
             )
             raise
     elapsed = time.monotonic() - started
-    if elapsed >= 2:
+    if elapsed >= 2 and VERBOSE_TIMINGS:
         console.print(
             f"[dim][Completed][/dim] {status_message.rstrip('.')} in {elapsed:.1f}s."
         )

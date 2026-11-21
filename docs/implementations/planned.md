@@ -1282,172 +1282,32 @@ estimate.
 
 ---
 
-## Part G: User Interface
+## Part G: User Interface (remaining)
 
-The UI is a prompt-driven terminal app built with `rich` and `prompt_toolkit`.
-The startup screens below come from a real run in a pseudo-terminal with a
-temporary home folder. No model was reachable, so the conversation screens
-are taken from the code.
-
-### What it looks like
-
-**Startup (captured):**
-
-```
-Private Agent
-No local runtimes found to proceed with local inference. Online configuration is available.
-RAG documents directory (Enter to use configured path '/…/.private_agent/rag', or enter
-a project-specific path):
-[Warning] Provided KB path '/…/.private_agent/rag' is not a valid directory. Skipping
-knowledge base initialization.
-⠋ Indexing local knowledge base...
-Enter workspace root path for security sandbox (Press Enter for current dir):
-[Agent Permission Mode]
-  1. Manual — ask before every tool action
-  2. Auto — read/search freely; ask before edits and command execution
-  3. Full — approve all tool calls for this session
-Choose permission mode [1/2/3] (default: auto): 2
-
-Model Provider
-  1. Online — enter details manually
-Choose provider [1-1] (Default: 1):
-OpenAI-compatible API base URL :
-Online mode will send requests to api.openai.com. Continue? [y/N]:
-
-Model Provider
-  1. Online — enter details manually
-Choose provider [1-1] (Default: 1):
-```
-
-**During a conversation (from the code):**
-
-```
---- Local Ready! Type 'exit' or 'switch' ---
-User: explain tests/conftest.py                 ← bold blue, single line
-[Processing] Processing model response...
-[RAG State] Retrieved 2 document/episodic chunks.
-[Tool Request] read_local_file {'file_path': 'tests/conftest.py'}
-╭─ Tool output: read_local_file ─────────────╮ ← blue panel, first 500 chars only
-│ import pathlib ...                          │
-╰─────────────────────────────────────────────╯
-AI (qwen3:8b): This file sets up **pytest** fixtures ...   ← raw text, Markdown not rendered
-```
-
-At exit, a **Session Statistics** table is printed, which looks good.
-
-**In numbers:**
-
-| Element | Count in code |
-|---|---|
-| `console.input` prompts | 59 |
-| `[y/N]` confirmations | 12 |
-| Typed confirmations | `APPROVE <id>`, `DELETE <id>`, `TAKEOVER <id>`, `RESET` |
-| Panels / tables | 10 / 9 |
-| `Markdown`, `Syntax`, `Live`, `Progress`, `Rule` | 0 |
-| Separate `Console()` objects | 11 |
-| Different `[Label]` message prefixes | about 57 |
-| Colour tags | yellow 166, cyan 75, red 60, green 35 |
-
-### Strengths worth keeping
-
-- Command and `@file` completion while typing, with "directory" and
-  "workspace file" labels, and Ctrl+R history search.
-- Clean tables for `/status`, the startup Ready summary and Session
-  Statistics.
-- Typed confirmations for destructive actions (`DELETE <id>`, `RESET`).
-- Redacted tool arguments, and plain-text fallback when not attached to a
-  terminal.
+Implemented items (G1, G2, G3, G5, G7, G8, G10, G12, G13, G14, G15/G16,
+G17-G19, G20-G23, G24) are complete and documented in
+`docs/implementations/ui-architecture.md` and `docs/implementations/implemented.md`.
+Only the unfinished items remain, renumbered.
 
 ### Bugs seen in the real run
 
-**G1. No way out of the online-provider loop.**
-
-**Fixed.** Added an `Exit` option (0) to the provider menu and an `exit_requested` flag on `ProviderPreference`.
-With no local model, pressing Enter at `Continue? [y/N]` (default No) returns
-to a provider menu whose only option is the same online provider. Only Ctrl+C
-exits.
-
-**G2. A warning about its own default folder.**
-
-**Fixed.** Missing KB folders are created instead of warned.
-On first run it warns that its own default RAG folder `~/.private_agent/rag`
-is not a valid directory, instead of creating it or skipping quietly.
-
-**G3. A spinner after skipping.**
-
-**Fixed.** The indexing spinner only runs when a docs path is provided.
-"Indexing local knowledge base..." appears right after it says indexing was
-skipped.
-
-**G4. Questions in an odd order.**
-
-**Fixed.** Workspace prompt now precedes the RAG folder prompt.
+**G1. Questions in an odd order.**
 It asks for the RAG folder before the workspace, though the project-local
 `rag` folder is found relative to the workspace.
 
 ### Essentials missing
 
-**G5. No Markdown rendering or code highlighting.**
-Replies are streamed as plain text with markup turned off
-(`runtime.py:2676`), so code blocks, tables, lists and bold show as raw `**`,
-`|` and backticks. This is the biggest visible gap (same as E1).
-
-**G6. No coloured diffs.**
+**G2. No coloured diffs.**
 Edit previews (`preview_workspace_patch`) go through the same `Text()` panel
 as all tool output, so it is hard to see what an edit changes before
 approving it.
 
-**G7. Too many startup questions.**
-There are 4–7 questions before the first message (RAG folder, workspace,
-mode, provider, URL, key, confirm), with no "remember my choices" and no
-command-line flags.
+**G3. No way to stop one turn** (see C12).
+No cancel/interrupt affordance for an in-flight turn.
 
-**G8. No live status while working** (see F3; fixed by step 9.7).
-
-**Partly fixed:** the CLI now shows one phase-aware spinner: cyan while a
-local model is being loaded into memory or an online request is in flight,
-magenta while the model is thinking with `visible_reasoning` off, and blue
-while older context or the session summary is being condensed. When
-`visible_reasoning` is on, the reasoning streams as dimmed text above the
-answer. A context-window gauge beside the spinner and in the
-`[Context State]` line fills with the share of the prompt budget in use
-(green below 50%, yellow from 50%, red from 80%). The full live panel for
-running and finished tools, packs and context use (step 9.7) is still open.
-
-**G9. No way to stop one turn** (see C12; fixed by step 6.4).
-
-**G10. No multi-line input.**
-There are no key bindings, so there is no Alt+Enter or Shift+Enter for a new
-line.
-
-**G11. No way to expand tool output.**
+**G4. No way to expand tool output.**
 Previews stop at 500 characters (`TOOL_RESULT_PREVIEW_CHARS`,
 `runtime.py:196`), with no way to see the rest of what the model saw.
-
-**G12. Basic approval prompts.**
-Prompts are plain `[y/N]` with no "always allow" option (C8), and tool
-arguments are shown as a Python dict.
-
-**G13. No arrow-key menus.**
-Menus are numbered or typed, and `/tasks` opens a sub-prompt where commands
-such as `approve <ID>` are typed and IDs copied by hand.
-
-**G14. Replies and diagnostics are mixed** (see E34; fixed by steps 5.2 and 8.2).
-
-### Cosmetics missing
-
-| ID | Missing | What it would look like |
-|---|---|---|
-| G15 | **Consistent message style.** About 57 different `[Label]` prefixes in mixed styles; yellow used 166 times for both warnings and normal information | A few levels (info, success, warning, error), each with one colour and one symbol |
-| G16 | **One shared console and theme.** 11 separate `Console()` objects and no theme | One console with a named theme (`warning`, `tool`, `user`, …) and a light-terminal option |
-| G17 | **An informative prompt.** Just `User:` in bold blue | `qwen3:8b · auto · 42% ›`, or the bottom toolbar (F3) |
-| G18 | **Separation between turns.** `AI (model):` header with no divider | A thin `Rule` between turns, aligned headers |
-| G19 | **A welcome screen.** Only "Private Agent" | Version, model, workspace and a `/help` hint |
-| G20 | **Readable tool requests.** Raw Python `repr` | `read_local_file · tests/conftest.py` |
-| G21 | **Per-turn details.** Speed, tokens and time only appear in the exit table | A dimmed line after each reply: `1.8k tokens · 14 tok/s · 6.2s` |
-| G22 | **Status symbols.** Results are marked only by panel colour | ✓ ✗ ⊘ ⏱ markers |
-| G23 | **Grouped `/help`.** One long list | Groups (Chat, Files, Plans, Memory, Model) in a table |
-| G24 | **Messages that fit narrow terminals.** Long warnings wrap mid-sentence | Short messages with details on request |
 
 ---
 
