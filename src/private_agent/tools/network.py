@@ -45,15 +45,20 @@ _EXPLICIT_PRIVATE_NETWORKS = tuple(
 
 _DNS_CACHE_TTL_SECONDS = 60.0
 _DNS_CACHE_MAX_ENTRIES = 256
-_DNS_CACHE: dict[tuple[str, int, bool, int], tuple[float, list[str]]] = {}
+_DnsCacheKey = tuple[str, int, bool, object]
+_DNS_CACHE: dict[_DnsCacheKey, tuple[float, list[str]]] = {}
 _DNS_CACHE_LOCK = threading.Lock()
 
 
-def _dns_cache_key(host: str, port: int, allow_loopback: bool, resolver_id: int = 0) -> tuple[str, int, bool, int]:
-    return (host.casefold(), int(port), bool(allow_loopback), int(resolver_id))
+def _dns_cache_key(
+    host: str, port: int, allow_loopback: bool, resolver: object | None = None
+) -> _DnsCacheKey:
+    # The resolver function itself is part of the key, so a replaced resolver
+    # starts with an empty cache and Python cannot recycle its id into a hit.
+    return (host.casefold(), int(port), bool(allow_loopback), resolver)
 
 
-def _cached_dns_records(key: tuple[str, int, bool, int]) -> list[str] | None:
+def _cached_dns_records(key: _DnsCacheKey) -> list[str] | None:
     now = time.monotonic()
     with _DNS_CACHE_LOCK:
         entry = _DNS_CACHE.get(key)
@@ -66,7 +71,7 @@ def _cached_dns_records(key: tuple[str, int, bool, int]) -> list[str] | None:
         return list(records)
 
 
-def _store_dns_records(key: tuple[str, int, bool, int], records: list[str]) -> None:
+def _store_dns_records(key: _DnsCacheKey, records: list[str]) -> None:
     now = time.monotonic()
     with _DNS_CACHE_LOCK:
         _DNS_CACHE[key] = (now, list(records))
@@ -207,7 +212,7 @@ def _resolve_validated_peer(
     deadline = time.monotonic() + min(max(0.0, timeout), NETWORK_REQUEST_TIMEOUT)
     if deadline <= time.monotonic():
         raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.")
-    cache_key = _dns_cache_key(host, port, allow_loopback, id(_getaddrinfo_with_timeout))
+    cache_key = _dns_cache_key(host, port, allow_loopback, _getaddrinfo_with_timeout)
     records = _cached_dns_records(cache_key)
     if records is None:
         try:
@@ -235,7 +240,9 @@ async def _resolve_validated_peer_async(
     deadline = time.monotonic() + min(max(0.0, timeout), NETWORK_REQUEST_TIMEOUT)
     if deadline <= time.monotonic():
         raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.")
-    cache_key = _dns_cache_key(host, port, allow_loopback, id(_getaddrinfo_async_with_timeout))
+    cache_key = _dns_cache_key(
+        host, port, allow_loopback, _getaddrinfo_async_with_timeout
+    )
     records = _cached_dns_records(cache_key)
     if records is None:
         try:
