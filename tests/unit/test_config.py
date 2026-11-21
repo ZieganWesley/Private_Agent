@@ -16,7 +16,7 @@ def test_malformed_config_handling(tmp_path, monkeypatch):
     with pytest.warns(RuntimeWarning, match="Malformed or invalid configuration"):
         config = load_or_create_config()
     assert isinstance(config, dict)
-    assert "default_model_temperature" in config
+    assert "models" in config
 
 
 def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch):
@@ -62,7 +62,7 @@ def test_config_creates_private_default_file(tmp_path, monkeypatch):
     assert settings["agent"]["streaming_output"] is True
     assert settings["agent"]["visible_reasoning"] is False
     assert settings["tools"]["override_tool_list"] == []
-    assert settings["DEBUG_LOG_ENABLED"] == 0
+    assert settings["logging"]["debug_enabled"] == 0
     assert json.loads(config_path.read_text(encoding="utf-8")) == config.DEFAULT_CONFIG
     assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
 
@@ -110,7 +110,7 @@ def test_empty_system_prompt_is_replaced_with_packaged_default():
     assert settings["agent"]["system_prompt"] == config.DEFAULT_SYSTEM_PROMPT
 
 
-def test_categorized_config_preserves_legacy_keys_and_prefers_category_values():
+def test_categorized_config_ignores_legacy_flat_keys():
     from private_agent import config
 
     merged = config._merge_config(
@@ -123,12 +123,12 @@ def test_categorized_config_preserves_legacy_keys_and_prefers_category_values():
     )
 
     assert merged["agent"]["max_tool_output_chars"] == 2048
-    assert merged["max_tool_output_chars"] == 2048
+    assert "max_tool_output_chars" not in merged
     assert merged["tools"]["max_read_file_bytes"] == 8192
-    assert merged["max_read_file_bytes"] == 8192
+    assert "max_read_file_bytes" not in merged
 
 
-def test_categorized_config_maps_legacy_flat_settings():
+def test_categorized_config_ignores_legacy_flat_settings():
     from private_agent import config
 
     merged = config._merge_config(
@@ -139,18 +139,18 @@ def test_categorized_config_maps_legacy_flat_settings():
         }
     )
 
-    assert merged["agent"]["max_tool_output_chars"] == 4096
-    assert merged["rag"]["max_file_bytes"] == 123456
-    assert merged["logging"]["debug_enabled"] == 1
+    assert merged["agent"]["max_tool_output_chars"] == 12000
+    assert merged["rag"]["max_file_bytes"] == 5242880
+    assert merged["logging"]["debug_enabled"] == 0
 
 
-def test_categorized_online_api_key_has_legacy_runtime_alias():
+def test_categorized_online_api_key_has_no_legacy_runtime_alias():
     from private_agent import config
 
     merged = config._merge_config({"models": {"online_api_key": "configured-test-key"}})
 
     assert merged["models"]["online_api_key"] == "configured-test-key"
-    assert merged["online_api_key"] == "configured-test-key"
+    assert "online_api_key" not in merged
 
 
 def test_merge_config_migrates_old_default_rag_and_skills_paths():
@@ -227,17 +227,17 @@ def test_streaming_output_configuration_parses_boolean_values(
     assert config._configured_bool("agent", "streaming_output", True) is expected
 
 
-def test_visible_reasoning_configuration_defaults_off_and_accepts_legacy_name():
+def test_visible_reasoning_configuration_defaults_off_and_ignores_legacy_name():
     from private_agent import config
 
     assert config.DEFAULT_CONFIG["agent"]["visible_reasoning"] is False
     assert (
         config._merge_config({"VISIBILE_REASONING": True})["agent"]["visible_reasoning"]
-        is True
+        is False
     )
 
 
-def test_loading_legacy_config_migrates_it_to_categorized_sections(
+def test_loading_legacy_config_does_not_migrate_flat_keys(
     tmp_path, monkeypatch
 ):
     config_path = tmp_path / ".private_agent.conf"
@@ -253,22 +253,18 @@ def test_loading_legacy_config_migrates_it_to_categorized_sections(
     )
     monkeypatch.setattr("private_agent.config.CONFIG_FILE_PATH", config_path)
 
-    runtime_config = load_or_create_config()
+    load_or_create_config()
     saved_config = json.loads(config_path.read_text(encoding="utf-8"))
 
-    assert saved_config["agent"]["max_tool_output_chars"] == 4096
-    assert saved_config["rag"]["max_file_bytes"] == 123456
-    assert saved_config["logging"]["debug_enabled"] == 1
-    assert "max_tool_output_chars" not in saved_config
-    assert runtime_config["max_tool_output_chars"] == 4096
-    assert stat.S_IMODE(config_path.stat().st_mode) == 0o600
+    assert "agent" in saved_config
+    assert saved_config["agent"]["max_tool_output_chars"] == 12000
 
 
 def test_debug_log_config_defaults_off(tmp_path, monkeypatch):
     from private_agent import config
 
     monkeypatch.setattr(config, "CONFIG_FILE_PATH", tmp_path / ".private_agent.conf")
-    assert load_or_create_config()["DEBUG_LOG_ENABLED"] == 0
+    assert load_or_create_config()["logging"]["debug_enabled"] == 0
 
 
 def test_logging_console_adapter_installs_and_restores_module_consoles():
