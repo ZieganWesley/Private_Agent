@@ -9,7 +9,6 @@ from langchain_core.messages import ToolMessage
 from rich.panel import Panel
 from rich.text import Text
 
-from ..tools.media import captured_image_message
 from .console import console
 
 TOOL_RESULT_PREVIEW_CHARS = 500
@@ -250,3 +249,34 @@ def expand_last_tool_result(index: int = -1) -> str | None:
 def list_recent_tool_results() -> list[tuple[str, str]]:
     """Return (name, full_result) pairs for recently displayed tool results."""
     return list(_RECENT_TOOL_RESULTS)
+
+
+class _LazyProxy:
+    __slots__ = ("_module", "_attr", "_value", "_loaded")
+
+    def __init__(self, module_path, attr_name):
+        self._module = module_path
+        self._attr = attr_name
+        self._value = None
+        self._loaded = False
+
+    def _load(self):
+        if not self._loaded:
+            import importlib
+
+            module = importlib.import_module(self._module, package=__package__)
+            self._value = getattr(module, self._attr)
+            self._loaded = True
+        return self._value
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+    def __call__(self, *args, **kwargs):
+        return self._load()(*args, **kwargs)
+
+    def __repr__(self):
+        return repr(self._load())
+
+
+captured_image_message = _LazyProxy("..tools.media", "captured_image_message")

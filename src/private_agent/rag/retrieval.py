@@ -5,7 +5,6 @@ import re
 import sqlite3
 import threading
 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from private_agent.console import console
@@ -113,7 +112,7 @@ class HybridRAGRetriever:
     keyword_backend: str | None = None
     _fts5: _Fts5KeywordIndex | None = None
 
-    def __init__(self, vectorstore: Chroma, documents: list[Document]):
+    def __init__(self, vectorstore: object, documents: list[Document]):
         self.vectorstore = vectorstore
         self.documents = documents
         self.bm25 = None

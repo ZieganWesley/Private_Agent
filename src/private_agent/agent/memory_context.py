@@ -8,6 +8,7 @@ import pathlib
 import re
 import sqlite3
 import sys
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -15,7 +16,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from rich.panel import Panel
 from rich.table import Table
 
-from ..code_tasks import is_code_task_request
 from ..config import (
     DEFAULT_EPISODIC_SUMMARIES,
     MAX_MEMORY_CONTEXT_TOKENS,
@@ -27,11 +27,29 @@ from ..config import (
     RAG_INDEX_PATH,
 )
 from ..database import PersistentMemory
-from ..rag import initialize_knowledge_base, reset_knowledge_base
 from ..run_logging import RUN_LOGGER
 from .console import console
 from .learning import _run_learning_maintenance, _run_learning_suggestion
 from .prompts import token_count as _token_count
+
+
+def initialize_knowledge_base(*args, **kwargs):
+    from ..rag import initialize_knowledge_base as _initialize
+
+    return _initialize(*args, **kwargs)
+
+
+def reset_knowledge_base(*args, **kwargs):
+    from ..rag import reset_knowledge_base as _reset
+
+    return _reset(*args, **kwargs)
+
+
+def knowledge_base_signature(*args, **kwargs):
+    from ..rag import knowledge_base_signature as _signature
+
+    return _signature(*args, **kwargs)
+
 
 _LAST_RAG_QUERY = ""
 
@@ -227,6 +245,8 @@ def _build_learned_context(
 
 
 def _is_coding_guidance_request(text: str) -> bool:
+    from ..code_tasks import is_code_task_request
+
     return is_code_task_request(text) or bool(
         re.search(
             r"\b(cod(?:e|ing)|software|program(?:ming)?|developer|"
@@ -717,3 +737,100 @@ def _offer_local_data_reset(memory: PersistentMemory) -> frozenset[str]:
                 f"[red]SQLite reset failed ({type(exc).__name__}): {exc}[/red]"
             )
     return frozenset(reset_scopes)
+
+
+async def _initialize_rag_for_docs(
+    docs_input,
+    *,
+    rag_index_path,
+    console,
+    input_fn,
+    log_event,
+    run_logger,
+    uuid,
+    logging,
+    initialize_knowledge_base_fn,
+    knowledge_base_signature_fn,
+):
+    """Run or schedule RAG indexing, preserving interactive rebuild prompts."""
+    import pathlib as _pathlib
+
+    vectorstore = None
+    is_rag_active = False
+    rag_signature = None
+    rag_last_check = time.monotonic()
+    rag_task = None
+    if not docs_input:
+        return vectorstore, is_rag_active, rag_signature, rag_task, rag_last_check
+
+    existing_index = _pathlib.Path(rag_index_path) / "chroma.sqlite3"
+    if existing_index.exists():
+        rag_init_started = time.monotonic()
+        try:
+            with console.status("[bold cyan]Indexing local knowledge base...[/bold cyan]"):
+                vectorstore = await asyncio.to_thread(
+                    initialize_knowledge_base_fn,
+                    docs_input,
+                    index_path=rag_index_path,
+                    confirm_rebuild=lambda detail: (
+                        input_fn(
+                            f"[yellow]RAG index state is damaged: {detail}\n"
+                            "Preserve the existing index as a timestamped backup and rebuild? "
+                            "Type REBUILD to confirm: [/yellow]"
+                        ).strip()
+                        == "REBUILD"
+                    ),
+                )
+        except Exception as exc:  # noqa: BLE001 - Chroma/embedding failures must not block startup
+            vectorstore = None
+            reference_id = uuid.uuid4().hex[:8]
+            console.print(
+                f"[yellow][RAG warning] Knowledge base is unavailable; continuing "
+                f"without RAG ({type(exc).__name__}; reference {reference_id}).[/yellow]"
+            )
+        is_rag_active = vectorstore is not None
+        rag_signature = (
+            knowledge_base_signature_fn(docs_input) if is_rag_active else None
+        )
+        rag_last_check = time.monotonic()
+        log_event(
+            run_logger,
+            "rag.initialization_completed",
+            elapsed_seconds=round(time.monotonic() - rag_init_started, 3),
+            enabled=True,
+        )
+        return vectorstore, is_rag_active, rag_signature, None, rag_last_check
+
+    console.print("[cyan][RAG][/cyan] Indexing local knowledge base in the background...")
+
+    async def _background_rag_init():
+        try:
+            return await asyncio.to_thread(
+                initialize_knowledge_base_fn,
+                docs_input,
+                index_path=rag_index_path,
+                confirm_rebuild=None,
+            )
+        except Exception as exc:  # noqa: BLE001 - Chroma/embedding failures must not block startup
+            reference_id = uuid.uuid4().hex[:8]
+            console.print(
+                f"[yellow][RAG warning] Knowledge base is unavailable; continuing "
+                f"without RAG ({type(exc).__name__}; reference {reference_id}).[/yellow]"
+            )
+            log_event(
+                run_logger,
+                "rag.initialization_failed",
+                level=logging.ERROR,
+                reference_id=reference_id,
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+            return None
+
+    rag_task = asyncio.create_task(_background_rag_init())
+    log_event(
+        run_logger,
+        "rag.initialization_scheduled",
+        enabled=True,
+    )
+    return None, False, None, rag_task, time.monotonic()

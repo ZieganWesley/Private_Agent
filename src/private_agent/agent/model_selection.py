@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """Chat-model construction, capability inspection and online model picking."""
 
 from __future__ import annotations
@@ -33,14 +34,6 @@ from ..config import (
 )
 from ..hardware import ollama_acceleration_options
 from ..run_logging import RUN_LOGGER, log_event
-from ..tools import (
-    _public_only_async_client,
-    check_internet_connection,
-    ollama_client_kwargs,
-    ollama_langchain_client_kwargs,
-    public_only_sync_client,
-    track_ollama_http_clients,
-)
 from .console import console
 from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
 from .model_capabilities import detect_openai_compatible_capabilities
@@ -319,3 +312,42 @@ def fetch_local_chat_models() -> list[str]:
             seen.add(model_name)
             chat_models.append(model_name)
     return chat_models
+
+
+class _LazyProxy:
+    __slots__ = ("_module", "_attr", "_value", "_loaded")
+
+    def __init__(self, module_path, attr_name):
+        self._module = module_path
+        self._attr = attr_name
+        self._value = None
+        self._loaded = False
+
+    def _load(self):
+        if not self._loaded:
+            import importlib
+
+            module = importlib.import_module(self._module, package=__package__)
+            self._value = getattr(module, self._attr)
+            self._loaded = True
+        return self._value
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+    def __call__(self, *args, **kwargs):
+        return self._load()(*args, **kwargs)
+
+    def __repr__(self):
+        return repr(self._load())
+
+
+for _name, _attr in {
+    "_public_only_async_client": "_public_only_async_client",
+    "check_internet_connection": "check_internet_connection",
+    "ollama_client_kwargs": "ollama_client_kwargs",
+    "ollama_langchain_client_kwargs": "ollama_langchain_client_kwargs",
+    "public_only_sync_client": "public_only_sync_client",
+    "track_ollama_http_clients": "track_ollama_http_clients",
+}.items():
+    globals()[_name] = _LazyProxy("..tools", _attr)

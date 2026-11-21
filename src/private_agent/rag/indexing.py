@@ -38,9 +38,7 @@ from ..config import (
     RAG_SQLITE_MAX_ROWS_PER_TABLE,
 )
 from ..hardware import ollama_acceleration_options
-from ..tools import ollama_langchain_client_kwargs, track_ollama_http_clients
 from .chunking import ChunkingSettings, split_text
-from .retrieval import HybridRAGRetriever
 
 SQLITE_EXTENSIONS = frozenset({".db", ".sqlite", ".sqlite3", ".db3"})
 SUPPORTED_EXTENSIONS = (
@@ -431,6 +429,11 @@ def initialize_knowledge_base(
     )
     try:
         if EMBEDDING_PROVIDER == "ollama":
+            from ..tools import (
+                ollama_langchain_client_kwargs,
+                track_ollama_http_clients,
+            )
+
             embeddings = OllamaEmbeddings(
                 model=EMBEDDING_MODEL,
                 base_url=OLLAMA_BASE_URL,
@@ -698,6 +701,8 @@ def initialize_knowledge_base(
         _write_index_state_atomic(state_file_path, updated_state)
 
         # Return Hybrid RAG retriever wrapper
+        from .retrieval import HybridRAGRetriever
+
         return HybridRAGRetriever(vectorstore, all_parsed_docs)
     except (ValueError, OSError, RuntimeError) as e:
         if (
@@ -729,6 +734,8 @@ def initialize_knowledge_base(
                         embedding_function=embeddings,
                     )
                 _write_index_state_atomic(state_file_path, updated_state)
+                from .retrieval import HybridRAGRetriever
+
                 return HybridRAGRetriever(vectorstore, all_parsed_docs)
             except (ValueError, OSError, RuntimeError) as recovery_error:
                 console.print(

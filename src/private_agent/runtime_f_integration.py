@@ -11,7 +11,6 @@ from typing import Any
 from . import capabilities as capability_packs
 from . import context_manager, json_output, task_orchestrator, timeline
 from .config import DEFAULT_DB_PATH
-from .tools import get_tool_context
 
 
 def rebuild_tools(base_tools_list, user_input, llm):
@@ -34,6 +33,8 @@ def gate_capability(tool_call, permission_mode, console, state):
     from langchain_core.messages import ToolMessage
 
     name = (tool_call.get("args") or {}).get("name")
+    from .tools import get_tool_context
+
     interactive = get_tool_context().interactive and sys.stdin.isatty()
     allowed, reason = approve_capability(name, permission_mode, console, interactive)
     if not allowed:

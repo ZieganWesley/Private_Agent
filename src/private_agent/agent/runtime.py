@@ -1,4 +1,6 @@
+# ruff: noqa: F821
 import asyncio
+import contextlib
 import hashlib
 import importlib.util
 import json
@@ -25,15 +27,8 @@ from prompt_toolkit.history import InMemoryHistory
 from rich.table import Table
 
 from .. import capabilities as capability_packs
-from .. import code_tasks as code_tasks_module
 from .. import json_output
 from .. import runtime_f_integration as f_integration
-from ..code_tasks import (
-    CodeTaskWorkspace,
-    checkpoint_code_task,
-    finalize_code_task,
-    run_project_unit_tests,
-)
 from ..config import (
     AGENT_PERMISSION_MODE,
     APP_CONFIG,
@@ -90,10 +85,6 @@ from ..hooks import (
     load_hooks,
     safe_run_session_start_hooks,
 )
-from ..rag import (
-    initialize_knowledge_base,
-    knowledge_base_signature,
-)
 from ..rag.citations import format_retrieved_citations
 from ..run_logging import RUN_LOGGER, log_event, logging_context
 from ..sandbox import SandboxManager
@@ -102,29 +93,6 @@ from ..skills import (
     match_skill_by_relevancy,
 )
 from ..status_overlay import StatusOverlay
-from ..tools import (
-    AVAILABLE_TOOLS,
-    LOCAL_MEDIA_TOOL_NAMES,
-    LOCAL_ONLY_NETWORK_TOOL_NAMES,
-    MCP_TOOL_NAMES,
-    MCP_TOOL_SOURCES,
-    MCP_TOOL_TRANSPORTS,
-    NETWORK_TOOL_NAMES,
-    approved_tool_invocation,
-    clear_schema_reads,
-    close_mcp_sandbox_dirs,
-    close_outbound_http_clients,
-    describe_tool_catalog,
-    get_tool_context,
-    has_internet_connection,
-    load_configured_mcp_tools,
-    ollama_client_kwargs,
-    set_tool_context,
-)
-from ..tools.media import (
-    approve_local_capture,
-    clear_captured_images,
-)
 from .compaction import (
     compact_history,
     compact_loop_messages,
@@ -134,31 +102,17 @@ from .compaction import (
     summary_system_message,
 )
 from .console import console
-from .interactive import format_help as _format_interactive_help
-from .interactive import (
-    handle_session_command,
-    include_file_context,
-    include_folder_context,
-    load_custom_slash_commands,
-    prompt_user_input,
-)
+from .lazy_imports import install_lazy_globals
 from .learning import _record_code_task_validation
 from .memory_context import (
     _build_learned_context,
     _build_relevant_episode_context,
     _build_startup_memory_context,
+    _initialize_rag_for_docs,
     _is_coding_guidance_request,
     _prune_memory_retention,
     _retrieve_rag_documents,
     _run_memory_maintenance,
-)
-from .model_selection import (
-    _discover_available_local_runtimes,
-    _effective_context_window,
-    _make_selected_local_chat_model,
-    inspect_model_capabilities,
-    inspect_openai_compatible_model_capabilities,
-    select_online_model,
 )
 from .permissions import (
     authorize_network_research as _authorize_network_research,
@@ -238,21 +192,27 @@ from .task_lease import (
     TASK_LEASE_SECONDS,
     _maintain_task_lease,
 )
-from .tool_display import (
-    _append_captured_images_from_tool_results,
-    _display_tool_error,
-    _display_tool_request,
-    _display_tool_result,
-    _local_image_input_error,
-    _redact_sensitive_values,
-    _redact_tool_arguments,
-    _tool_log_redactions,
-    _tool_result_is_error,
-)
 from .undo import undo_last_turn
 
 _ALWAYS_ALLOWED_TOOLS: set[str] = set()
 _ACTIVE_MEMORY: PersistentMemory | None = None
+_ACTIVE_RAG_TASK: Any | None = None
+
+
+def initialize_knowledge_base(*args: Any, **kwargs: Any) -> Any:
+    """Lazy wrapper so importing this module does not pull in Chroma."""
+
+    from ..rag import initialize_knowledge_base as _initialize
+
+    return _initialize(*args, **kwargs)
+
+
+def knowledge_base_signature(*args: Any, **kwargs: Any) -> Any:
+    """Lazy wrapper so importing this module does not pull in Chroma."""
+
+    from ..rag import knowledge_base_signature as _signature
+
+    return _signature(*args, **kwargs)
 _LAST_HEADLESS_RESPONSE: str = ""
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
 OS_ISOLATED_TOOL_NAMES = frozenset(
@@ -1332,6 +1292,8 @@ async def _build_session_setup(
             f"RAG index: [cyan]{RAG_INDEX_PATH}[/cyan] | "
             f"Skills: [cyan]{skills_folder_default or 'not configured'}[/cyan]"
         )
+    from .. import code_tasks as code_tasks_module
+
     isolation_warning = code_tasks_module.isolation_unavailable_reason()
     if verbose_startup:
         if isolation_warning:
@@ -1496,57 +1458,30 @@ async def _build_session_setup(
             "[yellow]Enter knowledge base (KB) files directory path "
             "(Press Enter to skip): [/yellow]"
         ).strip()
-    rag_init_started = time.monotonic()
-    try:
-        if docs_input:
-            with console.status(
-                "[bold cyan]Indexing local knowledge base...[/bold cyan]"
-            ):
-                vectorstore = initialize_knowledge_base(
-                    docs_input,
-                    index_path=RAG_INDEX_PATH,
-                    confirm_rebuild=lambda detail: (
-                        _input(
-                            f"[yellow]RAG index state is damaged: {detail}\n"
-                            "Preserve the existing index as a timestamped backup and rebuild? "
-                            "Type REBUILD to confirm: [/yellow]"
-                        ).strip()
-                        == "REBUILD"
-                    ),
-                )
-        else:
-            vectorstore = None
-    except Exception as exc:  # noqa: BLE001 - Chroma/embedding failures must not block startup
-        vectorstore = None
-        reference_id = uuid.uuid4().hex[:8]
-        console.print(
-            f"[yellow][RAG warning] Knowledge base is unavailable; continuing "
-            f"without RAG ({type(exc).__name__}; reference {reference_id}). "
-            "Check the documents path and local embedding runtime.[/yellow]"
-        )
-        log_event(
-            RUN_LOGGER,
-            "rag.initialization_failed",
-            level=logging.ERROR,
-            reference_id=reference_id,
-            error_type=type(exc).__name__,
-            exc_info=True,
-        )
-    finally:
-        rag_init_elapsed = time.monotonic() - rag_init_started
-        log_event(
-            RUN_LOGGER,
-            "rag.initialization_completed",
-            elapsed_seconds=round(rag_init_elapsed, 3),
-            enabled=bool(docs_input),
-        )
-        if rag_init_elapsed >= 2:
-            console.print(
-                f"[dim][Completed][/dim] RAG initialization in {rag_init_elapsed:.1f}s."
-            )
-    is_rag_active = vectorstore is not None
-    rag_signature = knowledge_base_signature(docs_input) if vectorstore else None
-    rag_last_check = time.monotonic()
+    # Start RAG indexing (background when no existing index needs an
+    # interactive rebuild) so provider selection is not blocked by it
+    # (J2, step 13.5).
+    global _ACTIVE_RAG_TASK
+    (
+        vectorstore,
+        is_rag_active,
+        rag_signature,
+        rag_task,
+        rag_last_check,
+    ) = await _initialize_rag_for_docs(
+        docs_input,
+        rag_index_path=RAG_INDEX_PATH,
+        console=console,
+        input_fn=_input,
+        log_event=log_event,
+        run_logger=RUN_LOGGER,
+        uuid=uuid,
+        logging=logging,
+        initialize_knowledge_base_fn=initialize_knowledge_base,
+        knowledge_base_signature_fn=knowledge_base_signature,
+    )
+    if rag_task is not None:
+        _ACTIVE_RAG_TASK = rag_task
 
     skills_folder_input = (
         skills_folder_default
@@ -1676,6 +1611,7 @@ async def _build_session_setup(
         is_rag_active=is_rag_active,
         rag_signature=rag_signature,
         rag_last_check=rag_last_check,
+        rag_task=rag_task,
         skills_folder_input=skills_folder_input,
         loaded_skills=loaded_skills,
         mode_label=mode_label,
@@ -1689,8 +1625,12 @@ async def _build_session_setup(
 
 async def _discard_session_startup() -> None:
     """Release whatever a failed startup already opened."""
-    global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
+    global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT, _ACTIVE_RAG_TASK
     heartbeat, _TASK_LEASE_HEARTBEAT = _TASK_LEASE_HEARTBEAT, None
+    rag_task, _ACTIVE_RAG_TASK = _ACTIVE_RAG_TASK, None
+    if rag_task is not None and not rag_task.done():
+        rag_task.cancel()
+        await asyncio.gather(rag_task, return_exceptions=True)
     if heartbeat is not None:
         heartbeat.cancel()
         await asyncio.gather(heartbeat, return_exceptions=True)
@@ -2356,6 +2296,7 @@ async def _run_agent_cli_session(
     is_rag_active = setup.is_rag_active
     rag_signature = setup.rag_signature
     rag_last_check = setup.rag_last_check
+    rag_task = setup.rag_task
     skills_folder_input = setup.skills_folder_input
     loaded_skills = setup.loaded_skills
     custom_slash_commands = load_custom_slash_commands(SandboxManager.get_root())
@@ -2395,6 +2336,35 @@ async def _run_agent_cli_session(
                 get_event_bus().subscribe(Event, json_output.emit_event)
                 return
             continue
+        # Collect the RAG index that was built in the background during
+        # provider selection (J2, step 13.5).
+        if rag_task is not None:
+            try:
+                if not rag_task.done():
+                    with console.status(
+                        "[bold cyan]Finishing RAG index...[/bold cyan]"
+                    ):
+                        vectorstore = await rag_task
+                else:
+                    vectorstore = rag_task.result()
+            except Exception as exc:  # noqa: BLE001 - keep startup working without RAG
+                vectorstore = None
+                reference_id = uuid.uuid4().hex[:8]
+                console.print(
+                    f"[yellow][RAG warning] Knowledge base is unavailable; continuing "
+                    f"without RAG ({type(exc).__name__}; reference {reference_id}).[/yellow]"
+                )
+            is_rag_active = vectorstore is not None
+            if is_rag_active:
+                rag_signature = knowledge_base_signature(docs_input)
+            else:
+                rag_signature = None
+            rag_last_check = time.monotonic()
+            _ACTIVE_RAG_TASK = None
+            rag_task = None
+            with contextlib.suppress(Exception):  # best effort
+                _SESSION_INFO["Local RAG"] = "active" if is_rag_active else "off"
+
         provider_type = selection.provider_type
         selected_model = selection.selected_model
         capabilities = selection.capabilities
@@ -4140,6 +4110,11 @@ async def run_agent_cli_async(
             input_provider=input_provider,
         )
     finally:
+        global _ACTIVE_RAG_TASK
+        if _ACTIVE_RAG_TASK is not None and not _ACTIVE_RAG_TASK.done():
+            _ACTIVE_RAG_TASK.cancel()
+            await asyncio.gather(_ACTIVE_RAG_TASK, return_exceptions=True)
+        _ACTIVE_RAG_TASK = None
         if _TASK_LEASE_HEARTBEAT is not None:
             _TASK_LEASE_HEARTBEAT.cancel()
             await asyncio.gather(_TASK_LEASE_HEARTBEAT, return_exceptions=True)
@@ -4224,3 +4199,94 @@ def run_agent_cli(
             input_provider=input_provider,
         )
     )
+
+_LAZY_TOOL_NAMES = {
+'AVAILABLE_TOOLS',
+'LOCAL_MEDIA_TOOL_NAMES',
+'LOCAL_ONLY_NETWORK_TOOL_NAMES',
+'MCP_TOOL_NAMES',
+'MCP_TOOL_SOURCES',
+'MCP_TOOL_TRANSPORTS',
+'NETWORK_TOOL_NAMES',
+'approved_tool_invocation',
+'clear_schema_reads',
+'close_mcp_sandbox_dirs',
+'close_outbound_http_clients',
+'describe_tool_catalog',
+'get_tool_context',
+'has_internet_connection',
+'load_configured_mcp_tools',
+'ollama_client_kwargs',
+'set_tool_context',
+'approve_local_capture'
+}
+
+_LAZY_MEDIA_NAMES = {"approve_local_capture", "clear_captured_images"}
+
+_LAZY_INTERACTIVE_NAMES = {
+    "_format_interactive_help", "handle_session_command", "include_file_context",
+    "include_folder_context", "load_custom_slash_commands", "prompt_user_input",
+}
+
+_LAZY_MODEL_SELECTION_NAMES = {
+    "_discover_available_local_runtimes", "_effective_context_window",
+    "_make_selected_local_chat_model", "inspect_model_capabilities",
+    "inspect_openai_compatible_model_capabilities", "select_online_model",
+}
+
+_LAZY_TASK_COMMAND_NAMES = set()
+
+_LAZY_TOOL_DISPLAY_NAMES = {
+    "_append_captured_images_from_tool_results", "_display_tool_error",
+    "_display_tool_request", "_display_tool_result", "_local_image_input_error",
+    "_redact_sensitive_values", "_redact_tool_arguments", "_tool_log_redactions",
+    "_tool_result_is_error",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_TOOL_NAMES:
+        from .. import tools as _tools
+
+        attr = getattr(_tools, name)
+        globals()[name] = attr
+        return attr
+    if name in _LAZY_MEDIA_NAMES:
+        from ..tools import media as _media
+
+        attr = getattr(_media, name)
+        globals()[name] = attr
+        return attr
+    if name == "_format_interactive_help":
+        from . import interactive as _interactive
+
+        attr = _interactive.format_help
+        globals()[name] = attr
+        return attr
+    if name in _LAZY_INTERACTIVE_NAMES:
+        from . import interactive as _interactive
+
+        attr = getattr(_interactive, name)
+        globals()[name] = attr
+        return attr
+    if name in _LAZY_MODEL_SELECTION_NAMES:
+        from . import model_selection as _model_selection
+
+        attr = getattr(_model_selection, name)
+        globals()[name] = attr
+        return attr
+    if name in _LAZY_TASK_COMMAND_NAMES:
+        from . import task_commands as _task_commands
+
+        attr = getattr(_task_commands, name)
+        globals()[name] = attr
+        return attr
+    if name in _LAZY_TOOL_DISPLAY_NAMES:
+        from . import tool_display as _tool_display
+
+        attr = getattr(_tool_display, name)
+        globals()[name] = attr
+        return attr
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+install_lazy_globals(globals())
