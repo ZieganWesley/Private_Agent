@@ -42,3 +42,4 @@ def test_chat_ui_wired_into_interactive_flow():
     source = Path("src/private_agent/agent/runtime.py").read_text(encoding="utf-8")
     assert "ChatTranscript" in source
     assert "chat_transcript.add_message" in source
+    assert "chat_transcript.stream_chunk" in source

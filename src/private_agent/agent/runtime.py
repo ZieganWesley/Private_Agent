@@ -3732,6 +3732,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
 
                 start_time = time.monotonic()
                 chat_transcript = ChatTranscript(console=console)
+                chat_transcript.add_message("user", user_input, echo=False)
                 deadline = start_time + MAX_TASK_SECONDS
                 with f_integration.guard_turn_start(_f_state):
                     (
@@ -3996,9 +3997,11 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     else str(content or "")
                 )
                 if not isinstance(response, AIMessageChunk):
-                    chat_transcript.add_message(
-                        "assistant", full_output_content, markdown=True
-                    )
+                    chat_transcript.add_message("assistant", full_output_content, echo=False)
+                    for i in range(0, len(full_output_content), 120):
+                        chat_transcript.stream_chunk("assistant", full_output_content[i:i + 120])
+                    if full_output_content:
+                        chat_transcript.stream_chunk("assistant", "\n")
                 elif not full_output_content and not getattr(
                     response, "tool_calls", None
                 ):

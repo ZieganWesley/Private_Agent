@@ -33,10 +33,17 @@ class ChatTranscript:
         self.messages: list[ChatMessage] = []
 
     def add_message(
-        self, role: str, content: str, timestamp: Any = None, markdown: bool = False
+        self,
+        role: str,
+        content: str,
+        timestamp: Any = None,
+        markdown: bool = False,
+        echo: bool = True,
     ) -> ChatMessage:
         message = ChatMessage(role, content, timestamp)
         self.messages.append(message)
+        if not echo:
+            return message
         if markdown:
             self.console.print(f"[bold green]{message.avatar}:[/bold green]")
             from rich.markdown import Markdown
@@ -52,10 +59,17 @@ class ChatTranscript:
 
 
 def render_chat_message(
-    role: str, content: str, timestamp: Any = None, console=None, markdown: bool = False
+    role: str,
+    content: str,
+    timestamp: Any = None,
+    console=None,
+    markdown: bool = False,
+    echo: bool = True,
 ) -> str:
     message = ChatMessage(role, content, timestamp)
     target = console or _shared_console
+    if not echo:
+        return message.render_text()
     if markdown:
         target.print(f"[bold green]{message.avatar}:[/bold green]")
         from rich.markdown import Markdown
