@@ -199,3 +199,48 @@ def test_parallel_parse_falls_back_to_in_process(monkeypatch):
                 assert syms and syms[0].name == f"baz{i}"
         finally:
             index.close()
+
+
+def test_import_target_and_identifier_helpers():
+    from private_agent.repository_intelligence.indexer import (
+        _extract_identifiers,
+        _import_target,
+    )
+
+    assert _import_target("import_statement", "from os.path import join") == "os.path"
+    assert _import_target("import_statement", "import sys") == "sys"
+    assert _import_target("import_statement", "import { x } from 'mod'") == "mod"
+    assert _import_target("import_statement", "const y = require('other')") == "other"
+    assert _import_target("import_statement", 'import "fmt"') == "fmt"
+    identifiers = _extract_identifiers("class Child(Base, Mixin):")
+    assert "Child" in identifiers
+    assert "Base" in identifiers
+    assert "Mixin" in identifiers
+
+
+def test_parser_extracts_javascript_symbols_imports_and_inheritance():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "app.js").write_text(
+            "import { x } from 'mod';\n"
+            "function greet(name) { return name; }\n"
+            "class Child extends Parent {}\n",
+            encoding="utf-8",
+        )
+        db = str(root / "index.db")
+        index = RepositoryIndex(db_path=db, root_path=str(root))
+        try:
+            stats = index.index_repository(str(root))
+            assert stats["files_indexed"] >= 1
+            assert index.find_symbols("greet")[0]["kind"] == "function"
+            assert index.find_symbols("Child")[0]["kind"] == "class"
+            assert any(dep["target"] == "mod" for dep in index.dependencies_of("app.js"))
+            assert any(
+                ref["source"] == "Child" and ref["kind"] == "inherits"
+                for ref in index.find_references("Parent")
+            )
+            cursor = index.conn.cursor()
+            cursor.execute("SELECT signature FROM symbols WHERE name='greet'")
+            assert "(" in (cursor.fetchone()[0] or "")
+        finally:
+            index.close()

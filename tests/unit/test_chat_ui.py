@@ -43,3 +43,11 @@ def test_chat_ui_wired_into_interactive_flow():
     assert "ChatTranscript" in source
     assert "chat_transcript.add_message" in source
     assert "chat_transcript.stream_chunk" in source
+
+
+def test_chat_transcript_stream_chunk_writes_incrementally():
+    buffer = StringIO()
+    console = Console(file=buffer, force_terminal=False, color_system=None)
+    transcript = ChatTranscript(console=console)
+    transcript.stream_chunk("assistant", "hello", end="")
+    assert "hello" in buffer.getvalue()
