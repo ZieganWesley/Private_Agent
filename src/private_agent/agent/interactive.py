@@ -22,6 +22,8 @@ from ..sandbox import SandboxManager
 
 SLASH_COMMANDS = {
     "/help": "Show available commands and file-context syntax.",
+    "/commands": "List all available slash commands.",
+    "/doctor": "Run dependency, environment and machine-resource diagnostics.",
     "/expand": "Show the full output of the most recent tool call.",
     "/list_tools": "List available tools, descriptions, and permission boundaries.",
     "/maintenance": (

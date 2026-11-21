@@ -288,6 +288,35 @@ class RepositoryIndex:
                     c.execute("DELETE FROM files WHERE id=?", (fid,))
                     self.conn.commit()
 
+    def _extract_identifiers(self, text: str) -> list[str]:
+        import re
+
+        return re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text)
+
+    def _import_target(self, node_type: str, text: str) -> str:
+        import re
+
+        text = text.strip()
+        # Python: from x import y / import x
+        m = re.search(r"^from\s+([.\w]+)\s+import", text)
+        if m:
+            return m.group(1)
+        m = re.search(r"^import\s+([.\w]+)", text)
+        if m:
+            return m.group(1)
+        # JS/TS: ... from 'mod' or require('mod')
+        m = re.search(r"from\s+['\"]([^'\"]+)['\"]", text)
+        if m:
+            return m.group(1)
+        m = re.search(r"require\(['\"]([^'\"]+)['\"]\)", text)
+        if m:
+            return m.group(1)
+        # Go/Java style: import "mod"
+        m = re.search(r"import\s+['\"]([^'\"]+)['\"]", text)
+        if m:
+            return m.group(1)
+        return ""
+
     def _parse_file(self, path: Path, rel: str, suffix: str) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
         language = _load_language(suffix)
         if language is None or Parser is None:
@@ -307,12 +336,18 @@ class RepositoryIndex:
         ntype = node.type
         name = ""
         kind = ""
+        current_parent = parent
         if ntype in _SYMBOL_NODE_TYPES:
             name_node = node.child_by_field_name("name")
             if name_node is not None:
                 name = source[name_node.start_byte:name_node.end_byte].decode("utf-8", "replace")
             kind = ntype.replace("_declaration", "").replace("_definition", "").replace("_item", "")
             if name:
+                signature = ""
+                for child in node.children:
+                    if "parameters" in child.type or "parameter" in child.type:
+                        signature = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
+                        break
                 symbols.append(
                     Symbol(
                         name=name,
@@ -320,27 +355,35 @@ class RepositoryIndex:
                         file_path=rel,
                         start_line=node.start_point[0] + 1,
                         end_line=node.end_point[0] + 1,
-                        signature="",
+                        signature=signature,
                         parent=parent,
                     )
                 )
-                parent = name
+                # inheritance edges for classes
+                if "class" in kind:
+                    for child in node.children:
+                        if "heritage" in child.type or "superclass" in child.type or "bases" in child.type or "argument_list" in child.type:
+                            text = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
+                            for base in self._extract_identifiers(text):
+                                if base and base != name:
+                                    edges.append((name, base, "inherits"))
+                current_parent = name or parent
         # calls
         if ntype in _CALL_NODE_TYPES:
             func_node = node.child_by_field_name("function") or node.child_by_field_name("callee")
             if func_node is not None:
                 callee = source[func_node.start_byte:func_node.end_byte].decode("utf-8", "replace")
-                # trim to last identifier
                 callee = callee.split(".")[-1].split("(")[0].strip()
-                if callee:
-                    edges.append((parent or "<module>", callee, "calls"))
+                if callee and callee.isidentifier():
+                    edges.append((current_parent or "<module>", callee, "calls"))
         # imports
         if "import" in ntype:
-            # record module names as edges
             text = source[node.start_byte:node.end_byte].decode("utf-8", "replace")
-            edges.append((parent or "<module>", text.strip(), "imports"))
+            target = self._import_target(ntype, text)
+            if target:
+                edges.append((current_parent or "<module>", target, "imports"))
         for child in node.children:
-            self._walk(child, source, parent if ntype not in _SYMBOL_NODE_TYPES else (name or parent), symbols, edges, rel)
+            self._walk(child, source, current_parent, symbols, edges, rel)
 
     # Query helpers
     def find_symbols(self, name: str, kind: str | None = None) -> list[dict[str, Any]]:

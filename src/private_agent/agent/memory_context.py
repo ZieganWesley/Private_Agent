@@ -27,6 +27,7 @@ from ..config import (
     RAG_INDEX_PATH,
 )
 from ..database import PersistentMemory
+from ..repository_intelligence.memory_ranking import rank_memories
 from ..run_logging import RUN_LOGGER
 from .console import console
 from .learning import _run_learning_maintenance, _run_learning_suggestion
@@ -65,6 +66,24 @@ def _build_startup_memory_context(
     episodes = memory.get_recent_episodic_memories(
         DEFAULT_EPISODIC_SUMMARIES, exclude_session_id=exclude_session_id
     )
+    if episodes:
+        ranked_items = [
+            {
+                "text": " ".join(
+                    str(ep.get(key) or "")
+                    for key in ("topic", "description", "task_summary", "outcome")
+                ),
+                "created_at": ep.get("timestamp"),
+                "importance": ep.get("importance", 0.5),
+            }
+            for ep in episodes
+        ]
+        per_item_scores = []
+        for item in ranked_items:
+            per_item_scores.append(rank_memories([item])[0].get("_score", 0.0))
+        episodes = [
+            ep for _, ep in sorted(zip(per_item_scores, episodes, strict=False), reverse=True)
+        ]
     episode_sections = []
     for episode in episodes:
         if episode.get("topic"):
