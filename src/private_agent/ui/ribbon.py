@@ -11,13 +11,15 @@ from .state import StatusState
 from .theme import SEGMENT_SEPARATOR
 
 
-def status_ribbon(state: StatusState, *, width: int | None = None) -> str:
+def status_ribbon(
+    state: StatusState, *, width: int | None = None, accessible: bool = False
+) -> str:
     """Return the canonical ribbon for ``state``.
 
     ``width`` (optional) enables width-aware segment dropping for narrow
     terminals; essential segments (model/context/permission) are never dropped.
     """
-    return SEGMENT_SEPARATOR.join(state.segments(width=width))
+    return SEGMENT_SEPARATOR.join(state.segments(width=width, accessible=accessible))
 
 
 __all__ = ["status_ribbon"]

@@ -51,14 +51,19 @@ def context_style(tokens: Any, maximum: Any) -> str:
     return "green"
 
 
-def context_bar(tokens: Any, maximum: Any, *, width: int = 24) -> str:
+def context_bar(
+    tokens: Any, maximum: Any, *, width: int = 24, accessible: bool = False
+) -> str:
     """Return a filled bar and percentage for the context window in use."""
     used, limit, fraction = _context_use(tokens, maximum)
     if limit <= 0:
         return ""
     cells = max(1, int(width))
     filled = min(cells, int(fraction * cells + 0.5))
-    return f"{GAUGE_FILLED * filled}{GAUGE_EMPTY * (cells - filled)} {used / limit * 100:.0f}%"
+    percent = used / limit * 100
+    if accessible:
+        return f"{used}/{limit} ({percent:.0f}%)"
+    return f"{GAUGE_FILLED * filled}{GAUGE_EMPTY * (cells - filled)} {percent:.0f}%"
 
 
 def context_state_line(
@@ -66,12 +71,13 @@ def context_state_line(
     output_tokens: Any,
     *,
     width: int = 24,
+    accessible: bool = False,
 ) -> str:
     """Return the styled context-window gauge printed before a request."""
     values = stats if isinstance(stats, dict) else {}
     tokens, maximum = values.get("tokens", 0), values.get("max", 0)
     used, limit, _fraction = _context_use(tokens, maximum)
-    bar = context_bar(tokens, maximum, width=width)
+    bar = context_bar(tokens, maximum, width=width, accessible=accessible)
     if not bar:
         return (
             f"[dim][Context State] {used:,} prompt tokens; "
@@ -99,7 +105,7 @@ class StatusState:
     def percent(self) -> float:
         return context_percent(self.context_tokens, self.context_maximum)
 
-    def segments(self, *, width: int | None = None) -> list[str]:
+    def segments(self, *, width: int | None = None, accessible: bool = False) -> list[str]:
         """Build the ribbon segments, dropping trailing ones if ``width`` is given."""
         model_name = "" if self.model is None else str(self.model)
         segs: list[str] = [
@@ -110,7 +116,12 @@ class StatusState:
         _used, limit, _fraction = _context_use(self.context_tokens, self.context_maximum)
         if limit > 0:
             segs.append(
-                context_bar(self.context_tokens, self.context_maximum, width=RIBBON_GAUGE_CELLS)
+                context_bar(
+                    self.context_tokens,
+                    self.context_maximum,
+                    width=RIBBON_GAUGE_CELLS,
+                    accessible=accessible,
+                )
             )
         if self.output_tokens is not None:
             segs.append(f"output={self.output_tokens}")

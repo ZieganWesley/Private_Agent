@@ -8,10 +8,11 @@ output.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from .state import context_bar, context_style
-from .theme import SPINNER_GAUGE_CELLS
+from .theme import ACCESSIBLE_ENV, SPINNER_GAUGE_CELLS
 
 LOADING = "loading"
 THINKING = "thinking"
@@ -110,6 +111,8 @@ class StatusIndicator:
     def _render(self) -> str:
         _spinner, style = phase_spinner(self.phase)
         text = f"[bold {style}]{self.message}[/bold {style}]"
+        if os.environ.get(ACCESSIBLE_ENV):
+            text += f" [dim]({self.phase})[/dim]"
         if self.context_usage is not None:
             tokens, maximum = self.context_usage
             bar = context_bar(tokens, maximum, width=SPINNER_GAUGE_CELLS)

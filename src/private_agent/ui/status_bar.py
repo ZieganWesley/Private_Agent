@@ -23,7 +23,7 @@ from rich.live import Live
 
 from .ribbon import status_ribbon
 from .state import StatusState
-from .theme import NO_COLOR_ENV
+from .theme import ACCESSIBLE_ENV, NO_COLOR_ENV
 
 
 def _plain_mode() -> bool:
@@ -67,8 +67,11 @@ class StatusBar:
                 pass
         return self._state
 
+    def _accessible(self) -> bool:
+        return bool(os.environ.get(ACCESSIBLE_ENV))
+
     def _render(self) -> str:
-        return status_ribbon(self._current_state())
+        return status_ribbon(self._current_state(), accessible=self._accessible())
 
     def start(self) -> None:
         if not self._enabled or self._started:

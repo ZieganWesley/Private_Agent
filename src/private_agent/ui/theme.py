@@ -24,3 +24,10 @@ TURN_LABEL = "[Turn]"
 
 # Environment variable that disables colour.
 NO_COLOR_ENV = "NO_COLOR"
+
+# Environment variable that requests screen-reader-friendly, text-only gauges.
+ACCESSIBLE_ENV = "PRIVATE_AGENT_ACCESSIBLE"
+
+# Text-only gauge glyphs for accessible mode.
+TEXT_GAUGE_FILLED = "#"
+TEXT_GAUGE_EMPTY = "."

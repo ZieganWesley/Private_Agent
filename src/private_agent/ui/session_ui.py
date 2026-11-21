@@ -67,7 +67,9 @@ class SessionUI:
         self._footer.start()
         if self._footer.mode == "B" and self._footer.started:
             with contextlib.suppress(Exception):
-                self.console.print(f"[dim]{status_ribbon(self._current_state())}[/dim]")
+                self.console.print(
+                    f"[dim]{status_ribbon(self._current_state(), accessible=self._footer._accessible())}[/dim]"
+                )
 
     def set_context(self, used: Any, maximum: Any) -> None:
         try:
