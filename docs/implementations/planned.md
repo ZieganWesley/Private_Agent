@@ -2564,6 +2564,10 @@ exit. That is the whole of the current telemetry.
 
 ### M5. Intel AI-PC support
 
+Status: deferred to a future implementation. NPU/OpenVINO acceleration,
+local STT/TTS and hardware-aware routing are out of scope for the
+m-section branch and remain FUTURE.
+
 | Item | Status | Notes |
 |---|---|---|
 | OpenVINO NPU-accelerated embeddings for memory, repository and vector indexing | `[ ]` | Priority FUTURE; embeddings are Ollama-only today (I1a) |
