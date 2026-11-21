@@ -14,6 +14,7 @@ import subprocess
 import threading
 import time
 from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -116,7 +117,7 @@ class RepositoryIndex:
 
     def __init__(self, db_path: str | None = None, root_path: str | None = None):
         if db_path is None:
-            db_path = str(Path.home() / ".private_agent" / "repo_index.db")
+            db_path = str(Path.home() / ".config" / "private_agent" / "repo_index.db")
         self.db_path = str(Path(db_path).expanduser())
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.root_path = str(Path(root_path).expanduser().resolve()) if root_path else None
@@ -194,6 +195,7 @@ class RepositoryIndex:
         files_indexed = 0
         symbols_indexed = 0
         files_skipped = 0
+        pending: list[tuple[Path, str, str, int]] = []
         for path in self._iter_files(root):
             suffix = path.suffix.lower()
             if suffix not in _LANGUAGE_MODULES:
@@ -242,7 +244,11 @@ class RepositoryIndex:
                     )
                     file_id = cur.lastrowid
                     self.conn.commit()
-            syms, edges = self._parse_file(path, rel, suffix)
+            pending.append((path, rel, suffix, int(file_id)))
+        parsed = self._parse_files_parallel(
+            [(path, rel, suffix) for path, rel, suffix, _ in pending]
+        )
+        for (_path, _rel, _suffix, file_id), (syms, edges) in zip(pending, parsed, strict=False):
             with self._lock:
                 cur = self.conn.cursor()
                 for sym in syms:
@@ -288,102 +294,25 @@ class RepositoryIndex:
                     c.execute("DELETE FROM files WHERE id=?", (fid,))
                     self.conn.commit()
 
-    def _extract_identifiers(self, text: str) -> list[str]:
-        import re
-
-        return re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text)
-
-    def _import_target(self, node_type: str, text: str) -> str:
-        import re
-
-        text = text.strip()
-        # Python: from x import y / import x
-        m = re.search(r"^from\s+([.\w]+)\s+import", text)
-        if m:
-            return m.group(1)
-        m = re.search(r"^import\s+([.\w]+)", text)
-        if m:
-            return m.group(1)
-        # JS/TS: ... from 'mod' or require('mod')
-        m = re.search(r"from\s+['\"]([^'\"]+)['\"]", text)
-        if m:
-            return m.group(1)
-        m = re.search(r"require\(['\"]([^'\"]+)['\"]\)", text)
-        if m:
-            return m.group(1)
-        # Go/Java style: import "mod"
-        m = re.search(r"import\s+['\"]([^'\"]+)['\"]", text)
-        if m:
-            return m.group(1)
-        return ""
-
     def _parse_file(self, path: Path, rel: str, suffix: str) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
-        language = _load_language(suffix)
-        if language is None or Parser is None:
-            return [], []
-        try:
-            source = path.read_bytes()
-        except OSError:
-            return [], []
-        parser = Parser(language)
-        tree = parser.parse(source)
-        symbols: list[Symbol] = []
-        edges: list[tuple[str, str, str]] = []
-        self._walk(tree.root_node, source, "", symbols, edges, rel)
-        return symbols, edges
+        return _parse_file_impl(path, rel, suffix)
 
-    def _walk(self, node, source: bytes, parent: str, symbols: list[Symbol], edges: list[tuple[str, str, str]], rel: str) -> None:
-        ntype = node.type
-        name = ""
-        kind = ""
-        current_parent = parent
-        if ntype in _SYMBOL_NODE_TYPES:
-            name_node = node.child_by_field_name("name")
-            if name_node is not None:
-                name = source[name_node.start_byte:name_node.end_byte].decode("utf-8", "replace")
-            kind = ntype.replace("_declaration", "").replace("_definition", "").replace("_item", "")
-            if name:
-                signature = ""
-                for child in node.children:
-                    if "parameters" in child.type or "parameter" in child.type:
-                        signature = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
-                        break
-                symbols.append(
-                    Symbol(
-                        name=name,
-                        kind=kind,
-                        file_path=rel,
-                        start_line=node.start_point[0] + 1,
-                        end_line=node.end_point[0] + 1,
-                        signature=signature,
-                        parent=parent,
-                    )
-                )
-                # inheritance edges for classes
-                if "class" in kind:
-                    for child in node.children:
-                        if "heritage" in child.type or "superclass" in child.type or "bases" in child.type or "argument_list" in child.type:
-                            text = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
-                            for base in self._extract_identifiers(text):
-                                if base and base != name:
-                                    edges.append((name, base, "inherits"))
-                current_parent = name or parent
-        # calls
-        if ntype in _CALL_NODE_TYPES:
-            func_node = node.child_by_field_name("function") or node.child_by_field_name("callee")
-            if func_node is not None:
-                callee = source[func_node.start_byte:func_node.end_byte].decode("utf-8", "replace")
-                callee = callee.split(".")[-1].split("(")[0].strip()
-                if callee and callee.isidentifier():
-                    edges.append((current_parent or "<module>", callee, "calls"))
-        # imports
-        if "import" in ntype:
-            text = source[node.start_byte:node.end_byte].decode("utf-8", "replace")
-            target = self._import_target(ntype, text)
-            if target:
-                edges.append((current_parent or "<module>", target, "imports"))
-        for child in node.children:
-            self._walk(child, source, current_parent, symbols, edges, rel)
+    def _parse_files_parallel(
+        self, pending: list[tuple[Path, str, str]]
+    ) -> list[tuple[list[Symbol], list[tuple[str, str, str]]]]:
+        if not pending:
+            return []
+        cpu_count = os.cpu_count() or 1
+        if len(pending) < 8 or cpu_count < 2:
+            return [_parse_file_impl(path, rel, suffix) for path, rel, suffix in pending]
+        payloads = [(str(path), rel, suffix) for path, rel, suffix in pending]
+        chunk_size = max(1, len(payloads) // (cpu_count * 4))
+        try:
+            with ProcessPoolExecutor(max_workers=min(len(payloads), cpu_count)) as executor:
+                results = list(executor.map(_parse_worker, payloads, chunksize=chunk_size))
+            return results
+        except Exception:  # noqa: BLE001 - fall back to in-process parsing
+            return [_parse_file_impl(path, rel, suffix) for path, rel, suffix in pending]
 
     # Query helpers
     def find_symbols(self, name: str, kind: str | None = None) -> list[dict[str, Any]]:
@@ -444,3 +373,110 @@ class RepositoryIndex:
             for c in self.callees_of(sym):
                 frontier.append((c["target"], d + 1))
         return result
+
+def _extract_identifiers(text: str) -> list[str]:
+    import re
+
+    return re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text)
+
+def _import_target(node_type: str, text: str) -> str:
+    import re
+
+    text = text.strip()
+    # Python: from x import y / import x
+    m = re.search(r"^from\s+([.\w]+)\s+import", text)
+    if m:
+        return m.group(1)
+    m = re.search(r"^import\s+([.\w]+)", text)
+    if m:
+        return m.group(1)
+    # JS/TS: ... from 'mod' or require('mod')
+    m = re.search(r"from\s+['\"]([^'\"]+)['\"]", text)
+    if m:
+        return m.group(1)
+    m = re.search(r"require\(['\"]([^'\"]+)['\"]\)", text)
+    if m:
+        return m.group(1)
+    # Go/Java style: import "mod"
+    m = re.search(r"import\s+['\"]([^'\"]+)['\"]", text)
+    if m:
+        return m.group(1)
+    return ""
+
+def _parse_file_impl(path: Path, rel: str, suffix: str) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
+    language = _load_language(suffix)
+    if language is None or Parser is None:
+        return [], []
+    try:
+        source = path.read_bytes()
+    except OSError:
+        return [], []
+    parser = Parser(language)
+    tree = parser.parse(source)
+    symbols: list[Symbol] = []
+    edges: list[tuple[str, str, str]] = []
+    _walk(tree.root_node, source, "", symbols, edges, rel)
+    return symbols, edges
+
+def _walk(node, source: bytes, parent: str, symbols: list[Symbol], edges: list[tuple[str, str, str]], rel: str) -> None:
+    ntype = node.type
+    name = ""
+    kind = ""
+    current_parent = parent
+    if ntype in _SYMBOL_NODE_TYPES:
+        name_node = node.child_by_field_name("name")
+        if name_node is not None:
+            name = source[name_node.start_byte:name_node.end_byte].decode("utf-8", "replace")
+        kind = ntype.replace("_declaration", "").replace("_definition", "").replace("_item", "")
+        if name:
+            signature = ""
+            for child in node.children:
+                if "parameters" in child.type or "parameter" in child.type:
+                    signature = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
+                    break
+            symbols.append(
+                Symbol(
+                    name=name,
+                    kind=kind,
+                    file_path=rel,
+                    start_line=node.start_point[0] + 1,
+                    end_line=node.end_point[0] + 1,
+                    signature=signature,
+                    parent=parent,
+                )
+            )
+            # inheritance edges for classes
+            if "class" in kind:
+                for child in node.children:
+                    if "heritage" in child.type or "superclass" in child.type or "bases" in child.type or "argument_list" in child.type:
+                        text = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
+                        for base in _extract_identifiers(text):
+                            if base and base != name:
+                                edges.append((name, base, "inherits"))
+            current_parent = name or parent
+    # calls
+    if ntype in _CALL_NODE_TYPES:
+        func_node = node.child_by_field_name("function") or node.child_by_field_name("callee")
+        if func_node is not None:
+            callee = source[func_node.start_byte:func_node.end_byte].decode("utf-8", "replace")
+            callee = callee.split(".")[-1].split("(")[0].strip()
+            if callee and callee.isidentifier():
+                edges.append((current_parent or "<module>", callee, "calls"))
+    # imports
+    if "import" in ntype:
+        text = source[node.start_byte:node.end_byte].decode("utf-8", "replace")
+        target = _import_target(ntype, text)
+        if target:
+            edges.append((current_parent or "<module>", target, "imports"))
+    for child in node.children:
+        _walk(child, source, current_parent, symbols, edges, rel)
+
+
+
+def _parse_worker(payload: tuple[str, str, str]) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
+    path_str, rel, suffix = payload
+    return _parse_file_impl(Path(path_str), rel, suffix)
+
+
+if __name__ == "__main__":
+    pass

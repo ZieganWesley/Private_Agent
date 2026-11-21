@@ -127,7 +127,7 @@ def run_doctor() -> int:
 
     console.print(
         "[cyan]Configuration file path:[/cyan] "
-        f"{Path.home() / '.private_agent.conf'}"
+        f"{Path.home() / '.config' / 'private_agent' / 'private_agent.conf'}"
     )
     if deps["required"]:
         console.print(
@@ -151,7 +151,7 @@ def doctor_interactive() -> int:
         console.print(
             "[yellow]Manual config changes cannot be performed from the application. "
             "Please edit the configuration file directly at "
-            f"{Path.home() / '.private_agent.conf'}.[/yellow]"
+            f"{Path.home() / '.config' / 'private_agent' / 'private_agent.conf'}.[/yellow]"
         )
         return 0
     rec = recommend_config(info)
@@ -160,6 +160,6 @@ def doctor_interactive() -> int:
         console.print(f"  {key}: {value}")
     console.print(
         "[cyan]Apply these values under the appropriate sections of "
-        f"{Path.home() / '.private_agent.conf'}.[/cyan]"
+        f"{Path.home() / '.config' / 'private_agent' / 'private_agent.conf'}.[/cyan]"
     )
     return 0

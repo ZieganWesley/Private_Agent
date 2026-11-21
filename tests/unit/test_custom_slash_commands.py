@@ -17,7 +17,7 @@ def test_load_custom_slash_commands_empty(tmp_path, monkeypatch):
 
 def test_load_custom_slash_commands_project_and_user(tmp_path, monkeypatch):
     home_root = tmp_path / "home"
-    user_dir = home_root / ".private_agent" / "commands"
+    user_dir = home_root / ".config" / "private_agent" / "commands"
     user_dir.mkdir(parents=True)
     (user_dir / "hello.md").write_text("Hello from user", encoding="utf-8")
 
@@ -36,7 +36,7 @@ def test_load_custom_slash_commands_project_and_user(tmp_path, monkeypatch):
 
 def test_load_custom_slash_commands_ignores_non_markdown(tmp_path, monkeypatch):
     home_root = tmp_path / "home"
-    user_dir = home_root / ".private_agent" / "commands"
+    user_dir = home_root / ".config" / "private_agent" / "commands"
     user_dir.mkdir(parents=True)
     (user_dir / "note.txt").write_text("ignored", encoding="utf-8")
     (user_dir / "cmd.md").write_text("run", encoding="utf-8")
@@ -54,7 +54,7 @@ def test_load_custom_slash_commands_handles_missing_dir(tmp_path, monkeypatch):
 
 def test_load_custom_slash_commands_skips_unreadable(tmp_path, monkeypatch):
     home_root = tmp_path / "home"
-    user_dir = home_root / ".private_agent" / "commands"
+    user_dir = home_root / ".config" / "private_agent" / "commands"
     user_dir.mkdir(parents=True)
     (user_dir / "bad.md").write_bytes(b"\xff\xfe")
     _patch_home(monkeypatch, home_root)

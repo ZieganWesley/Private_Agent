@@ -3601,7 +3601,7 @@ async def test_cli_help_and_attached_file_context(scripted_local_cli, monkeypatc
 
     await run_agent_cli_async()
 
-    assert any("/think-effort high" in output for output in printed)
+    assert any("/effort" in output for output in printed)
     assert any("@<workspace-relative-path>" in output for output in printed)
     assert any("/add <workspace-relative-folder>" in output for output in printed)
     assert any("to the next request only" in output for output in printed)

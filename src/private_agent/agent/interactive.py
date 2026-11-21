@@ -37,11 +37,8 @@ SLASH_COMMANDS = {
     "/status": "Show current provider, model, permissions, workspace, and context state.",
     "/undo": "Restore the files the last agent turn changed and rewind that turn.",
     "/tasks": "Inspect, approve, resume, pause, or cancel SQLite task plans.",
-    "/think on": "Enable model thinking when supported.",
-    "/think off": "Disable model thinking.",
-    "/think-effort low": "Set thinking effort to low.",
-    "/think-effort medium": "Set thinking effort to medium.",
-    "/think-effort high": "Set thinking effort to high.",
+    "/thinking": "Enable or disable model thinking: /thinking on|off.",
+    "/effort": "Set thinking effort: /effort low|medium|high.",
     "/think-status": "Show requested/effective thinking state.",
     "/hardware-status": "Show hardware details exposed by the selected local runtime.",
     "/summarize": "Summarize this session now and store it in SQLite memory.",
@@ -95,11 +92,8 @@ def format_help() -> str:
         "Chat": [
             "/plan",
             "/code",
-            "/think on",
-            "/think off",
-            "/think-effort low",
-            "/think-effort medium",
-            "/think-effort high",
+            "/thinking",
+            "/effort",
             "/think-status",
             "/summarize",
             "/compact",
@@ -111,7 +105,7 @@ def format_help() -> str:
         "Files": ["/add", "/context"],
         "Plans": ["/plan", "/code", "/tasks"],
         "Memory": ["/summarize", "/compact", "/maintenance"],
-        "Model": ["/think on", "/think off", "/hardware-status", "switch"],
+        "Model": ["/thinking", "/effort", "/hardware-status", "switch"],
         "Session": ["exit", "switch"],
     }
     lines = ["[bold cyan]Commands[/bold cyan]"]
@@ -156,7 +150,7 @@ def format_help() -> str:
 def load_custom_slash_commands(workspace_root=None) -> dict[str, str]:
     """Load custom slash commands from Markdown files (user then project level)."""
     commands: dict[str, str] = {}
-    roots = [pathlib.Path.home() / ".private_agent" / "commands"]
+    roots = [pathlib.Path.home() / ".config" / "private_agent" / "commands"]
     if workspace_root is not None:
         roots.append(pathlib.Path(workspace_root) / ".private_agent" / "commands")
     for root in roots:
@@ -202,6 +196,26 @@ class AgentCompleter(Completer):
                         insertion,
                         display=f"/skills {key}",
                         display_meta=skill.name,
+                    )
+            return
+        if command_prefix.startswith("/thinking "):
+            arg_prefix = command_prefix[len("/thinking ") :]
+            for value in ("on", "off"):
+                if value.startswith(arg_prefix):
+                    yield Completion(
+                        value[len(arg_prefix) :],
+                        display=f"/thinking {value}",
+                        display_meta="Model thinking state",
+                    )
+            return
+        if command_prefix.startswith("/effort "):
+            arg_prefix = command_prefix[len("/effort ") :]
+            for value in ("low", "medium", "high"):
+                if value.startswith(arg_prefix):
+                    yield Completion(
+                        value[len(arg_prefix) :],
+                        display=f"/effort {value}",
+                        display_meta="Thinking effort",
                     )
             return
         if (

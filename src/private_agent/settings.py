@@ -137,10 +137,10 @@ def configured_float(
 DEFAULT_PATHS: dict[str, str] = {
     "database": "~/.local_ai_memory.db",
     "workspace": ".",
-    "code_output": "~/.private_agent/projects",
-    "skills": "~/.private_agent/resources/skills",
-    "rag_documents": "~/.private_agent/rag/",
-    "rag_index": "~/.private_agent/rag_index",
+    "code_output": "~/.config/private_agent/projects",
+    "skills": "~/.config/private_agent/resources/skills",
+    "rag_documents": "~/.config/private_agent/rag/",
+    "rag_index": "~/.config/private_agent/rag_index",
 }
 
 
@@ -156,7 +156,7 @@ def resolve_config_values(
         str(config.get("default_db_path", "~/.local_ai_memory.db"))
     )
     WORKSPACE_ROOT_DEFAULT = str(config.get("workspace_root", "."))
-    CODE_OUTPUT_ROOT = str(config.get("code_output_root", "~/.private_agent/projects"))
+    CODE_OUTPUT_ROOT = str(config.get("code_output_root", "~/.config/private_agent/projects"))
     SKILLS_FOLDER_DEFAULT = configured_path(
         config_section(config, "paths").get("skills"),
         default_paths["skills"],

@@ -43,7 +43,7 @@ def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch)
 def test_config_uses_per_user_home_path():
     from private_agent import config
 
-    assert pathlib.Path.home() / ".private_agent.conf" == config.CONFIG_FILE_PATH
+    assert pathlib.Path.home() / ".config" / "private_agent" / "private_agent.conf" == config.CONFIG_FILE_PATH
 
 
 def test_config_creates_private_default_file(tmp_path, monkeypatch):
@@ -55,9 +55,9 @@ def test_config_creates_private_default_file(tmp_path, monkeypatch):
     settings = load_or_create_config()
 
     assert settings["paths"] == config.DEFAULT_CONFIG["paths"]
-    assert settings["paths"]["rag_documents"] == "~/.private_agent/rag/"
-    assert settings["paths"]["skills"] == "~/.private_agent/resources/skills"
-    assert settings["paths"]["rag_index"] == "~/.private_agent/rag_index"
+    assert settings["paths"]["rag_documents"] == "~/.config/private_agent/rag/"
+    assert settings["paths"]["skills"] == "~/.config/private_agent/resources/skills"
+    assert settings["paths"]["rag_index"] == "~/.config/private_agent/rag_index"
     assert settings["agent"] == config.DEFAULT_CONFIG["agent"]
     assert settings["agent"]["streaming_output"] is True
     assert settings["agent"]["visible_reasoning"] is False
@@ -167,12 +167,12 @@ def test_merge_config_migrates_old_default_rag_and_skills_paths():
     )
 
     assert merged["paths"] == {
-        "skills": "~/.private_agent/resources/skills",
-        "rag_documents": "~/.private_agent/rag/",
-        "rag_index": "~/.private_agent/rag_index",
+        "skills": "~/.config/private_agent/resources/skills",
+        "rag_documents": "~/.config/private_agent/rag/",
+        "rag_index": "~/.config/private_agent/rag_index",
         "database": "~/.local_ai_memory.db",
         "workspace": ".",
-        "code_output": "~/.private_agent/projects",
+        "code_output": "~/.config/private_agent/projects",
     }
 
 
@@ -191,9 +191,9 @@ def test_config_paths_are_home_anchored_and_tilde_expanded(tmp_path, monkeypatch
     monkeypatch.setenv("HOME", str(tmp_path))
 
     assert config._configured_path(
-        "~/.private_agent/rag/",
+        "~/.config/private_agent/rag/",
         config.DEFAULT_CONFIG["paths"]["rag_documents"],
-    ) == str(tmp_path / ".private_agent" / "rag")
+    ) == str(tmp_path / ".config" / "private_agent" / "rag")
     assert config._configured_path(
         "project/skills",
         config.DEFAULT_CONFIG["paths"]["skills"],
@@ -479,7 +479,7 @@ def test_config_path_honours_environment_variable(tmp_path):
 
     custom = tmp_path / "custom.conf"
     assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": str(custom)}) == custom
-    default = pathlib.Path.home() / ".private_agent.conf"
+    default = pathlib.Path.home() / ".config" / "private_agent" / "private_agent.conf"
     assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": "  "}) == default
     assert config.resolve_config_path({}) == default
 

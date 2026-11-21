@@ -90,7 +90,7 @@ reports that in the current session rather than restarting it.
   explicitly loaded from the saved configuration; manually entered keys are
   never written to disk. Automatic capability detection (tools, function
   calls, structured output, thinking, vision, audio); toggleable thinking with
-  configurable effort (`/think`, `/think-effort`, `/think-status`); streaming
+  configurable effort (`/thinking`, `/effort`, `/think-status`); streaming
   output; optional visible reasoning; a phase-aware status spinner while the
   model loads, thinks, answers or summarizes, with a context-window gauge that
   fills as the prompt budget is used (reasoning streams as dimmed text when
@@ -241,7 +241,7 @@ Put documents for RAG in `~/.private_agent/rag/` and skills in
 
 Session commands: `exit`, `switch`, `/help`, `/status`, `/undo`, `/context`,
 `/context clear`, `/list_tools`, `/maintenance` (`data reset` resets local
-stores after typed confirmation), `/plan`, `/tasks`, `/skills [key]`, `/think on|off`, `/think-effort
+stores after typed confirmation), `/plan`, `/tasks`, `/skills [key]`, `/thinking on|off`, `/effort
 low|medium|high`, `/think-status`, `/hardware-status`, `/summarize` (summarize and store the session now; `exit` will not re-summarize unless new prompts followed), `/compact` (replace the context window with a short working summary, without storing it), `/add path/to/folder` (include supported UTF-8 text files from an in-workspace folder in the next request only), and `@path/to/file`
 to attach a workspace text file as request-only context. Folder and file context
 are limited to the configured `tools.max_read_file_bytes` total; folder context
