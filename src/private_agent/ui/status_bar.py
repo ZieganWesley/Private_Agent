@@ -114,10 +114,8 @@ class StatusBar:
             with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
                 self.update()
             return
-        if self._mode == "B":
-            # Reprint the canonical ribbon as the final line of the turn.
-            with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
-                self.console.print(f"[dim]{status_ribbon(self._current_state())}[/dim]")
+        # Mode B: the ribbon was printed once at startup; do not reprint it
+        # on every turn.
 
     def stop(self) -> None:
         if not self._enabled or not self._started:

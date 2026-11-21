@@ -65,6 +65,9 @@ class SessionUI:
             self._output_tokens = output_tokens
         self._footer.update(self._current_state())
         self._footer.start()
+        if self._footer.mode == "B" and self._footer.started:
+            with contextlib.suppress(Exception):
+                self.console.print(f"[dim]{status_ribbon(self._current_state())}[/dim]")
 
     def set_context(self, used: Any, maximum: Any) -> None:
         try:

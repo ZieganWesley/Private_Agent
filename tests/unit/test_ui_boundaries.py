@@ -60,4 +60,5 @@ def test_scripted_turn_prints_one_turn_line_with_ribbon_last(monkeypatch):
     assert "Working" not in text
     lines = [line for line in text.splitlines() if line.strip()]
     assert lines, "no output produced"
-    assert "model=m" in lines[-1], f"ribbon not last: {lines[-1]!r}"
+    assert "[Turn]" in lines[-1], f"turn summary not last: {lines[-1]!r}"
+    assert any("model=m" in line for line in lines), "startup ribbon missing"
