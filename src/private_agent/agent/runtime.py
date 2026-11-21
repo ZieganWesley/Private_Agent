@@ -2515,10 +2515,9 @@ async def _run_agent_cli_session(
                     console.print(_format_interactive_help())
                     continue
                 if user_input.lower() == "/doctor":
-                    console.print(
-                        "[cyan][Doctor][/cyan] Run `private-agent --doctor` for full "
-                        "dependency and machine diagnostics."
-                    )
+                    from ..doctor import doctor_interactive
+
+                    doctor_interactive()
                     continue
                 if user_input.lower() == "/context":
                     if not pending_folder_context:
