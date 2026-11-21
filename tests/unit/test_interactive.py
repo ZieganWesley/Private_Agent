@@ -34,8 +34,8 @@ def test_help_lists_all_slash_and_session_commands():
     assert "List available tools" in help_text
     assert "/hardware-status" in help_text
     assert "/hardware —" not in help_text
-    assert "/think on" in help_text
-    assert "/think off" in help_text
+    assert "/thinking" in help_text
+    assert "/effort" in help_text
     assert "/think —" not in help_text
     for command in SLASH_COMMANDS:
         assert command in help_text
@@ -1667,12 +1667,12 @@ def test_coding_guidance_detection_is_broader_than_code_task_detection():
 def test_completer_suggests_slash_commands(temp_workspace):
     completer = AgentCompleter(temp_workspace)
 
-    completions = list(completer.get_completions(Document("/think-e"), None))
+    completions = list(completer.get_completions(Document("/effort "), None))
 
     assert [_completion_text(completion) for completion in completions] == [
-        "/think-effort low",
-        "/think-effort medium",
-        "/think-effort high",
+        "/effort low",
+        "/effort medium",
+        "/effort high",
     ]
 
 
@@ -1733,10 +1733,10 @@ def test_completer_suggests_loaded_skills_after_skills_command(temp_workspace):
 def test_completer_supports_effort_arguments(temp_workspace):
     completer = AgentCompleter(temp_workspace)
 
-    completions = list(completer.get_completions(Document("/think-effort h"), None))
+    completions = list(completer.get_completions(Document("/effort h"), None))
 
     assert [_completion_text(completion) for completion in completions] == [
-        "/think-effort high"
+        "/effort high"
     ]
 
 

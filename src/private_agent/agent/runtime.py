@@ -2800,9 +2800,10 @@ async def _run_agent_cli_session(
                         unavailable_names=unavailable_names,
                     )
                     continue
-                if user_input.lower() in {"/think on", "/think off"}:
-                    requested = user_input.lower().split()
-                    thinking_enabled = requested[1] == "on"
+                _thinking_command = user_input.lower()
+                if _thinking_command in {"/thinking on", "/thinking off", "/think on", "/think off"}:
+                    requested = _thinking_command.split()
+                    thinking_enabled = requested[-1] == "on"
                     if capabilities["thinking"] is not True:
                         console.print(
                             f"[yellow]Model '{selected_model}' does not declare thinking support; "
@@ -2825,11 +2826,12 @@ async def _run_agent_cli_session(
                             f"[cyan]Thinking: {'on' if thinking_enabled else 'off'}[/cyan]"
                         )
                     continue
-                if user_input.lower().startswith("/think-effort"):
-                    parts = user_input.lower().split()
+                _effort_command = user_input.lower()
+                if _effort_command.startswith(("/effort", "/think-effort")):
+                    parts = _effort_command.split()
                     if len(parts) != 2 or parts[1] not in {"low", "medium", "high"}:
                         console.print(
-                            "[yellow]Usage: /think-effort low|medium|high[/yellow]"
+                            "[yellow]Usage: /effort low|medium|high[/yellow]"
                         )
                         continue
                     thinking_effort = parts[1]
