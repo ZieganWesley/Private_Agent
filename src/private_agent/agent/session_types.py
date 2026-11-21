@@ -29,6 +29,7 @@ class SessionSetup:
     thinking_enabled: bool
     thinking_effort: str
     permission_mode: str
+    rag_task: Any = None
 
 
 @dataclass(frozen=True)

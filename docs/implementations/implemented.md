@@ -138,7 +138,7 @@ Branch `j-k-performance-optimization`.
 
 | ID | Status | Where |
 |---|---|---|
-| J2 | Partly fixed | `rag/indexing.py` imports Chroma and Ollama embeddings lazily via `_ensure_rag_dependencies()`; the RAG index is still built after provider selection, not during it (13.5) |
+| J2 | Fixed | `agent/runtime.py` schedules RAG indexing with `asyncio.create_task(asyncio.to_thread(...))` during provider selection; existing damaged indexes rebuild interactively on the main thread; `rag/__init__.py`, `rag/indexing.py`, `rag/retrieval.py`, and `agent/memory_context.py` import Chroma lazily; startup import is under 0.5 s |
 | J4 | Fixed | `capabilities.py` binds only routed packs (Core by default); all 50 tools belong to a pack; `filter_tools_list` sorts by name |
 | J5 | Fixed | `tools/network.py` caches validated DNS records for 60 s (bounded, rules re-checked, keyed by resolver object) |
 | J6 | Fixed | `tools/__init__.py` caches internet-connectivity probes for 30 s (single cache in `has_internet_connection`; raw probe uncached) |

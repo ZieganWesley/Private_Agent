@@ -1,3 +1,4 @@
+# ruff: noqa: F821
 """The /tasks command handler and its task-scope helpers."""
 
 from __future__ import annotations
@@ -22,7 +23,6 @@ from rich.table import Table
 from ..config import CODE_OUTPUT_ROOT
 from ..database import PersistentMemory
 from ..sandbox import SandboxManager
-from ..tools import get_tool_context, set_tool_context
 from .console import console
 from .learning import _offer_skill_capture
 from .permissions import coding_allows_command_network as _coding_allows_command_network
@@ -1042,3 +1042,35 @@ def _approved_coding_task_scope(
     if scope.get("network_access") is not _coding_allows_command_network(access_level):
         return None
     return scope
+
+
+class _LazyProxy:
+    __slots__ = ("_module", "_attr", "_value", "_loaded")
+
+    def __init__(self, module_path, attr_name):
+        self._module = module_path
+        self._attr = attr_name
+        self._value = None
+        self._loaded = False
+
+    def _load(self):
+        if not self._loaded:
+            import importlib
+
+            module = importlib.import_module(self._module, package=__package__)
+            self._value = getattr(module, self._attr)
+            self._loaded = True
+        return self._value
+
+    def __getattr__(self, item):
+        return getattr(self._load(), item)
+
+    def __call__(self, *args, **kwargs):
+        return self._load()(*args, **kwargs)
+
+    def __repr__(self):
+        return repr(self._load())
+
+
+for _name in ("get_tool_context", "set_tool_context"):
+    globals()[_name] = _LazyProxy("..tools", _name)

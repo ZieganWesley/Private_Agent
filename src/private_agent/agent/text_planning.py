@@ -5,7 +5,6 @@ import re
 
 from rich.markdown import Markdown
 
-from ..tools import get_tool_context, set_tool_context
 from .task_commands import _task_plan_markdown
 
 
@@ -50,6 +49,8 @@ def create_text_plan(memory, session_id, user_input, llm, console) -> None:
         assumptions=list(payload.get("assumptions") or []),
         constraints=list(payload.get("constraints") or []),
     )
+    from ..tools import get_tool_context, set_tool_context
+
     _tool_context = get_tool_context()
     _tool_context.task_id = task["task_id"]
     set_tool_context(_tool_context)
