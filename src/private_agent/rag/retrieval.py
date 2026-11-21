@@ -2,6 +2,8 @@
 
 import heapq
 import re
+import sqlite3
+import threading
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
@@ -11,6 +13,9 @@ from private_agent.console import console
 from ..config import RAG_RELEVANCE_THRESHOLD, RAG_SIMILARITY_RESULTS
 
 _RRF_K = 60
+# Above this many chunks, SQLite FTS5 ranks keyword matches with an index
+# instead of scoring every chunk with BM25 (J9, step 13.9).
+_FTS5_MIN_DOCUMENTS = 5_000
 _TOKEN_PATTERN = re.compile(r"\w+(?:[.'’\-]\w+)*", re.UNICODE)
 
 
@@ -49,13 +54,74 @@ def _reciprocal_rank_fusion(
     return [documents[key] for key in ordered_keys[:k]]
 
 
+class _Fts5KeywordIndex:
+    """Rank chunk text with SQLite FTS5 instead of scoring the whole corpus."""
+
+    def __init__(self, documents: list[Document]):
+        self._documents = documents
+        self._lock = threading.Lock()
+        self._connection = sqlite3.connect(":memory:", check_same_thread=False)
+        self._connection.execute("CREATE VIRTUAL TABLE chunks USING fts5(body)")
+        self._connection.executemany(
+            "INSERT INTO chunks(rowid, body) VALUES (?, ?)",
+            (
+                (index, doc.page_content or "")
+                for index, doc in enumerate(documents, start=1)
+            ),
+        )
+        self._connection.commit()
+
+    @staticmethod
+    def available() -> bool:
+        try:
+            connection = sqlite3.connect(":memory:")
+            try:
+                connection.execute("CREATE VIRTUAL TABLE t USING fts5(body)")
+            finally:
+                connection.close()
+        except sqlite3.Error:
+            return False
+        return True
+
+    def search(self, tokens: list[str], k: int) -> list[Document]:
+        # Quoting each term keeps FTS5 syntax characters out of the query.
+        query = " OR ".join('"' + token.replace('"', '""') + '"' for token in tokens)
+        if not query:
+            return []
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT rowid FROM chunks WHERE chunks MATCH ? "
+                "ORDER BY bm25(chunks) LIMIT ?",
+                (query, k),
+            ).fetchall()
+        results = []
+        for (rowid,) in rows:
+            index = int(rowid) - 1
+            if 0 <= index < len(self._documents):
+                results.append(self._documents[index])
+        return results
+
+
 class HybridRAGRetriever:
-    """Combine Chroma vector similarity and BM25 lexical retrieval."""
+    """Combine Chroma vector similarity and lexical retrieval.
+
+    Small corpora use BM25 in memory; large corpora use a SQLite FTS5 index
+    built lazily on the first keyword query (J9).
+    """
+
+    bm25 = None
+    keyword_backend: str | None = None
+    _fts5: _Fts5KeywordIndex | None = None
 
     def __init__(self, vectorstore: Chroma, documents: list[Document]):
         self.vectorstore = vectorstore
         self.documents = documents
         self.bm25 = None
+        self.keyword_backend: str | None = None
+        self._fts5: _Fts5KeywordIndex | None = None
+        if len(documents) >= _FTS5_MIN_DOCUMENTS and _Fts5KeywordIndex.available():
+            self.keyword_backend = "fts5"
+            return
 
         try:
             from rank_bm25 import BM25Okapi
@@ -64,11 +130,38 @@ class HybridRAGRetriever:
                 tokenized_corpus = [_tokenize(doc.page_content) for doc in documents]
                 if any(tokenized_corpus):
                     self.bm25 = BM25Okapi(tokenized_corpus)
+                    self.keyword_backend = "bm25"
         except ImportError:
             console.print(
                 "[yellow][Warning] 'rank_bm25' package not found. Falling back "
                 "to pure vector similarity search.[/yellow]"
             )
+
+    def _active_keyword_backend(self) -> str | None:
+        """Infer BM25 when a caller built the retriever without ``__init__``."""
+        if self.keyword_backend:
+            return self.keyword_backend
+        return "bm25" if self.bm25 else None
+
+    def _keyword_results(
+        self, query_tokens: list[str], k: int
+    ) -> list[Document]:
+        """Return the best keyword matches from FTS5 or BM25."""
+        if self._active_keyword_backend() == "fts5":
+            if self._fts5 is None:
+                self._fts5 = _Fts5KeywordIndex(self.documents)
+            return self._fts5.search(query_tokens, k)
+        if not self.bm25:
+            return []
+        bm25_scores = self.bm25.get_scores(query_tokens)
+        top_scored_docs = heapq.nsmallest(
+            k,
+            enumerate(bm25_scores),
+            key=lambda item: (-item[1], item[0]),
+        )
+        return [
+            self.documents[index] for index, score in top_scored_docs if score > 0
+        ]
 
     def _rerank(self, query: str, documents: list[Document]) -> list[Document]:
         """Re-rank documents by embedding similarity when an embedder is available."""
@@ -141,25 +234,17 @@ class HybridRAGRetriever:
             if not vector_results:
                 return []
         query_tokens = _tokenize(query)
-        if not self.bm25 or not self.documents or not query_tokens:
+        if not self._active_keyword_backend() or not self.documents or not query_tokens:
             return self._rerank(query, vector_results[:k])
 
-        bm25_scores = self.bm25.get_scores(query_tokens)
-        top_scored_docs = heapq.nsmallest(
-            k,
-            enumerate(bm25_scores),
-            key=lambda item: (-item[1], item[0]),
-        )
-        bm25_results = [
-            self.documents[index] for index, score in top_scored_docs if score > 0
-        ]
+        keyword_results = self._keyword_results(query_tokens, k)
         if collection:
-            bm25_results = [
+            keyword_results = [
                 doc
-                for doc in bm25_results
+                for doc in keyword_results
                 if (getattr(doc, "metadata", None) or {}).get("collection")
                 == collection
             ]
 
-        fused = _reciprocal_rank_fusion((vector_results, bm25_results), k)
+        fused = _reciprocal_rank_fusion((vector_results, keyword_results), k)
         return self._rerank(query, fused)
