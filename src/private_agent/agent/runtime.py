@@ -192,7 +192,6 @@ from .task_lease import (
     _maintain_task_lease,
 )
 from .undo import undo_last_turn
-
 _ALWAYS_ALLOWED_TOOLS: set[str] = set()
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _ACTIVE_RAG_TASK: Any | None = None
@@ -1492,7 +1491,6 @@ async def _build_session_setup(
                     "[yellow][RAG][/yellow] No embedding-capable runtime is "
                     "available; continuing without local RAG."
                 )
-
     def _initialize_knowledge_base_with_embeddings(
         docs_path,
         *,
@@ -2038,7 +2036,7 @@ async def _choose_provider(
                     f"using compatible local model {tool_capable_model} for agent tasks.[/yellow]"
                 )
                 selected_model = tool_capable_model
-                capabilities = inspect_model_capabilities(selected_model)
+                capabilities = inspect_model_capabilities(selected_model) if local_runtime.kind == "ollama" else inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
         try:
             llm = _make_selected_local_chat_model(
                 local_runtime,
@@ -2104,7 +2102,7 @@ async def _choose_provider(
                         f"[yellow][Model fallback] Switching to tool-capable model {fallback_model}.[/yellow]"
                     )
                     selected_model = fallback_model
-                    capabilities = inspect_model_capabilities(selected_model)
+                    capabilities = inspect_model_capabilities(selected_model) if local_runtime.kind == "ollama" else inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
                     llm = _make_selected_local_chat_model(
                         local_runtime,
                         selected_model,
