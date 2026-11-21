@@ -1177,7 +1177,6 @@ async def _prepare_session(
             "Run it from a terminal session.[/red]"
         )
         return
-
     try:
         return await _build_session_setup(
             verbose_startup=verbose_startup,
@@ -1208,7 +1207,6 @@ async def _build_session_setup(
     startup_started = time.monotonic()
     _input = input_provider if input_provider is not None else console.input
     console.print("[bold cyan]Private Agent[/bold cyan]")
-
     invocation_root = pathlib.Path.cwd()
     project_resources = discover_project_resources(invocation_root)
     rag_docs_default = (
@@ -1239,7 +1237,6 @@ async def _build_session_setup(
         console.print(
             "[green][Project folders][/green] Auto-detected " + " | ".join(discovered)
         )
-
     local_runtimes = _discover_available_local_runtimes()
     hardware_status_by_url: dict[str, dict[str, Any]] = {}
     log_event(
@@ -1311,7 +1308,6 @@ async def _build_session_setup(
             f"[bold green][Online Research][/bold green] "
             f"{'enabled; consent policy: ' + WEB_RESEARCH_CONSENT if ENABLE_WEB_RESEARCH else 'disabled'}"
         )
-
     memory = PersistentMemory(db_path=DEFAULT_DB_PATH)
     _ACTIVE_MEMORY = memory
     recovered_actions = memory.reconcile_task_actions_after_restart()
@@ -1423,7 +1419,6 @@ async def _build_session_setup(
                 tool_count=len(discovered_tools),
                 elapsed_seconds=round(time.monotonic() - mcp_started, 3),
             )
-
     if project_resources.workspace is not None:
         workspace_input = str(project_resources.workspace)
     else:
@@ -1444,7 +1439,6 @@ async def _build_session_setup(
             f"[bold green][Security][/bold green] Workspace root locked to: "
             f"{SandboxManager.get_root()}"
         )
-
     if project_resources.rag is not None:
         docs_input = str(project_resources.rag)
     elif rag_docs_default:
@@ -1483,7 +1477,6 @@ async def _build_session_setup(
     )
     if rag_task is not None:
         _ACTIVE_RAG_TASK = rag_task
-
     skills_folder_input = (
         skills_folder_default
         if skills_folder_default
@@ -1524,7 +1517,6 @@ async def _build_session_setup(
         console.print(
             "[yellow][Skills Mode][/yellow] No skills folder specified or found. Running in plain agent mode."
         )
-
     has_skills = len(loaded_skills) > 0
     if has_skills and is_rag_active:
         mode_label = "[cyan]Skilled Private Agent[/cyan]"
@@ -1534,13 +1526,11 @@ async def _build_session_setup(
         mode_label = "[cyan]Private Agent[/cyan]"
     else:
         mode_label = "[cyan]Agent[/cyan]"
-
     if verbose_startup:
         console.print(
             f"[bold green][Runtime Mode][/bold green] "
             f"Active Mode Indicator: {mode_label}"
         )
-
     log_event(
         RUN_LOGGER,
         "agent.startup_completed",
@@ -1674,7 +1664,6 @@ async def _choose_provider(
         requested_model,
         requested_provider,
     )
-
     last_used = load_last_provider() or {}
     for runtime_index, runtime in enumerate(local_runtimes, 1):
         marker = (
@@ -1692,7 +1681,8 @@ async def _choose_provider(
             f"  [yellow]–[/yellow] {idle.preset.name} is installed but not running "
             f"— {idle.start_hint}"
         )
-    resumed_record = provider_record_for_resume(memory, session_id)
+    if (resumed_record := provider_record_for_resume(memory, session_id)) is None and interactive and idle_providers:
+        local_runtimes[:], _ = _offer_provider_start(console=console, record=None, idle_providers=idle_providers, runtimes=local_runtimes, refresh=_discover_available_local_runtimes, input_fn=_input, interactive=interactive)
     resumed_runtime = None
     if resumed_record is not None:
         resumed_runtime = match_runtime(
@@ -1976,13 +1966,20 @@ async def _choose_provider(
             capabilities = inspect_openai_compatible_model_capabilities(
                 local_runtime, selected_model
             )
-        if local_runtime.kind == "ollama" and capabilities["tools"] is False:
+        if capabilities["tools"] is False:
             tool_capable_model = next(
                 (
                     candidate
                     for candidate in available_models
                     if candidate != selected_model
-                    and inspect_model_capabilities(candidate)["tools"] is True
+                    and (
+                        inspect_model_capabilities(candidate)
+                        if local_runtime.kind == "ollama"
+                        else inspect_openai_compatible_model_capabilities(
+                            local_runtime, candidate
+                        )
+                    )["tools"]
+                    is True
                 ),
                 None,
             )
@@ -2031,18 +2028,21 @@ async def _choose_provider(
             try:
                 llm_with_tools = _bind_tools(llm, tools_list)
             except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the runtime; continue without tools
-                fallback_model = (
-                    next(
-                        (
-                            candidate
-                            for candidate in available_models
-                            if candidate != selected_model
-                            and inspect_model_capabilities(candidate)["tools"] is True
-                        ),
-                        None,
-                    )
-                    if local_runtime.kind == "ollama"
-                    else None
+                fallback_model = next(
+                    (
+                        candidate
+                        for candidate in available_models
+                        if candidate != selected_model
+                        and (
+                            inspect_model_capabilities(candidate)
+                            if local_runtime.kind == "ollama"
+                            else inspect_openai_compatible_model_capabilities(
+                                local_runtime, candidate
+                            )
+                        )["tools"]
+                        is True
+                    ),
+                    None,
                 )
                 if fallback_model is None:
                     console.print(

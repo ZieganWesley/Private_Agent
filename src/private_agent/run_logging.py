@@ -175,7 +175,7 @@ def start_debug_logging() -> pathlib.Path | None:
         return None
     if _ACTIVE_HANDLERS:
         stop_debug_logging()
-    app_dir = pathlib.Path.home() / ".private_agent"
+    app_dir = pathlib.Path.home() / ".config" / "private_agent"
     log_dir = app_dir / "logs"
     try:
         if app_dir.is_symlink() or log_dir.is_symlink():

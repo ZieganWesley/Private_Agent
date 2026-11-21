@@ -117,7 +117,7 @@ class RepositoryIndex:
 
     def __init__(self, db_path: str | None = None, root_path: str | None = None):
         if db_path is None:
-            db_path = str(Path.home() / ".private_agent" / "repo_index.db")
+            db_path = str(Path.home() / ".config" / "private_agent" / "repo_index.db")
         self.db_path = str(Path(db_path).expanduser())
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.root_path = str(Path(root_path).expanduser().resolve()) if root_path else None

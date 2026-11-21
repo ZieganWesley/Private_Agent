@@ -11,7 +11,7 @@ from typing import Any
 class ArchitectureMemory:
     def __init__(self, db_path: str | None = None):
         if db_path is None:
-            db_path = str(Path.home() / ".private_agent" / "architecture.db")
+            db_path = str(Path.home() / ".config" / "private_agent" / "architecture.db")
         self.db_path = str(Path(db_path).expanduser())
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0)

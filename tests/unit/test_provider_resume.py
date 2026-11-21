@@ -349,3 +349,137 @@ def test_start_offer_is_skipped_when_not_interactive():
     assert (result, matched) == (runtimes, None)
     assert asked == []
     assert console.messages == []
+
+
+def test_initial_phase_offers_installed_but_idle_runtimes():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    restarted = SimpleNamespace(
+        name="LM Studio", base_url="http://127.0.0.1:1234/v1", models=("m",)
+    )
+    polls = []
+
+    def refresh():
+        polls.append(True)
+        return [restarted] if len(polls) >= 2 else []
+
+    idle_provider = _idle_provider("LM Studio", "start LM Studio")
+    # Rebuild idle provider with openai-compatible preset for realism.
+    from private_agent.providers.adapters import ProviderPreset
+    from private_agent.providers.selection import IdleProvider
+
+    idle_provider = IdleProvider(
+        preset=ProviderPreset(
+            name="LM Studio",
+            kind="openai-compatible",
+            default_ports=(1234,),
+            install_check=lambda: True,
+            start_hint="start LM Studio",
+        ),
+        start_hint="start LM Studio",
+    )
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=None,
+        idle_providers=[idle_provider],
+        runtimes=[],
+        refresh=refresh,
+        input_fn=lambda _prompt: "yes",
+        start_provider=lambda _name: True,
+        sleep=lambda _seconds: None,
+    )
+
+    assert matched is restarted
+    assert result == [restarted]
+    assert any("is installed but not running" in message for message in console.messages)
+
+
+def _openai_idle(name="LM Studio", start_hint="start LM Studio"):
+    from private_agent.providers.adapters import ProviderPreset
+    from private_agent.providers.selection import IdleProvider
+
+    return IdleProvider(
+        preset=ProviderPreset(
+            name=name,
+            kind="openai-compatible",
+            default_ports=(1234,),
+            install_check=lambda: True,
+            start_hint=start_hint,
+        ),
+        start_hint=start_hint,
+    )
+
+
+def test_initial_phase_declines_without_starting():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    started = []
+    runtimes = [object()]
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=None,
+        idle_providers=[_openai_idle()],
+        runtimes=runtimes,
+        refresh=lambda: [],
+        input_fn=lambda _prompt: "n",
+        start_provider=lambda name: started.append(name) or True,
+    )
+
+    assert result == runtimes
+    assert matched is None
+    assert started == []
+    assert any("is installed but not running" in message for message in console.messages)
+
+
+def test_initial_phase_reports_failed_launch():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=None,
+        idle_providers=[_openai_idle()],
+        runtimes=[],
+        refresh=lambda: [],
+        input_fn=lambda _prompt: "yes",
+        start_provider=lambda _name: False,
+        sleep=lambda _seconds: None,
+    )
+
+    assert result == []
+    assert matched is None
+    assert any("Could not start LM Studio automatically" in message for message in console.messages)
+
+
+def test_initial_phase_restarts_after_consent():
+    from private_agent.agent.provider_resume import offer_provider_start
+
+    console = _Recorder()
+    restarted = SimpleNamespace(
+        name="LM Studio", base_url="http://127.0.0.1:1234/v1", models=("m",)
+    )
+    polls = []
+
+    def refresh():
+        polls.append(True)
+        return [restarted] if len(polls) >= 1 else []
+
+    result, matched = offer_provider_start(
+        console=console,
+        record=None,
+        idle_providers=[_openai_idle()],
+        runtimes=[],
+        refresh=refresh,
+        input_fn=lambda _prompt: "y",
+        start_provider=lambda _name: True,
+        sleep=lambda _seconds: None,
+    )
+
+    assert matched is restarted
+    assert result == [restarted]
+    assert any("is running again" in message for message in console.messages)

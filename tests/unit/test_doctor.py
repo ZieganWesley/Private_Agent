@@ -57,4 +57,4 @@ def test_doctor_interactive_manual_fallback_on_decline(monkeypatch):
     assert result == 0
     joined = "\n".join(fake.output)
     assert "Manual config changes" in joined
-    assert ".private_agent.conf" in joined
+    assert "private_agent.conf" in joined

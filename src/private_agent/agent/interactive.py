@@ -150,7 +150,7 @@ def format_help() -> str:
 def load_custom_slash_commands(workspace_root=None) -> dict[str, str]:
     """Load custom slash commands from Markdown files (user then project level)."""
     commands: dict[str, str] = {}
-    roots = [pathlib.Path.home() / ".private_agent" / "commands"]
+    roots = [pathlib.Path.home() / ".config" / "private_agent" / "commands"]
     if workspace_root is not None:
         roots.append(pathlib.Path(workspace_root) / ".private_agent" / "commands")
     for root in roots:

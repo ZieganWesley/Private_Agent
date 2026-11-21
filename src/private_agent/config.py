@@ -23,13 +23,13 @@ CONFIG_PATH_ENV_VAR = "PRIVATE_AGENT_CONFIG"
 
 
 def resolve_config_path(environ=None) -> pathlib.Path:
-    """Return the config file path: $PRIVATE_AGENT_CONFIG or ~/.private_agent.conf."""
+    """Return the config file path: $PRIVATE_AGENT_CONFIG or ~/.config/private_agent/private_agent.conf."""
     override = (environ if environ is not None else os.environ).get(
         CONFIG_PATH_ENV_VAR, ""
     )
     if override.strip():
         return pathlib.Path(override.strip()).expanduser().absolute()
-    return pathlib.Path.home() / ".private_agent.conf"
+    return pathlib.Path.home() / ".config" / "private_agent" / "private_agent.conf"
 
 
 CONFIG_FILE_PATH = resolve_config_path()
@@ -38,10 +38,10 @@ DEFAULT_CONFIG = {
     "paths": {
         "database": "~/.local_ai_memory.db",
         "workspace": ".",
-        "code_output": "~/.private_agent/projects",
-        "skills": "~/.private_agent/resources/skills",
-        "rag_documents": "~/.private_agent/rag/",
-        "rag_index": "~/.private_agent/rag_index",
+        "code_output": "~/.config/private_agent/projects",
+        "skills": "~/.config/private_agent/resources/skills",
+        "rag_documents": "~/.config/private_agent/rag/",
+        "rag_index": "~/.config/private_agent/rag_index",
     },
     "permissions": {
         "allow": [],
@@ -259,6 +259,7 @@ def _persist_categorized_config(config: dict) -> None:
     except OSError:
         pass
 
+    CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
     try:
         descriptor, temporary_name = tempfile.mkstemp(
@@ -338,6 +339,7 @@ def load_or_create_config() -> dict:
     """Load the per-user config, creating it with defaults when missing."""
     if not CONFIG_FILE_PATH.exists():
         try:
+            CONFIG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
             descriptor = os.open(
                 CONFIG_FILE_PATH,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL,

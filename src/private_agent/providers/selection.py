@@ -23,7 +23,7 @@ def state_path() -> pathlib.Path:
     override = os.environ.get(STATE_ENV)
     if override:
         return pathlib.Path(override).expanduser()
-    return pathlib.Path.home() / ".private_agent" / "last_provider.json"
+    return pathlib.Path.home() / ".config" / "private_agent" / "last_provider.json"
 
 
 def load_last_provider() -> dict[str, Any] | None:

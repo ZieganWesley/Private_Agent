@@ -1,8 +1,10 @@
 """Provider record persistence and resume fallback helpers (Part I, I1p)."""
 
+import contextlib
 import logging
 import sqlite3
 import time
+from typing import Any
 
 from ..run_logging import RUN_LOGGER, log_event
 
@@ -98,8 +100,8 @@ def _start_provider(name: str) -> bool:
 def offer_provider_start(
     *,
     console,
-    record,
-    idle_providers,
+    record=None,
+    idle_providers=None,
     runtimes,
     refresh,
     input_fn,
@@ -108,21 +110,97 @@ def offer_provider_start(
     sleep=None,
     attempts=6,
     delay=1.0,
+    provider_name=None,
 ):
     """Offer to start an installed but idle provider.
 
     Returns ``(runtimes, match)`` where ``match`` is the restarted provider when
     it came back. Only providers the user already has installed are offered, and
     nothing is launched without an explicit yes.
+
+    When ``record`` is ``None`` (the initial, non-resume phase) every provider
+    in ``idle_providers`` is offered in turn, so a present-but-inactive runtime
+    can be started before the provider menu is shown.
     """
-    if record is None or not interactive:
+    if not interactive:
         return runtimes, None
-    name = str(record.display_name)
+    if idle_providers is None:
+        idle_providers = []
+
+    # Initial phase: no resumed record, offer every installed-but-idle provider.
+    if record is None:
+        if provider_name is not None:
+            wanted_names = {str(provider_name).strip().lower()}
+        else:
+            wanted_names = None
+        current_runtimes = list(runtimes)
+        matched: Any = None
+        started_any = False
+        for idle in idle_providers:
+            name = str(getattr(idle.preset, "name", "")).strip()
+            if not name:
+                continue
+            if wanted_names is not None and name.lower() not in wanted_names:
+                continue
+            console.print(
+                f"[yellow]{name} is installed but not running.[/yellow]"
+            )
+            start_hint = getattr(idle, "start_hint", "") or getattr(
+                idle.preset, "start_hint", ""
+            )
+            if start_hint:
+                console.print(f"  Start it with: {start_hint}")
+            try:
+                answer = input_fn(
+                    f"[cyan]Start {name} now? [y/N]: [/cyan]"
+                ).strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                continue
+            if answer not in {"y", "yes"}:
+                continue
+            start = start_provider or _start_provider
+            if not start(name):
+                console.print(
+                    f"[yellow]Could not start {name} automatically; "
+                    "start it yourself and try again.[/yellow]"
+                )
+                continue
+            started_any = True
+            pause = sleep or time.sleep
+            for attempt in range(max(int(attempts), 1)):
+                current = refresh()
+                from ..providers.selection import match_runtime as _match_runtime
+
+                found = _match_runtime(name, current)
+                if found is not None:
+                    console.print(
+                        f"[green]{name} is running again.[/green]"
+                    )
+                    if matched is None:
+                        matched = found
+                    current_runtimes = list(current)
+                    break
+                if attempt + 1 < max(int(attempts), 1):
+                    pause(delay)
+            else:
+                console.print(
+                    f"[yellow]{name} did not answer after starting; "
+                    "continuing without it.[/yellow]"
+                )
+                current_runtimes = list(refresh())
+        if started_any and len(idle_providers) > 1:
+            with contextlib.suppress(Exception):
+                current_runtimes = list(refresh())
+        return current_runtimes, matched
+
+    # Resume phase: only the recorded provider is offered.
+    name = str(getattr(record, "display_name", record))
     idle = next(
         (
             idle_provider
             for idle_provider in idle_providers
-            if idle_provider.preset.name.lower() == name.lower()
+            if str(getattr(idle_provider.preset, "name", "")).strip().lower()
+            == name.strip().lower()
         ),
         None,
     )
@@ -131,8 +209,11 @@ def offer_provider_start(
     console.print(
         f"[yellow][Resume][/yellow] {name} (recorded for this session) is not running."
     )
-    if idle.start_hint:
-        console.print(f"  Start it with: {idle.start_hint}")
+    start_hint = getattr(idle, "start_hint", "") or getattr(
+        idle.preset, "start_hint", ""
+    )
+    if start_hint:
+        console.print(f"  Start it with: {start_hint}")
     try:
         answer = input_fn(f"[cyan]Start {name} now? [y/N]: [/cyan]").strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -152,7 +233,7 @@ def offer_provider_start(
     for attempt in range(max(int(attempts), 1)):
         current = refresh()
         matched = match_runtime(name, current) or match_runtime_by_address(
-            record.base_url, current
+            getattr(record, "base_url", ""), current
         )
         if matched is not None:
             console.print(f"[green][Resume][/green] {name} is running again.")
@@ -164,7 +245,6 @@ def offer_provider_start(
         "continuing without it."
     )
     return refresh(), None
-
 
 def persist_provider_choice(
     *,

@@ -94,7 +94,7 @@ def main():
     parser.add_argument(
         "--config",
         metavar="PATH",
-        help="Use this configuration file instead of ~/.private_agent.conf "
+        help="Use this configuration file instead of ~/.config/private_agent/private_agent.conf "
         "(also settable with PRIVATE_AGENT_CONFIG).",
     )
     resume_group = parser.add_mutually_exclusive_group()
