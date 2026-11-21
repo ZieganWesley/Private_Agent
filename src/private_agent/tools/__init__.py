@@ -644,6 +644,20 @@ from .shell import (
 )
 from .subagents import run_subagent
 from .web import download_web_file, fetch_webpage, web_search
+from .repository_intelligence import (
+    find_callees_tool,
+    find_callers_tool,
+    find_definition_tool,
+    find_dependencies_tool,
+    find_references_tool,
+    find_symbol_tool,
+    get_agent_metrics,
+    get_repository_map,
+    index_repository,
+    recall_architecture,
+    record_architecture_decision,
+    trace_execution_flow_tool,
+)
 
 AVAILABLE_TOOLS = {
     "get_local_datetime": get_local_datetime,
@@ -696,6 +710,18 @@ AVAILABLE_TOOLS = {
     "create_docx": create_docx,
     "create_xlsx": create_xlsx,
     "create_pdf": create_pdf,
+    "index_repository": index_repository,
+    "find_symbol": find_symbol_tool,
+    "find_definition": find_definition_tool,
+    "find_references": find_references_tool,
+    "find_callers": find_callers_tool,
+    "find_callees": find_callees_tool,
+    "find_dependencies": find_dependencies_tool,
+    "trace_execution_flow": trace_execution_flow_tool,
+    "get_repository_map": get_repository_map,
+    "record_architecture_decision": record_architecture_decision,
+    "recall_architecture": recall_architecture,
+    "get_agent_metrics": get_agent_metrics,
 }
 
 
