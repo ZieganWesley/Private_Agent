@@ -140,8 +140,12 @@ Branch `j-k-performance-optimization`.
 |---|---|---|
 | J2 | Partly fixed | `rag/indexing.py` imports Chroma and Ollama embeddings lazily via `_ensure_rag_dependencies()` |
 | J5 | Fixed | `tools/network.py` caches validated DNS records for 60 s (bounded, rules re-checked) |
-| J6 | Fixed | `tools/__init__.py` caches internet-connectivity probes for 30 s |
-| J7/J8 | Partly fixed | `rag/indexing.py` keeps parsed chunks for unchanged files in `_CHUNK_CACHE` |
+| J6 | Fixed | `tools/__init__.py` caches internet-connectivity probes for 30 s (single cache in `has_internet_connection`; raw probe uncached) |
+| J7/J8 | Partly fixed | `rag/indexing.py` keeps parsed chunks for unchanged files in `_CHUNK_CACHE` (plus `clear_chunk_cache()`) |
+
+Simplification pass: removed the redundant dict cache inside `check_internet_connection`
+(the 30 s cache in `has_internet_connection` is the single source of truth),
+and `SNAPSHOT_DIR` is no longer resolved at import time (K7).
 
 Verification: `ruff check .` clean; `pytest` -> 1120 passed, 12 skipped, 1 warning.
 

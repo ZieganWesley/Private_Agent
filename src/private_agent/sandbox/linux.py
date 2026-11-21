@@ -11,7 +11,7 @@ from ..snapshots import SnapshotError, record_snapshot
 
 _LOGGER = logging.getLogger(__name__)
 
-SNAPSHOT_DIR = pathlib.Path(".agent_snapshots").resolve()
+SNAPSHOT_DIR = pathlib.Path(".agent_snapshots")
 
 
 class SandboxManager:

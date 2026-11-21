@@ -343,6 +343,11 @@ OllamaEmbeddings = None
 _CHUNK_CACHE: dict[str, tuple[dict, list]] = {}
 
 
+def clear_chunk_cache() -> None:
+    """Drop cached parsed chunks so the next refresh re-parses every file."""
+    _CHUNK_CACHE.clear()
+
+
 def initialize_knowledge_base(
     docs_path: str | None,
     *,
