@@ -142,3 +142,60 @@ def test_memory_classification_and_ranking():
     ranked = rank_memories(memories, query="python")
     assert ranked[0]["text"] == "python style guide"
     assert "_score" in ranked[0]
+
+
+def test_parallel_parse_preserves_order():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for i in range(8):
+            (root / f"f{i}.py").write_text(
+                f"def foo{i}():\n    bar{i}()\n", encoding="utf-8"
+            )
+        db = str(root / "index.db")
+        index = RepositoryIndex(db_path=db, root_path=str(root))
+        try:
+            pending = [
+                (root / f"f{i}.py", f"f{i}.py", ".py") for i in range(8)
+            ]
+            results = index._parse_files_parallel(pending)
+            assert len(results) == 8
+            for i, (syms, _edges) in enumerate(results):
+                assert syms and syms[0].name == f"foo{i}"
+        finally:
+            index.close()
+
+
+def test_parallel_parse_falls_back_to_in_process(monkeypatch):
+    import private_agent.repository_intelligence.indexer as indexer_module
+
+    class _BrokenExecutor:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("unavailable")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(
+        indexer_module, "ProcessPoolExecutor", _BrokenExecutor
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for i in range(8):
+            (root / f"g{i}.py").write_text(
+                f"def baz{i}():\n    qux{i}()\n", encoding="utf-8"
+            )
+        db = str(root / "index.db")
+        index = RepositoryIndex(db_path=db, root_path=str(root))
+        try:
+            pending = [
+                (root / f"g{i}.py", f"g{i}.py", ".py") for i in range(8)
+            ]
+            results = index._parse_files_parallel(pending)
+            assert len(results) == 8
+            for i, (syms, _edges) in enumerate(results):
+                assert syms and syms[0].name == f"baz{i}"
+        finally:
+            index.close()
