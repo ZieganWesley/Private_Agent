@@ -73,6 +73,15 @@ def list_saved_sessions(limit: int = 20) -> int:
 def main():
     ensure_supported_platform()
     enforce_offline_environment()
+    from rich.panel import Panel
+
+    console.print(
+        Panel.fit(
+            "[bold cyan]Private Agent[/bold cyan]\n"
+            "Local-first AI assistant with repository intelligence, memory and tools.",
+            title="Private Agent",
+        )
+    )
     parser = argparse.ArgumentParser(
         prog="private-agent",
         description="Run the local-first Private Agent CLI.",
@@ -140,6 +149,11 @@ def main():
         action="store_true",
         help="Use a light-terminal colour theme.",
     )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Run dependency, environment and machine-resource diagnostics.",
+    )
     args = parser.parse_args()
     if args.config:
         os.environ["PRIVATE_AGENT_CONFIG"] = args.config
@@ -151,6 +165,10 @@ def main():
         os.environ["PRIVATE_AGENT_MODEL"] = args.model
     if args.list_sessions:
         raise SystemExit(list_saved_sessions())
+    if args.doctor:
+        from .doctor import doctor_interactive
+
+        raise SystemExit(doctor_interactive())
     originals = []
     exit_code = 0
     from .config import DEBUG_LOG_ENABLED

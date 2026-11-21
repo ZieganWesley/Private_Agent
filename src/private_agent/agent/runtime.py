@@ -29,6 +29,7 @@ from rich.table import Table
 from .. import capabilities as capability_packs
 from .. import json_output
 from .. import runtime_f_integration as f_integration
+from ..chat_ui import ChatTranscript
 from ..config import (
     AGENT_PERMISSION_MODE,
     APP_CONFIG,
@@ -2510,8 +2511,13 @@ async def _run_agent_cli_session(
                 )
                 if _handled and _cont:
                     continue
-                if user_input.lower() == "/help":
+                if user_input.lower() in {"/help", "/commands"}:
                     console.print(_format_interactive_help())
+                    continue
+                if user_input.lower() == "/doctor":
+                    from ..doctor import doctor_interactive
+
+                    doctor_interactive()
                     continue
                 if user_input.lower() == "/context":
                     if not pending_folder_context:
@@ -3724,6 +3730,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 set_tool_context(_tool_context)
 
                 start_time = time.monotonic()
+                chat_transcript = ChatTranscript(console=console)
+                chat_transcript.add_message("user", user_input, echo=False)
                 deadline = start_time + MAX_TASK_SECONDS
                 with f_integration.guard_turn_start(_f_state):
                     (
@@ -3988,13 +3996,11 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     else str(content or "")
                 )
                 if not isinstance(response, AIMessageChunk):
-                    console.print(f"\n[bold green]AI ({selected_model}):[/bold green]")
-                    from rich.markdown import Markdown
-
-                    console.print(
-                        Markdown(full_output_content),
-                        soft_wrap=True,
-                    )
+                    chat_transcript.add_message("assistant", full_output_content, echo=False)
+                    for i in range(0, len(full_output_content), 120):
+                        chat_transcript.stream_chunk("assistant", full_output_content[i:i + 120])
+                    if full_output_content:
+                        chat_transcript.stream_chunk("assistant", "\n")
                 elif not full_output_content and not getattr(
                     response, "tool_calls", None
                 ):

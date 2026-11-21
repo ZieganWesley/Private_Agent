@@ -312,11 +312,9 @@ def online_request_failure(exc: Exception) -> str:
 
 
 def has_saved_online_config(app_config: dict) -> bool:
-    """Return whether a non-empty API key is available in categorized or legacy config."""
+    """Return whether a non-empty API key is available in categorized config."""
     models = app_config.get("models")
     configured_key = models.get("online_api_key") if isinstance(models, dict) else None
-    if configured_key is None:
-        configured_key = app_config.get("online_api_key")
     return isinstance(configured_key, str) and bool(configured_key.strip())
 
 

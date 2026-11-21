@@ -235,7 +235,7 @@ used; and if no local `skills` folder is found, the configured skills path is
 used.
 
 The first run creates `~/.private_agent.conf` (JSON) in your home directory;
-legacy flat keys are migrated. Memory is stored in `~/.local_ai_memory.db`.
+Configuration uses categorized sections only. Memory is stored in `~/.local_ai_memory.db`.
 Put documents for RAG in `~/.private_agent/rag/` and skills in
 `~/.private_agent/resources/skills/`.
 
@@ -371,8 +371,7 @@ Other behaviour:
 
 Settings live in `~/.private_agent.conf` (JSON). The block below shows the
 defaults with descriptions; real JSON files cannot contain comments, so omit
-the `//` text in your file. Flat legacy keys are still accepted; categorized
-values win on conflict.
+the `//` text in your file. Only categorized sections are accepted; flat legacy keys are ignored.
 
 ```jsonc
 {
@@ -540,6 +539,10 @@ responses, and rendered output are not copied into the log; tool and model
 events record operational metadata rather than prompt, result, or argument
 bodies. Captured exception details redact known credential patterns and
 argument values echoed by tools.
+
+### MCP tool surface
+
+MCP tools are discovered from configured servers and registered dynamically. stdio servers run in an isolated temporary sandbox; remote HTTP/SSE endpoints are validated against SSRF rules and must use public or loopback hosts. Tool approval follows the session permission mode and `mcp.auto_approve_tools`.
 
 ### MCP server examples (calendar, notes, email, reminders)
 

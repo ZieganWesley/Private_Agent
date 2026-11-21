@@ -208,91 +208,15 @@ DEFAULT_CONFIG = {
     },
 }
 
-_LEGACY_CONFIG_KEYS = {
-    "default_db_path": ("paths", "database"),
-    "workspace_root": ("paths", "workspace"),
-    "code_output_root": ("paths", "code_output"),
-    "skills_folder": ("paths", "skills"),
-    "rag_docs_path": ("paths", "rag_documents"),
-    "rag_index_path": ("paths", "rag_index"),
-    "ollama_base_url": ("models", "ollama_base_url"),
-    "hardware_acceleration": ("models", "hardware_acceleration"),
-    "preferred_model": ("models", "preferred_model"),
-    "online_base_url": ("models", "online_base_url"),
-    "online_model": ("models", "online_model"),
-    "online_api_key": ("models", "online_api_key"),
-    "default_model_temperature": ("models", "temperature"),
-    "embedding_model": ("models", "embedding_model"),
-    "thinking_toggle_default": ("models", "thinking_enabled_by_default"),
-    "thinking_effort_default": ("models", "thinking_effort"),
-    "agent_permission_mode": ("agent", "permission_mode"),
-    "max_tool_iterations": ("agent", "max_tool_iterations"),
-    "max_tool_calls": ("agent", "max_tool_calls"),
-    "max_task_seconds": ("agent", "max_task_seconds"),
-    "max_tool_output_chars": ("agent", "max_tool_output_chars"),
-    "max_history_messages": ("agent", "max_history_messages"),
-    "max_context_tokens": ("agent", "max_context_tokens"),
-    "max_output_tokens": ("agent", "max_output_tokens"),
-    "STREAMING_OUTPUT": ("agent", "streaming_output"),
-    "streaming_output": ("agent", "streaming_output"),
-    "VISIBILE_REASONING": ("agent", "visible_reasoning"),
-    "visible_reasoning": ("agent", "visible_reasoning"),
-    "max_model_capability_cache_entries": (
-        "agent",
-        "max_model_capability_cache_entries",
-    ),
-    "conversation_retention_days": ("memory", "conversation_retention_days"),
-    "episode_retention_days": ("memory", "episode_retention_days"),
-    "registered_skill_retention_days": ("memory", "registered_skill_retention_days"),
-    "task_stale_after_days": ("memory", "task_stale_after_days"),
-    "max_summary_chars": ("memory", "max_summary_chars"),
-    "rag_max_file_bytes": ("rag", "max_file_bytes"),
-    "rag_max_corpus_bytes": ("rag", "max_corpus_bytes"),
-    "rag_max_pdf_pages": ("rag", "max_pdf_pages"),
-    "rag_max_documents": ("rag", "max_documents"),
-    "enable_web_research": ("network", "web_research_enabled"),
-    "web_research_consent": ("network", "web_research_consent"),
-    "internet_check_host": ("network", "internet_check_host"),
-    "internet_check_port": ("network", "internet_check_port"),
-    "internet_check_timeout": ("network", "internet_check_timeout_seconds"),
-    "max_network_concurrency": ("network", "max_concurrent_requests"),
-    "network_request_timeout": ("network", "request_timeout_seconds"),
-    "max_webpage_bytes": ("network", "max_webpage_bytes"),
-    "max_download_bytes": ("network", "max_download_bytes"),
-    "max_http_redirects": ("network", "max_http_redirects"),
-    "max_search_query_chars": ("network", "max_search_query_chars"),
-    "max_search_results": ("network", "max_search_results"),
-    "max_fetched_webpage_chars": ("network", "max_fetched_webpage_chars"),
-    "max_read_file_bytes": ("tools", "max_read_file_bytes"),
-    "file_read_chunk_bytes": ("tools", "file_read_chunk_bytes"),
-    "binary_probe_bytes": ("tools", "binary_probe_bytes"),
-    "shell_command_timeout_seconds": ("tools", "shell_command_timeout_seconds"),
-    "default_history_read_limit": ("tools", "default_history_read_limit"),
-    "rag_context_results": ("agent", "rag_context_results"),
-    "rag_documents_only": ("agent", "rag_documents_only"),
-    "rag_relevance_threshold": ("rag", "relevance_threshold"),
-    "rag_include_coding_guidance": ("rag", "include_coding_guidance"),
-    "summary_prompt_sentences": ("agent", "summary_prompt_sentences"),
-    "DEBUG_LOG_ENABLED": ("logging", "debug_enabled"),
-    "mcp_auto_approve_tools": ("mcp", "auto_approve_tools"),
-    "mcpServers": ("mcp", "servers"),
-}
-
-
 def _merge_config(config: dict) -> dict:
-    """Merge categorized settings and legacy flat settings into runtime aliases."""
+    """Merge categorized settings into a normalized configuration."""
     merged = {section: values.copy() for section, values in DEFAULT_CONFIG.items()}
-    for section, values in config.items():
+    for section, values in (config or {}).items():
         if section in merged and isinstance(values, dict):
             merged[section].update(values)
-    for old_key, (section, key) in _LEGACY_CONFIG_KEYS.items():
-        if old_key in config and not (
-            isinstance(config.get(section), dict) and key in config[section]
-        ):
-            merged[section][key] = config[old_key]
-    for section, value in config.items():
-        if section not in merged and section not in _LEGACY_CONFIG_KEYS:
-            merged[section] = value
+        elif section not in merged and isinstance(values, dict):
+            merged[section] = values
+        # Flat legacy keys and unknown scalar settings are ignored.
     if merged["paths"].get("rag_documents") is None:
         merged["paths"]["rag_documents"] = DEFAULT_CONFIG["paths"]["rag_documents"]
     if merged["paths"].get("skills") == "resources/skills":
@@ -303,8 +227,6 @@ def _merge_config(config: dict) -> dict:
         merged["agent"]["system_prompt"].strip()
     ):
         merged["agent"]["system_prompt"] = DEFAULT_SYSTEM_PROMPT
-    for old_key, (section, key) in _LEGACY_CONFIG_KEYS.items():
-        merged[old_key] = merged[section][key]
     return merged
 
 
@@ -314,8 +236,8 @@ def _categorized_config_for_file(config: dict, merged: dict) -> dict:
     categorized.update(
         {
             key: value
-            for key, value in config.items()
-            if key not in DEFAULT_CONFIG and key not in _LEGACY_CONFIG_KEYS
+            for key, value in (config or {}).items()
+            if key not in DEFAULT_CONFIG and isinstance(value, dict)
         }
     )
     return categorized
