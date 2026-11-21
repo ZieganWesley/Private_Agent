@@ -68,6 +68,37 @@ def sync_mocked_resolver_with_async_backend(monkeypatch):
     )
 
 
+def test_dns_cache_does_not_reuse_records_across_resolvers(monkeypatch):
+    from private_agent.tools.network import _PublicOnlySyncNetworkBackend
+
+    backend = _PublicOnlySyncNetworkBackend()
+    calls = []
+
+    def resolver_a(host, port, timeout):
+        calls.append("a")
+        return ["1.1.1.1"]
+
+    def resolver_b(host, port, timeout):
+        calls.append("b")
+        return ["1.0.0.1"]
+
+    monkeypatch.setattr(
+        backend._backend, "connect_tcp", lambda *args, **kwargs: "connected"
+    )
+    monkeypatch.setattr(network_tools, "_getaddrinfo_with_timeout", resolver_a)
+    assert (
+        backend.connect_tcp("resolver-isolation.example.test", 443, timeout=0.5)
+        == "connected"
+    )
+    monkeypatch.setattr(network_tools, "_getaddrinfo_with_timeout", resolver_b)
+    assert (
+        backend.connect_tcp("resolver-isolation.example.test", 443, timeout=0.5)
+        == "connected"
+    )
+    # A replaced resolver must not read records cached for the previous one.
+    assert calls == ["a", "b"]
+
+
 def test_internet_probe_uses_per_call_timeout_without_global_socket_mutation():
     with patch("private_agent.tools.socket.create_connection") as connect:
         assert check_internet_connection("example.test", 443, 0.25) is True

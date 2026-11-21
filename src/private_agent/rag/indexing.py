@@ -11,13 +11,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from urllib.parse import quote
 
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
-
-try:
-    from langchain_ollama import OllamaEmbeddings
-except Exception:  # noqa: BLE001 - optional dependency
-    OllamaEmbeddings = None
 
 from private_agent.console import console
 
@@ -329,12 +323,38 @@ def _preserve_corrupt_index(index_path: pathlib.Path) -> pathlib.Path:
     return backup_path
 
 
+def _ensure_rag_dependencies():
+    global Chroma, OllamaEmbeddings
+    if Chroma is None:
+        from langchain_chroma import Chroma as _Chroma
+        Chroma = _Chroma
+    if OllamaEmbeddings is None:
+        try:
+            from langchain_ollama import OllamaEmbeddings as _OllamaEmbeddings
+            OllamaEmbeddings = _OllamaEmbeddings
+        except Exception:  # noqa: BLE001 - optional dependency
+            OllamaEmbeddings = None
+
+
+Chroma = None
+OllamaEmbeddings = None
+
+
+_CHUNK_CACHE: dict[str, tuple[dict, list]] = {}
+
+
+def clear_chunk_cache() -> None:
+    """Drop cached parsed chunks so the next refresh re-parses every file."""
+    _CHUNK_CACHE.clear()
+
+
 def initialize_knowledge_base(
     docs_path: str | None,
     *,
     index_path: str | None = None,
     confirm_rebuild: Callable[[str], bool] | None = None,
 ):
+    _ensure_rag_dependencies()
     """Initializes the Chroma vector store exclusively when an explicit, valid knowledge base folder path is provided."""
     if not docs_path:
         return None
@@ -487,6 +507,26 @@ def initialize_knowledge_base(
                 "embedding": signature,
             }
 
+            cached_entry = _CHUNK_CACHE.get(file_key)
+            if cached_entry is not None and cached_entry[0] == source_fingerprint:
+                cached_docs = list(cached_entry[1])
+                if cached_docs:
+                    if len(all_parsed_docs) + len(cached_docs) > RAG_MAX_DOCUMENTS:
+                        console.print(
+                            f"[yellow][Warning] Skipping {file_path.name}: document "
+                            f"chunk limit ({RAG_MAX_DOCUMENTS}) would be exceeded.[/yellow]"
+                        )
+                        failed_sources.add(file_key)
+                        continue
+                    all_parsed_docs.extend(cached_docs)
+                updated_state[file_key] = source_fingerprint
+                if (
+                    file_key not in index_state
+                    or index_state.get(file_key) != source_fingerprint
+                ):
+                    changed_docs.extend(cached_docs)
+                continue
+
             if ext == ".pdf":
                 try:
                     from pypdf import PdfReader
@@ -578,6 +618,7 @@ def initialize_knowledge_base(
                     )
                     chunk_number += 1
 
+            _CHUNK_CACHE[file_key] = (source_fingerprint, list(file_docs))
             if file_docs:
                 if len(all_parsed_docs) + len(file_docs) > RAG_MAX_DOCUMENTS:
                     console.print(

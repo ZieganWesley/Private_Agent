@@ -1,0 +1,19 @@
+{
+  "description": "Ratios measured on the machine below, relative to a fixed pure-Python calibration workload. Only 'ratios' is compared; 'reference_seconds' is a one-off wall-clock measurement kept for context and is never used by the check.",
+  "format": 2,
+  "ratios": {
+    "rag_refresh": 0.4704,
+    "startup_import": 5.0484
+  },
+  "reference_hardware": {
+    "cpu_count": 2,
+    "platform": "Linux-6.1.102-x86_64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "reference_measured_at": "2026-11-21",
+  "reference_seconds": {
+    "offline_token_count": 2.049,
+    "rag_refresh": 0.126,
+    "startup_import": 1.61
+  }
+}

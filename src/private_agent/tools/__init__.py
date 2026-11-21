@@ -289,6 +289,8 @@ def reset_turn_tool_context(token: Any) -> None:
 
 
 # --- NETWORK CONNECTIVITY UTILITY ---
+
+
 def check_internet_connection(
     host: str = INTERNET_CHECK_HOST,
     port: int = INTERNET_CHECK_PORT,

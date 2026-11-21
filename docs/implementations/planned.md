@@ -2422,7 +2422,7 @@ By phase:
 - [ ] Phase 10: User interface (10.1–10.10; 10.6 done)
 - [ ] Phase 11: Platform support, POSIX only (11.1–11.12; 11.1 done)
 - [ ] Phase 12: Local provider independence (12.1–12.13; 12.3 done)
-- [ ] Phase 13: Performance (13.1–13.10; 13.1 and 13.4 done, 13.3 partly)
+- [ ] Phase 13: Performance (13.1–13.10; 13.1, 13.4, 13.7, 13.8, 13.9 and 13.10 done, 13.3, 13.5 and 13.6 partly)
 - [ ] Phase 14: Configuration (14.1–14.11; 14.1 and 14.2 done)
 - [ ] Phase 15: Repository intelligence, architecture memory and metrics (15.1–15.15)
 

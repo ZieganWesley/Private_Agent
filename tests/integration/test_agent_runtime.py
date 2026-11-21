@@ -3146,7 +3146,11 @@ async def test_local_tool_incompatibility_fallback_preserves_task_context_and_po
     await run_agent_cli_async()
 
     assert len(fallback.calls) == 2
-    system_prompt = fallback.calls[0][0].content
+    system_prompt = "\n".join(
+        str(message.content)
+        for message in fallback.calls[0]
+        if isinstance(message, SystemMessage)
+    )
     assert "active permission mode is auto" in system_prompt
     assert "Configured system instructions." in system_prompt
     assert "This is the local Ollama provider." in system_prompt
@@ -4920,6 +4924,38 @@ async def test_startup_context_skips_the_resumed_sessions_own_episode(
     first_turn = "\n".join(str(message.content) for message in model.calls[0])
     assert "GIRAFFE-OTHER" in first_turn
     assert "ZEBRA-RESUMED" not in first_turn
+
+
+@pytest.mark.asyncio
+async def test_memory_lookups_run_off_the_event_loop(scripted_local_cli, monkeypatch):
+    import threading
+
+    agent, model, inputs, _workspace, _database_path = scripted_local_cli
+    threads = []
+    original_episodes = agent._build_relevant_episode_context
+    original_learned = agent._build_learned_context
+
+    def episodes(*args, **kwargs):
+        threads.append(threading.current_thread().name)
+        return original_episodes(*args, **kwargs)
+
+    def learned(*args, **kwargs):
+        threads.append(threading.current_thread().name)
+        return original_learned(*args, **kwargs)
+
+    monkeypatch.setattr(agent, "_build_relevant_episode_context", episodes)
+    monkeypatch.setattr(agent, "_build_learned_context", learned)
+    model.responses = [AIMessage(content="ok"), AIMessage(content="session summary")]
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["hello", "exit"])
+    )
+    inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
+
+    await run_agent_cli_async()
+
+    # Both SQLite lookups ran in worker threads, not on the event loop (J10).
+    assert len(threads) == 2
+    assert threading.current_thread().name not in threads
 
 
 @pytest.mark.asyncio
