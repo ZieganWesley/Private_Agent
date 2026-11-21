@@ -21,3 +21,16 @@ def test_render_chat_message_returns_text():
     console = Console(file=buffer, force_terminal=False, color_system=None)
     text = render_chat_message("user", "ping", console=console)
     assert "You: ping" in text
+
+
+def test_chat_transcript_render_budget():
+    import time
+
+    buffer = StringIO()
+    console = Console(file=buffer, force_terminal=False, color_system=None)
+    transcript = ChatTranscript(console=console)
+    start = time.monotonic()
+    for index in range(500):
+        transcript.add_message("assistant", f"message {index}")
+    elapsed = time.monotonic() - start
+    assert elapsed < 1.0
