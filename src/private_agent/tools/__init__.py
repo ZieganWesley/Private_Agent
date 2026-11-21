@@ -635,15 +635,6 @@ from .planner import (
     update_todo_step,
 )
 from .rag_tools import search_documents
-from .shell import (
-    get_background_process_status,
-    list_background_processes,
-    run_shell_command,
-    start_background_process,
-    stop_background_process,
-)
-from .subagents import run_subagent
-from .web import download_web_file, fetch_webpage, web_search
 from .repository_intelligence import (
     find_callees_tool,
     find_callers_tool,
@@ -658,6 +649,15 @@ from .repository_intelligence import (
     record_architecture_decision,
     trace_execution_flow_tool,
 )
+from .shell import (
+    get_background_process_status,
+    list_background_processes,
+    run_shell_command,
+    start_background_process,
+    stop_background_process,
+)
+from .subagents import run_subagent
+from .web import download_web_file, fetch_webpage, web_search
 
 AVAILABLE_TOOLS = {
     "get_local_datetime": get_local_datetime,
