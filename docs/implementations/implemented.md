@@ -138,16 +138,33 @@ Branch `j-k-performance-optimization`.
 
 | ID | Status | Where |
 |---|---|---|
-| J2 | Partly fixed | `rag/indexing.py` imports Chroma and Ollama embeddings lazily via `_ensure_rag_dependencies()` |
-| J5 | Fixed | `tools/network.py` caches validated DNS records for 60 s (bounded, rules re-checked) |
+| J2 | Partly fixed | `rag/indexing.py` imports Chroma and Ollama embeddings lazily via `_ensure_rag_dependencies()`; the RAG index is still built after provider selection, not during it (13.5) |
+| J4 | Fixed | `capabilities.py` binds only routed packs (Core by default); all 50 tools belong to a pack; `filter_tools_list` sorts by name |
+| J5 | Fixed | `tools/network.py` caches validated DNS records for 60 s (bounded, rules re-checked, keyed by resolver object) |
 | J6 | Fixed | `tools/__init__.py` caches internet-connectivity probes for 30 s (single cache in `has_internet_connection`; raw probe uncached) |
 | J7/J8 | Partly fixed | `rag/indexing.py` keeps parsed chunks for unchanged files in `_CHUNK_CACHE` (plus `clear_chunk_cache()`) |
+| J9 | Fixed | `rag/retrieval.py` builds a lazy in-memory FTS5 index at 5,000+ chunks and ranks with `bm25()`; smaller corpora keep `rank_bm25` |
+| J10 | Fixed | `runtime.py` runs episode search, learned preferences, startup retention pruning, history reloads and `/tasks` listing through `asyncio.to_thread` |
+| 13.7 | Fixed | `agent/prompt_prefix.py` splits the system prompt into a stable first message (base prompt, static rules, tool/deadline limits) and a volatile second one |
+| 13.10 | Fixed | `scripts/perf_check.py` + `scripts/perf_baseline.json` guard startup import, fixed-corpus RAG refresh and offline token counting at 20% growth; `.github/workflows/performance.yml` runs it |
 
 Simplification pass: removed the redundant dict cache inside `check_internet_connection`
 (the 30 s cache in `has_internet_connection` is the single source of truth),
 and `SNAPSHOT_DIR` is no longer resolved at import time (K7).
 
-Verification: `ruff check .` clean; `pytest` -> 1120 passed, 12 skipped, 1 warning.
+The DNS cache previously keyed entries by `id(resolver)`. Python recycles ids, so
+a replaced resolver (and its tests) could hit stale records; the key now holds the
+resolver function itself.
+
+J4 measurements: plain chat binds 12 tools (~1,372 tokens of tool schema)
+instead of 50 (~6,280 tokens), and the tool list is name-sorted so the
+prompt prefix is byte-identical between turns. J9 measurements at 20,000
+chunks: 1.3 ms per keyword query versus 7.7 ms with BM25 (55 ms to build the
+FTS5 index once). J13.10 baseline on this machine: 1.63 s startup import,
+0.14 s corpus refresh, 1.80 s offline token count.
+
+Verification: `ruff check .` clean; `pytest` -> 1138 passed, 12 skipped, 1 warning;
+`python scripts/perf_check.py` -> performance check passed.
 
 ### K section audit note
 
