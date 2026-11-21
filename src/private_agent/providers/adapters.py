@@ -90,7 +90,11 @@ def _lmstudio_installed() -> bool:
 
 
 def _llamacpp_installed() -> bool:
-    return _which("llama-server") or _which("llama-cli")
+    return (
+        _which("llama-server")
+        or _which("llama-cli")
+        or _which("llama")
+    )
 
 
 def _vllm_installed() -> bool:

@@ -575,7 +575,7 @@ def arrow_select(
 
     kb = KB()
 
-    @kb.add("enter")
+    @kb.add("enter", eager=True)
     def _accept(event) -> None:  # type: ignore[no-untyped-def]
         event.app.exit(result=radio.current_value)
 
