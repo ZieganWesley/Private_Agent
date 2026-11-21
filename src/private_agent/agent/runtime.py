@@ -29,6 +29,7 @@ from rich.table import Table
 from .. import capabilities as capability_packs
 from .. import json_output
 from .. import runtime_f_integration as f_integration
+from ..chat_ui import ChatTranscript
 from ..config import (
     AGENT_PERMISSION_MODE,
     APP_CONFIG,
@@ -3730,6 +3731,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 set_tool_context(_tool_context)
 
                 start_time = time.monotonic()
+                chat_transcript = ChatTranscript(console=console)
                 deadline = start_time + MAX_TASK_SECONDS
                 with f_integration.guard_turn_start(_f_state):
                     (
@@ -3994,12 +3996,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     else str(content or "")
                 )
                 if not isinstance(response, AIMessageChunk):
-                    console.print(f"\n[bold green]AI ({selected_model}):[/bold green]")
-                    from rich.markdown import Markdown
-
-                    console.print(
-                        Markdown(full_output_content),
-                        soft_wrap=True,
+                    chat_transcript.add_message(
+                        "assistant", full_output_content, markdown=True
                     )
                 elif not full_output_content and not getattr(
                     response, "tool_calls", None

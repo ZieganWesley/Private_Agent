@@ -34,3 +34,11 @@ def test_chat_transcript_render_budget():
         transcript.add_message("assistant", f"message {index}")
     elapsed = time.monotonic() - start
     assert elapsed < 1.0
+
+
+def test_chat_ui_wired_into_interactive_flow():
+    from pathlib import Path
+
+    source = Path("src/private_agent/agent/runtime.py").read_text(encoding="utf-8")
+    assert "ChatTranscript" in source
+    assert "chat_transcript.add_message" in source
