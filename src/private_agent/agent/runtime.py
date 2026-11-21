@@ -1561,7 +1561,8 @@ async def _build_session_setup(
         or EPISODE_RETENTION_DAYS
         or REGISTERED_SKILL_RETENTION_DAYS
     ):
-        _prune_memory_retention(
+        await asyncio.to_thread(
+            _prune_memory_retention,
             memory,
             conversation_days=CONVERSATION_RETENTION_DAYS,
             episode_days=EPISODE_RETENTION_DAYS or CONVERSATION_RETENTION_DAYS,
@@ -2182,19 +2183,26 @@ async def _choose_provider(
         provider_type == "local" or preference.online_selection["share_context"]
     )
     startup_memory_context = (
-        _build_startup_memory_context(
-            memory, skills_folder_input or None, exclude_session_id=session_id
+        await asyncio.to_thread(
+            _build_startup_memory_context,
+            memory,
+            skills_folder_input or None,
+            exclude_session_id=session_id,
         )
         if include_private_context
         else ""
     )
     chat_history = (
-        memory.load_history(session_id, limit=MAX_HISTORY_MESSAGES)
+        await asyncio.to_thread(
+            memory.load_history, session_id, limit=MAX_HISTORY_MESSAGES
+        )
         if include_private_context
         else []
     )
     context_summary = ""
-    session_summary_saved = memory.ends_with_summary(session_id)
+    session_summary_saved = await asyncio.to_thread(
+        memory.ends_with_summary, session_id
+    )
     _SESSION_INFO.update(
         {
             "SQL session ID": session_id,
@@ -2621,12 +2629,15 @@ async def _run_agent_cli_session(
                     )
                     console.print(undo_outcome.message)
                     if undo_outcome.history_changed:
-                        chat_history = memory.get_history(
+                        chat_history = await asyncio.to_thread(
+                            memory.get_history,
                             session_id,
-                            limit=MAX_HISTORY_MESSAGES,
+                            MAX_HISTORY_MESSAGES,
                         )
                         context_summary = ""
-                        session_summary_saved = memory.ends_with_summary(session_id)
+                        session_summary_saved = await asyncio.to_thread(
+                            memory.ends_with_summary, session_id
+                        )
                     continue
                 if user_input.lower() == "/add" or user_input.lower().startswith(
                     "/add "
@@ -2751,7 +2762,10 @@ async def _run_agent_cli_session(
                         )
                     continue
                 if user_input.lower() == "/tasks":
-                    approved_task_id = _run_task_management(
+                    # Listing and resolving saved plans scans SQLite; keep it
+                    # off the event loop (J10, 13.8).
+                    approved_task_id = await asyncio.to_thread(
+                        _run_task_management,
                         memory,
                         session_id,
                         skills_folder_input or None,
@@ -3322,8 +3336,13 @@ async def _run_agent_cli_session(
 
                 context_text = ""
                 retrieved_citations = []
+                # Episode search and learned-preference lookups scan SQLite;
+                # keep them off the event loop so streaming and the live
+                # overlay stay responsive (J10, 13.8).
                 relevant_episodes = (
-                    _build_relevant_episode_context(memory, user_input)
+                    await asyncio.to_thread(
+                        _build_relevant_episode_context, memory, user_input
+                    )
                     if include_private_context
                     else ""
                 )
@@ -3340,14 +3359,18 @@ async def _run_agent_cli_session(
                 )
                 if include_private_context:
                     selected_task = (
-                        memory.get_task(get_tool_context().task_id)
+                        await asyncio.to_thread(
+                            memory.get_task, get_tool_context().task_id
+                        )
                         if get_tool_context().task_id
                         else None
                     )
                     if selected_task and selected_task["status"] == "active":
                         learned_task_type = selected_task["task_type"]
                 learned_context = (
-                    _build_learned_context(memory, learned_task_type)
+                    await asyncio.to_thread(
+                        _build_learned_context, memory, learned_task_type
+                    )
                     if include_private_context
                     else ""
                 )
