@@ -35,3 +35,19 @@ def test_overlay_context_usage_renders(monkeypatch):
     console.print(rendered)
     text = console.export_text()
     assert "42%" in text or "Context" in text
+
+
+def test_overlay_empty_state_renders_thinking(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    import os
+
+    monkeypatch.setattr(os, "isatty", lambda fd: False)
+    from rich.console import Console
+
+    from private_agent import status_overlay
+
+    console = Console(record=True)
+    overlay = status_overlay.StatusOverlay(console)
+    rendered = overlay._render()
+    console.print(rendered)
+    assert "Thinking..." in console.export_text()
