@@ -8,6 +8,7 @@ try:
 except Exception:  # noqa: BLE001 - optional dependency
     ollama = None
 
+import contextlib
 import logging
 import sys
 from collections.abc import Sequence
@@ -47,8 +48,15 @@ from .providers import (
 )
 from .providers import select_online_model as _select_online_model
 from .providers import validate_online_base_url as _validate_online_base_url
+from .session_state import SESSION_STATS as _SESSION_STATS
 
 _MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] = {}
+_MODEL_CONSTRUCTION_COUNT: int = 0
+
+
+def model_construction_count() -> int:
+    """Return how many chat-model objects this process has constructed."""
+    return _MODEL_CONSTRUCTION_COUNT
 
 
 def _ollama_client(*args, **kwargs):
@@ -174,6 +182,10 @@ def _make_chat_model(
     supports_thinking: bool | None,
     context_window: int | None = None,
 ):
+    global _MODEL_CONSTRUCTION_COUNT
+    _MODEL_CONSTRUCTION_COUNT += 1
+    with contextlib.suppress(Exception):
+        _SESSION_STATS.model_constructions += 1
     effective_context = min(MAX_CONTEXT_TOKENS, context_window or MAX_CONTEXT_TOKENS)
     return _create_local_chat_model(
         model_name,
@@ -193,6 +205,10 @@ def _make_chat_model(
 
 
 def _make_online_chat_model(base_url: str, model_name: str, api_key: str):
+    global _MODEL_CONSTRUCTION_COUNT
+    _MODEL_CONSTRUCTION_COUNT += 1
+    with contextlib.suppress(Exception):
+        _SESSION_STATS.model_constructions += 1
     from langchain_openai import ChatOpenAI
 
     return _create_openai_compatible_chat_model(

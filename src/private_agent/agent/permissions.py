@@ -79,10 +79,7 @@ def select_coding_access_level(
     """Ask how a coding plan may access its selected workspace."""
     if not is_interactive():
         return "isolated_governed"
-    console.print("[bold cyan][Coding Workspace Access][/bold cyan]")
     choices = tuple(CODING_ACCESS_LEVELS.items())
-    for index, (_, description) in enumerate(choices, 1):
-        console.print(f"  {index}. {description}")
     try:
         from .interactive import arrow_select as _arrow_select
 
@@ -98,6 +95,9 @@ def select_coding_access_level(
         if not 1 <= choice <= len(choices):
             choice = 4
     else:
+        console.print("[bold cyan][Coding Workspace Access][/bold cyan]")
+        for index, (_, description) in enumerate(choices, 1):
+            console.print(f"  {index}. {description}")
         selection = console.input(
             "Choose workspace access [1-5] (default: 4, isolated): "
         ).strip()

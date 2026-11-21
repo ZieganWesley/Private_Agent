@@ -74,6 +74,7 @@ async def _recover_on_another_provider(
     interactive,
     input_fn,
     discover,
+    first_local_turn: bool = False,
 ):
     """Explain the loss, offer another provider and retry the turn on it."""
     console.print(
@@ -112,6 +113,7 @@ async def _recover_on_another_provider(
             model_name=model,
             status_message="Generating response...",
             local_model=True,
+            first_local_turn=first_local_turn,
             thinking_enabled=thinking_enabled,
             context_usage=usage,
         )
@@ -159,6 +161,7 @@ async def _invoke_initial_model_with_fallback(
     interactive=False,
     input_fn=None,
     discover=None,
+    first_local_turn: bool = True,
 ):
     """Invoke the model, falling back to a tool-capable or other local provider."""
     try:
@@ -169,6 +172,7 @@ async def _invoke_initial_model_with_fallback(
             model_name=selected_model,
             status_message=status_message,
             local_model=provider_type == "local",
+            first_local_turn=first_local_turn,
             thinking_enabled=thinking_enabled,
             context_usage=usage,
         )
@@ -222,6 +226,7 @@ async def _invoke_initial_model_with_fallback(
                     interactive=interactive,
                     input_fn=input_fn,
                     discover=discover,
+                    first_local_turn=first_local_turn,
                 )
             if recovered is not None:
                 return recovered
@@ -247,6 +252,7 @@ async def _invoke_initial_model_with_fallback(
             model_name=selected_model,
             status_message="Generating response...",
             local_model=provider_type == "local",
+            first_local_turn=first_local_turn,
             thinking_enabled=thinking_enabled,
         )
         return (

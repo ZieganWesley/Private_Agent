@@ -52,6 +52,8 @@ def response_usage(response: Any) -> tuple[int | None, int | None]:
 class SessionStats:
     started: float = field(default_factory=time.monotonic)
     model_calls: int = 0
+    model_constructions: int = 0
+    suspected_cold_loads: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
     estimated_calls: int = 0
@@ -130,6 +132,10 @@ def build_stats_table(stats: SessionStats, info: dict[str, Any]) -> Table:
     add("Time in model calls", format_duration(stats.model_seconds))
     add("Prompts this session", stats.turns)
     add("Model calls", stats.model_calls)
+    if stats.model_constructions:
+        add("Model constructions", stats.model_constructions)
+    if stats.suspected_cold_loads:
+        add("Suspected cold loads", stats.suspected_cold_loads)
     add("Input tokens", f"{stats.input_tokens:,}")
     add("Output tokens", f"{stats.output_tokens:,}")
     add("Total tokens", f"{stats.total_tokens:,}")

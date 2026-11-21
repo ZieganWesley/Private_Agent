@@ -26,6 +26,7 @@ from .status import (
     PROCESSING,
     THINKING,
     StatusIndicator,
+    processing_message,
     reasoning_text,
     thinking_message,
     waiting_message,
@@ -162,6 +163,7 @@ async def _invoke_with_budget(
     model_name: str = "model",
     status_message: str = "Processing model response...",
     local_model: bool = False,
+    first_local_turn: bool = True,
     context_usage: tuple[int, int] | None = None,
 ):
     """Invoke a model within the task deadline, streaming text when supported."""
@@ -173,9 +175,12 @@ async def _invoke_with_budget(
         model, "astream", None
     )
     if _supports_async_streaming(model) and stream_method is not None:
+        _loading_phase = local_model and first_local_turn
         indicator = StatusIndicator(
-            waiting_message(model_name, local_model=local_model),
-            phase=LOADING if local_model else PROCESSING,
+            (waiting_message(model_name, local_model=True) if _loading_phase else processing_message(model_name))
+            if local_model
+            else processing_message(model_name),
+            phase=(LOADING if _loading_phase else PROCESSING),
             context_usage=context_usage,
         ).start()
 
@@ -333,6 +338,8 @@ async def _invoke_with_budget(
             _stats = _display_generation_rate(
                 aggregate, elapsed, first_token_at=first_token_at, started=started
             )
+            if local_model and first_token_at is not None and (first_token_at - started) > 2.0:
+                _SESSION_STATS.suspected_cold_loads += 1
             if aggregate is not None and _stats is not None:
                 with contextlib.suppress(AttributeError, TypeError):
                     aggregate.generation_stats = _stats
@@ -454,6 +461,8 @@ async def _invoke_with_budget(
     elapsed = time.monotonic() - started
     _display_visible_reasoning(response)
     _stats = _display_generation_rate(response, elapsed)
+    if local_model and elapsed > 2.0:
+        _SESSION_STATS.suspected_cold_loads += 1
     if _stats is not None:
         with contextlib.suppress(AttributeError, TypeError):
             response.generation_stats = _stats
@@ -476,6 +485,7 @@ async def _invoke_with_status(
     model_name: str,
     status_message: str,
     local_model: bool = False,
+    first_local_turn: bool = True,
     thinking_enabled: bool = False,
     context_usage: tuple[int, int] | None = None,
 ):
@@ -490,6 +500,7 @@ async def _invoke_with_status(
                 model_name=model_name,
                 status_message=status_message,
                 local_model=local_model,
+                first_local_turn=first_local_turn,
                 context_usage=context_usage,
             )
         except (ValueError, OSError, RuntimeError) as exc:
@@ -509,11 +520,22 @@ async def _invoke_with_status(
             )
             raise
     else:
-        phase = THINKING if thinking_enabled else LOADING if local_model else PROCESSING
+        _loading_phase = local_model and first_local_turn
+        phase = (
+            THINKING
+            if thinking_enabled
+            else (LOADING if _loading_phase else PROCESSING)
+        )
         message = (
             thinking_message(model_name)
             if thinking_enabled
-            else waiting_message(model_name, local_model=local_model)
+            else (
+                waiting_message(model_name, local_model=True)
+                if _loading_phase
+                else processing_message(model_name)
+            )
+            if local_model
+            else processing_message(model_name)
         )
         try:
             with StatusIndicator(message, phase=phase, context_usage=context_usage):
@@ -523,6 +545,7 @@ async def _invoke_with_status(
                     deadline,
                     model_name=model_name,
                     local_model=local_model,
+                    first_local_turn=first_local_turn,
                 )
         except (ValueError, OSError, RuntimeError) as exc:
             reference_id = uuid.uuid4().hex[:8]

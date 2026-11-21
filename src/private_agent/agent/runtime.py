@@ -1717,16 +1717,6 @@ async def _choose_provider(
         requested_provider,
     )
     last_used = load_last_provider() or {}
-    for runtime_index, runtime in enumerate(local_runtimes, 1):
-        marker = (
-            " [green](last used)[/green]"
-            if last_used.get("display_name") == runtime.name
-            else ""
-        )
-        console.print(
-            f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
-            f"— {len(runtime.models)} model(s){marker}"
-        )
     idle_providers = installed_but_idle(local_runtimes)
     for idle in idle_providers:
         console.print(
@@ -1782,9 +1772,6 @@ async def _choose_provider(
                 False,
             )
         )
-    for choice_number, label, _use_saved_details in online_options:
-        console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
-    console.print("  [cyan]0.[/cyan] Exit")
     if preference.online_preference is not None or _has_saved_online_config(APP_CONFIG):
         default_choice = str(online_options[0][0])
     else:
@@ -1794,12 +1781,10 @@ async def _choose_provider(
             default_choice = str(_index)
             break
     last_choice = online_options[-1][0]
-    _arrow_choices: list[tuple[str, str]] = []
-    for _i, _rt in enumerate(local_runtimes, 1):
-        _arrow_choices.append((str(_i), _rt.name))
-    for _cn, _label, _ in online_options:
-        _arrow_choices.append((str(_cn), _label))
-    _arrow_choices.append(("0", "Exit"))
+    _arrow_choices: list[tuple[str, str]] = [
+        (str(_i), f"Local ({_rt.name}) — {len(_rt.models)} model(s)" + (" (last used)" if last_used.get("display_name") == _rt.name else ""))
+        for _i, _rt in enumerate(local_runtimes, 1)
+    ] + [(str(_cn), _label) for _cn, _label, _ in online_options] + [("0", "Exit")]
     flagged_provider = requested_provider()
     flagged_runtime = match_runtime(flagged_provider, local_runtimes)
     if flagged_provider and flagged_runtime is None:
@@ -1854,6 +1839,19 @@ async def _choose_provider(
         if _chosen is not None:
             provider_choice = _chosen
         else:
+            for runtime_index, runtime in enumerate(local_runtimes, 1):
+                marker = (
+                    " [green](last used)[/green]"
+                    if last_used.get("display_name") == runtime.name
+                    else ""
+                )
+                console.print(
+                    f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
+                    f"— {len(runtime.models)} model(s){marker}"
+                )
+            for choice_number, label, _use_saved_details in online_options:
+                console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
+            console.print("  [cyan]0.[/cyan] Exit")
             provider_choice = (
                 _input(
                     f"[cyan]Choose provider [1-{last_choice}] "
@@ -1943,16 +1941,6 @@ async def _choose_provider(
                 "no chat models. Choose another runtime or online mode.[/yellow]"
             )
             return None
-        console.print(
-            f"\n[bold underline]Available {local_runtime.name} Chat Models:[/bold underline]"
-        )
-        for idx, model_name in enumerate(available_models, 1):
-            marker = (
-                " [green](configured, preferred)[/green]"
-                if PREFERRED_MODEL and model_name == PREFERRED_MODEL
-                else ""
-            )
-            console.print(f"  [cyan]{idx}.[/cyan] {model_name}{marker}")
         if PREFERRED_MODEL and PREFERRED_MODEL not in available_models:
             console.print(
                 f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
@@ -1991,6 +1979,16 @@ async def _choose_provider(
             else:
                 selected_model = available_models[0]
         else:
+            console.print(
+                f"\n[bold underline]Available {local_runtime.name} Chat Models:[/bold underline]"
+            )
+            for idx, model_name in enumerate(available_models, 1):
+                marker = (
+                    " [green](configured, preferred)[/green]"
+                    if PREFERRED_MODEL and model_name == PREFERRED_MODEL
+                    else ""
+                )
+                console.print(f"  [cyan]{idx}.[/cyan] {model_name}{marker}")
             while True:
                 choice_input = _input(
                     f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
@@ -2497,6 +2495,7 @@ async def _run_agent_cli_session(
             verbose_timings=VERBOSE_TIMINGS,
         )
         session_ui.bind(model=selected_model, permission=permission_mode)
+        _local_model_has_answered = False
         try:
             while True:
                 try:
@@ -3794,7 +3793,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         interactive=interactive,
                         input_fn=console.input,
                         discover=_discover_available_local_runtimes,
+                        first_local_turn=not _local_model_has_answered,
                     )
+                    _local_model_has_answered = _local_model_has_answered or provider_type == "local"
                     if selected_local_runtime is not None:
                         available_models = list(
                             selected_local_runtime.models or available_models
@@ -3919,7 +3920,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 deadline,  # noqa: B023
                                 model_name=selected_model,  # noqa: B023
                                 status_message="Processing tool outputs...",
-                                local_model=provider_type == "local",  # noqa: B023
+                                local_model=provider_type == "local", first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                                 context_usage=usage,
                             )
@@ -3969,7 +3970,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 deadline,  # noqa: B023
                                 model_name=selected_model,  # noqa: B023
                                 status_message="Finalizing response...",
-                                local_model=provider_type == "local",  # noqa: B023
+                                local_model=provider_type == "local", first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                             )
                     if (
@@ -3994,7 +3995,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             deadline,  # noqa: B023
                             model_name=selected_model,  # noqa: B023
                             status_message="Finalizing response...",
-                            local_model=provider_type == "local",  # noqa: B023
+                            local_model=provider_type == "local", first_local_turn=False,  # noqa: B023
                             thinking_enabled=thinking_enabled,  # noqa: B023
                         )
                     return response

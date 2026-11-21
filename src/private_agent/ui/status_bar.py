@@ -81,6 +81,7 @@ class StatusBar:
                     self._render(),
                     console=self.console,
                     refresh_per_second=4,
+                    auto_refresh=True,
                     transient=False,
                 )
                 self._live.start()
@@ -105,6 +106,19 @@ class StatusBar:
             with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
                 self._live.update(self._render())
 
+    def turn_finished(self) -> None:
+        """End-of-turn handling that keeps a TTY footer alive."""
+        if not self._enabled or not self._started:
+            return
+        if self._mode == "A":
+            with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+                self.update()
+            return
+        if self._mode == "B":
+            # Reprint the canonical ribbon as the final line of the turn.
+            with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+                self.console.print(f"[dim]{status_ribbon(self._current_state())}[/dim]")
+
     def stop(self) -> None:
         if not self._enabled or not self._started:
             return
@@ -112,10 +126,6 @@ class StatusBar:
             with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
                 self._live.stop()
             self._live = None
-        elif self._mode == "B":
-            # Reprint the canonical ribbon as the final line of the turn.
-            with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
-                self.console.print(f"[dim]{status_ribbon(self._current_state())}[/dim]")
         self._started = False
 
     @property

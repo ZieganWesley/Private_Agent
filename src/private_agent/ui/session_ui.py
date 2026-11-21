@@ -64,6 +64,7 @@ class SessionUI:
         if output_tokens is not None:
             self._output_tokens = output_tokens
         self._footer.update(self._current_state())
+        self._footer.start()
 
     def set_context(self, used: Any, maximum: Any) -> None:
         try:
@@ -121,7 +122,7 @@ class SessionUI:
             if getattr(report, "generation", None) is None:
                 report.generation = self._generation
         self.console.print(f"[dim green]{report.summary_line()}[/dim green]")
-        self._footer.stop()
+        self._footer.turn_finished()
 
     def rule(self) -> None:
         from rich.rule import Rule
