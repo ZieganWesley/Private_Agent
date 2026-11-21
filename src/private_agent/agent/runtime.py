@@ -1,4 +1,4 @@
-# ruff: noqa: F821
+# ruff: noqa: F821, I001
 import asyncio
 import contextlib
 import hashlib
@@ -15,7 +15,6 @@ import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
-
 from langchain_core.messages import (
     AIMessage,
     AIMessageChunk,
@@ -25,7 +24,6 @@ from langchain_core.messages import (
 )
 from prompt_toolkit.history import InMemoryHistory
 from rich.table import Table
-
 from .. import capabilities as capability_packs
 from .. import json_output
 from .. import runtime_f_integration as f_integration
@@ -202,17 +200,13 @@ _ACTIVE_RAG_TASK: Any | None = None
 
 def initialize_knowledge_base(*args: Any, **kwargs: Any) -> Any:
     """Lazy wrapper so importing this module does not pull in Chroma."""
-
     from ..rag import initialize_knowledge_base as _initialize
-
     return _initialize(*args, **kwargs)
 
 
 def knowledge_base_signature(*args: Any, **kwargs: Any) -> Any:
     """Lazy wrapper so importing this module does not pull in Chroma."""
-
     from ..rag import knowledge_base_signature as _signature
-
     return _signature(*args, **kwargs)
 _LAST_HEADLESS_RESPONSE: str = ""
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
@@ -1291,7 +1285,6 @@ async def _build_session_setup(
             f"Skills: [cyan]{skills_folder_default or 'not configured'}[/cyan]"
         )
     from .. import code_tasks as code_tasks_module
-
     isolation_warning = code_tasks_module.isolation_unavailable_reason()
     if verbose_startup:
         if isolation_warning:
@@ -1453,9 +1446,69 @@ async def _build_session_setup(
             "[yellow]Enter knowledge base (KB) files directory path "
             "(Press Enter to skip): [/yellow]"
         ).strip()
+    from .. import config as _rag_config
+    rag_embedding_provider = _rag_config.EMBEDDING_PROVIDER
+    rag_embedding_model = _rag_config.EMBEDDING_MODEL
+    rag_embedding_base_url = _rag_config.EMBEDDING_BASE_URL
+    ollama_runtimes = [
+        runtime for runtime in local_runtimes
+        if getattr(runtime, "kind", "") == "ollama"
+    ]
+    openai_runtimes = [
+        runtime for runtime in local_runtimes
+        if getattr(runtime, "kind", "") == "openai-compatible"
+    ]
+    if rag_embedding_provider == "ollama":
+        embedding_models = []
+        for runtime in ollama_runtimes:
+            embedding_models.extend(getattr(runtime, "embedding_models", ()) or ())
+        if embedding_models:
+            rag_embedding_model = str(embedding_models[0])
+        elif ollama_runtimes:
+            pass
+        elif openai_runtimes:
+            selected_runtime = None
+            selected_model = None
+            for runtime in openai_runtimes:
+                models = getattr(runtime, "embedding_models", ()) or ()
+                if models:
+                    selected_runtime = runtime
+                    selected_model = str(models[0])
+                    break
+            if selected_runtime is not None:
+                rag_embedding_provider = "openai-compatible"
+                rag_embedding_base_url = str(
+                    getattr(selected_runtime, "base_url", rag_embedding_base_url)
+                )
+                rag_embedding_model = selected_model
+                console.print(
+                    "[cyan][RAG][/cyan] Ollama is unavailable; using "
+                    f"{getattr(selected_runtime, 'name', 'local runtime')} "
+                    f"embeddings ({selected_model})."
+                )
+            elif local_runtimes:
+                rag_embedding_provider = "none"
+                console.print(
+                    "[yellow][RAG][/yellow] No embedding-capable runtime is "
+                    "available; continuing without local RAG."
+                )
+
+    def _initialize_knowledge_base_with_embeddings(
+        docs_path,
+        *,
+        index_path=None,
+        confirm_rebuild=None,
+    ):
+        return initialize_knowledge_base(
+            docs_path,
+            index_path=index_path,
+            confirm_rebuild=confirm_rebuild,
+            embedding_provider=rag_embedding_provider,
+            embedding_model=rag_embedding_model,
+            embedding_base_url=rag_embedding_base_url,
+        )
     # Start RAG indexing (background when no existing index needs an
     # interactive rebuild) so provider selection is not blocked by it
-    # (J2, step 13.5).
     global _ACTIVE_RAG_TASK
     (
         vectorstore,
@@ -1472,7 +1525,7 @@ async def _build_session_setup(
         run_logger=RUN_LOGGER,
         uuid=uuid,
         logging=logging,
-        initialize_knowledge_base_fn=initialize_knowledge_base,
+        initialize_knowledge_base_fn=_initialize_knowledge_base_with_embeddings,
         knowledge_base_signature_fn=knowledge_base_signature,
     )
     if rag_task is not None:
@@ -1538,7 +1591,6 @@ async def _build_session_setup(
         mcp_server_count=len(MCP_SERVERS),
         rag_enabled=is_rag_active,
     )
-
     resume_prompt = (
         (
             lambda latest: _input(
@@ -1794,7 +1846,6 @@ async def _choose_provider(
     else:
         try:
             from .interactive import arrow_select as _arrow_select
-
             _chosen = _arrow_select(
                 "Choose provider:", _arrow_choices, default=default_choice
             )
@@ -1919,7 +1970,6 @@ async def _choose_provider(
             preselected_model = requested_exact
         try:
             from .interactive import arrow_select as _arrow_select
-
             _model_choice = (
                 None
                 if preselected_model is not None
@@ -1956,7 +2006,6 @@ async def _choose_provider(
                 except ValueError:
                     pass
                 console.print("[red][Error] Invalid selection.[/red]")
-
         console.print(
             f"[green][Info] Initializing local model client for: {selected_model}[/green]"
         )
@@ -2307,7 +2356,6 @@ async def _run_agent_cli_session(
     thinking_enabled = setup.thinking_enabled
     thinking_effort = setup.thinking_effort
     permission_mode = setup.permission_mode
-
     provider_preference = ProviderPreference()
     while True:
         selection = await _choose_provider(
@@ -2365,7 +2413,6 @@ async def _run_agent_cli_session(
             rag_task = None
             with contextlib.suppress(Exception):  # best effort
                 _SESSION_INFO["Local RAG"] = "active" if is_rag_active else "off"
-
         provider_type = selection.provider_type
         selected_model = selection.selected_model
         capabilities = selection.capabilities
@@ -2373,7 +2420,6 @@ async def _run_agent_cli_session(
         llm_with_tools = selection.llm_with_tools
         tools_list = selection.tools_list
         from .subagent_runner import make_subagent_runner
-
         _tool_context = get_tool_context()
         _tool_context.subagent_runner = make_subagent_runner(llm)
         set_tool_context(_tool_context)
@@ -2406,7 +2452,6 @@ async def _run_agent_cli_session(
                 context_summary = ""
                 startup_memory_context = ""
                 session_summary_saved = False
-
         # see the current llm/capabilities after a mid-session model switch, so its
         # late binding of loop-assigned names (B023) is intentional.
         def cleanup_code_task(*, finalize: bool) -> str | None:
@@ -2446,7 +2491,6 @@ async def _run_agent_cli_session(
                     llm_with_tools = llm  # noqa: B023
             active_code_workspace = None
             return result
-
         try:
             while True:
                 try:
@@ -2455,7 +2499,6 @@ async def _run_agent_cli_session(
                         prompt = None
                     else:
                         from rich.rule import Rule
-
                         console.print(Rule(style="dim"))
                         user_input = (
                             await prompt_user_input(
@@ -2516,7 +2559,6 @@ async def _run_agent_cli_session(
                     continue
                 if user_input.lower() == "/doctor":
                     from ..doctor import doctor_interactive
-
                     doctor_interactive()
                     continue
                 if user_input.lower() == "/context":
@@ -2653,7 +2695,6 @@ async def _run_agent_cli_session(
                         vectorstore=vectorstore,
                         on_data_reset=clear_context_after_data_reset,
                     )
-
                     continue
                 if user_input.lower() == "/plan" or user_input.lower() == "/plan on":
                     planning_mode_persistent = True
@@ -2991,7 +3032,6 @@ async def _run_agent_cli_session(
                     if capabilities["tools"] is False:
                         try:
                             from .text_planning import create_text_plan
-
                             create_text_plan(
                                 memory, session_id, user_input, llm, console
                             )
@@ -3070,7 +3110,6 @@ async def _run_agent_cli_session(
                 if attached_file_context and not user_input:
                     user_input = "Use the attached file context to answer my request."
                 clear_captured_images()
-
                 code_related_request = _is_coding_guidance_request(user_input)
                 if coding_task_requested and not planning_only:
                     approved_coding_scope = _approved_coding_task_scope(memory)
@@ -3192,7 +3231,6 @@ async def _run_agent_cli_session(
                             "actions and the isolated output path before retrying.[/yellow]"
                         )
                         continue
-
                     SandboxManager.set_root(str(active_code_workspace.root))
                     _tool_context = get_tool_context()
                     _tool_context.code_task = active_code_workspace
@@ -3212,7 +3250,6 @@ async def _run_agent_cli_session(
                         }
                     )
                     tools_list = list(tools_by_name.values())
-
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; abort the code task
@@ -3222,7 +3259,6 @@ async def _run_agent_cli_session(
                         )
                         cleanup_code_task(finalize=False)
                         continue
-
                     git_policy = (
                         "A local Git repository is initialized inside this isolated project. "
                         "Use checkpoint_code_task after each completed microtask/subtask; "
@@ -3242,7 +3278,6 @@ async def _run_agent_cli_session(
                         f"{active_code_workspace.root} | "
                         f"Access level: {access_level}\n{git_policy}"
                     )
-
                 active_skill = None
                 if selected_skill_key:
                     if not include_private_context:
@@ -3293,7 +3328,6 @@ async def _run_agent_cli_session(
                     else None
                 )
                 tool_call_limit = MAX_TOOL_CALLS if enforce_tool_call_limits else None
-
                 if active_skill:
                     skill_budget = (
                         f"{tool_iteration_limit} tool rounds"
@@ -3304,14 +3338,12 @@ async def _run_agent_cli_session(
                         f"[magenta][Skill Active][/magenta] "
                         f"{active_skill.name} ({skill_budget})"
                     )
-
                 status_message = (
                     f"Model thinking is active (effort: {thinking_effort}; "
                     "reasoning is private and not displayed)..."
                     if thinking_enabled and capabilities["thinking"] is True
                     else "Processing your request and generating a response..."
                 )
-
                 context_text = ""
                 retrieved_citations = []
                 # Episode search and learned-preference lookups scan SQLite;
@@ -3371,7 +3403,6 @@ async def _run_agent_cli_session(
                     )
                     if part
                 )
-
                 if (
                     vectorstore
                     and docs_input
@@ -3394,6 +3425,9 @@ async def _run_agent_cli_session(
                                     initialize_knowledge_base,
                                     docs_input,
                                     index_path=RAG_INDEX_PATH,
+                                    embedding_provider=rag_embedding_provider,
+                                    embedding_model=rag_embedding_model,
+                                    embedding_base_url=rag_embedding_base_url,
                                 )
                             refresh_elapsed = time.monotonic() - refresh_started
                             if refresh_elapsed >= 2:
@@ -3426,7 +3460,6 @@ async def _run_agent_cli_session(
                             error_type=type(exc).__name__,
                             exc_info=True,
                         )
-
                 if vectorstore and include_private_context:
                     rag_search_started = time.monotonic()
                     try:
@@ -3484,7 +3517,6 @@ async def _run_agent_cli_session(
                                 3,
                             ),
                         )
-
                 if attached_file_context:
                     context_text = "\n\n".join(
                         part for part in (context_text, attached_file_context) if part
@@ -3548,7 +3580,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             if isinstance(value, (list, tuple)):
                                 return ", ".join(str(item) for item in value)
                             return str(value or "")
-
                         active_task_instruction = (
                             "Current user-approved SQLite task plan (reference, "
                             "not authorization beyond its recorded scope): "
@@ -3647,7 +3678,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     system_prompts.append(
                         SystemMessage(content=active_skill.system_prompt)
                     )
-
                 effective_context = (
                     _effective_context_window(capabilities)
                     if provider_type == "local"
@@ -3716,13 +3746,11 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 usage = _print_context_state(
                     context_stats, output_budget, selected_model, turn_permission_mode
                 )
-
                 messages = (
                     system_prompts
                     + prompt_history[-MAX_HISTORY_MESSAGES:]
                     + [HumanMessage(content=enriched_input)]
                 )
-
                 turn_id = uuid.uuid4().hex
                 _f_state = f_integration.begin_turn(
                     turn_id, user_input, effective_context, non_interactive
@@ -3730,7 +3758,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
-
                 start_time = time.monotonic()
                 chat_transcript = ChatTranscript(console=console)
                 chat_transcript.add_message("user", user_input, echo=False)
@@ -3769,7 +3796,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         available_models = list(
                             selected_local_runtime.models or available_models
                         )
-
                 async def _run_agent_turn(response) -> Any:
                     nonlocal tools_list, llm_with_tools
                     iteration = 0
@@ -3802,7 +3828,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         for tool_call in response.tool_calls:
                             _display_tool_request(tool_call)
                         messages.append(response)  # noqa: B023
-
                         tool_tasks = []
                         blocked_tool_messages = []
                         declined_media_calls = []
@@ -3866,7 +3891,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             )
                         if stop:
                             break
-
                         await compact_loop_messages(
                             llm,  # noqa: B023
                             messages,  # noqa: B023
@@ -3904,7 +3928,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             raise RuntimeError(
                                 f"Model failed after tool execution: {exc}"
                             ) from exc
-
                     if getattr(response, "tool_calls", None):
                         messages.append(response)  # noqa: B023
                         limit_message = (
@@ -3945,7 +3968,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 local_model=provider_type == "local",  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                             )
-
                     if (
                         not getattr(response, "tool_calls", None)
                         and not message_text(response).strip()
@@ -3971,9 +3993,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             local_model=provider_type == "local",  # noqa: B023
                             thinking_enabled=thinking_enabled,  # noqa: B023
                         )
-
                     return response
-
                 _overlay = StatusOverlay(console)
                 _overlay.set_plan_summary(f_integration.get_plan_summary(_f_state))
                 _overlay.set_eta_deadline(deadline)
@@ -3990,7 +4010,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     f_integration.finish_turn(_f_state)
                     _overlay.stop()
                 elapsed_time = time.monotonic() - start_time
-
                 content = response.content
                 full_output_content = (
                     _visible_chunk_text(content)
@@ -4016,7 +4035,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 console.print(
                     f"[dim green][Latency] Turn completed in {elapsed_time:.2f}s.[/dim green]"
                 )
-
                 if active_code_workspace is not None:
                     verification = cleanup_code_task(finalize=True)
                     console.print(
@@ -4025,7 +4043,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     full_output_content += (
                         f"\n\n[Code task verification]\n{verification}"
                     )
-
                 memory.save_message(session_id, "human", user_input, turn_id=turn_id)
                 memory.save_message(
                     session_id, "ai", full_output_content, turn_id=turn_id
@@ -4033,7 +4050,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = None
                 set_tool_context(_tool_context)
-
                 chat_history.append(HumanMessage(content=user_input))
                 chat_history.append(AIMessage(content=full_output_content))
                 if non_interactive:
@@ -4042,7 +4058,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _SESSION_STATS.turns += 1
                 if CONTEXT_COMPACTION_THRESHOLD <= 0:
                     chat_history = chat_history[-MAX_HISTORY_MESSAGES:]
-
         except (KeyboardInterrupt, asyncio.CancelledError):
             cleanup_code_task(finalize=False)
             _acknowledge_interrupt()
@@ -4083,7 +4098,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 f"\n[red][Exception] Unexpected runtime error: {ex!s}[/red]\n"
             )
             continue
-
         if model_selection_failed:
             continue
         break
@@ -4207,7 +4221,6 @@ def run_agent_cli(
             input_provider=input_provider,
         )
     )
-
 _LAZY_TOOL_NAMES = {
 'AVAILABLE_TOOLS',
 'LOCAL_MEDIA_TOOL_NAMES',
@@ -4228,22 +4241,17 @@ _LAZY_TOOL_NAMES = {
 'set_tool_context',
 'approve_local_capture'
 }
-
 _LAZY_MEDIA_NAMES = {"approve_local_capture", "clear_captured_images"}
-
 _LAZY_INTERACTIVE_NAMES = {
     "_format_interactive_help", "handle_session_command", "include_file_context",
     "include_folder_context", "load_custom_slash_commands", "prompt_user_input",
 }
-
 _LAZY_MODEL_SELECTION_NAMES = {
     "_discover_available_local_runtimes", "_effective_context_window",
     "_make_selected_local_chat_model", "inspect_model_capabilities",
     "inspect_openai_compatible_model_capabilities", "select_online_model",
 }
-
 _LAZY_TASK_COMMAND_NAMES = set()
-
 _LAZY_TOOL_DISPLAY_NAMES = {
     "_append_captured_images_from_tool_results", "_display_tool_error",
     "_display_tool_request", "_display_tool_result", "_local_image_input_error",
@@ -4255,46 +4263,38 @@ _LAZY_TOOL_DISPLAY_NAMES = {
 def __getattr__(name: str):
     if name in _LAZY_TOOL_NAMES:
         from .. import tools as _tools
-
         attr = getattr(_tools, name)
         globals()[name] = attr
         return attr
     if name in _LAZY_MEDIA_NAMES:
         from ..tools import media as _media
-
         attr = getattr(_media, name)
         globals()[name] = attr
         return attr
     if name == "_format_interactive_help":
         from . import interactive as _interactive
-
         attr = _interactive.format_help
         globals()[name] = attr
         return attr
     if name in _LAZY_INTERACTIVE_NAMES:
         from . import interactive as _interactive
-
         attr = getattr(_interactive, name)
         globals()[name] = attr
         return attr
     if name in _LAZY_MODEL_SELECTION_NAMES:
         from . import model_selection as _model_selection
-
         attr = getattr(_model_selection, name)
         globals()[name] = attr
         return attr
     if name in _LAZY_TASK_COMMAND_NAMES:
         from . import task_commands as _task_commands
-
         attr = getattr(_task_commands, name)
         globals()[name] = attr
         return attr
     if name in _LAZY_TOOL_DISPLAY_NAMES:
         from . import tool_display as _tool_display
-
         attr = getattr(_tool_display, name)
         globals()[name] = attr
         return attr
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
 install_lazy_globals(globals())

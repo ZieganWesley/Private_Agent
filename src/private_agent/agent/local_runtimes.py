@@ -25,6 +25,7 @@ class LocalRuntime:
     kind: str
     base_url: str
     models: tuple[str, ...]
+    embedding_models: tuple[str, ...] = ()
 
 
 def _is_loopback_url(url: str) -> bool:
@@ -89,18 +90,25 @@ def _probe_endpoint(
         with client:
             response = client.get(f"{base_url.rstrip('/')}{path}")
             response.raise_for_status()
-            models = _extract_models(response.json())
+            all_models = _extract_models(response.json())
             embedding_markers = ("embed", "embedding", "bge", "e5", "nomic-embed")
+            embedding_models = tuple(
+                model
+                for model in all_models
+                if any(marker in model.lower() for marker in embedding_markers)
+            )
             models = tuple(
                 model
-                for model in models
-                if not any(marker in model.lower() for marker in embedding_markers)
+                for model in all_models
+                if model not in embedding_models
             )
             if kind == "openai-compatible":
                 from ..providers.identify import identify_server
 
                 name = identify_server(client, base_url) or name
-            return LocalRuntime(name, kind, base_url.rstrip("/"), models)
+            return LocalRuntime(
+                name, kind, base_url.rstrip("/"), models, embedding_models
+            )
     except (httpx.HTTPError, ValueError, ConnectionError, OSError) as exc:
         log_event(
             RUN_LOGGER,

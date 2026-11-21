@@ -105,13 +105,22 @@ def _iter_source_files(root: pathlib.Path):
             yield file_path, file_stat
 
 
-def embedding_signature() -> str:
+def embedding_signature(
+    embedding_provider: str | None = None,
+    embedding_model: str | None = None,
+    embedding_base_url: str | None = None,
+) -> str:
     """Identify the embedder that produced an index (provider, model, endpoint)."""
-    if EMBEDDING_PROVIDER == "ollama":
-        return f"ollama:{EMBEDDING_MODEL}"
-    if EMBEDDING_PROVIDER == "none":
+    provider = embedding_provider if embedding_provider is not None else EMBEDDING_PROVIDER
+    model = embedding_model if embedding_model is not None else EMBEDDING_MODEL
+    base_url = (
+        embedding_base_url if embedding_base_url is not None else EMBEDDING_BASE_URL
+    )
+    if provider == "ollama":
+        return f"ollama:{model}"
+    if provider == "none":
         return "none"
-    return f"{EMBEDDING_PROVIDER}:{EMBEDDING_MODEL}@{EMBEDDING_BASE_URL.rstrip('/')}"
+    return f"{provider}:{model}@{base_url.rstrip('/')}"
 
 
 def _source_fingerprint(file_path: pathlib.Path, file_stat) -> dict:
@@ -351,9 +360,21 @@ def initialize_knowledge_base(
     *,
     index_path: str | None = None,
     confirm_rebuild: Callable[[str], bool] | None = None,
+    embedding_provider: str | None = None,
+    embedding_model: str | None = None,
+    embedding_base_url: str | None = None,
 ):
     _ensure_rag_dependencies()
     """Initializes the Chroma vector store exclusively when an explicit, valid knowledge base folder path is provided."""
+    _embedding_provider = (
+        embedding_provider if embedding_provider is not None else EMBEDDING_PROVIDER
+    )
+    _embedding_model = (
+        embedding_model if embedding_model is not None else EMBEDDING_MODEL
+    )
+    _embedding_base_url = (
+        embedding_base_url if embedding_base_url is not None else EMBEDDING_BASE_URL
+    )
     if not docs_path:
         return None
     if isinstance(docs_path, str):
@@ -404,13 +425,17 @@ def initialize_knowledge_base(
         )
         index_state = {}
 
-    if EMBEDDING_PROVIDER == "none":
+    if _embedding_provider == "none":
         console.print(
             "[cyan][Info] Embedding provider disabled; RAG will use keyword search only.[/cyan]"
         )
         return None
 
-    signature = embedding_signature()
+    signature = embedding_signature(
+        embedding_provider=_embedding_provider,
+        embedding_model=_embedding_model,
+        embedding_base_url=_embedding_base_url,
+    )
     recorded_signatures = {
         str(fingerprint.get("embedding"))
         for fingerprint in index_state.values()
@@ -424,18 +449,18 @@ def initialize_knowledge_base(
         )
 
     console.print(
-        f"[cyan][Info] Initializing local embedding model '{EMBEDDING_MODEL}' via "
-        f"{EMBEDDING_PROVIDER}...[/cyan]"
+        f"[cyan][Info] Initializing local embedding model '{_embedding_model}' via "
+        f"{_embedding_provider}...[/cyan]"
     )
     try:
-        if EMBEDDING_PROVIDER == "ollama":
+        if _embedding_provider == "ollama":
             from ..tools import (
                 ollama_langchain_client_kwargs,
                 track_ollama_http_clients,
             )
 
             embeddings = OllamaEmbeddings(
-                model=EMBEDDING_MODEL,
+                model=_embedding_model,
                 base_url=OLLAMA_BASE_URL,
                 **ollama_langchain_client_kwargs(),
                 **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
@@ -445,23 +470,36 @@ def initialize_knowledge_base(
             from ..agent.local_runtimes import _is_loopback_url
             from ..providers.adapters import OpenAICompatibleAdapter
 
-            if not _is_loopback_url(EMBEDDING_BASE_URL):
+            if not _is_loopback_url(_embedding_base_url):
                 console.print(
-                    f"[yellow][Remote host][/yellow] {EMBEDDING_BASE_URL} is not "
+                    f"[yellow][Remote host][/yellow] {_embedding_base_url} is not "
                     "on this machine; document chunks leave the local device."
                 )
             embeddings = OpenAICompatibleAdapter().embeddings(
-                EMBEDDING_MODEL, base_url=EMBEDDING_BASE_URL
+                _embedding_model, base_url=_embedding_base_url
             )
             if embeddings is None:
                 console.print(
                     "[red][Error] Could not create the embedding client for "
-                    f"'{EMBEDDING_BASE_URL}'.[/red]"
+                    f"'{_embedding_base_url}'.[/red]"
                 )
                 return None
     except (ValueError, OSError, TypeError, RuntimeError) as e:  # noqa: BLE001 - optional dependency boundary
         console.print(f"[red][Error] Could not bind embedding model: {e}[/red]")
         return None
+
+    # Verify the embedding runtime is actually reachable before indexing, so a
+    # configured-but-absent runtime (for example Ollama on a llama.cpp-only
+    # machine) disables RAG instead of failing on every later search.
+    if hasattr(embeddings, "embed_query"):
+        try:
+            embeddings.embed_query("embedding availability check")
+        except Exception as e:  # noqa: BLE001 - embedding runtimes are optional
+            console.print(
+                f"[yellow][RAG] Embedding runtime is unavailable "
+                f"({type(e).__name__}); continuing without RAG.[/yellow]"
+            )
+            return None
 
     console.print(
         f"[bold green][Chroma DB][/bold green] Initializing local project vector store at: [cyan]{chroma_persist_dir}[/cyan]"
