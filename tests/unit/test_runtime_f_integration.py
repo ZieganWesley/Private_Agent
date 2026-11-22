@@ -1,4 +1,4 @@
-from private_agent import runtime_f_integration
+from private_agent.agent import runtime_f_integration
 
 
 def test_is_plan_complete_steers():

@@ -166,13 +166,13 @@ def main():
     if args.list_sessions:
         raise SystemExit(list_saved_sessions())
     if args.doctor:
-        from .doctor import doctor_interactive
+        from .diagnostics.doctor import doctor_interactive
 
         raise SystemExit(doctor_interactive())
     originals = []
     exit_code = 0
     from .config import DEBUG_LOG_ENABLED
-    from .run_logging import (
+    from .utils.run_logging import (
         RUN_LOGGER,
         LoggingConsoleAdapter,
         install_logging_console_adapter,
@@ -239,7 +239,7 @@ def main():
     finally:
         log_event(RUN_LOGGER, "application.exiting")
         if originals:
-            from .run_logging import restore_logging_consoles
+            from .utils.run_logging import restore_logging_consoles
 
             restore_logging_consoles(originals)
         stop_debug_logging()

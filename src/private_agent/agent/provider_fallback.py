@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .model_selection import (
     _discover_available_local_runtimes,
     _make_chat_model,

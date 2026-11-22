@@ -10,7 +10,7 @@ turn summaries, and labelled notices. Business modules (in particular
 
 | Surface | Module | Purpose |
 |---|---|---|
-| Shared console | `ui/console.py` | Re-exports the one `Console` + palettes/builders from `private_agent.console`. |
+| Shared console | `ui/console.py` | Re-exports the one `Console` + palettes/builders from `private_agent.ui.console`. |
 | Theme tokens | `ui/theme.py` | Glyphs (`GAUGE_FILLED`/`GAUGE_EMPTY`), widths, separators, `TURN_LABEL`, `NO_COLOR_ENV`. |
 | Context math | `ui/state.py` | `StatusState` (immutable snapshot), `context_percent`, `context_bar`, `context_style`, `context_state_line`. |
 | Ribbon | `ui/ribbon.py` | `status_ribbon(state, width=)` — the canonical `model=… \| context=… \| …` line. |

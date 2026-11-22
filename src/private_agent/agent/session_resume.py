@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Callable
 
 from ..database import PersistentMemory
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 
 class SessionResumeError(RuntimeError):

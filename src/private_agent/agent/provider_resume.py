@@ -6,7 +6,7 @@ import sqlite3
 import time
 from typing import Any
 
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 __all__ = [
     "always_ask_provider",

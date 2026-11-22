@@ -10,7 +10,7 @@ from .schemas import AskUserInput
 @tool(args_schema=AskUserInput)
 def ask_user(question: str, options: list[str] | None = None) -> str:
     """Ask the user a clarifying question and return their answer."""
-    from private_agent.console import console
+    from private_agent.ui.console import console
 
     console.print(f"[cyan][Question][/cyan] {question}")
     if options:

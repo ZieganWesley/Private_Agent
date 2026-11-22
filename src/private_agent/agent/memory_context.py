@@ -28,7 +28,7 @@ from ..config import (
 )
 from ..database import PersistentMemory
 from ..repository_intelligence.memory_ranking import rank_memories
-from ..run_logging import RUN_LOGGER
+from ..utils.run_logging import RUN_LOGGER
 from .console import console
 from .learning import _run_learning_maintenance, _run_learning_suggestion
 from .prompts import token_count as _token_count

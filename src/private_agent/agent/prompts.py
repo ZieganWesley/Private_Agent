@@ -9,7 +9,7 @@ from pathlib import Path
 from rich.console import Console
 
 from ..config import MAX_CONTEXT_TOKENS
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 _TOKENIZER_FALLBACKS_REPORTED: set[str] = set()
 _BUNDLED_TIKTOKEN_DIR = (

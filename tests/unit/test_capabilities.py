@@ -1,6 +1,6 @@
 import pytest
 
-from private_agent import capabilities
+from private_agent.agent import capabilities
 
 
 @pytest.fixture(autouse=True)
@@ -119,7 +119,7 @@ def test_filter_tools_list_is_sorted_for_a_stable_prefix():
 def test_gate_capability_non_gated_pack():
     from types import SimpleNamespace
 
-    import private_agent.runtime_f_integration as f
+    import private_agent.agent.runtime_f_integration as f
 
     state = SimpleNamespace(blocked_tool_messages=[], capability_approved=False)
     console = SimpleNamespace(input=lambda *a, **k: "n")
@@ -134,7 +134,7 @@ def test_gate_capability_non_gated_pack():
 def test_gate_capability_coding_denied_noninteractive():
     from types import SimpleNamespace
 
-    import private_agent.runtime_f_integration as f
+    import private_agent.agent.runtime_f_integration as f
 
     state = SimpleNamespace(blocked_tool_messages=[], capability_approved=False)
     console = SimpleNamespace(input=lambda *a, **k: "y")
@@ -148,7 +148,7 @@ def test_gate_capability_coding_denied_noninteractive():
 def test_gate_capability_coding_approved_interactive(monkeypatch):
     from types import SimpleNamespace
 
-    import private_agent.runtime_f_integration as f
+    import private_agent.agent.runtime_f_integration as f
 
     # Force interactive tty
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)

@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .model_capabilities import (
     capabilities_from_model_entry,
     find_model_entry,

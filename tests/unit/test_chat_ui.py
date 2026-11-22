@@ -2,7 +2,7 @@ from io import StringIO
 
 from rich.console import Console
 
-from private_agent.chat_ui import ChatTranscript, render_chat_message
+from private_agent.ui.chat_ui import ChatTranscript, render_chat_message
 
 
 def test_chat_transcript_renders_messages():

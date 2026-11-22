@@ -12,7 +12,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 from rich.markup import escape
 
-from private_agent.console import console
+from private_agent.ui.console import console
 
 from ..config import (
     DEFAULT_CAMERA_DEVICE_INDEX,

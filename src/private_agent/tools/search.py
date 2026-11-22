@@ -5,7 +5,7 @@ import logging
 import httpx
 
 from .. import config
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .network import search_duckduckgo, searxng_search
 
 PROVIDERS = ("auto", "searxng", "duckduckgo")

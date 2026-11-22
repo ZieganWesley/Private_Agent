@@ -1,4 +1,4 @@
-from private_agent import context_manager
+from private_agent.agent import context_manager
 
 
 def test_allocate_sums_to_total():

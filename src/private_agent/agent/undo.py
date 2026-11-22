@@ -1,6 +1,6 @@
 """`/undo`: restore the workspace changes of the last agent turn.
 
-The file work lives in :mod:`private_agent.snapshots`; this module turns a
+The file work lives in :mod:`private_agent.code_tasks.snapshots`; this module turns a
 snapshot result into a user-facing outcome and rewinds the conversation rows
 that belong to the same turn.
 """
@@ -14,10 +14,10 @@ from dataclasses import dataclass, field
 
 from rich.markup import escape
 
-from .. import snapshots
+from ..code_tasks import snapshots
 from ..database import PersistentMemory
-from ..run_logging import RUN_LOGGER, log_event
 from ..sandbox import SandboxManager
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 _LOGGER = logging.getLogger(__name__)
 

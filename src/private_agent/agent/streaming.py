@@ -16,9 +16,9 @@ from rich.panel import Panel
 from rich.text import Text
 
 from ..config import STREAMING_OUTPUT, VERBOSE_TIMINGS, VISIBLE_REASONING
-from ..run_logging import RUN_LOGGER, log_event
 from ..ui.status_bar import get_active_footer
 from ..ui.turn import GenerationStats
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .console import console
 from .prompts import token_count as _token_count
 from .session_state import SESSION_STATS as _SESSION_STATS

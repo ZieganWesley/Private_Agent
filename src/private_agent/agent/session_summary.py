@@ -13,7 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from ..config import MAX_SUMMARY_CHARS, SUMMARY_PROMPT_SENTENCES
 from ..database import PersistentMemory
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .console import console
 from .prompts import token_count as _token_count
 from .session_state import SESSION_INFO as _SESSION_INFO

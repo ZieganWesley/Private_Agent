@@ -20,7 +20,7 @@ def test_malformed_config_handling(tmp_path, monkeypatch):
 
 
 def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch):
-    from private_agent import run_logging
+    from private_agent.utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(
@@ -271,9 +271,10 @@ def test_logging_console_adapter_installs_and_restores_module_consoles():
     import private_agent.rag.indexing as rag_indexing
     import private_agent.rag.retrieval as rag_retrieval
     import private_agent.skills.loader as skill_loader
-    from private_agent import code_tasks, run_logging, tools
+    from private_agent import code_tasks, tools
     from private_agent.agent import runtime
     from private_agent.tools import mcp, media, network, shell
+    from private_agent.utils import run_logging
 
     modules = (
         runtime,
@@ -307,7 +308,7 @@ def test_debug_log_records_are_structured_and_console_content_is_not_logged(
     import json
     import logging
 
-    from private_agent import run_logging
+    from private_agent.utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "DEBUG")
@@ -373,7 +374,7 @@ def test_debug_log_level_filters_and_terminal_stays_clean(
 ):
     import logging
 
-    from private_agent import run_logging
+    from private_agent.utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "WARNING")
@@ -394,7 +395,7 @@ def test_debug_log_level_filters_and_terminal_stays_clean(
 def test_debug_log_file_and_directory_permissions_are_private(tmp_path, monkeypatch):
     import stat
 
-    from private_agent import run_logging
+    from private_agent.utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
@@ -412,7 +413,7 @@ def test_structured_exception_traceback_redacts_sensitive_tool_values():
     import logging
     import sys
 
-    from private_agent.run_logging import JsonLineFormatter
+    from private_agent.utils.run_logging import JsonLineFormatter
 
     secret = "private-tool-credential-value"
     try:
@@ -441,7 +442,7 @@ def test_debug_logging_repeated_start_does_not_duplicate_handlers(
 ):
     import json
 
-    from private_agent import run_logging
+    from private_agent.utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "INFO")

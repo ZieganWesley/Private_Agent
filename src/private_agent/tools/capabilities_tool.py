@@ -2,7 +2,7 @@
 
 from langchain_core.tools import tool
 
-from ..capabilities import enable_capability as _enable
+from ..agent.capabilities import enable_capability as _enable
 
 
 @tool

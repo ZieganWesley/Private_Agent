@@ -1,6 +1,6 @@
 """Re-export the shared console from the leaf module."""
 
-from private_agent.console import (
+from private_agent.ui.console import (
     DARK_PALETTE,
     LIGHT_PALETTE,
     build_console,

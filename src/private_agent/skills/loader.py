@@ -4,7 +4,7 @@ import pathlib
 
 import yaml
 
-from private_agent.console import console
+from private_agent.ui.console import console
 
 from ..config import SKILL_DESCRIPTION_PREVIEW_CHARS, SKILL_MAX_ITERATIONS
 

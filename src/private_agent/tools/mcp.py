@@ -5,7 +5,7 @@ import shutil
 import tempfile
 import urllib.parse
 
-from private_agent.console import console
+from private_agent.ui.console import console
 
 from .network import mcp_http_client_factory, validate_explicit_service_url
 

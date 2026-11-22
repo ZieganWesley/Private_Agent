@@ -7,7 +7,7 @@ import logging
 import sqlite3
 
 from ..database import PersistentMemory
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .console import console
 
 TASK_LEASE_SECONDS = 180

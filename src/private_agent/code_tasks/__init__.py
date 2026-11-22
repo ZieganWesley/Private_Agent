@@ -10,7 +10,7 @@ from pathlib import Path
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from private_agent.console import console
+from private_agent.ui.console import console
 
 from ..config import (
     CODE_TASK_GIT_TIMEOUT,

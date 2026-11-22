@@ -5065,7 +5065,7 @@ async def test_f_runtime_integration_emits_timeline_and_json(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.runtime_f_integration as f_integration
+    import private_agent.agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     model.responses = [
@@ -5103,7 +5103,7 @@ async def test_enable_capability_rebuilds_tool_list_end_to_end(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.runtime_f_integration as f_integration
+    import private_agent.agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     model.responses = [
@@ -5136,7 +5136,7 @@ async def test_enable_capability_then_uses_newly_enabled_tool_next_iteration(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.runtime_f_integration as f_integration
+    import private_agent.agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     model.responses = [
@@ -5214,7 +5214,7 @@ async def test_enable_capability_rebinds_and_runs_the_new_tool_in_the_same_turn(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.runtime_f_integration as f_integration
+    import private_agent.agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     timeline = _record_tool_bindings(monkeypatch, model)
@@ -5268,7 +5268,7 @@ async def test_capability_packs_do_not_leak_between_turns(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.runtime_f_integration as f_integration
+    import private_agent.agent.runtime_f_integration as f_integration
     from private_agent.tools import get_tool_context
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
@@ -5340,7 +5340,7 @@ async def test_turn_context_is_reset_when_the_model_fails_before_the_tool_loop(
     scripted_local_cli, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.runtime_f_integration as f_integration
+    import private_agent.agent.runtime_f_integration as f_integration
     from private_agent.tools import get_tool_context
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))

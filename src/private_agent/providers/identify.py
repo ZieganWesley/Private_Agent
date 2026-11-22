@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 # Model-list ownership labels servers put in their OpenAI-compatible payloads.
 _OWNER_LABELS = {

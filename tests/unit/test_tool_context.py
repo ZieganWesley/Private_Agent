@@ -233,7 +233,7 @@ async def test_concurrent_turns_keep_separate_enabled_packs():
         try:
             get_tool_context().enabled_packs.add(pack)
             # Simulate enable_capability landing on this turn's context.
-            from private_agent import capabilities as _caps
+            from private_agent.agent import capabilities as _caps
 
             _caps.enable_capability(pack)
             ready_event = turn_events[name]
@@ -262,7 +262,7 @@ async def test_concurrent_turns_do_not_clobber_durable_fields():
     """Durable fields (task_id, ...) must not clobber between concurrent turns."""
     import asyncio
 
-    from private_agent import runtime_f_integration as f
+    from private_agent.agent import runtime_f_integration as f
     from private_agent.tools import get_tool_context
 
     observed = {}

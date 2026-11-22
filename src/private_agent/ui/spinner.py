@@ -206,7 +206,7 @@ class StatusIndicator:
 
 
 def _default_console() -> Any:
-    from ..console import console as _shared_console
+    from ..ui.console import console as _shared_console
 
     return _shared_console
 

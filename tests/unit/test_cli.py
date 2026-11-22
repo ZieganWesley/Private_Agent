@@ -7,8 +7,8 @@ from private_agent import cli
 
 
 def test_verbose_startup_flag_is_forwarded(monkeypatch):
-    from private_agent import run_logging
     from private_agent.agent import runtime
+    from private_agent.utils import run_logging
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--verbose-startup"])
@@ -39,8 +39,8 @@ def test_verbose_startup_flag_is_forwarded(monkeypatch):
 
 
 def test_resume_flags_are_forwarded(monkeypatch):
-    from private_agent import run_logging
     from private_agent.agent import runtime
+    from private_agent.utils import run_logging
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--resume", "session_abc"])
@@ -58,8 +58,8 @@ def test_resume_flags_are_forwarded(monkeypatch):
 
 
 def test_continue_flag_is_forwarded(monkeypatch):
-    from private_agent import run_logging
     from private_agent.agent import runtime
+    from private_agent.utils import run_logging
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--continue"])
@@ -178,8 +178,8 @@ def test_posix_platforms_start_normally(monkeypatch):
 
 
 def test_config_flag_sets_config_path_environment(monkeypatch, tmp_path):
-    from private_agent import run_logging
     from private_agent.agent import runtime
+    from private_agent.utils import run_logging
 
     seen = []
     custom = str(tmp_path / "custom.conf")
@@ -201,8 +201,8 @@ def test_config_flag_sets_config_path_environment(monkeypatch, tmp_path):
 
 
 def test_end_of_input_at_a_startup_prompt_exits_cleanly(monkeypatch, capsys):
-    from private_agent import run_logging
     from private_agent.agent import runtime
+    from private_agent.utils import run_logging
 
     def closed_stdin(**_kwargs):
         raise EOFError
@@ -221,8 +221,8 @@ def test_end_of_input_at_a_startup_prompt_exits_cleanly(monkeypatch, capsys):
 
 
 def test_startup_banner_prints(monkeypatch, capsys):
-    from private_agent import run_logging
     from private_agent.agent import runtime
+    from private_agent.utils import run_logging
 
     monkeypatch.setattr("sys.argv", ["private-agent"])
     monkeypatch.setattr(run_logging, "start_debug_logging", lambda: None)

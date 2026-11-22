@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from langchain_core.documents import Document
 
-from private_agent.console import console
+from private_agent.ui.console import console
 
 from ..config import (
     CHUNKING_MIN_CHUNK_CHARS,

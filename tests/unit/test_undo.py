@@ -5,8 +5,8 @@ import sqlite3
 
 import pytest
 
-from private_agent import snapshots
 from private_agent.agent.undo import undo_last_turn
+from private_agent.code_tasks import snapshots
 from private_agent.database import PersistentMemory
 from private_agent.tools import edit_local_file, get_tool_context
 

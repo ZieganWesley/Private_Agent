@@ -26,7 +26,7 @@ from urllib.parse import quote
 
 import httpx
 
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .local_runtimes import DISCOVERY_TIMEOUT_SECONDS, _is_loopback_url
 
 CAPABILITY_FLAGS = (

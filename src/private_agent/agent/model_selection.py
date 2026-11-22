@@ -34,7 +34,7 @@ from ..config import (
     ONLINE_REQUEST_TIMEOUT,
 )
 from ..hardware import ollama_acceleration_options
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 from .console import console
 from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
 from .model_capabilities import detect_openai_compatible_capabilities

@@ -1,4 +1,8 @@
-from private_agent.doctor import analyze_machine, check_dependencies, recommend_config
+from private_agent.diagnostics.doctor import (
+    analyze_machine,
+    check_dependencies,
+    recommend_config,
+)
 
 
 def test_check_dependencies_structure():
@@ -36,7 +40,7 @@ class _FakeConsole:
 
 
 def test_doctor_interactive_recommends_on_confirmation(monkeypatch):
-    from private_agent import doctor
+    from private_agent.diagnostics import doctor
 
     fake = _FakeConsole("y")
     monkeypatch.setattr(doctor, "console", fake)
@@ -48,7 +52,7 @@ def test_doctor_interactive_recommends_on_confirmation(monkeypatch):
 
 
 def test_doctor_interactive_manual_fallback_on_decline(monkeypatch):
-    from private_agent import doctor
+    from private_agent.diagnostics import doctor
 
     fake = _FakeConsole("n")
     monkeypatch.setattr(doctor, "console", fake)

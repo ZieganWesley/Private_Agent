@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 MAX_DISCOVERY_ENDPOINTS = 8
 DISCOVERY_TIMEOUT_SECONDS = 1.5

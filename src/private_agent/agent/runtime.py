@@ -24,10 +24,10 @@ from langchain_core.messages import (
 )
 from prompt_toolkit.history import InMemoryHistory
 from rich.table import Table
-from .. import capabilities as capability_packs
-from .. import json_output
-from .. import runtime_f_integration as f_integration
-from ..chat_ui import ChatTranscript
+from . import capabilities as capability_packs
+from ..ui import json_output
+from . import runtime_f_integration as f_integration
+from ..ui.chat_ui import ChatTranscript
 from ..config import (
     AGENT_PERMISSION_MODE,
     APP_CONFIG,
@@ -75,19 +75,19 @@ from ..config import (
     merge_project_config,
 )
 from ..database import PersistentMemory
-from ..events import Event, ToolFinished, ToolStarted, get_event_bus
+from ..core.events import Event, ToolFinished, ToolStarted, get_event_bus
 from ..hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
 )
-from ..hooks import (
+from ..core.hooks import (
     collect_post_tool_hook_output,
     evaluate_pre_tool_hooks,
     load_hooks,
     safe_run_session_start_hooks,
 )
 from ..rag.citations import format_retrieved_citations
-from ..run_logging import RUN_LOGGER, log_event, logging_context
+from ..utils.run_logging import RUN_LOGGER, log_event, logging_context
 from ..sandbox import SandboxManager
 from ..skills import (
     load_skills_from_folder,
@@ -2560,7 +2560,7 @@ async def _run_agent_cli_session(
                     session_ui.print(_format_interactive_help())
                     continue
                 if user_input.lower() == "/doctor":
-                    from ..doctor import doctor_interactive
+                    from ..diagnostics.doctor import doctor_interactive
                     doctor_interactive()
                     continue
                 if user_input.lower() == "/context":

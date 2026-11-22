@@ -14,7 +14,7 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from private_agent.console import console as _shared_console
+from private_agent.ui.console import console as _shared_console
 
 from ..config import (
     DEFAULT_DB_PATH,

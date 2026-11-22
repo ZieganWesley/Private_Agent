@@ -1,4 +1,4 @@
-from private_agent import hooks
+from private_agent.core import hooks
 
 
 def test_load_hooks_empty():

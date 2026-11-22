@@ -16,13 +16,13 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
+from ..code_tasks.snapshots import SnapshotError, record_snapshot
 from ..config import (
     BINARY_PROBE_BYTES,
     FILE_READ_CHUNK_BYTES,
     MAX_READ_FILE_BYTES,
 )
 from ..sandbox import SandboxManager
-from ..snapshots import SnapshotError, record_snapshot
 from .schemas import (
     ApplyWorkspacePatchInput,
     CommitGitChangesInput,

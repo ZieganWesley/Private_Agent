@@ -24,7 +24,7 @@ from httpcore._backends.base import (
     NetworkStream,
 )
 
-from private_agent.console import console
+from private_agent.ui.console import console
 
 from ..config import (
     MAX_HTTP_REDIRECTS,
@@ -35,7 +35,7 @@ from ..config import (
     MAX_WEBPAGE_BYTES,
     NETWORK_REQUEST_TIMEOUT,
 )
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 _outbound_http_clients = []
 _EXPLICIT_PRIVATE_NETWORKS = tuple(

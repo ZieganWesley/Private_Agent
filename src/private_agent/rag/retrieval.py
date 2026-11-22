@@ -7,7 +7,7 @@ import threading
 
 from langchain_core.documents import Document
 
-from private_agent.console import console
+from private_agent.ui.console import console
 
 from ..config import RAG_RELEVANCE_THRESHOLD, RAG_SIMILARITY_RESULTS
 

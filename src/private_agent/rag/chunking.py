@@ -8,7 +8,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from ..run_logging import RUN_LOGGER, log_event
+from ..utils.run_logging import RUN_LOGGER, log_event
 
 STRATEGIES = (
     "auto",

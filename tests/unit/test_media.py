@@ -83,7 +83,7 @@ def test_webcam_capture_keeps_image_transient_and_releases_device(monkeypatch):
 
 def test_media_capture_consent_prompt_shows_y_n_choices(monkeypatch):
     import private_agent.tools.media as media_tools
-    from private_agent.run_logging import render_console_values
+    from private_agent.utils.run_logging import render_console_values
 
     prompt = MagicMock(return_value="")
     monkeypatch.setattr(media_tools, "console", MagicMock(input=prompt))

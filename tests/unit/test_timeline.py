@@ -1,6 +1,6 @@
 import sqlite3
 
-from private_agent import timeline
+from private_agent.agent import timeline
 
 
 def test_schema_and_estimate():

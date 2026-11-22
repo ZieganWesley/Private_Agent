@@ -7,7 +7,7 @@ import shlex
 import shutil
 import uuid
 
-from ..snapshots import SnapshotError, record_snapshot
+from ..code_tasks.snapshots import SnapshotError, record_snapshot
 
 _LOGGER = logging.getLogger(__name__)
 
