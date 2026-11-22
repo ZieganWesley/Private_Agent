@@ -2496,6 +2496,7 @@ async def _run_agent_cli_session(
                         user_input = (prompt or "").strip() or "exit"
                         prompt = None
                     else:
+                        session_ui._footer.stop()
                         session_ui.rule()
                         user_input = (
                             await prompt_user_input(
@@ -2507,9 +2508,15 @@ async def _run_agent_cli_session(
                                 bottom_toolbar=session_ui.ribbon_text(),
                             )
                         ).strip()
+                    if not non_interactive:
+                        session_ui._footer.start()
+                        session_ui._footer.update(session_ui._current_state())
                 except (KeyboardInterrupt, EOFError, asyncio.CancelledError):
                     _acknowledge_interrupt()
                     user_input = "exit"
+                    if not non_interactive:
+                        session_ui._footer.start()
+                        session_ui._footer.update(session_ui._current_state())
                 _custom_command_name = ""
                 if user_input.startswith("/"):
                     _custom_command_name = user_input.split(None, 1)[0].lower()

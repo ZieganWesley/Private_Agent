@@ -8,6 +8,7 @@ output.
 
 from __future__ import annotations
 
+import contextlib
 import os
 from typing import Any
 
@@ -103,6 +104,8 @@ class StatusIndicator:
         self.context_usage = context_usage
         self._console = console if console is not None else _default_console()
         self._status: Any = None
+        self._footer: Any = None
+        self._used_footer = False
 
     @property
     def active(self) -> bool:
@@ -124,6 +127,27 @@ class StatusIndicator:
     def start(self) -> StatusIndicator:
         if self._status is not None or not self.message:
             return self
+        try:
+            from .status_bar import get_active_footer
+
+            footer = get_active_footer(self._console)
+        except Exception:  # noqa: BLE001 - best effort
+            footer = None
+        if (
+            footer is not None
+            and getattr(footer, "started", False)
+            and getattr(footer, "mode", "") == "A"
+        ):
+            self._footer = footer
+            self._used_footer = True
+            try:
+                footer.set_busy(self._render(), self.phase)
+            except (ValueError, OSError, RuntimeError):
+                self._footer = None
+                self._used_footer = False
+            else:
+                self._status = footer
+                return self
         spinner, style = phase_spinner(self.phase)
         try:
             status = self._console.status(
@@ -141,6 +165,14 @@ class StatusIndicator:
             self.message = message
         if phase is not None:
             self.phase = phase
+        if self._used_footer and self._footer is not None:
+            try:
+                self._footer.set_busy(self._render(), self.phase)
+            except (ValueError, OSError, RuntimeError):
+                self._footer = None
+                self._used_footer = False
+                self._status = None
+            return
         if self._status is None:
             return
         spinner, style = phase_spinner(self.phase)
@@ -150,6 +182,13 @@ class StatusIndicator:
             self._status = None
 
     def stop(self) -> None:
+        if self._used_footer and self._footer is not None:
+            with contextlib.suppress(ValueError, OSError, RuntimeError):
+                self._footer.clear_busy()
+            self._footer = None
+            self._used_footer = False
+            self._status = None
+            return
         status, self._status = self._status, None
         if status is None:
             return

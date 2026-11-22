@@ -17,6 +17,7 @@ import contextlib
 import os
 import threading
 from collections.abc import Callable
+from typing import Any
 
 from rich.console import Console
 from rich.live import Live
@@ -24,6 +25,23 @@ from rich.live import Live
 from .ribbon import status_ribbon
 from .state import StatusState
 from .theme import ACCESSIBLE_ENV, NO_COLOR_ENV
+
+_ACTIVE_FOOTERS: dict[int, StatusBar] = {}
+
+
+def register_active_footer(console: Any, footer: StatusBar) -> None:
+    """Remember the live footer associated with ``console``."""
+    _ACTIVE_FOOTERS[id(console)] = footer
+
+
+def unregister_active_footer(console: Any) -> None:
+    """Forget the live footer associated with ``console``."""
+    _ACTIVE_FOOTERS.pop(id(console), None)
+
+
+def get_active_footer(console: Any) -> StatusBar | None:
+    """Return the live footer for ``console``, if one is currently active."""
+    return _ACTIVE_FOOTERS.get(id(console))
 
 
 def _plain_mode() -> bool:
@@ -58,6 +76,9 @@ class StatusBar:
         self._live: Live | None = None
         self._started = False
         self._lock = threading.Lock()
+        self._busy = False
+        self._busy_message = ""
+        self._busy_phase = "processing"
 
     def _current_state(self) -> StatusState:
         if self._state_provider is not None:
@@ -67,7 +88,29 @@ class StatusBar:
                 pass
         return self._state
 
-    def _render(self) -> str:
+    def _render(self) -> Any:
+        if self._busy:
+            try:
+                from rich.spinner import Spinner
+
+                from .spinner import phase_spinner
+            except Exception:  # noqa: BLE001 - fall back to plain text
+                ribbon = status_ribbon(
+                    self._current_state(),
+                    accessible=bool(os.environ.get(ACCESSIBLE_ENV)),
+                )
+                return f"{self._busy_message} | {ribbon}"
+            spinner, style = phase_spinner(self._busy_phase)
+            ribbon = status_ribbon(
+                self._current_state(),
+                accessible=bool(os.environ.get(ACCESSIBLE_ENV)),
+            )
+            return Spinner(
+                spinner,
+                text=f"{self._busy_message} | {ribbon}",
+                style=style,
+                speed=1.0,
+            )
         return status_ribbon(
             self._current_state(), accessible=bool(os.environ.get(ACCESSIBLE_ENV))
         )
@@ -91,6 +134,8 @@ class StatusBar:
                 self._live = None
                 self._mode = "B"
         self._started = True
+        if self._enabled:
+            register_active_footer(self.console, self)
 
     def update(self, state: StatusState | None = None) -> None:
         if not self._enabled:
@@ -104,6 +149,30 @@ class StatusBar:
         with self._lock:
             current = self._current_state()
             self._state = current
+        if self._mode == "A" and self._live is not None:
+            with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+                self._live.update(self._render())
+
+    def set_busy(self, message: str, phase: str = "processing") -> None:
+        """Show a spinner message in the live footer without hiding the ribbon."""
+        if not self._enabled or not self._started:
+            return
+        with self._lock:
+            self._busy = True
+            self._busy_message = str(message or "")
+            self._busy_phase = phase or "processing"
+        if self._mode == "A" and self._live is not None:
+            with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+                self._live.update(self._render())
+
+    def clear_busy(self) -> None:
+        """Return the live footer to showing only the ribbon."""
+        if not self._enabled or not self._started:
+            return
+        with self._lock:
+            self._busy = False
+            self._busy_message = ""
+            self._busy_phase = "processing"
         if self._mode == "A" and self._live is not None:
             with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
                 self._live.update(self._render())
@@ -127,6 +196,7 @@ class StatusBar:
                 self._live.stop()
             self._live = None
         self._started = False
+        unregister_active_footer(self.console)
 
     @property
     def mode(self) -> str:
