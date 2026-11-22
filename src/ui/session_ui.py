@@ -129,11 +129,6 @@ class SessionUI:
         self.console.print(f"[dim green]{report.summary_line()}[/dim green]")
         self._footer.turn_finished()
 
-    def rule(self) -> None:
-        from rich.rule import Rule
-
-        self.console.print(Rule(style="dim"))
-
     def print_markup(self, text: Any) -> None:
         """Print a pre-formatted (markup) chrome line through the shared console."""
         self.console.print(text)

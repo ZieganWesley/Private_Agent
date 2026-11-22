@@ -49,12 +49,9 @@ class TurnReport:
     def summary_line(self) -> str:
         elapsed = self.elapsed()
         gen = self.generation
-        if gen is not None and gen.output_tokens:
-            return (
-                f"{TURN_LABEL} {gen.output_tokens} estimated output tokens "
-                f"in {elapsed:.2f}s ({gen.tokens_per_second:.1f} tokens/s)."
-            )
-        return f"{TURN_LABEL} Turn completed in {elapsed:.2f}s."
+        tokens = gen.output_tokens if gen is not None and gen.output_tokens else 0
+        model = self.model if self.model is not None else "unknown"
+        return f"{TURN_LABEL} {model} | {tokens} tokens | {elapsed:.2f}s"
 
     def __str__(self) -> str:
         return self.summary_line()

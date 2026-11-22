@@ -11,11 +11,11 @@ from typing import Any
 
 from rich.markup import escape
 
-from .theme import (
-    GAUGE_EMPTY,
-    GAUGE_FILLED,
-    SEGMENT_SEPARATOR,
-)
+from .theme import SEGMENT_SEPARATOR
+
+# Context-window gauge glyphs (owned here so theme stays minimal).
+GAUGE_FILLED = "\u25b0"
+GAUGE_EMPTY = "\u25b1"
 
 
 def _context_use(tokens: Any, maximum: Any) -> tuple[int, int, float]:

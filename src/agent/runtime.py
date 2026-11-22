@@ -2495,7 +2495,7 @@ async def _run_agent_cli_session(
                         prompt = None
                     else:
                         session_ui._footer.stop()
-                        session_ui.rule()
+                        session_ui.console.rule(style="dim")
                         user_input = (
                             await prompt_user_input(
                                 console,

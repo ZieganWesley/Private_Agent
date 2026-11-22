@@ -7,10 +7,6 @@ single file.
 
 from __future__ import annotations
 
-# Context-window gauge glyphs.
-GAUGE_FILLED = "\u25b0"
-GAUGE_EMPTY = "\u25b1"
-
 # Separators used between ribbon segments and toolbar segments.
 SEGMENT_SEPARATOR = " | "
 
