@@ -14,7 +14,6 @@ from rich.markup import escape
 from .theme import (
     GAUGE_EMPTY,
     GAUGE_FILLED,
-    RIBBON_GAUGE_CELLS,
     SEGMENT_SEPARATOR,
 )
 
@@ -113,16 +112,10 @@ class StatusState:
             f"context={self.percent()}%",
             f"permission={self.permission_mode}",
         ]
-        _used, limit, _fraction = _context_use(self.context_tokens, self.context_maximum)
-        if limit > 0:
-            segs.append(
-                context_bar(
-                    self.context_tokens,
-                    self.context_maximum,
-                    width=RIBBON_GAUGE_CELLS,
-                    accessible=accessible,
-                )
-            )
+        if accessible and self.context_maximum:
+            _used, limit, _fraction = _context_use(self.context_tokens, self.context_maximum)
+            if limit > 0:
+                segs.append(f"{_used}/{limit} ({self.percent():.0f}%)")
         if self.output_tokens is not None:
             segs.append(f"output={self.output_tokens}")
         segs.append(f"background_processes={self.background_processes}")

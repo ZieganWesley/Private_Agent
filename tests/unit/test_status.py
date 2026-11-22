@@ -255,11 +255,8 @@ def test_indicator_renders_the_context_gauge_when_supplied():
     indicator.update(phase=status.THINKING, message="m is thinking")
 
     message = console.created[0].message
-    assert message.startswith(
-        "[bold magenta]m is thinking[/bold magenta] [dim]\u00b7[/dim]"
-    )
+    assert message.startswith("[bold magenta]m is thinking[/bold magenta] (25%)")
     assert "25%" in message
-    assert "[green]" in message
     assert status.StatusIndicator("Waiting", console=FakeConsole())._render() == (
         "[bold cyan]Waiting[/bold cyan]"
     )
