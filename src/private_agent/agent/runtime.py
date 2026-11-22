@@ -1818,16 +1818,9 @@ async def _choose_provider(
                 f"[yellow][Resume][/yellow] {resumed_runtime.name} is running but "
                 "advertises no chat models."
             )
-    elif (
-        len(local_runtimes) == 1
-        and not always_ask_provider(APP_CONFIG)
-        and auto_select_single_provider(APP_CONFIG)
-    ):
+    elif len(local_runtimes) == 1 and not always_ask_provider(APP_CONFIG) and auto_select_single_provider(APP_CONFIG):
         provider_choice = "1"
-        console.print(
-            f"[green][Local runtime][/green] Using {local_runtimes[0].name} "
-            "(only reachable local provider)."
-        )
+        console.print(f"[green][Local runtime][/green] Using {local_runtimes[0].name} (only reachable local provider).")
     else:
         try:
             from .interactive import arrow_select as _arrow_select

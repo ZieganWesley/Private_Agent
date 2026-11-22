@@ -165,13 +165,6 @@ def discover_local_runtimes(
         else [ollama_base_url]
     )
     endpoints: list[tuple[str, str, str, str]] = []
-    for index, url in enumerate(ollama_urls):
-        if not isinstance(url, str) or not url.strip():
-            continue
-        name = (
-            "Ollama" if index == 0 and len(ollama_urls) == 1 else f"Ollama {index + 1}"
-        )
-        endpoints.append((name, "ollama", url.rstrip("/"), "/api/tags"))
     if isinstance(openai_compatible_endpoints, list):
         for entry in openai_compatible_endpoints[: MAX_DISCOVERY_ENDPOINTS - 1]:
             if not isinstance(entry, dict):
@@ -190,6 +183,13 @@ def discover_local_runtimes(
                     "/models",
                 )
             )
+    for index, url in enumerate(ollama_urls):
+        if not isinstance(url, str) or not url.strip():
+            continue
+        name = (
+            "Ollama" if index == 0 and len(ollama_urls) == 1 else f"Ollama {index + 1}"
+        )
+        endpoints.append((name, "ollama", url.rstrip("/"), "/api/tags"))
 
     unique_endpoints = []
     seen_urls = set()

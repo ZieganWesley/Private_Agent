@@ -152,9 +152,9 @@ def test_local_runtime_discovery_reports_only_reachable_loopback_runtimes():
     )
 
     assert [(runtime.name, runtime.models) for runtime in runtimes] == [
-        ("Ollama", ("qwen:latest",)),
         ("LM Studio", ("lmstudio-model",)),
         ("llama.cpp", ("gguf-model",)),
+        ("Ollama", ("qwen:latest",)),
     ]
 
 
@@ -359,7 +359,7 @@ def test_embedding_models_are_filtered_out_for_openai_compatible_servers():
         client_factory=_fake_runtime_client(responses),
     )
 
-    assert [runtime.models for runtime in runtimes] == [(), ("qwen3-8b",)]
+    assert [runtime.models for runtime in runtimes] == [("qwen3-8b",), ()]
 
 
 def test_non_loopback_endpoint_is_used_only_when_remote_hosts_are_allowed():
@@ -384,8 +384,8 @@ def test_non_loopback_endpoint_is_used_only_when_remote_hosts_are_allowed():
 
     assert [runtime.name for runtime in rejected] == ["Ollama"]
     assert [(runtime.name, runtime.models) for runtime in accepted] == [
-        ("Ollama", ()),
         ("remote", ("remote",)),
+        ("Ollama", ()),
     ]
 
 

@@ -204,8 +204,11 @@ def resolve_config_values(
     else:
         OLLAMA_BASE_URLS = []
     if not OLLAMA_BASE_URLS:
-        OLLAMA_BASE_URLS = ["http://localhost:11434"]
-    OLLAMA_BASE_URL = OLLAMA_BASE_URLS[0]
+        import shutil
+
+        if shutil.which("ollama"):
+            OLLAMA_BASE_URLS = ["http://localhost:11434"]
+    OLLAMA_BASE_URL = OLLAMA_BASE_URLS[0] if OLLAMA_BASE_URLS else ""
     HARDWARE_ACCELERATION_MODE = normalize_acceleration_mode(
         config.get("hardware_acceleration", "auto")
     )
