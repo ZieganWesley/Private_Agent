@@ -6,7 +6,6 @@ written incrementally to the shared console.
 
 from __future__ import annotations
 
-import datetime
 from typing import Any
 
 from .console import console as _shared_console
@@ -16,15 +15,14 @@ class ChatMessage:
     def __init__(self, role: str, content: str, timestamp: Any = None):
         self.role = role
         self.content = content
-        self.timestamp = timestamp or datetime.datetime.now()
+        self.timestamp = timestamp
 
     @property
     def avatar(self) -> str:
         return "You" if self.role.lower() in {"user", "you"} else "Agent"
 
     def render_text(self) -> str:
-        stamp = self.timestamp.strftime("%H:%M:%S") if hasattr(self.timestamp, "strftime") else str(self.timestamp)
-        return f"[{stamp}] {self.avatar}: {self.content}"
+        return f"{self.avatar}: {self.content}"
 
 
 class ChatTranscript:
