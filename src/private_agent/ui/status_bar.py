@@ -192,6 +192,11 @@ class StatusBar:
         if not self._enabled or not self._started:
             return
         if self._mode == "A" and self._live is not None:
+            # Erase the paused live footer so it does not linger above the
+            # prompt_toolkit input area; the bottom toolbar takes over while
+            # input is active.
+            with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+                self._live.transient = True
             with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
                 self._live.stop()
             self._live = None

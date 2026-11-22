@@ -17,6 +17,7 @@ from rich.text import Text
 
 from ..config import STREAMING_OUTPUT, VERBOSE_TIMINGS, VISIBLE_REASONING
 from ..run_logging import RUN_LOGGER, log_event
+from ..ui.status_bar import get_active_footer
 from ..ui.turn import GenerationStats
 from .console import console
 from .prompts import token_count as _token_count
@@ -183,6 +184,22 @@ async def _invoke_with_budget(
             phase=(LOADING if _loading_phase else PROCESSING),
             context_usage=context_usage,
         ).start()
+        _paused_footer: dict[str, Any] = {"footer": None}
+
+        def _pause_footer() -> None:
+            footer = get_active_footer(console)
+            if footer is not None and getattr(footer, "started", False):
+                footer.stop()
+                _paused_footer["footer"] = footer
+
+        def _resume_footer() -> None:
+            footer = _paused_footer.get("footer")
+            if footer is not None:
+                with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+                    footer.start()
+                with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+                    footer.update()
+                _paused_footer["footer"] = None
 
         async def collect_stream():
             aggregate = None
@@ -197,6 +214,7 @@ async def _invoke_with_budget(
                     if reasoning:
                         if VISIBLE_REASONING:
                             indicator.stop()
+                            _pause_footer()
                             if not reasoning_open:
                                 console.print(
                                     f"\n[dim]Thinking ({model_name}):[/dim] ",
@@ -220,6 +238,7 @@ async def _invoke_with_budget(
                         if first_token_at is None:
                             first_token_at = time.monotonic()
                         indicator.stop()
+                        _pause_footer()
                         if reasoning_open:
                             console.print()
                             reasoning_open = False
@@ -242,6 +261,7 @@ async def _invoke_with_budget(
                     console.print()
                 if emitted_header:
                     console.print()
+                _resume_footer()
             return aggregate, first_token_at
 
         try:
