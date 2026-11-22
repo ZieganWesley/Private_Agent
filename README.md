@@ -584,6 +584,22 @@ Notes on both forms: `timeout` and `sse_read_timeout` must be between 0.1 and
 others; tools run only after approval unless their names are listed in
 `auto_approve_tools`.
 
+## Environment Variables
+
+The terminal UI honours the following environment variables. They do not
+require a config file change and are read at startup.
+
+- `NO_COLOR` (any non-empty value): Disables ANSI colour output and the
+  live footer. The status ribbon is printed once at startup in plain text;
+  spinners and gauges lose their colour but keep their text labels. This
+  follows the conventional `NO_COLOR` standard.
+- `PRIVATE_AGENT_ACCESSIBLE` (any non-empty value): Enables screen-reader
+  friendly output. Context gauges are rendered as `used/limit (percent%)`
+  instead of Unicode block glyphs, and spinner lines include the phase name
+  (for example `(thinking)`) in addition to colour.
+- `PRIVATE_AGENT_CONFIG`: Path to the JSON config file (see above).
+- `TERM=dumb` / non-TTY stdout: Behaves like `NO_COLOR` automatically.
+
 ## Source Layout
 
 `src/private_agent/`: `cli.py` (entry point), `config.py`, `agent/`
