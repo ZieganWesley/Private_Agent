@@ -26,7 +26,6 @@ from config import (
     MAX_TOOL_ITERATIONS,
     MODEL_TEMPERATURE,
     OLLAMA_BASE_URL,
-    OLLAMA_BASE_URLS,
     ONLINE_MAX_RETRIES,
     ONLINE_MODEL_LIST_LIMIT,
     ONLINE_MODEL_LIST_TIMEOUT,
@@ -256,8 +255,26 @@ def _make_selected_local_chat_model(
     return _make_local_openai_compatible_chat_model(runtime.base_url, model_name)
 
 
+def _configured_endpoint_models(entry: dict[str, Any]) -> tuple[str, ...] | None:
+    """Return explicitly configured model names for an endpoint, if any."""
+    if not isinstance(entry, dict):
+        return None
+    if isinstance(entry.get("models"), list):
+        models = tuple(
+            str(model).strip()
+            for model in entry["models"]
+            if isinstance(model, str) and str(model).strip()
+        )
+        if models:
+            return models
+    model = entry.get("model")
+    if isinstance(model, str) and model.strip():
+        return (model.strip(),)
+    return None
+
+
 def _discover_available_local_runtimes() -> list[LocalRuntime]:
-    """Probe configured loopback model servers using bounded HTTP requests."""
+    """Probe OpenAI-compatible endpoints configured in the local config file."""
     model_config = APP_CONFIG.get("models", {})
     endpoints = (
         model_config.get("local_openai_compatible_endpoints", [])
@@ -273,24 +290,57 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
             else str(raw).strip().lower() in {"true", "1", "yes", "on"}
         )
     configured = endpoints if isinstance(endpoints, list) else []
-    from providers.selection import preset_probe_endpoints
 
-    endpoints = configured + [
-        entry
-        for entry in preset_probe_endpoints(configured)
-        if entry["base_url"]
-        not in {
-            str(e.get("base_url", "")).rstrip("/")
-            for e in configured
-            if isinstance(e, dict)
-        }
+    # Drop instance detection/presets: only endpoints explicitly present in the
+    # local configuration are eligible, and every one is treated as OpenAI
+    # compatible.
+    configured_entries = [
+        entry for entry in configured if isinstance(entry, dict)
     ]
-    return discover_local_runtimes(
-        OLLAMA_BASE_URLS,
-        endpoints,
+    # Keep configured entries only; do not probe installed-provider defaults.
+    probe_entries = configured_entries
+
+    runtimes = discover_local_runtimes(
+        [],
+        probe_entries,
         client_factory=public_only_sync_client,
         allow_remote=allow_remote,
     )
+
+    # Apply explicitly configured model names, allowing provider-only entries to
+    # use the models reported by the endpoint.
+    by_url = {
+        str(entry.get("base_url", "")).rstrip("/"): entry
+        for entry in configured_entries
+        if isinstance(entry.get("base_url"), str)
+    }
+    result: list[LocalRuntime] = []
+    for runtime in runtimes:
+        entry = by_url.get(runtime.base_url.rstrip("/"))
+        configured_models = (
+            _configured_endpoint_models(entry) if entry is not None else None
+        )
+        if configured_models is not None:
+            result.append(
+                LocalRuntime(
+                    name=runtime.name,
+                    kind="openai-compatible",
+                    base_url=runtime.base_url,
+                    models=configured_models,
+                    embedding_models=runtime.embedding_models,
+                )
+            )
+        else:
+            result.append(
+                LocalRuntime(
+                    name=runtime.name,
+                    kind="openai-compatible",
+                    base_url=runtime.base_url,
+                    models=runtime.models,
+                    embedding_models=runtime.embedding_models,
+                )
+            )
+    return result
 
 
 def select_online_model(use_saved_details: bool | None = None):
