@@ -3007,7 +3007,7 @@ async def test_repeated_cli_runs_remove_mcp_tools_and_sandboxes(
     monkeypatch.setattr(agent, "load_configured_mcp_tools", load_server)
     prompt_calls = []
 
-    async def prompt(_console, _root, prompt_message, skills=None, history=None):
+    async def prompt(_console, _root, prompt_message, skills=None, history=None, bottom_toolbar=None):
         prompt_calls.append(prompt_message)
         return "exit"
 

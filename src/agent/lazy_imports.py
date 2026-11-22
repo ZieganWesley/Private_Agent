@@ -122,7 +122,7 @@ class _LazyModule:
 
     def _load(self):
         if self._module is None:
-            self._module = importlib.import_module(self._module_path, package=__package__)
+            self._module = importlib.import_module(self._module_path)
         return self._module
 
     def __getattr__(self, item: str):
