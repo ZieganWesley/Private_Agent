@@ -602,7 +602,7 @@ require a config file change and are read at startup.
 
 ## Source Layout
 
-`src/private_agent/`: `cli.py` (entry point), `config.py`, `agent/`
+`src/private_agent/`: `cli.py` (entry point), `config/` (configuration and settings), `agent/`
 (`runtime.py` session loop, `interactive.py` prompt and completion,
 `permissions.py`, `providers.py`, `prompts.py`), `tools/` (filesystem, network,
 media, memory, planning, schemas), `database/memory.py` (SQLite),
