@@ -7,6 +7,7 @@ summaries; they go through this facade so the terminal stays coherent.
 from __future__ import annotations
 
 import contextlib
+import os
 import time
 from typing import Any
 
@@ -14,6 +15,7 @@ from .console import console as _shared_console
 from .ribbon import status_ribbon
 from .state import StatusState
 from .status_bar import StatusBar
+from .theme import ACCESSIBLE_ENV
 from .turn import TurnReport
 
 
@@ -68,7 +70,7 @@ class SessionUI:
         if self._footer.mode == "B" and self._footer.started:
             with contextlib.suppress(Exception):
                 self.console.print(
-                    f"[dim]{status_ribbon(self._current_state(), accessible=self._footer._accessible())}[/dim]"
+                    f"[dim]{status_ribbon(self._current_state(), accessible=bool(os.environ.get(ACCESSIBLE_ENV)))}[/dim]"
                 )
 
     def set_context(self, used: Any, maximum: Any) -> None:

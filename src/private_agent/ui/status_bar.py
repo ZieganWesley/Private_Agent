@@ -67,11 +67,10 @@ class StatusBar:
                 pass
         return self._state
 
-    def _accessible(self) -> bool:
-        return bool(os.environ.get(ACCESSIBLE_ENV))
-
     def _render(self) -> str:
-        return status_ribbon(self._current_state(), accessible=self._accessible())
+        return status_ribbon(
+            self._current_state(), accessible=bool(os.environ.get(ACCESSIBLE_ENV))
+        )
 
     def start(self) -> None:
         if not self._enabled or self._started:
