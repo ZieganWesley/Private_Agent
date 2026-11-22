@@ -1200,7 +1200,6 @@ async def _build_session_setup(
     global _ACTIVE_MEMORY, _TASK_LEASE_HEARTBEAT
     startup_started = time.monotonic()
     _input = input_provider if input_provider is not None else console.input
-    console.print("[bold cyan]Private Agent[/bold cyan]")
     invocation_root = pathlib.Path.cwd()
     project_resources = discover_project_resources(invocation_root)
     rag_docs_default = (

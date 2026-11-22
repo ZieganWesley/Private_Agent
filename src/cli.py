@@ -77,7 +77,6 @@ def main():
 
     console.print(
         Panel.fit(
-            "[bold cyan]Private Agent[/bold cyan]\n"
             "Local-first AI assistant with repository intelligence, memory and tools.",
             title="Private Agent",
         )

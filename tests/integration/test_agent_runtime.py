@@ -3769,7 +3769,6 @@ async def test_ready_summary_is_compact_and_shows_local_hardware_only_for_local(
     await run_agent_cli_async()
 
     rendered = output.getvalue()
-    assert "Private Agent" in rendered
     assert "Welcome" not in rendered
     assert "╭" not in rendered
     assert "Platform" in rendered
