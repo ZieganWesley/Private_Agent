@@ -5,12 +5,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.console import Console
 
-from private_agent.agent import tool_display
+from agent import tool_display
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -26,7 +26,7 @@ except ImportError:
             return model
 
 
-from private_agent.tools.media import (
+from tools.media import (
     capture_webcam_image,
     captured_image_message,
     consume_captured_image,
@@ -82,8 +82,8 @@ def test_webcam_capture_keeps_image_transient_and_releases_device(monkeypatch):
 
 
 def test_media_capture_consent_prompt_shows_y_n_choices(monkeypatch):
-    import private_agent.tools.media as media_tools
-    from private_agent.utils.run_logging import render_console_values
+    import tools.media as media_tools
+    from utils.run_logging import render_console_values
 
     prompt = MagicMock(return_value="")
     monkeypatch.setattr(media_tools, "console", MagicMock(input=prompt))
@@ -137,7 +137,7 @@ def test_microphone_transcription_uses_local_model_without_downloading(
 
 
 def test_workspace_video_sampling_is_bounded_and_transient(monkeypatch, temp_workspace):
-    from private_agent.tools import media
+    from tools import media
 
     video_path = temp_workspace / "clip.mp4"
     video_path.write_bytes(b"bounded mock video")
@@ -219,7 +219,7 @@ def test_workspace_audio_file_is_bounded_and_transcribed_locally(
         assert audio_file.read(4) == b"RIFF"
         return "locally transcribed words"
 
-    monkeypatch.setattr("private_agent.tools.media._transcribe_local_audio", transcribe)
+    monkeypatch.setattr("tools.media._transcribe_local_audio", transcribe)
     result = transcribe_workspace_audio.invoke({"file_path": "speech.wav"})
 
     assert "1.0s" in result
@@ -229,8 +229,8 @@ def test_workspace_audio_file_is_bounded_and_transcribed_locally(
 def test_workspace_audio_rejects_unsupported_and_oversized_inputs(
     monkeypatch, temp_workspace
 ):
-    from private_agent.config import MAX_MEDIA_FILE_BYTES
-    from private_agent.tools.media import transcribe_workspace_audio
+    from config import MAX_MEDIA_FILE_BYTES
+    from tools.media import transcribe_workspace_audio
 
     assert "PCM WAV files only" in transcribe_workspace_audio.invoke(
         {"file_path": "speech.mp3"}
@@ -278,7 +278,7 @@ def test_workspace_video_rejects_overlong_media_and_releases_capture(
 def test_workspace_video_rejects_oversized_frame_before_decoding(
     monkeypatch, temp_workspace
 ):
-    from private_agent.config import MAX_DECODED_IMAGE_PIXELS
+    from config import MAX_DECODED_IMAGE_PIXELS
 
     video_path = temp_workspace / "huge-frames.mp4"
     video_path.write_bytes(b"bounded mock video")
@@ -361,7 +361,7 @@ def test_microphone_device_listing_reports_available_input_indexes():
 
 @pytest.mark.asyncio
 async def test_media_tools_require_local_runtime_authorization(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     camera = MagicMock()
     camera.invoke.return_value = "should not run"
@@ -401,7 +401,7 @@ async def test_media_tools_require_local_runtime_authorization(monkeypatch):
 async def test_workspace_media_files_are_blocked_for_online_provider(
     monkeypatch, tool_name, arguments
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     media_tool = MagicMock()
     media_tool.ainvoke = MagicMock()
@@ -425,7 +425,7 @@ async def test_workspace_media_files_are_blocked_for_online_provider(
 
 @pytest.mark.asyncio
 async def test_workspace_video_requires_vision_capability(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     video_tool = MagicMock()
     monkeypatch.setattr(agent, "AVAILABLE_TOOLS", {"load_workspace_video": video_tool})
@@ -449,7 +449,7 @@ async def test_workspace_video_requires_vision_capability(monkeypatch):
 def test_webcam_tool_failure_is_reported_without_model_retry():
     from langchain_core.messages import ToolMessage
 
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     error = agent._local_image_input_error(
         [{"name": "capture_webcam_image", "id": "camera-failed"}],

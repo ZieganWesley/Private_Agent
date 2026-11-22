@@ -7,8 +7,8 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 
-from private_agent.agent import interactive, learning, memory_context, task_commands
-from private_agent.agent.interactive import (
+from agent import interactive, learning, memory_context, task_commands
+from agent.interactive import (
     SLASH_COMMANDS,
     AgentCompleter,
     format_help,
@@ -16,7 +16,7 @@ from private_agent.agent.interactive import (
     include_folder_context,
     prompt_user_input,
 )
-from private_agent.database import PersistentMemory
+from database import PersistentMemory
 
 
 def _enable_interactive_task_controls(runtime, monkeypatch):
@@ -74,7 +74,7 @@ def test_maintenance_commands_are_documented_and_completable():
 async def test_memory_maintenance_reviews_deletes_and_runs_database_maintenance(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     memory.save_message("session", "human", "conversation remains")
@@ -127,7 +127,7 @@ async def test_memory_maintenance_reviews_deletes_and_runs_database_maintenance(
 async def test_memory_maintenance_does_not_send_episode_to_unapproved_online_model(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     memory.save_summary("session", "private episode")
@@ -159,7 +159,7 @@ async def test_memory_maintenance_does_not_send_episode_to_unapproved_online_mod
 async def test_maintenance_explains_chat_history_when_no_episode_exists(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     memory.save_message("unfinished-session", "human", "Stored but unsummarized.")
@@ -191,7 +191,7 @@ async def test_maintenance_explains_chat_history_when_no_episode_exists(
 async def test_rag_maintenance_reindexes_and_returns_active_vectorstore(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     index_path = tmp_path / "rag-index"
@@ -222,7 +222,7 @@ async def test_rag_maintenance_reindexes_and_returns_active_vectorstore(
 async def test_rag_maintenance_declined_reset_preserves_active_vectorstore(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     active_store = object()
@@ -250,7 +250,7 @@ async def test_rag_maintenance_declined_reset_preserves_active_vectorstore(
 async def test_data_reset_confirmation_decline_preserves_maintenance_state(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     active_store = object()
@@ -276,7 +276,7 @@ async def test_data_reset_confirmation_decline_preserves_maintenance_state(
 
 @pytest.mark.asyncio
 async def test_rag_maintenance_lists_tracked_sources(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "memory.sqlite"))
     index_path = tmp_path / "rag-index"
@@ -311,8 +311,8 @@ async def test_rag_maintenance_lists_tracked_sources(tmp_path, monkeypatch):
 def test_task_management_requires_confirmation_and_approves_exact_revision(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
-    from private_agent.tools import get_tool_context
+    from agent import runtime
+    from tools import get_tool_context
 
     memory = PersistentMemory(str(tmp_path / "tasks.sqlite"))
     task = memory.create_task_plan(
@@ -352,7 +352,7 @@ def test_task_management_requires_confirmation_and_approves_exact_revision(
 def test_noninteractive_task_management_cannot_approve_saved_plans(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "noninteractive-plan.sqlite"))
     task = memory.create_task_plan(
@@ -379,7 +379,7 @@ def test_noninteractive_task_management_cannot_approve_saved_plans(
 
 
 def test_declined_task_plan_approval_keeps_plan_unapproved(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "declined-plan.sqlite"))
     task = memory.create_task_plan(
@@ -411,7 +411,7 @@ def test_declined_task_plan_approval_keeps_plan_unapproved(tmp_path, monkeypatch
 
 
 def test_task_management_rejects_ambiguous_task_id_prefix(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "ambiguous-plan.sqlite"))
     memory.create_task_plan(
@@ -449,8 +449,8 @@ def test_task_management_requires_confirmation_to_reconcile_unknown_action(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
-    from private_agent.tools import get_tool_context
+    from agent import runtime
+    from tools import get_tool_context
 
     memory = PersistentMemory(str(tmp_path / "reconcile-task.sqlite"))
     task = memory.create_task_plan(
@@ -509,7 +509,7 @@ def test_task_management_deletes_linked_skill_only_inside_configured_folder(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "delete-task.sqlite"))
     skills_directory = tmp_path / "skills"
@@ -551,7 +551,7 @@ def test_task_management_refuses_to_delete_external_linked_skill(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "unsafe-delete-task.sqlite"))
     skills_directory = tmp_path / "skills"
@@ -591,7 +591,7 @@ def test_task_management_refuses_to_delete_external_linked_skill(
 def test_learning_maintenance_requires_explicit_consent_and_can_correct_items(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "learning.sqlite"))
     commands = iter(["SAVE LEARNED ITEM", "APPLY CORRECTION"])
@@ -618,7 +618,7 @@ def test_learning_maintenance_requires_explicit_consent_and_can_correct_items(
 def test_task_derived_learning_requires_verified_validation_preview_and_save(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "task-learning-proposal.sqlite"))
 
@@ -740,7 +740,7 @@ async def test_model_learning_suggestion_is_local_verified_and_user_confirmed(
 ):
     from langchain_core.messages import AIMessage
 
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "suggested-learning.sqlite"))
     task = memory.create_task_plan(
@@ -883,7 +883,7 @@ def test_task_age_label_is_bounded_and_handles_invalid_timestamps():
 
 
 def test_learned_prompt_context_respects_scope_and_global_opt_out(tmp_path):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "learning-context.sqlite"))
     memory.add_learned_item("Prefer focused tests", "coding")
@@ -905,8 +905,8 @@ def test_learned_prompt_context_respects_scope_and_global_opt_out(tmp_path):
 def test_coding_approval_persists_user_selected_source_scope(tmp_path, monkeypatch):
     import json
 
-    from private_agent.agent import runtime
-    from private_agent.tools import get_tool_context
+    from agent import runtime
+    from tools import get_tool_context
 
     memory = PersistentMemory(str(tmp_path / "coding-tasks.sqlite"))
     task = memory.create_task_plan(
@@ -953,8 +953,8 @@ def test_direct_workspace_approval_persists_access_and_network_scope(
 ):
     import json
 
-    from private_agent.agent import runtime
-    from private_agent.tools import get_tool_context
+    from agent import runtime
+    from tools import get_tool_context
 
     allowed_root = tmp_path / "workspace"
     selected_source = allowed_root / "project"
@@ -1005,7 +1005,7 @@ def test_direct_workspace_approval_persists_access_and_network_scope(
     ],
 )
 def test_coding_access_level_selection(monkeypatch, selection, expected):
-    from private_agent.agent.permissions import select_coding_access_level
+    from agent.permissions import select_coding_access_level
 
     console = MagicMock()
     console.input.return_value = selection
@@ -1014,7 +1014,7 @@ def test_coding_access_level_selection(monkeypatch, selection, expected):
 
 
 def test_task_management_resume_requires_fresh_approval(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "tasks.sqlite"))
     task = memory.create_task_plan(
@@ -1049,7 +1049,7 @@ def test_task_management_resume_requires_fresh_approval(tmp_path, monkeypatch):
 
 
 def test_abandoned_task_cannot_be_resumed(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "abandoned-task.sqlite"))
     task = memory.create_task_plan(
@@ -1085,7 +1085,7 @@ def test_abandoned_task_cannot_be_resumed(tmp_path, monkeypatch):
 
 
 def test_research_validation_prompts_for_source_quality_review(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "research-validation.sqlite"))
     task = memory.create_task_plan(
@@ -1140,8 +1140,8 @@ def test_research_validation_prompts_for_source_quality_review(tmp_path, monkeyp
 
 
 def test_verified_five_star_task_can_create_and_register_skill(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
-    from private_agent.tools import get_tool_context
+    from agent import runtime
+    from tools import get_tool_context
 
     database = tmp_path / "skill-task.sqlite"
     skills_directory = tmp_path / "skills"
@@ -1247,7 +1247,7 @@ def test_skill_registration_failure_rolls_back_created_skill_file(
 ):
     import sqlite3
 
-    from private_agent.agent import runtime
+    from agent import runtime
 
     skills_directory = tmp_path / "skills"
     skills_directory.mkdir()
@@ -1299,7 +1299,7 @@ def test_skill_registration_failure_rolls_back_created_skill_file(
 
 
 def test_single_step_task_does_not_offer_skill_capture(tmp_path, monkeypatch):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "single-step-skill.sqlite"))
     task = memory.create_task_plan(
@@ -1347,7 +1347,7 @@ def test_single_step_task_does_not_offer_skill_capture(tmp_path, monkeypatch):
 def test_skill_capture_needs_validation_and_non_five_rating_stays_feedback_only(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "skill-validation-gate.sqlite"))
 
@@ -1405,7 +1405,7 @@ def test_skill_capture_needs_validation_and_non_five_rating_stays_feedback_only(
 
 
 def test_only_successful_code_finalization_is_saved_as_task_validation(tmp_path):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "code-validation.sqlite"))
     task = memory.create_task_plan(
@@ -1446,7 +1446,7 @@ def test_only_successful_code_finalization_is_saved_as_task_validation(tmp_path)
 def test_retention_removes_only_skill_files_inside_configured_directory(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "retention.sqlite"))
     skills_dir = tmp_path / "skills"
@@ -1481,7 +1481,7 @@ def test_retention_removes_only_skill_files_inside_configured_directory(
 async def test_code_rag_retrieval_also_searches_and_deduplicates_local_guidance(
     monkeypatch,
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     user_doc = SimpleNamespace(
         metadata={"source": "src/app.py", "chunk": 0},
@@ -1567,7 +1567,7 @@ def test_skill_capture_redacts_credentials_contact_details_and_one_off_paths():
 
 
 def test_planning_search_citations_only_keep_result_titles_and_https_urls():
-    from private_agent.agent import runtime
+    from agent import runtime
 
     result = (
         "Title: Official    guide\nSnippet: Untrusted snippet text\n"
@@ -1656,7 +1656,7 @@ def test_startup_memory_context_includes_bounded_local_episode_and_skill(
 
 
 def test_coding_guidance_detection_is_broader_than_code_task_detection():
-    from private_agent.agent import runtime
+    from agent import runtime
 
     assert runtime._is_coding_guidance_request(
         "Review the production readiness of this application"
@@ -2015,7 +2015,7 @@ def test_prompt_key_bindings_insert_newline_on_alt_enter_and_ctrl_j():
 
 
 def test_arrow_select_returns_none_non_interactive(monkeypatch):
-    from private_agent.agent import interactive
+    from agent import interactive
 
     monkeypatch.setattr(interactive.sys.stdin, "isatty", lambda: False, raising=False)
     monkeypatch.setattr(interactive.sys.stdout, "isatty", lambda: False, raising=False)
@@ -2025,7 +2025,7 @@ def test_arrow_select_returns_none_non_interactive(monkeypatch):
 def test_arrow_select_runs_application_and_returns_choice(monkeypatch):
     from prompt_toolkit.application import Application
 
-    from private_agent.agent import interactive
+    from agent import interactive
 
     monkeypatch.setattr(interactive.sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(interactive.sys.stdout, "isatty", lambda: True, raising=False)
@@ -2048,7 +2048,7 @@ def test_arrow_select_runs_application_and_returns_choice(monkeypatch):
 def test_arrow_select_treats_cancel_and_errors_as_no_choice(monkeypatch):
     from prompt_toolkit.application import Application
 
-    from private_agent.agent import interactive
+    from agent import interactive
 
     monkeypatch.setattr(interactive.sys.stdin, "isatty", lambda: True, raising=False)
     monkeypatch.setattr(interactive.sys.stdout, "isatty", lambda: True, raising=False)

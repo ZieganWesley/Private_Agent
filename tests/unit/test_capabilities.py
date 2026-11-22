@@ -1,11 +1,11 @@
 import pytest
 
-from private_agent.agent import capabilities
+from agent import capabilities
 
 
 @pytest.fixture(autouse=True)
 def _clear_enabled_packs():
-    from private_agent.tools import get_tool_context
+    from tools import get_tool_context
 
     get_tool_context().enabled_packs.clear()
     yield
@@ -59,7 +59,7 @@ def test_filter_preserves_unlisted_tools():
 def test_all_registered_tools_preserved():
     from types import SimpleNamespace
 
-    import private_agent.tools as tools_mod
+    import tools as tools_mod
 
     names = list(tools_mod.AVAILABLE_TOOLS.keys())
     objs = [SimpleNamespace(name=n) for n in names]
@@ -74,7 +74,7 @@ def test_all_registered_tools_preserved():
 
 def test_every_registered_tool_belongs_to_a_pack():
     """Tools outside every pack are always sent, defeating J4 filtering."""
-    import private_agent.tools as tools_mod
+    import tools as tools_mod
 
     packed = capabilities._all_pack_tools()
     assert set(tools_mod.AVAILABLE_TOOLS) - packed == set()
@@ -83,7 +83,7 @@ def test_every_registered_tool_belongs_to_a_pack():
 def test_plain_chat_binds_only_core_tools():
     from types import SimpleNamespace
 
-    import private_agent.tools as tools_mod
+    import tools as tools_mod
 
     objs = [SimpleNamespace(name=n) for n in tools_mod.AVAILABLE_TOOLS]
     out = {tool.name for tool in capabilities.filter_tools_list(objs, "hello there")}
@@ -119,7 +119,7 @@ def test_filter_tools_list_is_sorted_for_a_stable_prefix():
 def test_gate_capability_non_gated_pack():
     from types import SimpleNamespace
 
-    import private_agent.agent.runtime_f_integration as f
+    import agent.runtime_f_integration as f
 
     state = SimpleNamespace(blocked_tool_messages=[], capability_approved=False)
     console = SimpleNamespace(input=lambda *a, **k: "n")
@@ -134,7 +134,7 @@ def test_gate_capability_non_gated_pack():
 def test_gate_capability_coding_denied_noninteractive():
     from types import SimpleNamespace
 
-    import private_agent.agent.runtime_f_integration as f
+    import agent.runtime_f_integration as f
 
     state = SimpleNamespace(blocked_tool_messages=[], capability_approved=False)
     console = SimpleNamespace(input=lambda *a, **k: "y")
@@ -148,11 +148,11 @@ def test_gate_capability_coding_denied_noninteractive():
 def test_gate_capability_coding_approved_interactive(monkeypatch):
     from types import SimpleNamespace
 
-    import private_agent.agent.runtime_f_integration as f
+    import agent.runtime_f_integration as f
 
     # Force interactive tty
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    import private_agent.tools as tools_mod
+    import tools as tools_mod
 
     monkeypatch.setattr(tools_mod.get_tool_context(), "interactive", True)
 
@@ -180,8 +180,8 @@ def test_every_pack_tool_name_is_registered():
     the real tool objects rather than a hand-maintained list so a rename on
     either side fails here.
     """
-    import private_agent.tools as tools_mod
-    from private_agent import code_tasks
+    import code_tasks
+    import tools as tools_mod
 
     # Code-task tools are injected into AVAILABLE_TOOLS only for code-task turns.
     registered = set(tools_mod.AVAILABLE_TOOLS)

@@ -1,10 +1,10 @@
 """Unit coverage for the provider adapter layer (Part I)."""
 
-from private_agent.providers import all_presets, build_adapter
+from providers import all_presets, build_adapter
 
 
 def test_ollama_adapter_reports_formatted_hardware_status(monkeypatch):
-    from private_agent.hardware import status as hw_status
+    from hardware import status as hw_status
 
     seen = {}
 
@@ -36,7 +36,7 @@ def test_ollama_adapter_reports_formatted_hardware_status(monkeypatch):
 
 
 def test_ollama_adapter_hardware_status_degrades_without_raising(monkeypatch):
-    from private_agent.hardware import status as hw_status
+    from hardware import status as hw_status
 
     def exploding(*_args, **_kwargs):
         raise RuntimeError("no server")
@@ -57,7 +57,7 @@ def test_openai_compatible_adapter_has_no_standardized_hardware_api():
 
 
 def test_ollama_adapter_detect_running_degrades_without_raising(monkeypatch):
-    from private_agent.agent import local_runtimes
+    from agent import local_runtimes
 
     def exploding(*_args, **_kwargs):
         raise RuntimeError("discovery blew up")
@@ -70,7 +70,7 @@ def test_ollama_adapter_detect_running_degrades_without_raising(monkeypatch):
 
 
 def test_ollama_adapter_capabilities_degrade_without_raising(monkeypatch):
-    from private_agent.agent import model_capabilities
+    from agent import model_capabilities
 
     def exploding(*_args, **_kwargs):
         raise RuntimeError("probe blew up")

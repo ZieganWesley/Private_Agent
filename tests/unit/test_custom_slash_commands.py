@@ -1,4 +1,4 @@
-from private_agent.agent import interactive
+from agent import interactive
 
 
 def _patch_home(monkeypatch, home_root):

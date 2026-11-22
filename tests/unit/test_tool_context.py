@@ -4,8 +4,8 @@ from dataclasses import replace
 
 import pytest
 
-from private_agent import code_tasks
-from private_agent.tools import (
+import code_tasks
+from tools import (
     ToolContext,
     clear_schema_reads,
     get_tool_context,
@@ -144,7 +144,7 @@ def test_code_task_tools_degrade_when_no_task_is_active(monkeypatch):
 async def test_turn_tool_context_isolates_enabled_packs():
     import asyncio
 
-    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+    from tools import begin_turn_tool_context, reset_turn_tool_context
 
     async def turn(pack):
         token = begin_turn_tool_context()
@@ -163,7 +163,7 @@ async def test_turn_tool_context_isolates_enabled_packs():
 
 
 def test_turn_context_carries_task_state_but_not_enabled_packs():
-    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+    from tools import begin_turn_tool_context, reset_turn_tool_context
 
     outer = get_tool_context()
     token = begin_turn_tool_context()
@@ -187,7 +187,7 @@ def test_turn_context_carries_task_state_but_not_enabled_packs():
 async def test_interleaved_turns_keep_separate_enabled_packs():
     import asyncio
 
-    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+    from tools import begin_turn_tool_context, reset_turn_tool_context
 
     ready = {"first": asyncio.Event(), "second": asyncio.Event()}
     observed = {}
@@ -221,7 +221,7 @@ async def test_concurrent_turns_keep_separate_enabled_packs():
     """Concurrent turns must not share enabled packs or their base context."""
     import asyncio
 
-    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+    from tools import begin_turn_tool_context, reset_turn_tool_context
 
     bases = {}
     observed = {}
@@ -233,7 +233,7 @@ async def test_concurrent_turns_keep_separate_enabled_packs():
         try:
             get_tool_context().enabled_packs.add(pack)
             # Simulate enable_capability landing on this turn's context.
-            from private_agent.agent import capabilities as _caps
+            from agent import capabilities as _caps
 
             _caps.enable_capability(pack)
             ready_event = turn_events[name]
@@ -262,8 +262,8 @@ async def test_concurrent_turns_do_not_clobber_durable_fields():
     """Durable fields (task_id, ...) must not clobber between concurrent turns."""
     import asyncio
 
-    from private_agent.agent import runtime_f_integration as f
-    from private_agent.tools import get_tool_context
+    from agent import runtime_f_integration as f
+    from tools import get_tool_context
 
     observed = {}
 
@@ -311,7 +311,7 @@ async def test_concurrent_turns_do_not_clobber_durable_fields():
 async def test_worker_thread_tool_execution_sees_the_turn_context():
     import asyncio
 
-    from private_agent.tools import begin_turn_tool_context, reset_turn_tool_context
+    from tools import begin_turn_tool_context, reset_turn_tool_context
 
     token = begin_turn_tool_context()
     try:

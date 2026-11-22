@@ -5,7 +5,7 @@ import io
 from langchain_core.messages import ToolMessage
 from rich.console import Console
 
-from private_agent.agent import tool_display
+from agent import tool_display
 
 
 def test_argument_redaction_masks_nested_credentials():

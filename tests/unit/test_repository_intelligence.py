@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from private_agent.repository_intelligence import (
+from repository_intelligence import (
     AgentMetrics,
     ArchitectureMemory,
     build_repository_map,
@@ -19,7 +19,7 @@ from private_agent.repository_intelligence import (
     rank_memories,
     trace_execution_flow,
 )
-from private_agent.repository_intelligence.indexer import RepositoryIndex
+from repository_intelligence.indexer import RepositoryIndex
 
 
 def _sample_repo(root: Path) -> None:
@@ -166,7 +166,7 @@ def test_parallel_parse_preserves_order():
 
 
 def test_parallel_parse_falls_back_to_in_process(monkeypatch):
-    import private_agent.repository_intelligence.indexer as indexer_module
+    import repository_intelligence.indexer as indexer_module
 
     class _BrokenExecutor:
         def __init__(self, *args, **kwargs):
@@ -202,7 +202,7 @@ def test_parallel_parse_falls_back_to_in_process(monkeypatch):
 
 
 def test_import_target_and_identifier_helpers():
-    from private_agent.repository_intelligence.indexer import (
+    from repository_intelligence.indexer import (
         _extract_identifiers,
         _import_target,
     )

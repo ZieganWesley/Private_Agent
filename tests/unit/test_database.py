@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from private_agent.database import PersistentMemory
-from private_agent.tools import (
+from database import PersistentMemory
+from tools import (
     delete_chat_history_entry_from_sqlite,
     delete_chat_history_from_sqlite,
     read_chat_history_from_sqlite,
@@ -201,7 +201,7 @@ def test_task_pause_between_steps_survives_reopen_without_replaying_verified_wor
             sys.executable,
             "-c",
             "import json, sys; "
-            "from private_agent.database import PersistentMemory; "
+            "from database import PersistentMemory; "
             "memory = PersistentMemory(sys.argv[1]); "
             "task = memory.get_task(sys.argv[2]); "
             "print(json.dumps({'status': task['status'], "
@@ -364,7 +364,7 @@ def test_stale_task_expiry_clears_approval_but_preserves_recovery_state(temp_db)
             sys.executable,
             "-c",
             "import json, sys; "
-            "from private_agent.database import PersistentMemory; "
+            "from database import PersistentMemory; "
             "memory = PersistentMemory(sys.argv[1]); "
             "print(json.dumps(memory.mark_stale_tasks(30))); "
             "memory.close()",
@@ -392,7 +392,7 @@ def test_stale_task_expiry_clears_approval_but_preserves_recovery_state(temp_db)
 
 
 def test_failed_schema_migration_preserves_existing_database(tmp_path, monkeypatch):
-    import private_agent.database.connection as connection_module
+    import database.connection as connection_module
 
     db_path = str(tmp_path / "migration-failure.sqlite")
     connection = sqlite3.connect(db_path)
@@ -493,7 +493,7 @@ def test_future_schema_version_is_rejected_without_modifying_existing_data(tmp_p
 
 
 def test_task_resume_capsule_enforces_configured_size_limit(tmp_path, monkeypatch):
-    import private_agent.database.task_actions as actions_repository
+    import database.task_actions as actions_repository
 
     monkeypatch.setattr(actions_repository, "MAX_RESUME_STATE_CHARS", 256)
     memory = PersistentMemory(str(tmp_path / "resume-capsule-limit.sqlite"))
@@ -709,7 +709,7 @@ async def test_task_tool_call_is_not_run_when_action_journaling_fails(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "task-journal.sqlite"))
     task = memory.create_task_plan(
@@ -742,7 +742,7 @@ async def test_uncertain_task_action_blocks_retries_until_user_reconciles(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "task-action-recovery.sqlite"))
     task = memory.create_task_plan(
@@ -850,7 +850,7 @@ async def test_cancelled_task_tool_is_journaled_unknown_and_blocks_next_action(
     tmp_path,
     monkeypatch,
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     memory = PersistentMemory(str(tmp_path / "cancelled-action.sqlite"))
     task = memory.create_task_plan(
@@ -899,7 +899,7 @@ async def test_cancelled_task_tool_is_journaled_unknown_and_blocks_next_action(
             sys.executable,
             "-c",
             "import json, sys; "
-            "from private_agent.database import PersistentMemory; "
+            "from database import PersistentMemory; "
             "memory = PersistentMemory(sys.argv[1]); "
             "actions = memory.list_task_actions(sys.argv[2], unresolved_only=True); "
             "print(json.dumps([action['status'] for action in actions])); "
@@ -940,12 +940,12 @@ async def test_cancelled_task_tool_is_journaled_unknown_and_blocks_next_action(
 def test_table_schema_reports_constraints_and_blocks_uninspected_planner_writes(
     temp_db,
 ):
-    from private_agent.tools import (
+    from tools import (
         clear_schema_reads,
         get_tool_context,
         read_table_schema,
     )
-    from private_agent.tools import (
+    from tools import (
         create_task_plan as create_plan_tool,
     )
 
@@ -1247,7 +1247,7 @@ def test_learned_preferences_are_scoped_correctable_and_globally_disabled(temp_d
 
 
 def test_learned_item_expiry_review_and_configured_size_limit(temp_db, monkeypatch):
-    import private_agent.database.learning as learning_repository
+    import database.learning as learning_repository
 
     monkeypatch.setattr(learning_repository, "MAX_LEARNED_ITEM_CHARS", 12)
     memory = PersistentMemory(db_path=temp_db)
@@ -1415,7 +1415,7 @@ def test_sqlite_memory_reset_also_removes_persisted_task_state(temp_db):
 def test_memory_constructor_closes_connection_when_initialization_fails(
     tmp_path, monkeypatch
 ):
-    import private_agent.database.connection as connection_module
+    import database.connection as connection_module
 
     class BrokenConnection:
         closed = False
@@ -1484,7 +1484,7 @@ def test_memory_retention_prunes_messages_and_summaries(temp_db):
 
 
 def test_memory_summaries_are_bounded(temp_db, monkeypatch):
-    monkeypatch.setattr("private_agent.database.conversations.MAX_SUMMARY_CHARS", 12)
+    monkeypatch.setattr("database.conversations.MAX_SUMMARY_CHARS", 12)
     memory = PersistentMemory(db_path=temp_db)
     with pytest.raises(ValueError, match="configured 12-character limit"):
         memory.save_summary("session", "x" * 100)
@@ -1761,10 +1761,10 @@ def test_runtime_requires_typed_confirmation_for_selective_history_delete(
 ):
     from unittest.mock import MagicMock
 
-    from private_agent.sandbox.linux import SandboxManager
+    from sandbox.linux import SandboxManager
 
     SandboxManager.set_root(str(tmp_path))
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     memory = PersistentMemory(db_path=temp_db)
     memory.save_message("session-a", "human", "reviewed item")

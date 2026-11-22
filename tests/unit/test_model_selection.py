@@ -3,8 +3,8 @@
 import types
 from unittest.mock import MagicMock
 
-from private_agent.agent import model_selection
-from private_agent.agent.local_runtimes import LocalRuntime
+from agent import model_selection
+from agent.local_runtimes import LocalRuntime
 
 
 def test_effective_context_window_prefers_declared_value_within_limit(monkeypatch):

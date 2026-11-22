@@ -2,15 +2,15 @@ from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
-from private_agent.tools import (
+from tools import (
     _PublicOnlyAsyncHTTPTransport,
     _PublicOnlySyncHTTPTransport,
 )
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -26,13 +26,13 @@ except ImportError:
             return model
 
 
-from private_agent.hardware import (
+from hardware import (
     format_hardware_status,
     inspect_ollama_hardware,
     normalize_acceleration_mode,
     ollama_acceleration_options,
 )
-from private_agent.rag import (
+from rag import (
     initialize_knowledge_base,
 )
 
@@ -50,7 +50,7 @@ def test_hardware_acceleration_policy_options():
 
 
 def test_local_chat_model_applies_configured_acceleration_mode():
-    from private_agent.agent import model_selection
+    from agent import model_selection
 
     for mode, expected in (
         ("auto", {}),
@@ -59,9 +59,9 @@ def test_local_chat_model_applies_configured_acceleration_mode():
     ):
         with (
             patch(
-                "private_agent.agent.model_selection.HARDWARE_ACCELERATION_MODE", mode
+                "agent.model_selection.HARDWARE_ACCELERATION_MODE", mode
             ),
-            patch("private_agent.agent.model_selection.ChatOllama") as chat_model,
+            patch("agent.model_selection.ChatOllama") as chat_model,
         ):
             model_selection._make_chat_model(
                 "test-model",
@@ -82,8 +82,8 @@ def test_local_chat_model_applies_configured_acceleration_mode():
         )
 
     with (
-        patch("private_agent.agent.model_selection.HARDWARE_ACCELERATION_MODE", "auto"),
-        patch("private_agent.agent.model_selection.ChatOllama") as chat_model,
+        patch("agent.model_selection.HARDWARE_ACCELERATION_MODE", "auto"),
+        patch("agent.model_selection.ChatOllama") as chat_model,
     ):
         model_selection._make_chat_model(
             "test-model",
@@ -153,10 +153,10 @@ def test_rag_embeddings_receive_cpu_acceleration_policy(tmp_path, monkeypatch):
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "notes.txt").write_text("Local hardware policy test.", encoding="utf-8")
-    monkeypatch.setattr("private_agent.rag.indexing.HARDWARE_ACCELERATION_MODE", "cpu")
+    monkeypatch.setattr("rag.indexing.HARDWARE_ACCELERATION_MODE", "cpu")
     with (
-        patch("private_agent.rag.indexing.OllamaEmbeddings") as embeddings,
-        patch("private_agent.rag.indexing.Chroma") as chroma,
+        patch("rag.indexing.OllamaEmbeddings") as embeddings,
+        patch("rag.indexing.Chroma") as chroma,
     ):
         chroma.from_documents.return_value = MagicMock()
         assert initialize_knowledge_base(str(docs)) is not None

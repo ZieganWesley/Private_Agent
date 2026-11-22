@@ -5,8 +5,8 @@ import pathlib
 
 import pytest
 
-import private_agent.agent as agent_package
-from private_agent.agent import (
+import agent as agent_package
+from agent import (
     learning,
     memory_context,
     model_selection,
@@ -81,7 +81,7 @@ def test_agent_modules_stay_below_the_previous_monolith_size():
 def test_session_startup_and_provider_selection_are_separate_functions():
     import inspect
 
-    from private_agent.agent import session_types
+    from agent import session_types
 
     for helper in (
         runtime._prepare_session,

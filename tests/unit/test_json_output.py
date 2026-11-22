@@ -1,7 +1,7 @@
 import io
 import json
 
-from private_agent.ui import json_output
+from ui import json_output
 
 
 def test_emit_event_dict(monkeypatch):

@@ -1,6 +1,6 @@
 # UI Architecture
 
-The terminal UI for the Private Agent CLI lives in `src/private_agent/ui/`.
+The terminal UI for the Private Agent CLI lives in `src/ui/`.
 It is the **single owner** of all terminal chrome: status ribbons, spinners,
 turn summaries, and labelled notices. Business modules (in particular
 `agent/runtime.py`) must not call `console.print` for chrome; they go through
@@ -10,7 +10,7 @@ turn summaries, and labelled notices. Business modules (in particular
 
 | Surface | Module | Purpose |
 |---|---|---|
-| Shared console | `ui/console.py` | Re-exports the one `Console` + palettes/builders from `private_agent.ui.console`. |
+| Shared console | `ui/console.py` | Re-exports the one `Console` + palettes/builders from `ui.console`. |
 | Theme tokens | `ui/theme.py` | Glyphs (`GAUGE_FILLED`/`GAUGE_EMPTY`), widths, separators, `TURN_LABEL`, `NO_COLOR_ENV`. |
 | Context math | `ui/state.py` | `StatusState` (immutable snapshot), `context_percent`, `context_bar`, `context_style`, `context_state_line`. |
 | Ribbon | `ui/ribbon.py` | `status_ribbon(state, width=)` — the canonical `model=… \| context=… \| …` line. |
@@ -20,7 +20,7 @@ turn summaries, and labelled notices. Business modules (in particular
 | Facade | `ui/session_ui.py` | `SessionUI`: the only object the runtime talks to for chrome. |
 
 `agent/status.py` is a backward-compat shim that re-exports the above; new code
-should import from `private_agent.ui`.
+should import from `ui`.
 
 ## SessionUI contract
 
@@ -66,7 +66,7 @@ Call sites never branch on the mode; the mode is an internal detail of
    `console.print` for chrome. Passthroughs are `SessionUI.print` /
    `SessionUI.print_markup`.
 2. **One gauge.** `context_bar`, `GAUGE_FILLED`/`GAUGE_EMPTY`, `▰`/`▱` may
-   appear only under `src/private_agent/ui/` (enforced by
+   appear only under `src/ui/` (enforced by
    `tests/unit/test_ui_boundaries.py`).
 3. **One summary.** Each turn prints exactly one `[Turn]` line
    (`TURN_LABEL`), no `[Generation]`/`[Completed]`/`[Latency]`, no `Working`

@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage
 
-from private_agent.agent.session_stats import (
+from agent.session_stats import (
     SessionStats,
     build_stats_table,
     format_duration,

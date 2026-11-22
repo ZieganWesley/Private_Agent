@@ -11,8 +11,8 @@ from typing import get_type_hints
 
 import pytest
 
-from private_agent import config
-from private_agent.config.settings import (
+import config
+from config.settings import (
     DEFAULT_PATHS,
     DEFAULT_SYSTEM_PROMPT,
     DEFAULT_SYSTEM_PROMPT_PATH,
@@ -27,7 +27,7 @@ from private_agent.config.settings import (
     positive_int,
     resolve_config_values,
 )
-from private_agent.hardware import normalize_acceleration_mode
+from hardware import normalize_acceleration_mode
 
 NON_SETTINGS_EXPORTS = {
     "APP_CONFIG",

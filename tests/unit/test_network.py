@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from rich.console import Console
 
-from private_agent.agent import (
+from agent import (
     _make_online_chat_model,
     _online_request_failure,
     _validate_online_base_url,
@@ -14,7 +14,7 @@ from private_agent.agent import (
     model_selection,
     select_online_model,
 )
-from private_agent.tools import (
+from tools import (
     _get_limited_response,
     _PublicOnlyAsyncHTTPTransport,
     _PublicOnlyNetworkBackend,
@@ -27,12 +27,12 @@ from private_agent.tools import (
     load_configured_mcp_tools,
     validate_outbound_url,
 )
-from private_agent.tools import network as network_tools
+from tools import network as network_tools
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -69,7 +69,7 @@ def sync_mocked_resolver_with_async_backend(monkeypatch):
 
 
 def test_dns_cache_does_not_reuse_records_across_resolvers(monkeypatch):
-    from private_agent.tools.network import _PublicOnlySyncNetworkBackend
+    from tools.network import _PublicOnlySyncNetworkBackend
 
     backend = _PublicOnlySyncNetworkBackend()
     calls = []
@@ -100,7 +100,7 @@ def test_dns_cache_does_not_reuse_records_across_resolvers(monkeypatch):
 
 
 def test_internet_probe_uses_per_call_timeout_without_global_socket_mutation():
-    with patch("private_agent.tools.socket.create_connection") as connect:
+    with patch("tools.socket.create_connection") as connect:
         assert check_internet_connection("example.test", 443, 0.25) is True
         connect.assert_called_once()
         assert connect.call_args.kwargs["timeout"] == 0.25
@@ -144,7 +144,7 @@ def test_outbound_url_rejects_local_and_credentialed_destinations():
 
 def test_outbound_url_rejects_domains_resolving_to_private_addresses(monkeypatch):
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: [
             (2, 1, 6, "", ("10.0.0.12", 80)),
         ],
@@ -284,7 +284,7 @@ async def test_connect_backend_pins_validated_public_address(monkeypatch):
     connect = AsyncMock(return_value="connected")
     monkeypatch.setattr(backend._backend, "connect_tcp", connect)
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: [
             (2, 1, 6, "", ("1.1.1.1", 443)),
             (2, 1, 6, "", ("8.8.8.8", 443)),
@@ -298,7 +298,7 @@ async def test_connect_backend_pins_validated_public_address(monkeypatch):
 def test_sync_connect_timeout_budget_includes_dns(monkeypatch):
     import time
 
-    from private_agent.tools.network import _PublicOnlySyncNetworkBackend
+    from tools.network import _PublicOnlySyncNetworkBackend
 
     backend = _PublicOnlySyncNetworkBackend()
     observed = {}
@@ -356,7 +356,7 @@ async def test_connect_backend_falls_back_from_unavailable_localhost_ipv6(monkey
 
     monkeypatch.setattr(backend._backend, "connect_tcp", connect)
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: [
             (10, 1, 6, "", ("::1", 11434, 0, 0)),
             (2, 1, 6, "", ("127.0.0.1", 11434)),
@@ -372,7 +372,7 @@ async def test_connect_backend_rejects_mixed_public_private_dns(monkeypatch):
     connect = AsyncMock()
     monkeypatch.setattr(backend._backend, "connect_tcp", connect)
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: [
             (2, 1, 6, "", ("1.1.1.1", 443)),
             (2, 1, 6, "", ("10.0.0.5", 443)),
@@ -391,7 +391,7 @@ async def test_private_provider_transport_allows_only_explicit_private_literals(
     connect = AsyncMock(return_value="connected")
     monkeypatch.setattr(backend._backend, "connect_tcp", connect)
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda host, port, *args: [(2, 1, 6, "", (host, port))],
     )
     assert await backend.connect_tcp("192.168.1.20", 8080) == "connected"
@@ -402,7 +402,7 @@ async def test_private_provider_transport_allows_only_explicit_private_literals(
         ("169.254.169.254", "169.254.169.254"),
     ):
         monkeypatch.setattr(
-            "private_agent.tools.network._getaddrinfo_with_timeout",
+            "tools.network._getaddrinfo_with_timeout",
             lambda *args, address=resolved, **kwargs: [(2, 1, 6, "", (address, 443))],
         )
         with pytest.raises(OSError, match="non-public"):
@@ -430,7 +430,7 @@ async def test_real_http_transport_blocks_private_dns_results(
     server = await asyncio.start_server(respond, "127.0.0.1", 0)
     port = server.sockets[0].getsockname()[1]
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: [
             (
                 10 if ":" in private_address else 2,
@@ -508,7 +508,7 @@ async def test_http_redirect_to_local_network_is_rejected(monkeypatch):
     import httpx
 
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: [(2, 1, 6, "", ("93.184.216.34", 80))],
     )
     transport = httpx.MockTransport(
@@ -527,7 +527,7 @@ async def test_http_response_size_limit_is_enforced(monkeypatch):
     import httpx
 
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: [(2, 1, 6, "", ("93.184.216.34", 80))],
     )
     transport = httpx.MockTransport(
@@ -540,7 +540,7 @@ async def test_http_response_size_limit_is_enforced(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_http_total_timeout_releases_concurrency_slot(monkeypatch):
-    from private_agent import tools
+    import tools
 
     class SlowClient:
         def stream(self, *args, **kwargs):
@@ -553,13 +553,13 @@ async def test_http_total_timeout_releases_concurrency_slot(monkeypatch):
 
             return SlowResponse()
 
-    monkeypatch.setattr("private_agent.tools.network.NETWORK_REQUEST_TIMEOUT", 0.01)
+    monkeypatch.setattr("tools.network.NETWORK_REQUEST_TIMEOUT", 0.01)
 
     async def validate_url(url):
         return url
 
     monkeypatch.setattr(
-        "private_agent.tools.network._validate_outbound_url_async",
+        "tools.network._validate_outbound_url_async",
         validate_url,
     )
     with pytest.raises(asyncio.TimeoutError):
@@ -572,7 +572,7 @@ async def test_http_total_timeout_releases_concurrency_slot(monkeypatch):
 async def test_async_request_timeout_cancels_dns_validation(monkeypatch):
     import httpcore
 
-    from private_agent import tools
+    import tools
 
     cancelled = asyncio.Event()
 
@@ -584,11 +584,11 @@ async def test_async_request_timeout_cancels_dns_validation(monkeypatch):
             raise
 
     monkeypatch.setattr(
-        "private_agent.tools.network.NETWORK_REQUEST_TIMEOUT",
+        "tools.network.NETWORK_REQUEST_TIMEOUT",
         0.01,
     )
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_async_with_timeout",
+        "tools.network._getaddrinfo_async_with_timeout",
         stalled_resolver,
     )
     with pytest.raises((asyncio.TimeoutError, httpcore.ConnectTimeout)):
@@ -614,9 +614,9 @@ def test_failed_download_preserves_existing_destination(temp_workspace, monkeypa
         def __exit__(self, *args):
             return False
 
-    monkeypatch.setattr("private_agent.tools.web.has_internet_connection", lambda: True)
+    monkeypatch.setattr("tools.web.has_internet_connection", lambda: True)
     monkeypatch.setattr(
-        "private_agent.tools.web.public_only_sync_client",
+        "tools.web.public_only_sync_client",
         lambda **kwargs: FakeClient(),
     )
 
@@ -624,7 +624,7 @@ def test_failed_download_preserves_existing_destination(temp_workspace, monkeypa
         raise OSError("network dropped")
 
     monkeypatch.setattr(
-        "private_agent.tools.web._get_limited_response_sync", fail_fetch
+        "tools.web._get_limited_response_sync", fail_fetch
     )
     result = download_web_file.invoke(
         {
@@ -708,7 +708,7 @@ def test_online_model_uses_openai_compatible_client_with_session_key():
 
 
 def test_online_model_listing_uses_safe_transport_and_session_key(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     class FakeResponse:
         def raise_for_status(self):
@@ -761,7 +761,7 @@ def test_online_model_listing_uses_safe_transport_and_session_key(monkeypatch):
 def test_online_model_authentication_failure_is_redacted(monkeypatch):
     import httpx
 
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     class FakeResponse:
         status_code = 401
@@ -813,10 +813,10 @@ def test_online_model_authentication_failure_is_redacted(monkeypatch):
 @pytest.mark.asyncio
 async def test_network_tool_call_requires_runtime_authorization():
     with (
-        patch("private_agent.agent.runtime.ENABLE_WEB_RESEARCH", True),
-        patch("private_agent.agent.runtime.WEB_RESEARCH_CONSENT", "ask"),
+        patch("agent.runtime.ENABLE_WEB_RESEARCH", True),
+        patch("agent.runtime.WEB_RESEARCH_CONSENT", "ask"),
         patch(
-            "private_agent.agent.runtime.AVAILABLE_TOOLS", {"web_search": MagicMock()}
+            "agent.runtime.AVAILABLE_TOOLS", {"web_search": MagicMock()}
         ) as tools,
     ):
         result = await execute_tool_call(
@@ -829,7 +829,7 @@ async def test_network_tool_call_requires_runtime_authorization():
 def test_explicit_mcp_http_endpoints_are_peer_validated(monkeypatch):
     checked = []
     monkeypatch.setattr(
-        "private_agent.tools.network._resolve_validated_peer",
+        "tools.network._resolve_validated_peer",
         lambda host, port, allow_loopback: (
             checked.append((host, port, allow_loopback))
             or [__import__("ipaddress").ip_address("203.0.113.5")]
@@ -861,7 +861,7 @@ def test_mcp_http_transport_uses_pinned_client_factory(monkeypatch):
     adapter = types.ModuleType("langchain_mcp_adapters.client")
     adapter.MultiServerMCPClient = FakeMCPClient
     monkeypatch.setattr(
-        "private_agent.tools.network._resolve_validated_peer",
+        "tools.network._resolve_validated_peer",
         lambda host, port, allow_loopback: [
             __import__("ipaddress").ip_address("203.0.113.5")
         ],
@@ -897,10 +897,10 @@ def test_mcp_http_transport_uses_pinned_client_factory(monkeypatch):
 
 
 def test_explicit_endpoint_blocks_private_hostname_resolution(monkeypatch):
-    from private_agent import tools
+    import tools
 
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda host, port, *_args: ["10.0.0.7"],
     )
     with pytest.raises(OSError, match="non-public address"):
@@ -945,7 +945,7 @@ def test_duckduckgo_search_uses_bounded_pinned_http_client(monkeypatch):
             return FakeResponse()
 
     monkeypatch.setattr(
-        "private_agent.tools.network.validate_outbound_url", lambda url: url
+        "tools.network.validate_outbound_url", lambda url: url
     )
     result = _search_duckduckgo(
         "private agent",
@@ -957,7 +957,7 @@ def test_duckduckgo_search_uses_bounded_pinned_http_client(monkeypatch):
 
 
 def _configured_online_setup(monkeypatch, answers):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     seen = {}
 
@@ -1064,7 +1064,7 @@ def test_online_selection_allows_manual_entry_over_saved_config(monkeypatch):
 
 
 def test_online_permission_override_can_consent_to_tool_call_limits(monkeypatch):
-    from private_agent.config import DEFAULT_CONFIG
+    from config import DEFAULT_CONFIG
 
     assert DEFAULT_CONFIG["models"]["online_permission_override"] is False
     # Prompts: share-context n, model id handled by listing "model-a" -> "" ; no tool prompt.
@@ -1086,7 +1086,7 @@ def test_online_permission_override_can_decline_tool_call_limits(monkeypatch):
 
 
 def test_internet_check_is_cached_for_repeated_offline_calls(monkeypatch):
-    from private_agent import tools
+    import tools
 
     calls = []
     clock = [1000.0]

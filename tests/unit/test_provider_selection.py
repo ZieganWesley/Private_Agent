@@ -2,8 +2,8 @@
 
 from types import SimpleNamespace
 
-from private_agent.providers.adapters import ProviderPreset
-from private_agent.providers.selection import (
+from providers.adapters import ProviderPreset
+from providers.selection import (
     installed_but_idle,
     load_last_provider,
     match_runtime,
@@ -135,7 +135,7 @@ def test_requested_flags_read_the_environment(monkeypatch):
 
 
 def test_provider_loss_guidance_lists_reachable_alternatives():
-    from private_agent.agent.provider_resume import provider_loss_guidance
+    from agent.provider_resume import provider_loss_guidance
 
     runtimes = [
         SimpleNamespace(name="Ollama", models=("qwen3:8b",)),
@@ -153,7 +153,7 @@ def test_provider_loss_guidance_lists_reachable_alternatives():
 
 
 def test_provider_loss_guidance_handles_no_alternatives():
-    from private_agent.agent.provider_resume import provider_loss_guidance
+    from agent.provider_resume import provider_loss_guidance
 
     message = provider_loss_guidance(
         runtime_name="Ollama", session_id="s-1", discover=lambda: []
@@ -164,7 +164,7 @@ def test_provider_loss_guidance_handles_no_alternatives():
 
 
 def test_provider_loss_guidance_survives_a_failing_discovery():
-    from private_agent.agent.provider_resume import provider_loss_guidance
+    from agent.provider_resume import provider_loss_guidance
 
     def exploding():
         raise OSError("probe failed")
@@ -177,8 +177,8 @@ def test_provider_loss_guidance_survives_a_failing_discovery():
 
 
 def test_preset_probe_endpoints_cover_installed_presets_only():
-    from private_agent.providers.adapters import ProviderPreset
-    from private_agent.providers.selection import preset_probe_endpoints
+    from providers.adapters import ProviderPreset
+    from providers.selection import preset_probe_endpoints
 
     def installed():
         return True
@@ -219,8 +219,8 @@ def test_preset_probe_endpoints_cover_installed_presets_only():
 
 
 def test_preset_probe_endpoints_deduplicate_shared_default_ports():
-    from private_agent.providers.adapters import ProviderPreset
-    from private_agent.providers.selection import preset_probe_endpoints
+    from providers.adapters import ProviderPreset
+    from providers.selection import preset_probe_endpoints
 
     presets = [
         ProviderPreset(
@@ -239,8 +239,8 @@ def test_preset_probe_endpoints_deduplicate_shared_default_ports():
 
 
 def test_preset_probe_endpoints_tolerate_a_failing_install_check():
-    from private_agent.providers.adapters import ProviderPreset
-    from private_agent.providers.selection import preset_probe_endpoints
+    from providers.adapters import ProviderPreset
+    from providers.selection import preset_probe_endpoints
 
     def exploding():
         raise OSError("permission denied")

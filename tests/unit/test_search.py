@@ -6,7 +6,7 @@ import json
 import httpx
 import pytest
 
-from private_agent.tools import network, search, web
+from tools import network, search, web
 
 
 class _FakeResponse:

@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from private_agent import config
+import config
 
 
 def test_discover_project_config_paths(tmp_path):
@@ -52,7 +52,7 @@ def test_merge_project_config_overrides_base(tmp_path):
 
 
 def test_load_or_create_config_applies_project_config(tmp_path, monkeypatch):
-    config_path = tmp_path / ".private_agent.conf"
+    config_path = tmp_path / ".conf"
     monkeypatch.setattr(config, "CONFIG_FILE_PATH", config_path)
     monkeypatch.chdir(tmp_path)
     project_dir = tmp_path / ".private_agent"

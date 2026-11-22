@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from private_agent.agent import memory_context
+from agent import memory_context
 
 
 @pytest.mark.parametrize(
@@ -124,7 +124,7 @@ def test_prune_memory_retention_requires_a_skills_directory(tmp_path, monkeypatc
 
 
 def test_rag_followup_rewrite_combines_previous_query():
-    from private_agent.agent import memory_context
+    from agent import memory_context
 
     # Reset module-level state.
     memory_context._LAST_RAG_QUERY = "implement a parser"

@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from private_agent.agent import interactive
+from agent import interactive
 
 
 def test_format_conversation_export_renders_messages():

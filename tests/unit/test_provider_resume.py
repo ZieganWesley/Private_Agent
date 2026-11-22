@@ -2,13 +2,13 @@
 
 from types import SimpleNamespace
 
-from private_agent.agent.provider_resume import (
+from agent.provider_resume import (
     persist_provider_choice,
     provider_loss_guidance,
     provider_record_for_resume,
 )
-from private_agent.database import PersistentMemory
-from private_agent.providers.adapters import ProviderRecord
+from database import PersistentMemory
+from providers.adapters import ProviderRecord
 
 
 def _memory(tmp_path):
@@ -121,7 +121,7 @@ def test_provider_loss_guidance_handles_no_other_provider_and_discovery_errors()
 
 
 def test_capability_change_warnings_describe_what_a_resumed_model_lost():
-    from private_agent.agent.provider_resume import capability_change_warnings
+    from agent.provider_resume import capability_change_warnings
 
     previous = ProviderRecord(
         "ollama",
@@ -144,7 +144,7 @@ def test_capability_change_warnings_describe_what_a_resumed_model_lost():
 
 
 def test_capability_change_warnings_are_quiet_when_nothing_shrank():
-    from private_agent.agent.provider_resume import capability_change_warnings
+    from agent.provider_resume import capability_change_warnings
 
     previous = ProviderRecord(
         "ollama", "Ollama", "http://127.0.0.1:11434", "qwen3:8b", needs_tools=True
@@ -189,8 +189,8 @@ def test_persisting_a_weaker_provider_warns_about_the_lost_capabilities(tmp_path
 
 
 def _idle_provider(name="Ollama", start_hint="Run `ollama serve`."):
-    from private_agent.providers.adapters import ProviderPreset
-    from private_agent.providers.selection import IdleProvider
+    from providers.adapters import ProviderPreset
+    from providers.selection import IdleProvider
 
     return IdleProvider(
         preset=ProviderPreset(
@@ -217,7 +217,7 @@ class _Recorder:
 
 
 def test_start_offer_is_skipped_when_the_provider_is_not_installed():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     runtimes = [object()]
@@ -236,7 +236,7 @@ def test_start_offer_is_skipped_when_the_provider_is_not_installed():
 
 
 def test_start_offer_does_nothing_without_consent():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     started = []
@@ -263,7 +263,7 @@ def test_start_offer_does_nothing_without_consent():
 
 
 def test_start_offer_waits_for_the_restarted_provider():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     restarted = SimpleNamespace(
@@ -293,7 +293,7 @@ def test_start_offer_waits_for_the_restarted_provider():
 
 
 def test_start_offer_reports_a_failed_launch_and_a_provider_that_stays_down():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     result, matched = offer_provider_start(
@@ -330,7 +330,7 @@ def test_start_offer_reports_a_failed_launch_and_a_provider_that_stays_down():
 
 
 def test_start_offer_is_skipped_when_not_interactive():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     asked = []
@@ -352,7 +352,7 @@ def test_start_offer_is_skipped_when_not_interactive():
 
 
 def test_initial_phase_offers_installed_but_idle_runtimes():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     restarted = SimpleNamespace(
@@ -366,8 +366,8 @@ def test_initial_phase_offers_installed_but_idle_runtimes():
 
     idle_provider = _idle_provider("LM Studio", "start LM Studio")
     # Rebuild idle provider with openai-compatible preset for realism.
-    from private_agent.providers.adapters import ProviderPreset
-    from private_agent.providers.selection import IdleProvider
+    from providers.adapters import ProviderPreset
+    from providers.selection import IdleProvider
 
     idle_provider = IdleProvider(
         preset=ProviderPreset(
@@ -397,8 +397,8 @@ def test_initial_phase_offers_installed_but_idle_runtimes():
 
 
 def _openai_idle(name="LM Studio", start_hint="start LM Studio"):
-    from private_agent.providers.adapters import ProviderPreset
-    from private_agent.providers.selection import IdleProvider
+    from providers.adapters import ProviderPreset
+    from providers.selection import IdleProvider
 
     return IdleProvider(
         preset=ProviderPreset(
@@ -413,7 +413,7 @@ def _openai_idle(name="LM Studio", start_hint="start LM Studio"):
 
 
 def test_initial_phase_declines_without_starting():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     started = []
@@ -436,7 +436,7 @@ def test_initial_phase_declines_without_starting():
 
 
 def test_initial_phase_reports_failed_launch():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
 
@@ -457,7 +457,7 @@ def test_initial_phase_reports_failed_launch():
 
 
 def test_initial_phase_restarts_after_consent():
-    from private_agent.agent.provider_resume import offer_provider_start
+    from agent.provider_resume import offer_provider_start
 
     console = _Recorder()
     restarted = SimpleNamespace(

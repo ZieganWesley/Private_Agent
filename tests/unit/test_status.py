@@ -3,7 +3,7 @@
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk
 
-from private_agent.agent import status
+from agent import status
 
 
 class FakeStatus:

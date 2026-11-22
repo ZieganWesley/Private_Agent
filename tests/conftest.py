@@ -5,8 +5,8 @@ from collections import Counter
 
 import pytest
 
-from private_agent.sandbox import SandboxManager
-from private_agent.tools import get_tool_context
+from sandbox import SandboxManager
+from tools import get_tool_context
 
 _TEST_CATEGORIES = {
     "test_agent_runtime": "Agent runtime",
@@ -118,7 +118,7 @@ def temp_workspace():
 
 
 def _sandbox_skip_reason():
-    from private_agent.code_tasks import isolation_unavailable_reason
+    from code_tasks import isolation_unavailable_reason
 
     return isolation_unavailable_reason()
 

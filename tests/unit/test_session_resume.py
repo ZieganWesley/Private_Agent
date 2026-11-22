@@ -4,12 +4,12 @@ import sqlite3
 
 import pytest
 
-from private_agent.agent.session_resume import (
+from agent.session_resume import (
     SessionResumeError,
     resolve_session_id,
     take_over_session_task_lease,
 )
-from private_agent.database import PersistentMemory
+from database import PersistentMemory
 
 
 @pytest.fixture

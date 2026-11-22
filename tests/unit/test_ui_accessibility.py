@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from rich.console import Console
 
-from private_agent.ui import SessionUI
-from private_agent.ui.ribbon import status_ribbon
-from private_agent.ui.state import StatusState
+from ui import SessionUI
+from ui.ribbon import status_ribbon
+from ui.state import StatusState
 
 
 def test_no_color_output_has_no_ansi_escapes(monkeypatch):
@@ -54,7 +54,7 @@ def test_spinner_render_includes_phase_when_accessible(monkeypatch):
     monkeypatch.setenv("PRIVATE_AGENT_ACCESSIBLE", "1")
     from rich.console import Console
 
-    from private_agent.ui.spinner import StatusIndicator
+    from ui.spinner import StatusIndicator
 
     console = Console(record=True)
     indicator = StatusIndicator("Waiting", phase="thinking", console=console)

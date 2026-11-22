@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from private_agent.agent.model_capabilities import (
+from agent.model_capabilities import (
     capabilities_from_family,
     capabilities_from_llamacpp_props,
     capabilities_from_model_entry,

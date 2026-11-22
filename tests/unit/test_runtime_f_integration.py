@@ -1,4 +1,4 @@
-from private_agent.agent import runtime_f_integration
+from agent import runtime_f_integration
 
 
 def test_is_plan_complete_steers():
@@ -12,7 +12,7 @@ def test_is_plan_complete_steers():
 
 
 def test_begin_turn_isolates_and_restores_enabled_packs():
-    from private_agent.tools import get_tool_context
+    from tools import get_tool_context
 
     outer = get_tool_context()
     outer.enabled_packs.add("Research")

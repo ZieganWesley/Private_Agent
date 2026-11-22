@@ -2,7 +2,7 @@ import asyncio
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from private_agent.agent.compaction import (
+from agent.compaction import (
     compact_history,
     compact_loop_messages,
     messages_tokens,
@@ -119,7 +119,7 @@ class RecordingIndicator:
 
 
 def test_summarizing_context_shows_a_live_status_spinner(monkeypatch):
-    from private_agent.agent import compaction
+    from agent import compaction
 
     RecordingIndicator.created = []
     monkeypatch.setattr(compaction, "StatusIndicator", RecordingIndicator)
@@ -142,7 +142,7 @@ def test_summarizing_context_shows_a_live_status_spinner(monkeypatch):
 
 
 def test_summary_spinner_stops_when_the_model_fails(monkeypatch):
-    from private_agent.agent import compaction
+    from agent import compaction
 
     RecordingIndicator.created = []
     monkeypatch.setattr(compaction, "StatusIndicator", RecordingIndicator)

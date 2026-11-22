@@ -9,19 +9,19 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from rich.console import Console
 
-from private_agent.agent import (
+from agent import (
     _build_bounded_user_input,
     _token_count,
     format_retrieved_citations,
     memory_context,
     trim_history_to_context_budget,
 )
-from private_agent.database import PersistentMemory
+from database import PersistentMemory
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -37,17 +37,17 @@ except ImportError:
             return model
 
 
-from private_agent.rag import (
+from rag import (
     HybridRAGRetriever,
     initialize_knowledge_base,
 )
-from private_agent.rag.indexing import (
+from rag.indexing import (
     ChunkingSettings,
     _read_index_state,
     _split_into_chunks,
     _write_index_state_atomic,
 )
-from private_agent.rag.retrieval import _tokenize
+from rag.retrieval import _tokenize
 
 console = Console()
 
@@ -63,7 +63,7 @@ def test_context_budget_preserves_newest_messages():
 
 
 def test_prompt_tokenizer_fallback_is_traceable_without_prompt_content(monkeypatch):
-    from private_agent.agent import prompts
+    from agent import prompts
 
     events = []
 
@@ -113,7 +113,7 @@ def test_context_budget_keeps_query_and_bounds_local_context():
 def test_context_budget_includes_system_prompt_and_bounds_long_query():
     from langchain_core.messages import SystemMessage
 
-    from private_agent.agent.prompts import calculate_prompt_budgets
+    from agent.prompts import calculate_prompt_budgets
 
     system_prompts = [SystemMessage(content="rules " * 100)]
     budget, output_budget = calculate_prompt_budgets(
@@ -153,7 +153,7 @@ def test_rag_chunker_splits_long_documents_with_overlap():
 
 
 def test_reset_knowledge_base_removes_only_configured_index(tmp_path):
-    from private_agent.rag import reset_knowledge_base
+    from rag import reset_knowledge_base
 
     index = tmp_path / "chroma"
     index.mkdir()
@@ -167,7 +167,7 @@ def test_reset_knowledge_base_removes_only_configured_index(tmp_path):
 
 
 def test_reset_knowledge_base_refuses_symlinks_and_protected_paths(tmp_path):
-    from private_agent.rag import reset_knowledge_base
+    from rag import reset_knowledge_base
 
     target = tmp_path / "target"
     target.mkdir()
@@ -181,7 +181,7 @@ def test_reset_knowledge_base_refuses_symlinks_and_protected_paths(tmp_path):
 
 
 def test_local_data_reset_requires_typed_confirmation(monkeypatch, tmp_path):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     index = tmp_path / "chroma"
     index.mkdir()
@@ -203,7 +203,7 @@ def test_local_data_reset_requires_typed_confirmation(monkeypatch, tmp_path):
 
 
 def test_local_data_reset_clears_both_stores_after_confirmation(monkeypatch, tmp_path):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     index = tmp_path / "chroma"
     index.mkdir()
@@ -222,8 +222,8 @@ def test_local_data_reset_clears_both_stores_after_confirmation(monkeypatch, tmp
     memory.close()
 
 
-@patch("private_agent.rag.indexing.OllamaEmbeddings")
-@patch("private_agent.rag.indexing.Chroma")
+@patch("rag.indexing.OllamaEmbeddings")
+@patch("rag.indexing.Chroma")
 def test_rag_initialization_mocked(mock_chroma_class, mock_embeddings_class, tmp_path):
     doc_dir = tmp_path / "docs"
     doc_dir.mkdir()
@@ -247,7 +247,7 @@ def test_rag_initialization_with_invalid_or_empty_paths():
 
 
 @patch(
-    "private_agent.rag.indexing.OllamaEmbeddings",
+    "rag.indexing.OllamaEmbeddings",
     side_effect=Exception("Connection refused"),
 )
 def test_rag_embedding_failure_fallback(mock_embeddings_class):
@@ -262,7 +262,7 @@ def test_rag_corrupt_index_state_fails_closed_before_embedding(tmp_path):
     index.mkdir()
     state_path = index / ".index_state.json"
     state_path.write_text("{broken", encoding="utf-8")
-    with patch("private_agent.rag.indexing.OllamaEmbeddings") as embeddings:
+    with patch("rag.indexing.OllamaEmbeddings") as embeddings:
         assert initialize_knowledge_base(str(docs), index_path=str(index)) is None
     embeddings.assert_not_called()
     assert state_path.read_text(encoding="utf-8") == "{broken"
@@ -277,12 +277,12 @@ def test_rag_guided_recovery_preserves_corrupt_index(tmp_path, monkeypatch):
     (index / ".index_state.json").write_text("{bad", encoding="utf-8")
     (index / "chroma.sqlite3").write_text("preserve", encoding="utf-8")
     monkeypatch.setattr(
-        "private_agent.rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
+        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
     )
     vectorstore = MagicMock()
-    monkeypatch.setattr("private_agent.rag.indexing.Chroma", MagicMock())
+    monkeypatch.setattr("rag.indexing.Chroma", MagicMock())
     monkeypatch.setattr(
-        "private_agent.rag.indexing.Chroma.from_documents",
+        "rag.indexing.Chroma.from_documents",
         MagicMock(return_value=vectorstore),
     )
 
@@ -303,16 +303,16 @@ def test_rag_limits_file_size_and_keeps_state_write_atomic(tmp_path, monkeypatch
     docs.mkdir()
     (docs / "large.txt").write_text("this is larger than allowed", encoding="utf-8")
     index = tmp_path / "index"
-    monkeypatch.setattr("private_agent.rag.indexing.RAG_MAX_FILE_BYTES", 4)
+    monkeypatch.setattr("rag.indexing.RAG_MAX_FILE_BYTES", 4)
 
     class EmptyVectorStore:
         def __init__(self, **kwargs):
             pass
 
     monkeypatch.setattr(
-        "private_agent.rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
+        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
     )
-    monkeypatch.setattr("private_agent.rag.indexing.Chroma", EmptyVectorStore)
+    monkeypatch.setattr("rag.indexing.Chroma", EmptyVectorStore)
     retriever = initialize_knowledge_base(str(docs), index_path=str(index))
     assert retriever is not None
     assert _read_index_state(index / ".index_state.json") == {}
@@ -322,7 +322,7 @@ def test_rag_limits_file_size_and_keeps_state_write_atomic(tmp_path, monkeypatch
     state_path.write_text(original_state, encoding="utf-8")
     with (
         patch(
-            "private_agent.rag.indexing.os.replace", side_effect=OSError("disk error")
+            "rag.indexing.os.replace", side_effect=OSError("disk error")
         ),
         pytest.raises(OSError, match="disk error"),
     ):
@@ -355,9 +355,9 @@ def test_rag_vector_failure_does_not_advance_index_state(tmp_path, monkeypatch):
             raise RuntimeError("embedding write failed")
 
     monkeypatch.setattr(
-        "private_agent.rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
+        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
     )
-    monkeypatch.setattr("private_agent.rag.indexing.Chroma", FailingVectorStore)
+    monkeypatch.setattr("rag.indexing.Chroma", FailingVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is None
     assert _read_index_state(state_path) == old_state
 
@@ -365,7 +365,7 @@ def test_rag_vector_failure_does_not_advance_index_state(tmp_path, monkeypatch):
 def test_rag_modified_and_removed_sources_update_vector_store_and_state(
     tmp_path, monkeypatch
 ):
-    from private_agent.rag import indexing
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -415,7 +415,7 @@ def test_rag_modified_and_removed_sources_update_vector_store_and_state(
 def test_rag_corrupt_vector_database_fails_closed_without_advancing_state(
     tmp_path, monkeypatch
 ):
-    from private_agent.rag import indexing
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -443,7 +443,7 @@ def test_rag_corrupt_vector_database_fails_closed_without_advancing_state(
 def test_rag_corrupt_vector_database_can_be_explicitly_preserved_and_rebuilt(
     tmp_path, monkeypatch
 ):
-    from private_agent.rag import indexing
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -500,7 +500,7 @@ def test_rag_corrupt_vector_database_can_be_explicitly_preserved_and_rebuilt(
 def test_rag_partial_vector_update_requires_confirmation_then_rebuilds(
     tmp_path, monkeypatch
 ):
-    from private_agent.rag import indexing
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -571,8 +571,8 @@ def test_rag_enforces_corpus_byte_limit(tmp_path, monkeypatch):
     first.write_text("abc", encoding="utf-8")
     second.write_text("def", encoding="utf-8")
     index = tmp_path / "index"
-    monkeypatch.setattr("private_agent.rag.indexing.RAG_MAX_FILE_BYTES", 10)
-    monkeypatch.setattr("private_agent.rag.indexing.RAG_MAX_CORPUS_BYTES", 4)
+    monkeypatch.setattr("rag.indexing.RAG_MAX_FILE_BYTES", 10)
+    monkeypatch.setattr("rag.indexing.RAG_MAX_CORPUS_BYTES", 4)
 
     class RecordingVectorStore:
         @classmethod
@@ -581,9 +581,9 @@ def test_rag_enforces_corpus_byte_limit(tmp_path, monkeypatch):
             return cls()
 
     monkeypatch.setattr(
-        "private_agent.rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
+        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
     )
-    monkeypatch.setattr("private_agent.rag.indexing.Chroma", RecordingVectorStore)
+    monkeypatch.setattr("rag.indexing.Chroma", RecordingVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is not None
     assert RecordingVectorStore.sources == {str(first.resolve())}
     assert set(_read_index_state(index / ".index_state.json")) == {str(first.resolve())}
@@ -597,8 +597,8 @@ def test_rag_enforces_pdf_page_and_document_chunk_limits(tmp_path, monkeypatch):
     index = tmp_path / "index"
     index.mkdir()
     (index / "chroma.sqlite3").touch()
-    monkeypatch.setattr("private_agent.rag.indexing.RAG_MAX_PDF_PAGES", 1)
-    monkeypatch.setattr("private_agent.rag.indexing.RAG_MAX_DOCUMENTS", 1)
+    monkeypatch.setattr("rag.indexing.RAG_MAX_PDF_PAGES", 1)
+    monkeypatch.setattr("rag.indexing.RAG_MAX_DOCUMENTS", 1)
     pdf_module = types.ModuleType("pypdf")
     pdf_module.PdfReader = lambda path: types.SimpleNamespace(
         pages=[object(), object()]
@@ -613,9 +613,9 @@ def test_rag_enforces_pdf_page_and_document_chunk_limits(tmp_path, monkeypatch):
             return {"ids": []}
 
     monkeypatch.setattr(
-        "private_agent.rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
+        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
     )
-    monkeypatch.setattr("private_agent.rag.indexing.Chroma", EmptyVectorStore)
+    monkeypatch.setattr("rag.indexing.Chroma", EmptyVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is not None
     assert _read_index_state(index / ".index_state.json") == {}
 
@@ -701,9 +701,9 @@ def _capture_indexing(monkeypatch):
             return MagicMock()
 
     monkeypatch.setattr(
-        "private_agent.rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
+        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
     )
-    monkeypatch.setattr("private_agent.rag.indexing.Chroma", RecordingStore)
+    monkeypatch.setattr("rag.indexing.Chroma", RecordingStore)
     return captured
 
 
@@ -762,7 +762,7 @@ def test_rag_indexes_sqlite_databases_read_only(tmp_path, monkeypatch):
 
 
 def test_knowledge_base_signature_changes_with_new_or_updated_files(tmp_path):
-    from private_agent.rag import knowledge_base_signature
+    from rag import knowledge_base_signature
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -783,7 +783,7 @@ def test_knowledge_base_signature_changes_with_new_or_updated_files(tmp_path):
 def test_tokenizer_uses_bundled_vocabulary_without_network(monkeypatch, tmp_path):
     import tiktoken.load
 
-    from private_agent.agent import prompts
+    from agent import prompts
 
     def no_network(*_args, **_kwargs):
         raise AssertionError("Tokenizer vocabulary must not be downloaded.")
@@ -801,7 +801,7 @@ def test_tokenizer_uses_bundled_vocabulary_without_network(monkeypatch, tmp_path
 
 
 def test_tokenizer_fallback_warns_visibly(monkeypatch, capsys):
-    from private_agent.agent import prompts
+    from agent import prompts
 
     monkeypatch.setattr(prompts, "_TOKENIZER_FALLBACKS_REPORTED", set())
     monkeypatch.setattr(prompts, "log_event", lambda *_a, **_k: None)
@@ -812,7 +812,7 @@ def test_tokenizer_fallback_warns_visibly(monkeypatch, capsys):
 
 
 def test_initialize_knowledge_base_creates_missing_folder(tmp_path):
-    from private_agent.rag import indexing
+    from rag import indexing
 
     missing = tmp_path / "does_not_exist" / "rag"
     assert not missing.exists()
@@ -821,7 +821,7 @@ def test_initialize_knowledge_base_creates_missing_folder(tmp_path):
 
 
 def test_embedding_signature_records_provider_model_and_endpoint(monkeypatch):
-    from private_agent.rag import indexing
+    from rag import indexing
 
     monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "ollama")
     monkeypatch.setattr(indexing, "EMBEDDING_MODEL", "nomic-embed-text")
@@ -840,7 +840,7 @@ def test_embedding_signature_records_provider_model_and_endpoint(monkeypatch):
 
 
 def test_changing_the_embedder_rebuilds_the_whole_index(tmp_path, monkeypatch, capsys):
-    from private_agent.rag import indexing
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -895,8 +895,8 @@ def test_changing_the_embedder_rebuilds_the_whole_index(tmp_path, monkeypatch, c
 def test_embeddings_can_come_from_an_openai_compatible_adapter(tmp_path, monkeypatch):
     from types import SimpleNamespace
 
-    from private_agent.providers import adapters
-    from private_agent.rag import indexing
+    from providers import adapters
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -928,8 +928,8 @@ def test_embeddings_can_come_from_an_openai_compatible_adapter(tmp_path, monkeyp
 
 
 def test_missing_openai_compatible_embedding_client_fails_closed(tmp_path, monkeypatch):
-    from private_agent.providers import adapters
-    from private_agent.rag import indexing
+    from providers import adapters
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()
@@ -953,8 +953,8 @@ def test_remote_embedding_endpoint_warns_before_sending_chunks(
 ):
     from types import SimpleNamespace
 
-    from private_agent.providers import adapters
-    from private_agent.rag import indexing
+    from providers import adapters
+    from rag import indexing
 
     docs = tmp_path / "docs"
     docs.mkdir()

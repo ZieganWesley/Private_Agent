@@ -1,7 +1,7 @@
 import asyncio
 
-from private_agent.sandbox import SandboxManager
-from private_agent.tools import get_tool_context, set_tool_context, subagents
+from sandbox import SandboxManager
+from tools import get_tool_context, set_tool_context, subagents
 
 
 def test_run_subagent_requires_runner(tmp_path):

@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from private_agent.core.contracts import (
+from core.contracts import (
     Evidence,
     ExecutionError,
     MemoryRecord,
@@ -15,7 +15,7 @@ from private_agent.core.contracts import (
     ToolCall,
     ToolResult,
 )
-from private_agent.core.plugins import PluginContext, PluginManifest, ResourceBudget
+from core.plugins import PluginContext, PluginManifest, ResourceBudget
 
 
 def test_model_contracts_keep_unknown_capabilities_explicit():

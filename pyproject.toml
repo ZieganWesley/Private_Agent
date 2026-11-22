@@ -35,7 +35,7 @@ dependencies = [
 ]
 
 [project.scripts]
-private-agent = "private_agent.cli:main"
+private-agent = "cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -64,13 +64,16 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
 
+[tool.setuptools]
+py-modules = ["cli", "__main__"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["private_agent", "private_agent.*"]
+include = ["*", "*.*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-private_agent = ["resources/*.md", "resources/tiktoken/*"]
+resources = ["*.md", "tiktoken/*"]
 
 [tool.ruff]
 line-length = 88
@@ -83,6 +86,6 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 # Imports after the shared policy helpers are intentional (circular dependency).
-"src/private_agent/tools/__init__.py" = ["E402"]
+"src/tools/__init__.py" = ["E402"]
 # Tests may assert on arbitrary failure, so blind catches there are deliberate.
 "tests/**" = ["BLE001"]

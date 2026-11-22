@@ -3,8 +3,8 @@ from unittest.mock import patch
 
 import pytest
 
-from private_agent.agent import runtime
-from private_agent.tools import (
+from agent import runtime
+from tools import (
     AVAILABLE_TOOLS,
     LOCAL_ONLY_NETWORK_TOOL_NAMES,
     NETWORK_TOOL_NAMES,
@@ -196,7 +196,7 @@ def test_online_permission_override_enables_device_tools(monkeypatch):
 def test_format_weather_uses_each_days_own_values():
     from datetime import date
 
-    from private_agent.tools.location import format_weather
+    from tools.location import format_weather
 
     payload = {
         "daily": {

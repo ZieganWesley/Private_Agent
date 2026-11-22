@@ -4,9 +4,9 @@ import pathlib
 
 import pytest
 
-from private_agent.code_tasks import snapshots
-from private_agent.sandbox import SandboxManager, create_hitl_snapshot
-from private_agent.tools import (
+from code_tasks import snapshots
+from sandbox import SandboxManager, create_hitl_snapshot
+from tools import (
     delete_workspace_file,
     edit_local_file,
     get_tool_context,

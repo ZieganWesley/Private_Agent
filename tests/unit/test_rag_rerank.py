@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from private_agent.rag.retrieval import HybridRAGRetriever
+from rag.retrieval import HybridRAGRetriever
 
 
 def test_rerank_uses_embeddings_when_available():

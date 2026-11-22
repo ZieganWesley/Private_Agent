@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from private_agent.rag.retrieval import HybridRAGRetriever
+from rag.retrieval import HybridRAGRetriever
 
 
 def _doc(text, collection):

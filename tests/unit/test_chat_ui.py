@@ -2,7 +2,7 @@ from io import StringIO
 
 from rich.console import Console
 
-from private_agent.ui.chat_ui import ChatTranscript, render_chat_message
+from ui.chat_ui import ChatTranscript, render_chat_message
 
 
 def test_chat_transcript_renders_messages():
@@ -39,7 +39,7 @@ def test_chat_transcript_render_budget():
 def test_chat_ui_wired_into_interactive_flow():
     from pathlib import Path
 
-    source = Path("src/private_agent/agent/runtime.py").read_text(encoding="utf-8")
+    source = Path("src/agent/runtime.py").read_text(encoding="utf-8")
     assert "ChatTranscript" in source
     assert "chat_transcript.add_message" in source
     assert "chat_transcript.stream_chunk" in source

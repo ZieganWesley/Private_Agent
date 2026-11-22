@@ -3,12 +3,12 @@ import sys
 
 import pytest
 
-from private_agent import cli
+import cli
 
 
 def test_verbose_startup_flag_is_forwarded(monkeypatch):
-    from private_agent.agent import runtime
-    from private_agent.utils import run_logging
+    from agent import runtime
+    from utils import run_logging
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--verbose-startup"])
@@ -39,8 +39,8 @@ def test_verbose_startup_flag_is_forwarded(monkeypatch):
 
 
 def test_resume_flags_are_forwarded(monkeypatch):
-    from private_agent.agent import runtime
-    from private_agent.utils import run_logging
+    from agent import runtime
+    from utils import run_logging
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--resume", "session_abc"])
@@ -58,8 +58,8 @@ def test_resume_flags_are_forwarded(monkeypatch):
 
 
 def test_continue_flag_is_forwarded(monkeypatch):
-    from private_agent.agent import runtime
-    from private_agent.utils import run_logging
+    from agent import runtime
+    from utils import run_logging
 
     received = []
     monkeypatch.setattr(sys, "argv", ["private-agent", "--continue"])
@@ -88,16 +88,16 @@ def test_resume_and_continue_are_mutually_exclusive(monkeypatch):
 
 
 def _patch_database(monkeypatch, database_path):
-    from private_agent.database import PersistentMemory
+    from database import PersistentMemory
 
     monkeypatch.setattr(
-        "private_agent.database.PersistentMemory",
+        "database.PersistentMemory",
         lambda: PersistentMemory(str(database_path)),
     )
 
 
 def test_list_sessions_prints_saved_sessions(monkeypatch, capsys, tmp_path):
-    from private_agent.database import PersistentMemory
+    from database import PersistentMemory
 
     database_path = tmp_path / "sessions.sqlite"
     memory = PersistentMemory(str(database_path))
@@ -128,7 +128,7 @@ def test_list_sessions_reports_an_empty_database(monkeypatch, capsys, tmp_path):
 
 
 def test_list_sessions_does_not_start_the_agent(monkeypatch, tmp_path):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     started = []
     _patch_database(monkeypatch, tmp_path / "empty.sqlite")
@@ -146,7 +146,7 @@ def test_list_sessions_does_not_start_the_agent(monkeypatch, tmp_path):
 def test_offline_environment_is_set_at_startup_not_import(monkeypatch):
     import importlib
 
-    from private_agent import config
+    import config
 
     monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
     monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
@@ -178,8 +178,8 @@ def test_posix_platforms_start_normally(monkeypatch):
 
 
 def test_config_flag_sets_config_path_environment(monkeypatch, tmp_path):
-    from private_agent.agent import runtime
-    from private_agent.utils import run_logging
+    from agent import runtime
+    from utils import run_logging
 
     seen = []
     custom = str(tmp_path / "custom.conf")
@@ -201,8 +201,8 @@ def test_config_flag_sets_config_path_environment(monkeypatch, tmp_path):
 
 
 def test_end_of_input_at_a_startup_prompt_exits_cleanly(monkeypatch, capsys):
-    from private_agent.agent import runtime
-    from private_agent.utils import run_logging
+    from agent import runtime
+    from utils import run_logging
 
     def closed_stdin(**_kwargs):
         raise EOFError
@@ -221,8 +221,8 @@ def test_end_of_input_at_a_startup_prompt_exits_cleanly(monkeypatch, capsys):
 
 
 def test_startup_banner_prints(monkeypatch, capsys):
-    from private_agent.agent import runtime
-    from private_agent.utils import run_logging
+    from agent import runtime
+    from utils import run_logging
 
     monkeypatch.setattr("sys.argv", ["private-agent"])
     monkeypatch.setattr(run_logging, "start_debug_logging", lambda: None)

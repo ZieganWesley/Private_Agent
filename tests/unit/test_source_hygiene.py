@@ -1,13 +1,10 @@
 """Guards that production code never branches on the test runner (issue A3)."""
 
 import ast
-import inspect
 import pathlib
 import re
 
-import private_agent
-
-SOURCE_ROOT = pathlib.Path(inspect.getfile(private_agent)).parent
+SOURCE_ROOT = pathlib.Path("src")
 
 TEST_RUNNER_MARKERS = (
     '"pytest" in sys.modules',

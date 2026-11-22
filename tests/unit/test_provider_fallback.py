@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from private_agent.agent.provider_fallback import (
+from agent.provider_fallback import (
     _recover_on_another_provider,
     next_local_provider,
 )
@@ -89,7 +89,7 @@ def test_recover_on_another_provider_returns_none_when_declined():
 
 
 def test_recover_on_another_provider_retries_and_persists_on_accept(monkeypatch):
-    from private_agent.agent import provider_fallback
+    from agent import provider_fallback
 
     console_messages = []
     console = SimpleNamespace(

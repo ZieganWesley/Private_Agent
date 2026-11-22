@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 
-from private_agent.providers.identify import identify_server
+from providers.identify import identify_server
 
 
 class _FakeResponse:
@@ -92,7 +92,7 @@ def test_identification_never_raises_when_probes_fail():
 
 
 def test_discovery_renames_a_runtime_from_its_responses(monkeypatch):
-    from private_agent.agent import local_runtimes
+    from agent import local_runtimes
 
     routes = {
         "http://127.0.0.1:8080/v1/models": {"data": [{"id": "gguf-model"}]},

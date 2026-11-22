@@ -36,9 +36,9 @@ B1-B3, B4-B6 and B8/B9 pull requests, #28, #29 and #30, were merged)
 
 ### A1. Very large modules (highest priority)
 
-- `src/private_agent/agent/runtime.py` was 6,507 lines with
+- `src/agent/runtime.py` was 6,507 lines with
   `_run_agent_cli_session` at about 2,600 lines in one function.
-- `src/private_agent/database/memory.py` is 2,926 lines in one
+- `src/database/memory.py` is 2,926 lines in one
   `PersistentMemory` class.
 - **Partly fixed:** `runtime.py` was split into focused modules that keep
   their own behaviour and tests: `tool_display.py` (186 lines),
@@ -80,13 +80,13 @@ class for each table.
 
 ### A2. Settings loaded at import time as global constants
 
-- `config.py` reads `~/.private_agent.conf` and builds `APP_CONFIG` as soon as
+- `config.py` reads `~/.conf` and builds `APP_CONFIG` as soon as
   it is imported, then exposes dozens of module-level constants. `runtime.py`
   imports about 50 of them.
 - **Fixed:** the `HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` environment
   variables are now set during startup instead of at import (commit `2fec457`).
 - **Partly fixed (step 3.1):** the schema and all coercion logic now live in
-  `src/private_agent/settings.py` as a typed, frozen `Settings` dataclass
+  `src/settings.py` as a typed, frozen `Settings` dataclass
   with one field per runtime constant, built by `Settings.from_config(...)`.
   `config.py` keeps its public surface and re-exports the same names as
   `NAME = SETTINGS.name`, so no importing module changed. Loading still
@@ -113,7 +113,7 @@ warning with `pytest.warns`.
 
 Re-verified on 2026-11-18 against `main` at `5b64e1b`: no production module
 branches on the test runner. There are no `sys.modules` checks,
-`PYTEST_CURRENT_TEST` reads or test-only flags under `src/private_agent/`.
+`PYTEST_CURRENT_TEST` reads or test-only flags under `src/`.
 A guard test
 (`tests/unit/test_source_hygiene.py::test_production_sources_never_branch_on_the_test_runner`)
 fails if one is reintroduced.
@@ -153,27 +153,27 @@ a baseline of errors to clear.
 replaced with specific exception types across all source files. The following
 files were updated with `except (ValueError, OSError)` or specific exception types:
 
-- `src/private_agent/agent/compaction.py`
-- `src/private_agent/agent/learning.py`
-- `src/private_agent/agent/local_runtimes.py`
-- `src/private_agent/agent/memory_context.py`
-- `src/private_agent/agent/prompts.py`
-- `src/private_agent/agent/model_capabilities.py`
-- `src/private_agent/tools/filesystem.py`
-- `src/private_agent/tools/media.py`
-- `src/private_agent/tools/location.py`
-- `src/private_agent/agent/providers.py`
-- `src/private_agent/agent/runtime.py`
-- `src/private_agent/agent/status.py`
-- `src/private_agent/agent/streaming.py`
-- `src/private_agent/agent/learning.py`
-- `src/private_agent/tools/mcp.py`
-- `src/private_agent/tools/web.py`
-- `src/private_agent/tools/memory.py`
-- `src/private_agent/skills/loader.py`
-- `src/private_agent/tools/shell.py`
-- `src/private_agent/tools/network.py`
-- `src/private_agent/config.py`
+- `src/agent/compaction.py`
+- `src/agent/learning.py`
+- `src/agent/local_runtimes.py`
+- `src/agent/memory_context.py`
+- `src/agent/prompts.py`
+- `src/agent/model_capabilities.py`
+- `src/tools/filesystem.py`
+- `src/tools/media.py`
+- `src/tools/location.py`
+- `src/agent/providers.py`
+- `src/agent/runtime.py`
+- `src/agent/status.py`
+- `src/agent/streaming.py`
+- `src/agent/learning.py`
+- `src/tools/mcp.py`
+- `src/tools/web.py`
+- `src/tools/memory.py`
+- `src/skills/loader.py`
+- `src/tools/shell.py`
+- `src/tools/network.py`
+- `src/config.py`
 
 That work narrowed real blind catches, but it did not leave source code free
 of BLE001: the audit in step 5.3 found 29 broad handlers still in `src/`, and
@@ -224,10 +224,10 @@ client against a closed port: before the change the call raised
 
 **Completed.** Added module-level loggers (`logging.getLogger(__name__)`) and log statements across the codebase for improved diagnostics and debugging. Key additions:
 
-- **`src/private_agent/agent/learning.py`**: Added `import logging` and module-level logger; log statements in _run_learning_maintenance and other key functions
-- **`src/private_agent/agent/task_commands.py`**: Added `import logging` and logger; debug log statements in _task_age_label and _planning_search_citations
-- **`src/private_agent/tools/shell.py`**: Added `import logging` and module-level logger; log statements in run_shell_command and _sandbox_shell_script; added `description` parameter to @tool decorator
-- **`src/private_agent/tools/web.py`**: Added `import logging` and module-level logger; log statements in web_search and fetch_webpage functions
+- **`src/agent/learning.py`**: Added `import logging` and module-level logger; log statements in _run_learning_maintenance and other key functions
+- **`src/agent/task_commands.py`**: Added `import logging` and logger; debug log statements in _task_age_label and _planning_search_citations
+- **`src/tools/shell.py`**: Added `import logging` and module-level logger; log statements in run_shell_command and _sandbox_shell_script; added `description` parameter to @tool decorator
+- **`src/tools/web.py`**: Added `import logging` and module-level logger; log statements in web_search and fetch_webpage functions
 
 All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, `log_event`) for consistent structured JSON logging with redaction of sensitive data. A7 (Async mixed with blocking code) and A8 (Smaller issues) are now also complete (see sections below).
 
@@ -239,11 +239,11 @@ All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, 
 **Completed.** Removed the `asyncio.run`-inside-ThreadPoolExecutor anti-pattern
 from sync tool functions by converting them to fully synchronous HTTP clients:
 
-- **`src/private_agent/tools/web.py`**: `fetch_webpage` and `download_web_file`
+- **`src/tools/web.py`**: `fetch_webpage` and `download_web_file`
   now use `public_only_sync_client` and a new synchronous
   `_get_limited_response_sync` helper instead of spawning a thread pool to run
   `asyncio.run`. Added `_get_limited_response_sync` to `tools/network.py`.
-- **`src/private_agent/tools/location.py`**: `_get_json` now uses the sync HTTP
+- **`src/tools/location.py`**: `_get_json` now uses the sync HTTP
   client; removed `_run` and `_get_json_async`.
 - **`database/memory.py`**: connection already guarded by `threading.Lock`;
   verified by `test_sqlite_concurrent_read_write_locking`.
@@ -666,7 +666,7 @@ interrupt handlers in `runtime.py`.
 
 **C13. Fewer configuration levels.**
 - **Status (updated):** Done in 6.9: user, project, and local settings merge over the base config.
-There is one user config file (`~/.private_agent.conf`), not user, project and
+There is one user config file (`~/.conf`), not user, project and
 local settings files that can be committed alongside the code.
 
 **C14. No status line or output styles.**
@@ -1573,7 +1573,7 @@ messages).
 
 ### J2. Startup imports
 
-Importing `private_agent.cli` takes 0.12 s, but importing the runtime takes
+Importing `cli` takes 0.12 s, but importing the runtime takes
 **2.3–2.7 s and about 130 MB**, before any user input. Largest parts, from
 `python -X importtime`:
 
@@ -1583,7 +1583,7 @@ Importing `private_agent.cli` takes 0.12 s, but importing the runtime takes
 | `langchain_ollama` (`runtime.py:32`) | 0.52 s |
 | `langchain_core` tracers and `langsmith` (pulled in by LangChain) | 0.35 s |
 | `ollama` (`runtime.py:24`) | 0.28 s |
-| `private_agent.tools` | 0.13 s |
+| `tools` | 0.13 s |
 | `numpy` | 0.11 s |
 
 These load even when RAG is off, Ollama is not used, or the session is
@@ -1596,7 +1596,7 @@ background while the user picks a provider.
 ### J3. Tokenizer downloaded at run time
 
 **Fixed.** The `cl100k_base` vocabulary ships in
-`src/private_agent/resources/tiktoken/`, and `agent/prompts.py` points
+`src/resources/tiktoken/`, and `agent/prompts.py` points
 `TIKTOKEN_CACHE_DIR` at it before loading the encoding (commit `4eddf57`), so
 there is no download, no temp-folder cache to lose, and no outbound request.
 The silent character-estimate fallback and the model-specific tokenizer
@@ -1720,7 +1720,7 @@ defined twice, and values that should stay in code on purpose.
 ### K1. Read from config but missing from the defaults
 
 **Fixed** (commit `fc6bfde`). These keys are now in `DEFAULT_CONFIG`, so they
-appear in the generated `~/.private_agent.conf` and in the README.
+appear in the generated `~/.conf` and in the README.
 
 | Key | Default |
 |---|---|
@@ -1800,7 +1800,7 @@ swappable, for example for a self-hosted SearXNG or Nominatim.
 
 | Value | Where |
 |---|---|
-| ~~Config file always `~/.private_agent.conf`; no environment variable or `--config` flag~~ **Fixed:** `PRIVATE_AGENT_CONFIG` and `--config` work (commit `f8f0256`) | `config.py:13` |
+| ~~Config file always `~/.conf`; no environment variable or `--config` flag~~ **Fixed:** `PRIVATE_AGENT_CONFIG` and `--config` work (commit `f8f0256`) | `config.py:13` |
 | `SNAPSHOT_DIR` resolved against the current folder at import time, not the workspace (it is exported but not used elsewhere) | `sandbox/linux.py:8` |
 
 ### K8. Plan limits defined twice

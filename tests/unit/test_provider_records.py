@@ -1,8 +1,8 @@
 """Unit coverage for the per-session provider record (I1p)."""
 
-from private_agent.database import PersistentMemory
-from private_agent.database.provider_records import provider_record_payload
-from private_agent.providers.adapters import ProviderRecord
+from database import PersistentMemory
+from database.provider_records import provider_record_payload
+from providers.adapters import ProviderRecord
 
 
 def _memory(tmp_path):

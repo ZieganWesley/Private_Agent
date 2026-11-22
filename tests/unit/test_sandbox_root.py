@@ -1,6 +1,6 @@
 import pytest
 
-from private_agent.sandbox import SandboxManager
+from sandbox import SandboxManager
 
 
 def test_workspace_root_requires_explicit_configuration(monkeypatch):

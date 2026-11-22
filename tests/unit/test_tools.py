@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from rich.console import Console
 
-from private_agent.agent import (
+from agent import (
     execute_tool_call,
     model_selection,
 )
-from private_agent.sandbox import SandboxManager, evaluate_shell_command
-from private_agent.tools import (
+from sandbox import SandboxManager, evaluate_shell_command
+from tools import (
     close_mcp_sandbox_dirs,
     close_outbound_http_clients,
     describe_tool_catalog,
@@ -28,9 +28,9 @@ from private_agent.tools import (
 )
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -52,7 +52,7 @@ console = Console()
 def test_research_plan_tool_output_marks_unvalidated_evidence_incomplete():
     import json
 
-    from private_agent.tools.planner import _format_task
+    from tools.planner import _format_task
 
     formatted = json.loads(
         _format_task(
@@ -75,7 +75,7 @@ def test_research_plan_tool_output_marks_unvalidated_evidence_incomplete():
 
 @pytest.mark.asyncio
 async def test_mcp_approval_redacts_sensitive_arguments(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     mcp_tool = MagicMock()
     mcp_tool.name = "mcp_secret_test"
@@ -121,7 +121,7 @@ async def test_mcp_approval_redacts_sensitive_arguments(monkeypatch):
 async def test_mcp_tool_errors_redact_sensitive_arguments_from_output_and_logs(
     monkeypatch,
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     secret = "private-tool-credential-value"
     tool = MagicMock()
@@ -163,7 +163,7 @@ async def test_mcp_tool_errors_redact_sensitive_arguments_from_output_and_logs(
 async def test_mcp_tool_output_is_bounded_and_logs_only_output_metadata(
     monkeypatch,
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     tool = MagicMock()
     tool.name = "mcp_large_output"
@@ -200,7 +200,7 @@ async def test_mcp_tool_output_is_bounded_and_logs_only_output_metadata(
 
 @pytest.mark.asyncio
 async def test_workspace_image_tool_cannot_be_used_in_online_mode(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     image_tool = MagicMock()
     image_tool.name = "load_workspace_image"
@@ -257,7 +257,7 @@ def test_file_tools_in_sandbox(temp_workspace):
 def test_workspace_write_rejects_racing_symlink_replacement(
     temp_workspace, tmp_path, monkeypatch
 ):
-    from private_agent.tools import edit_local_file
+    from tools import edit_local_file
 
     target = temp_workspace / "target.txt"
     target.write_text("inside", encoding="utf-8")
@@ -269,7 +269,7 @@ def test_workspace_write_rejects_racing_symlink_replacement(
         target.symlink_to(outside)
 
     monkeypatch.setattr(
-        "private_agent.tools.filesystem._snapshot_file_descriptor",
+        "tools.filesystem._snapshot_file_descriptor",
         replace_target,
     )
     result = edit_local_file.invoke(
@@ -282,7 +282,7 @@ def test_workspace_write_rejects_racing_symlink_replacement(
 
 
 def test_workspace_search_tools_find_files_and_text(temp_workspace):
-    from private_agent.tools import search_workspace_files, search_workspace_text
+    from tools import search_workspace_files, search_workspace_text
 
     (temp_workspace / "src").mkdir()
     (temp_workspace / "src" / "main.py").write_text(
@@ -306,7 +306,7 @@ def test_workspace_search_tools_find_files_and_text(temp_workspace):
 
 
 def test_workspace_symbol_search_finds_supported_declarations(temp_workspace):
-    from private_agent.tools import search_workspace_symbols
+    from tools import search_workspace_symbols
 
     source_files = {
         "src/app.py": "class Widget:\n    async def build(self):\n        pass\n",
@@ -344,7 +344,7 @@ def test_workspace_symbol_search_finds_supported_declarations(temp_workspace):
 def test_workspace_symbol_search_is_bounded_and_rejects_unsafe_patterns(
     temp_workspace, monkeypatch
 ):
-    from private_agent.tools import filesystem, search_workspace_symbols
+    from tools import filesystem, search_workspace_symbols
 
     source = temp_workspace / "app.py"
     source.write_text(
@@ -368,7 +368,7 @@ def test_workspace_symbol_search_is_bounded_and_rejects_unsafe_patterns(
 def test_workspace_symbol_search_skips_symlink_escape_and_invalid_utf8(
     temp_workspace, tmp_path
 ):
-    from private_agent.tools import search_workspace_symbols
+    from tools import search_workspace_symbols
 
     external = tmp_path / "external.py"
     external.write_text("class PrivateType:\n    pass\n", encoding="utf-8")
@@ -386,8 +386,8 @@ def test_workspace_symbol_search_skips_symlink_escape_and_invalid_utf8(
 
 @pytest.mark.requires_media
 def test_workspace_image_input_validates_path_and_size(temp_workspace, monkeypatch):
-    from private_agent.config import MAX_CAPTURED_IMAGE_BYTES
-    from private_agent.tools import load_workspace_image
+    from config import MAX_CAPTURED_IMAGE_BYTES
+    from tools import load_workspace_image
 
     oversized = temp_workspace / "large.png"
     oversized.write_bytes(b"x" * (MAX_CAPTURED_IMAGE_BYTES + 1))
@@ -406,7 +406,7 @@ def test_workspace_image_input_validates_path_and_size(temp_workspace, monkeypat
 def test_workspace_image_input_normalizes_and_consumes_single_use_image(
     temp_workspace, monkeypatch
 ):
-    from private_agent.tools import load_workspace_image, media
+    from tools import load_workspace_image, media
 
     image_path = temp_workspace / "source.png"
     image_path.write_bytes(b"fake image bytes")
@@ -459,8 +459,8 @@ def test_workspace_image_input_normalizes_and_consumes_single_use_image(
 def test_workspace_image_rejects_excessive_decoded_dimensions(
     temp_workspace, monkeypatch
 ):
-    from private_agent.config import MAX_DECODED_IMAGE_PIXELS
-    from private_agent.tools import load_workspace_image
+    from config import MAX_DECODED_IMAGE_PIXELS
+    from tools import load_workspace_image
 
     image_path = temp_workspace / "large-dimensions.png"
     image_path.write_bytes(b"encoded data")
@@ -499,7 +499,7 @@ def test_workspace_image_rejects_excessive_decoded_dimensions(
 def test_workspace_search_tools_reject_traversal_and_symlink_escape(
     temp_workspace, tmp_path
 ):
-    from private_agent.tools import search_workspace_files, search_workspace_text
+    from tools import search_workspace_files, search_workspace_text
 
     secret = tmp_path / "secret.py"
     secret.write_text("must stay outside", encoding="utf-8")
@@ -519,7 +519,7 @@ def test_workspace_search_tools_reject_traversal_and_symlink_escape(
 
 
 def test_workspace_git_inspection_is_read_only_and_bounded(temp_workspace):
-    from private_agent.tools import inspect_workspace_git
+    from tools import inspect_workspace_git
 
     subprocess.run(["git", "init", "-q"], cwd=temp_workspace, check=True)
     source = temp_workspace / "tracked.txt"
@@ -557,13 +557,13 @@ def test_workspace_git_inspection_is_read_only_and_bounded(temp_workspace):
 
 
 def test_workspace_patch_preview_matches_applied_patch(temp_workspace, monkeypatch):
-    from private_agent.tools import apply_workspace_patch, preview_workspace_patch
+    from tools import apply_workspace_patch, preview_workspace_patch
 
     source = temp_workspace / "app.py"
     source.write_text("def answer():\n    return 1\n", encoding="utf-8")
     snapshots = []
     monkeypatch.setattr(
-        "private_agent.tools.filesystem._snapshot_file_descriptor",
+        "tools.filesystem._snapshot_file_descriptor",
         lambda _file_fd, name, **_kwargs: snapshots.append(name),
     )
     arguments = {
@@ -584,7 +584,7 @@ def test_workspace_patch_preview_matches_applied_patch(temp_workspace, monkeypat
 
 
 def test_workspace_patch_requires_unique_context_and_rejects_escape(temp_workspace):
-    from private_agent.tools import apply_workspace_patch
+    from tools import apply_workspace_patch
 
     (temp_workspace / "duplicate.txt").write_text("same same", encoding="utf-8")
     ambiguous = apply_workspace_patch.invoke(
@@ -608,7 +608,7 @@ def test_workspace_patch_requires_unique_context_and_rejects_escape(temp_workspa
 
 
 def test_workspace_mutations_reject_symlinks_and_hard_linked_files(temp_workspace):
-    from private_agent.tools import (
+    from tools import (
         apply_workspace_patch,
         delete_workspace_file,
         rename_workspace_file,
@@ -647,7 +647,7 @@ def test_workspace_mutations_reject_symlinks_and_hard_linked_files(temp_workspac
 def test_workspace_patch_rejects_path_replacement_during_snapshot(
     temp_workspace, tmp_path, monkeypatch
 ):
-    from private_agent.tools import apply_workspace_patch
+    from tools import apply_workspace_patch
 
     target = temp_workspace / "target.txt"
     target.write_text("inside", encoding="utf-8")
@@ -659,7 +659,7 @@ def test_workspace_patch_rejects_path_replacement_during_snapshot(
         target.symlink_to(outside)
 
     monkeypatch.setattr(
-        "private_agent.tools.filesystem._snapshot_file_descriptor",
+        "tools.filesystem._snapshot_file_descriptor",
         lambda file_fd, name, **_kwargs: replace_target(file_fd, name),
     )
     result = apply_workspace_patch.invoke(
@@ -674,12 +674,12 @@ def test_workspace_patch_rejects_path_replacement_during_snapshot(
 def test_workspace_mutations_fail_closed_without_secure_os_support(
     temp_workspace, monkeypatch
 ):
-    from private_agent.tools import apply_workspace_patch
+    from tools import apply_workspace_patch
 
     target = temp_workspace / "target.txt"
     target.write_text("unchanged", encoding="utf-8")
     monkeypatch.setattr(
-        "private_agent.tools.filesystem._secure_mutation_available",
+        "tools.filesystem._secure_mutation_available",
         lambda: False,
     )
 
@@ -694,7 +694,7 @@ def test_workspace_mutations_fail_closed_without_secure_os_support(
 def test_workspace_rename_does_not_overwrite_racing_destination(
     temp_workspace, monkeypatch
 ):
-    from private_agent.tools import filesystem, rename_workspace_file
+    from tools import filesystem, rename_workspace_file
 
     source = temp_workspace / "source.txt"
     source.write_text("source", encoding="utf-8")
@@ -724,13 +724,13 @@ def test_workspace_rename_does_not_overwrite_racing_destination(
 async def test_workspace_mutations_require_runtime_approval(
     temp_workspace, monkeypatch
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     source = temp_workspace / "app.py"
     source.write_text("value = 1\n", encoding="utf-8")
     monkeypatch.setattr(agent.sys, "stdin", MagicMock(isatty=lambda: True))
     monkeypatch.setattr(
-        "private_agent.tools.filesystem._snapshot_file_descriptor",
+        "tools.filesystem._snapshot_file_descriptor",
         lambda _file_fd, _name, **_kwargs: None,
     )
     arguments = {
@@ -758,7 +758,7 @@ async def test_workspace_mutations_require_runtime_approval(
 async def test_workspace_rename_and_delete_require_runtime_approval(
     temp_workspace, monkeypatch
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     source = temp_workspace / "source.txt"
     source.write_text("recoverable content", encoding="utf-8")
@@ -807,14 +807,14 @@ async def test_workspace_rename_and_delete_require_runtime_approval(
 def test_workspace_rename_and_delete_are_recoverable_and_collision_safe(
     temp_workspace, monkeypatch
 ):
-    from private_agent.tools import delete_workspace_file, rename_workspace_file
+    from tools import delete_workspace_file, rename_workspace_file
 
     source = temp_workspace / "source.txt"
     source.write_text("recoverable", encoding="utf-8")
     (temp_workspace / "existing.txt").write_text("keep", encoding="utf-8")
     snapshots = []
     monkeypatch.setattr(
-        "private_agent.tools.filesystem._snapshot_file_descriptor",
+        "tools.filesystem._snapshot_file_descriptor",
         lambda _file_fd, name: snapshots.append(name),
     )
 
@@ -836,7 +836,7 @@ def test_workspace_rename_and_delete_are_recoverable_and_collision_safe(
 
 
 def test_file_snapshots_are_unique_and_workspace_local(temp_workspace):
-    from private_agent.sandbox import create_hitl_snapshot
+    from sandbox import create_hitl_snapshot
 
     source = temp_workspace / "important.txt"
     source.write_text("initial", encoding="utf-8")
@@ -877,7 +877,7 @@ def test_non_interactive_shell_blocking(temp_workspace):
 
 def test_shell_command_requires_explicit_approval(temp_workspace):
     with (
-        patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
         patch("subprocess.run") as run,
     ):
         result = run_shell_command.invoke({"command": "echo no"})
@@ -886,7 +886,7 @@ def test_shell_command_requires_explicit_approval(temp_workspace):
 
 
 def test_tool_catalog_shows_origin_permissions_and_effects(monkeypatch):
-    from private_agent import tools
+    import tools
 
     monkeypatch.setattr(
         tools,
@@ -933,7 +933,7 @@ def test_local_datetime_tool_is_listed_as_read_only():
 
 
 def test_workspace_symbol_tool_is_registered_as_read_only():
-    from private_agent import tools
+    import tools
 
     assert tools.AVAILABLE_TOOLS["search_workspace_symbols"] is (
         tools.search_workspace_symbols
@@ -948,7 +948,7 @@ def test_workspace_symbol_tool_is_registered_as_read_only():
 
 
 def test_workspace_media_tools_are_registered_as_local_approved_tools():
-    from private_agent import tools
+    import tools
 
     for name in ("load_workspace_video", "transcribe_workspace_audio"):
         assert name in tools.AVAILABLE_TOOLS
@@ -964,7 +964,7 @@ def test_workspace_media_tools_are_registered_as_local_approved_tools():
 
 
 def test_unavailable_ollama_returns_no_models_without_raising(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     class UnavailableClient:
         closed = False
@@ -991,7 +991,7 @@ def test_unavailable_ollama_returns_no_models_without_raising(monkeypatch):
 def test_agent_current_datetime_context_includes_local_date_and_timezone():
     from datetime import datetime
 
-    from private_agent.agent import _current_datetime_context
+    from agent import _current_datetime_context
 
     context = _current_datetime_context()
     now = datetime.now().astimezone()
@@ -1006,7 +1006,7 @@ def test_tool_catalog_compactly_separates_names_descriptions_and_boundaries():
 
     from rich.console import Console as RichConsole
 
-    from private_agent.agent import _print_tool_catalog
+    from agent import _print_tool_catalog
 
     output = io.StringIO()
     console = RichConsole(file=output, width=100, force_terminal=False)
@@ -1026,7 +1026,7 @@ def test_tool_catalog_compactly_separates_names_descriptions_and_boundaries():
             "description": "Another deliberately long tool description.",
         },
     ]
-    with patch("private_agent.agent.runtime.console", console):
+    with patch("agent.runtime.console", console):
         _print_tool_catalog(entries)
     rendered = output.getvalue()
     assert "Tool Catalog" in rendered
@@ -1043,7 +1043,7 @@ def test_tool_catalog_compactly_separates_names_descriptions_and_boundaries():
 
 
 def test_override_tool_list_includes_platform_filtered_tools():
-    from private_agent.agent import runtime
+    from agent import runtime
 
     tool = MagicMock()
     with (
@@ -1075,7 +1075,7 @@ def test_tool_catalog_marks_overridden_unavailable_entries_red_and_struck_out():
 
     from rich.console import Console as RichConsole
 
-    from private_agent.agent import _print_tool_catalog
+    from agent import _print_tool_catalog
 
     output = io.StringIO()
     console = RichConsole(
@@ -1091,7 +1091,7 @@ def test_tool_catalog_marks_overridden_unavailable_entries_red_and_struck_out():
         "effects": "may modify local state",
         "description": "Runs isolated commands.",
     }
-    with patch("private_agent.agent.runtime.console", console):
+    with patch("agent.runtime.console", console):
         _print_tool_catalog(
             [entry],
             unavailable_names={"run_shell_command"},
@@ -1159,7 +1159,7 @@ async def test_configured_mcp_http_transports_discover_tools(
     adapter = types.ModuleType("langchain_mcp_adapters.client")
     adapter.MultiServerMCPClient = FakeMCPClient
     monkeypatch.setattr(
-        "private_agent.tools.mcp.validate_explicit_service_url",
+        "tools.mcp.validate_explicit_service_url",
         lambda supplied_url, _schemes: supplied_url,
     )
     with patch.dict(
@@ -1198,8 +1198,8 @@ async def test_live_mcp_transports_close_connections_after_discovery_and_calls(
     import uvicorn
     from mcp.server.fastmcp import FastMCP
 
-    import private_agent.tools.mcp as mcp_module
-    from private_agent.tools.network import mcp_http_client_factory
+    import tools.mcp as mcp_module
+    from tools.network import mcp_http_client_factory
 
     server_app = FastMCP("private-agent-lifecycle-test")
 
@@ -1269,7 +1269,7 @@ def test_ollama_client_kwargs_use_pinned_transports():
 def test_langchain_ollama_clients_are_tracked_and_closed():
     from langchain_ollama import ChatOllama, OllamaEmbeddings
 
-    from private_agent import tools
+    import tools
 
     chat = ChatOllama(
         model="test",
@@ -1311,7 +1311,7 @@ def test_mcp_stdio_tools_are_loaded_with_isolated_command(monkeypatch):
     adapter.MultiServerMCPClient = FakeMCPClient
     isolated = ["/usr/bin/bwrap", "--unshare-all", "--", "python", "-m", "server"]
     monkeypatch.setattr(
-        "private_agent.code_tasks._isolated_command",
+        "code_tasks._isolated_command",
         lambda command, root: (isolated, {}),
     )
     try:
@@ -1347,7 +1347,7 @@ def test_mcp_stdio_tools_are_loaded_with_isolated_command(monkeypatch):
 async def test_mcp_stdio_sandbox_is_removed_when_client_initialization_fails(
     monkeypatch, tmp_path
 ):
-    import private_agent.tools.mcp as mcp_module
+    import tools.mcp as mcp_module
 
     sandbox_dir = tmp_path / "mcp-sandbox"
 
@@ -1365,7 +1365,7 @@ async def test_mcp_stdio_sandbox_is_removed_when_client_initialization_fails(
     adapter.MultiServerMCPClient = FailingMCPClient
     monkeypatch.setattr(mcp_module.tempfile, "mkdtemp", make_sandbox)
     monkeypatch.setattr(
-        "private_agent.code_tasks._isolated_command",
+        "code_tasks._isolated_command",
         lambda command, root: (["/usr/bin/bwrap", *command], {}),
     )
     try:
@@ -1393,7 +1393,7 @@ async def test_mcp_stdio_sandbox_is_removed_when_client_initialization_fails(
 async def test_mcp_stdio_sandbox_is_removed_when_tool_discovery_fails(
     monkeypatch, tmp_path
 ):
-    import private_agent.tools.mcp as mcp_module
+    import tools.mcp as mcp_module
 
     sandbox_dir = tmp_path / "mcp-discovery-failure"
 
@@ -1414,7 +1414,7 @@ async def test_mcp_stdio_sandbox_is_removed_when_tool_discovery_fails(
     adapter.MultiServerMCPClient = FailingDiscoveryClient
     monkeypatch.setattr(mcp_module.tempfile, "mkdtemp", make_sandbox)
     monkeypatch.setattr(
-        "private_agent.code_tasks._isolated_command",
+        "code_tasks._isolated_command",
         lambda command, root: (["/usr/bin/bwrap", *command], {}),
     )
     try:
@@ -1439,7 +1439,7 @@ async def test_mcp_stdio_sandbox_is_removed_when_tool_discovery_fails(
 
 
 def test_mcp_cleanup_continues_after_one_sandbox_removal_fails(monkeypatch, tmp_path):
-    import private_agent.tools.mcp as mcp_module
+    import tools.mcp as mcp_module
 
     first = tmp_path / "first"
     second = tmp_path / "second"
@@ -1473,11 +1473,11 @@ def test_download_restricted_extension(temp_workspace):
 
 @pytest.mark.requires_sandbox
 def test_shell_command_tool(temp_workspace):
-    from private_agent.tools import approved_tool_invocation
+    from tools import approved_tool_invocation
 
     with (
         approved_tool_invocation(),
-        patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
     ):
         res = run_shell_command.invoke({"command": "echo 'sandbox integration test'"})
     assert "Exit Code: 0" in res
@@ -1491,14 +1491,14 @@ def _run_shell_with_fake_sandbox(command):
         isolated.append((list(command_args), root))
         return ["bwrap", "--", *command_args], {"PATH": "/usr/bin"}
 
-    from private_agent.tools import approved_tool_invocation
+    from tools import approved_tool_invocation
 
     with (
         approved_tool_invocation(),
-        patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
-        patch("private_agent.code_tasks._isolated_command", side_effect=isolate),
+        patch("tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("code_tasks._isolated_command", side_effect=isolate),
         patch(
-            "private_agent.tools.shell.subprocess.run",
+            "tools.shell.subprocess.run",
             return_value=subprocess.CompletedProcess([], 0, "ok\n", ""),
         ) as run,
     ):
@@ -1538,7 +1538,7 @@ def test_shell_script_host_workspace_paths_point_at_sandbox_mount(temp_workspace
 
 
 def test_code_task_blocks_git_inside_compound_command(monkeypatch, temp_workspace):
-    from private_agent.tools import get_tool_context
+    from tools import get_tool_context
 
     monkeypatch.setattr(get_tool_context(), "code_task", object())
     result, isolated, _run = _run_shell_with_fake_sandbox("cd src && git status")
@@ -1550,11 +1550,11 @@ def test_code_task_blocks_git_inside_compound_command(monkeypatch, temp_workspac
 def test_shell_compound_command_in_real_sandbox(temp_workspace):
     (temp_workspace / "sub").mkdir()
     (temp_workspace / "sub" / "note.txt").write_text("hello\n", encoding="utf-8")
-    from private_agent.tools import approved_tool_invocation
+    from tools import approved_tool_invocation
 
     with (
         approved_tool_invocation(),
-        patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
     ):
         res = run_shell_command.invoke(
             {"command": "cd sub && cat note.txt | tr a-z A-Z && pwd > ../where.txt"}
@@ -1595,7 +1595,7 @@ async def test_load_mcp_tools_connection_failure_edge_case(mock_stdio_client):
 def test_fetch_webpage_reports_httpx_transport_errors_instead_of_raising(monkeypatch):
     import httpx
 
-    from private_agent.tools import web
+    from tools import web
 
     def refuse(*_args, **_kwargs):
         raise httpx.ConnectError("connection refused")
@@ -1615,7 +1615,7 @@ def test_download_web_file_reports_httpx_transport_errors_instead_of_raising(
 ):
     import httpx
 
-    from private_agent.tools import web
+    from tools import web
 
     original_client = web.public_only_sync_client
 

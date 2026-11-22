@@ -12,11 +12,11 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
-from private_agent.agent.model_selection import _discover_available_local_runtimes
-from private_agent.config import HARDWARE_ACCELERATION_MODE
-from private_agent.hardware import format_hardware_status, inspect_ollama_hardware
-from private_agent.rag import initialize_knowledge_base
-from private_agent.tools import close_outbound_http_clients
+from agent.model_selection import _discover_available_local_runtimes
+from config import HARDWARE_ACCELERATION_MODE
+from hardware import format_hardware_status, inspect_ollama_hardware
+from rag import initialize_knowledge_base
+from tools import close_outbound_http_clients
 
 MAX_QUERY_FILE_BYTES = 1_048_576
 MAX_BENCHMARK_QUERIES = 1_000

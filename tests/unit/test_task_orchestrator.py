@@ -1,4 +1,4 @@
-from private_agent.agent import task_orchestrator
+from agent import task_orchestrator
 
 
 def test_build_plan_and_summary():

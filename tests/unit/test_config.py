@@ -5,13 +5,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from private_agent.config import load_or_create_config
+from config import load_or_create_config
 
 
 def test_malformed_config_handling(tmp_path, monkeypatch):
-    config_path = tmp_path / ".private_agent.conf"
+    config_path = tmp_path / ".conf"
     config_path.write_text("{ malformed_json: ", encoding="utf-8")
-    monkeypatch.setattr("private_agent.config.CONFIG_FILE_PATH", config_path)
+    monkeypatch.setattr("config.CONFIG_FILE_PATH", config_path)
 
     with pytest.warns(RuntimeWarning, match="Malformed or invalid configuration"):
         config = load_or_create_config()
@@ -20,7 +20,7 @@ def test_malformed_config_handling(tmp_path, monkeypatch):
 
 
 def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch):
-    from private_agent.utils import run_logging
+    from utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(
@@ -41,15 +41,15 @@ def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch)
 
 
 def test_config_uses_per_user_home_path():
-    from private_agent import config
+    import config
 
-    assert pathlib.Path.home() / ".config" / "private_agent" / "private_agent.conf" == config.CONFIG_FILE_PATH
+    assert pathlib.Path.home() / ".config" / "private_agent" / "conf" == config.CONFIG_FILE_PATH
 
 
 def test_config_creates_private_default_file(tmp_path, monkeypatch):
-    from private_agent import config
+    import config
 
-    config_path = tmp_path / ".private_agent.conf"
+    config_path = tmp_path / ".conf"
     monkeypatch.setattr(config, "CONFIG_FILE_PATH", config_path)
 
     settings = load_or_create_config()
@@ -70,9 +70,9 @@ def test_config_creates_private_default_file(tmp_path, monkeypatch):
 def test_default_system_prompt_is_loaded_from_packaged_resource_and_configured(
     tmp_path, monkeypatch
 ):
-    from private_agent import config
+    import config
 
-    config_path = tmp_path / ".private_agent.conf"
+    config_path = tmp_path / ".conf"
     monkeypatch.setattr(config, "CONFIG_FILE_PATH", config_path)
 
     settings = load_or_create_config()
@@ -84,9 +84,9 @@ def test_default_system_prompt_is_loaded_from_packaged_resource_and_configured(
 
 
 def test_custom_system_prompt_is_preserved_in_user_config(tmp_path, monkeypatch):
-    from private_agent import config
+    import config
 
-    config_path = tmp_path / ".private_agent.conf"
+    config_path = tmp_path / ".conf"
     config_path.write_text(
         json.dumps({"agent": {"system_prompt": "Follow our project conventions."}}),
         encoding="utf-8",
@@ -103,7 +103,7 @@ def test_custom_system_prompt_is_preserved_in_user_config(tmp_path, monkeypatch)
 
 
 def test_empty_system_prompt_is_replaced_with_packaged_default():
-    from private_agent import config
+    import config
 
     settings = config._merge_config({"agent": {"system_prompt": "  "}})
 
@@ -111,7 +111,7 @@ def test_empty_system_prompt_is_replaced_with_packaged_default():
 
 
 def test_categorized_config_ignores_legacy_flat_keys():
-    from private_agent import config
+    import config
 
     merged = config._merge_config(
         {
@@ -129,7 +129,7 @@ def test_categorized_config_ignores_legacy_flat_keys():
 
 
 def test_categorized_config_ignores_legacy_flat_settings():
-    from private_agent import config
+    import config
 
     merged = config._merge_config(
         {
@@ -145,7 +145,7 @@ def test_categorized_config_ignores_legacy_flat_settings():
 
 
 def test_categorized_online_api_key_has_no_legacy_runtime_alias():
-    from private_agent import config
+    import config
 
     merged = config._merge_config({"models": {"online_api_key": "configured-test-key"}})
 
@@ -154,7 +154,7 @@ def test_categorized_online_api_key_has_no_legacy_runtime_alias():
 
 
 def test_merge_config_migrates_old_default_rag_and_skills_paths():
-    from private_agent import config
+    import config
 
     merged = config._merge_config(
         {
@@ -177,7 +177,7 @@ def test_merge_config_migrates_old_default_rag_and_skills_paths():
 
 
 def test_override_tool_list_is_loaded_as_tool_names():
-    from private_agent import config
+    import config
 
     assert (
         frozenset(config.APP_CONFIG["tools"]["override_tool_list"])
@@ -186,7 +186,7 @@ def test_override_tool_list_is_loaded_as_tool_names():
 
 
 def test_config_paths_are_home_anchored_and_tilde_expanded(tmp_path, monkeypatch):
-    from private_agent import config
+    import config
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -201,7 +201,7 @@ def test_config_paths_are_home_anchored_and_tilde_expanded(tmp_path, monkeypatch
 
 
 def test_runtime_limits_read_categorized_config_and_validate_ranges(monkeypatch):
-    from private_agent import config
+    import config
 
     monkeypatch.setattr(
         config,
@@ -220,7 +220,7 @@ def test_runtime_limits_read_categorized_config_and_validate_ranges(monkeypatch)
 def test_streaming_output_configuration_parses_boolean_values(
     monkeypatch, value, expected
 ):
-    from private_agent import config
+    import config
 
     monkeypatch.setattr(config, "APP_CONFIG", {"agent": {"streaming_output": value}})
 
@@ -228,7 +228,7 @@ def test_streaming_output_configuration_parses_boolean_values(
 
 
 def test_visible_reasoning_configuration_defaults_off_and_ignores_legacy_name():
-    from private_agent import config
+    import config
 
     assert config.DEFAULT_CONFIG["agent"]["visible_reasoning"] is False
     assert (
@@ -240,7 +240,7 @@ def test_visible_reasoning_configuration_defaults_off_and_ignores_legacy_name():
 def test_loading_legacy_config_does_not_migrate_flat_keys(
     tmp_path, monkeypatch
 ):
-    config_path = tmp_path / ".private_agent.conf"
+    config_path = tmp_path / ".conf"
     config_path.write_text(
         json.dumps(
             {
@@ -251,7 +251,7 @@ def test_loading_legacy_config_does_not_migrate_flat_keys(
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("private_agent.config.CONFIG_FILE_PATH", config_path)
+    monkeypatch.setattr("config.CONFIG_FILE_PATH", config_path)
 
     load_or_create_config()
     saved_config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -261,20 +261,21 @@ def test_loading_legacy_config_does_not_migrate_flat_keys(
 
 
 def test_debug_log_config_defaults_off(tmp_path, monkeypatch):
-    from private_agent import config
+    import config
 
-    monkeypatch.setattr(config, "CONFIG_FILE_PATH", tmp_path / ".private_agent.conf")
+    monkeypatch.setattr(config, "CONFIG_FILE_PATH", tmp_path / ".conf")
     assert load_or_create_config()["logging"]["debug_enabled"] == 0
 
 
 def test_logging_console_adapter_installs_and_restores_module_consoles():
-    import private_agent.rag.indexing as rag_indexing
-    import private_agent.rag.retrieval as rag_retrieval
-    import private_agent.skills.loader as skill_loader
-    from private_agent import code_tasks, tools
-    from private_agent.agent import runtime
-    from private_agent.tools import mcp, media, network, shell
-    from private_agent.utils import run_logging
+    import code_tasks
+    import rag.indexing as rag_indexing
+    import rag.retrieval as rag_retrieval
+    import skills.loader as skill_loader
+    import tools
+    from agent import runtime
+    from tools import mcp, media, network, shell
+    from utils import run_logging
 
     modules = (
         runtime,
@@ -308,7 +309,7 @@ def test_debug_log_records_are_structured_and_console_content_is_not_logged(
     import json
     import logging
 
-    from private_agent.utils import run_logging
+    from utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "DEBUG")
@@ -374,7 +375,7 @@ def test_debug_log_level_filters_and_terminal_stays_clean(
 ):
     import logging
 
-    from private_agent.utils import run_logging
+    from utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "WARNING")
@@ -395,7 +396,7 @@ def test_debug_log_level_filters_and_terminal_stays_clean(
 def test_debug_log_file_and_directory_permissions_are_private(tmp_path, monkeypatch):
     import stat
 
-    from private_agent.utils import run_logging
+    from utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path))
@@ -413,14 +414,14 @@ def test_structured_exception_traceback_redacts_sensitive_tool_values():
     import logging
     import sys
 
-    from private_agent.utils.run_logging import JsonLineFormatter
+    from utils.run_logging import JsonLineFormatter
 
     secret = "private-tool-credential-value"
     try:
         raise RuntimeError(f"upstream service echoed {secret}")
     except RuntimeError:
         record = logging.LogRecord(
-            name="private_agent.tools",
+            name="tools",
             level=logging.ERROR,
             pathname=__file__,
             lineno=1,
@@ -442,7 +443,7 @@ def test_debug_logging_repeated_start_does_not_duplicate_handlers(
 ):
     import json
 
-    from private_agent.utils import run_logging
+    from utils import run_logging
 
     monkeypatch.setattr(run_logging, "DEBUG_LOG_ENABLED", True)
     monkeypatch.setattr(run_logging, "DEBUG_LOG_LEVEL", "INFO")
@@ -467,7 +468,7 @@ def test_debug_logging_repeated_start_does_not_duplicate_handlers(
 
 
 def test_media_limits_are_in_defaults_and_match_runtime_values():
-    from private_agent import config
+    import config
 
     media = config.DEFAULT_CONFIG["media"]
     assert media["max_decoded_image_pixels"] == 20_000_000
@@ -476,17 +477,17 @@ def test_media_limits_are_in_defaults_and_match_runtime_values():
 
 
 def test_config_path_honours_environment_variable(tmp_path):
-    from private_agent import config
+    import config
 
     custom = tmp_path / "custom.conf"
     assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": str(custom)}) == custom
-    default = pathlib.Path.home() / ".config" / "private_agent" / "private_agent.conf"
+    default = pathlib.Path.home() / ".config" / "private_agent" / "conf"
     assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": "  "}) == default
     assert config.resolve_config_path({}) == default
 
 
 def test_config_file_can_be_loaded_from_another_path(tmp_path, monkeypatch):
-    from private_agent import config
+    import config
 
     custom = tmp_path / "elsewhere.conf"
     monkeypatch.setattr(

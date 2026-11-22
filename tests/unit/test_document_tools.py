@@ -1,7 +1,7 @@
 import zipfile
 
-from private_agent.sandbox import SandboxManager
-from private_agent.tools import calculator, documents
+from sandbox import SandboxManager
+from tools import calculator, documents
 
 
 def _root(tmp_path):
@@ -61,7 +61,7 @@ def test_calculate_rejects_unsafe(tmp_path):
 
 
 def test_search_documents_no_vectorstore():
-    from private_agent.tools import rag_tools
+    from tools import rag_tools
 
     result = rag_tools.search_documents.invoke({"query": "hello"})
     assert "No document index" in result

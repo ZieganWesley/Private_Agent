@@ -1,6 +1,6 @@
 """The system prompt keeps a stable prefix so local servers can cache it."""
 
-from private_agent.agent.prompt_prefix import (
+from agent.prompt_prefix import (
     build_system_messages,
     stable_system_prompt,
 )

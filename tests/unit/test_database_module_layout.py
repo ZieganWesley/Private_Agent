@@ -5,8 +5,8 @@ import pathlib
 
 import pytest
 
-import private_agent.database as database_package
-from private_agent.database import (
+import database as database_package
+from database import (
     connection,
     conversations,
     episodes,

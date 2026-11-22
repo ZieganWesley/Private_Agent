@@ -1,4 +1,4 @@
-from private_agent.sandbox import SandboxManager
+from sandbox import SandboxManager
 
 
 def test_approved_extra_folder_allows_read(tmp_path):

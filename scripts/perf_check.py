@@ -42,7 +42,7 @@ CORPUS_SECTIONS = 8
 CALIBRATION_ITERATIONS = 2_400_000
 CALIBRATION_PARTS = 360_000
 
-_STARTUP_CODE = "import private_agent.agent.runtime"
+_STARTUP_CODE = "import agent.runtime"
 
 _CALIBRATION_CODE = """
 import sys
@@ -65,7 +65,7 @@ class _BlockedSocket(socket.socket):
 
 socket.socket = _BlockedSocket
 socket.create_connection = _blocked
-from private_agent.agent.prompts import token_count
+from agent.prompts import token_count
 
 print(token_count("offline token counting " * 200))
 """
@@ -168,8 +168,8 @@ def measure_rag_refresh(runs: int = 3) -> float:
     """Return the median seconds to read, chunk and index a fixed corpus."""
     from langchain_core.documents import Document
 
-    from private_agent.rag import indexing
-    from private_agent.rag.retrieval import HybridRAGRetriever
+    from rag import indexing
+    from rag.retrieval import HybridRAGRetriever
 
     timings = []
     with tempfile.TemporaryDirectory() as corpus_root:

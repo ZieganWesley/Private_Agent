@@ -28,7 +28,7 @@ an online provider or an online research request.
 
 ## Core Functionality and Operational Behaviour
 
-**Session flow.** `private-agent` loads `~/.private_agent.conf`, discovers
+**Session flow.** `private-agent` loads `~/.conf`, discovers
 reachable local inference runtimes (Ollama,
 LM Studio, and configured loopback OpenAI-compatible servers such as llama.cpp), locks the
 workspace root, asks for a session permission mode, then asks for an available
@@ -178,12 +178,12 @@ ollama pull nomic-embed-text  # needed only for RAG
 # 3. Run the installed command from the project you want it to work on
 cd /path/to/your/project
 private-agent
-# After installing, it can also be run with `python -m private_agent`.
+# After installing, it can also be run with `python -m cli`.
 ```
 
 Use `--config PATH` (or the `PRIVATE_AGENT_CONFIG` environment variable) to load
 and create the configuration file at another location instead of
-`~/.private_agent.conf`; the flag takes precedence over the variable.
+`~/.conf`; the flag takes precedence over the variable.
 
 Pass `--verbose-startup` to show configured paths, saved-memory counts, local
 runtime details, detailed hardware diagnostics, and successful MCP/skill
@@ -234,7 +234,7 @@ is used; if no local `rag` folder is found, the configured RAG path/prompt is
 used; and if no local `skills` folder is found, the configured skills path is
 used.
 
-The first run creates `~/.private_agent.conf` (JSON) in your home directory;
+The first run creates `~/.conf` (JSON) in your home directory;
 Configuration uses categorized sections only. Memory is stored in `~/.local_ai_memory.db`.
 Put documents for RAG in `~/.private_agent/rag/` and skills in
 `~/.private_agent/resources/skills/`.
@@ -369,7 +369,7 @@ Other behaviour:
 
 ## Configuration Variables
 
-Settings live in `~/.private_agent.conf` (JSON). The block below shows the
+Settings live in `~/.conf` (JSON). The block below shows the
 defaults with descriptions; real JSON files cannot contain comments, so omit
 the `//` text in your file. Only categorized sections are accepted; flat legacy keys are ignored.
 
@@ -602,7 +602,7 @@ require a config file change and are read at startup.
 
 ## Source Layout
 
-`src/private_agent/`: `cli.py` (entry point), `config/` (configuration and settings), `agent/`
+`src/`: `cli.py` (entry point), `config/` (configuration and settings), `agent/`
 (`runtime.py` session loop, `interactive.py` prompt and completion,
 `permissions.py`, `providers.py`, `prompts.py`), `tools/` (filesystem, network,
 media, memory, planning, schemas), `database/memory.py` (SQLite),

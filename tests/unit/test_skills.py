@@ -3,15 +3,15 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
-from private_agent.tools import (
+from tools import (
     create_skill,
     get_tool_context,
 )
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -27,7 +27,7 @@ except ImportError:
             return model
 
 
-from private_agent.skills import (
+from skills import (
     AgentSkill,
     load_skills_from_folder,
     match_skill_by_relevancy,
@@ -109,8 +109,8 @@ def test_create_skill_tool_rejects_path_traversal_and_existing_files(tmp_path):
 
 @pytest.mark.asyncio
 async def test_skill_creation_requires_interactive_approval(monkeypatch, tmp_path):
-    import private_agent.agent.runtime as agent
-    from private_agent import tools
+    import agent.runtime as agent
+    import tools
 
     registry = {}
     context = get_tool_context()
@@ -156,7 +156,7 @@ async def test_skill_creation_requires_interactive_approval(monkeypatch, tmp_pat
 async def test_skill_creation_is_blocked_without_interactive_terminal(
     monkeypatch, tmp_path
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     context = get_tool_context()
     context.skill_directory = str(tmp_path / "skills")

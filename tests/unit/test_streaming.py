@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk
 
-from private_agent.agent import streaming
+from agent import streaming
 
 
 def test_visible_chunk_text_reads_strings_and_text_blocks():

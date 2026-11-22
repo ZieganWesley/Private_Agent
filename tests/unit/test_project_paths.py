@@ -1,4 +1,4 @@
-from private_agent.agent.project_paths import discover_project_resources
+from agent.project_paths import discover_project_resources
 
 
 def test_project_resources_are_discovered_from_all_supported_locations(tmp_path):

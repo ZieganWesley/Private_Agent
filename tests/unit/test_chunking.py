@@ -1,6 +1,6 @@
 import pytest
 
-from private_agent.rag.chunking import (
+from rag.chunking import (
     _TOKEN_RE,
     STRATEGIES,
     ChunkingSettings,
@@ -81,7 +81,7 @@ def test_min_chunk_chars_merges_small_pieces():
 
 
 def test_semantic_splits_at_topic_shift_and_traces_fallback(monkeypatch):
-    from private_agent.rag import chunking
+    from rag import chunking
 
     text = " ".join(["Cats purr softly."] * 4 + ["Stocks fell sharply."] * 4)
     events = []

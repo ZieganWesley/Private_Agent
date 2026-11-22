@@ -6,11 +6,11 @@ from pathlib import Path
 
 from rich.console import Console
 
-from private_agent.ui import SessionUI
+from ui import SessionUI
 
 
 def test_gauge_glyphs_and_tokens_only_live_under_ui():
-    root = Path("src/private_agent")
+    root = Path("src")
     ui_dir = root / "ui"
     forbidden_tokens = ["\u25b0", "\u25b1", "GAUGE_FILLED", "GAUGE_EMPTY"]
     offenders = []
@@ -40,7 +40,7 @@ def test_gauge_glyphs_and_tokens_only_live_under_ui():
 
 
 def test_runtime_has_no_old_chrome_labels():
-    text = Path("src/private_agent/agent/runtime.py").read_text(encoding="utf-8")
+    text = Path("src/agent/runtime.py").read_text(encoding="utf-8")
     for label in ("[Latency]", "[Generation]", "Working", "[Context State]"):
         assert label not in text, f"old chrome label {label!r} still in runtime.py"
     assert 'console.print(f"[dim]model=' not in text

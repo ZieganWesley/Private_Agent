@@ -1,6 +1,6 @@
 import pytest
 
-from private_agent.sandbox import (
+from sandbox import (
     evaluate_shell_command,
     requires_shell_interpreter,
     shell_command_programs,

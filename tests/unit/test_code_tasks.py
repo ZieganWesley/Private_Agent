@@ -8,14 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rich.console import Console
 
-from private_agent.tools import (
+from tools import (
     run_shell_command,
 )
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -31,7 +31,7 @@ except ImportError:
             return model
 
 
-from private_agent.code_tasks import (
+from code_tasks import (
     CodeTaskWorkspace,
     _isolated_command,
     is_code_task_request,
@@ -101,8 +101,8 @@ def test_code_workspace_isolated_git_and_test_gated_checkpoint(tmp_path, monkeyp
     assert committed.startswith("Checkpoint committed locally:")
     assert "Tests passed:" in workspace.last_test_result
 
-    from private_agent import code_tasks
-    from private_agent.tools import get_tool_context
+    import code_tasks
+    from tools import get_tool_context
 
     monkeypatch.setattr(get_tool_context(), "code_task", workspace)
     final = code_tasks.finalize_code_task.invoke({})
@@ -115,7 +115,7 @@ def test_code_workspace_isolated_git_and_test_gated_checkpoint(tmp_path, monkeyp
 
 
 def test_code_workspace_without_git_requires_confirmation(tmp_path, monkeypatch):
-    from private_agent import code_tasks
+    import code_tasks
 
     monkeypatch.setattr(code_tasks.shutil, "which", lambda executable: None)
     declined = CodeTaskWorkspace.create(
@@ -140,7 +140,7 @@ def test_git_initialization_failure_requires_confirmation_and_removes_partial_re
     tmp_path,
     monkeypatch,
 ):
-    from private_agent import code_tasks
+    import code_tasks
 
     real_run_git = code_tasks._run_git
 
@@ -219,7 +219,7 @@ def test_existing_code_workspace_copy_excludes_git_secrets_and_caches(
 def test_code_workspace_copy_failure_preserves_source_and_removes_destination(
     tmp_path, monkeypatch
 ):
-    from private_agent import code_tasks
+    import code_tasks
 
     source = tmp_path / "source"
     source.mkdir()
@@ -246,7 +246,7 @@ def test_code_workspace_copy_failure_preserves_source_and_removes_destination(
 
 
 def test_code_workspace_removes_symlinks_added_during_copy(tmp_path, monkeypatch):
-    from private_agent import code_tasks
+    import code_tasks
 
     source = tmp_path / "source"
     source.mkdir()
@@ -284,14 +284,14 @@ def test_code_workspace_removes_symlinks_added_during_copy(tmp_path, monkeypatch
 
 
 def test_code_task_blocks_manual_git_shell_commands(monkeypatch):
-    from private_agent.tools import get_tool_context
+    from tools import get_tool_context
 
     monkeypatch.setattr(get_tool_context(), "code_task", object())
-    from private_agent.tools import approved_tool_invocation
+    from tools import approved_tool_invocation
 
     with (
         approved_tool_invocation(),
-        patch("private_agent.tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("tools.shell.sys.stdin", MagicMock(isatty=lambda: True)),
     ):
         result = run_shell_command.invoke({"command": "git status"})
     assert "manual Git commands are disabled" in result
@@ -308,7 +308,7 @@ def test_code_task_blocks_manual_git_shell_commands(monkeypatch):
 def test_isolated_command_fails_closed_when_isolation_is_unavailable(
     monkeypatch, tmp_path, system, available_tools, message
 ):
-    from private_agent import code_tasks
+    import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: system)
     monkeypatch.setattr(
@@ -355,7 +355,7 @@ def test_isolated_command_fails_closed_when_isolation_is_unavailable(
 def test_isolation_readiness_reports_platform_without_raising(
     monkeypatch, system, available_tools, expected
 ):
-    from private_agent import code_tasks
+    import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: system)
     monkeypatch.setattr(
@@ -368,7 +368,7 @@ def test_isolation_readiness_reports_platform_without_raising(
 
 
 def test_isolated_command_uses_seatbelt_on_macos(monkeypatch, tmp_path):
-    from private_agent import code_tasks
+    import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(
@@ -390,7 +390,7 @@ def test_isolated_command_uses_seatbelt_on_macos(monkeypatch, tmp_path):
 def test_isolated_command_shares_network_only_when_explicitly_enabled(
     monkeypatch, tmp_path
 ):
-    from private_agent import code_tasks
+    import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: "Linux")
     monkeypatch.setattr(
@@ -488,7 +488,7 @@ def test_generated_project_test_command_isolated_from_host_files(tmp_path):
 
 
 def test_project_runner_runs_all_detected_suites_after_failure(tmp_path, monkeypatch):
-    from private_agent import code_tasks
+    import code_tasks
 
     project = tmp_path / "project"
     (project / "tests").mkdir(parents=True)
@@ -543,7 +543,7 @@ def test_project_runner_rejects_ignored_test_files(tmp_path):
 
 
 def test_project_runner_reports_missing_runner_and_timeout(tmp_path, monkeypatch):
-    from private_agent import code_tasks
+    import code_tasks
 
     project = tmp_path / "project"
     project.mkdir()
@@ -551,7 +551,7 @@ def test_project_runner_reports_missing_runner_and_timeout(tmp_path, monkeypatch
         "def test_example():\n    assert True\n", encoding="utf-8"
     )
     workspace = CodeTaskWorkspace(project, "project", False)
-    from private_agent.code_tasks import testing
+    from code_tasks import testing
 
     real_find_spec = testing.importlib.util.find_spec
     monkeypatch.setattr(testing.importlib.util, "find_spec", lambda name: None)
@@ -575,7 +575,7 @@ def test_project_runner_reports_missing_runner_and_timeout(tmp_path, monkeypatch
 
 
 def test_project_runner_executes_configured_argv_inside_sandbox(tmp_path, monkeypatch):
-    from private_agent import code_tasks
+    import code_tasks
 
     project = tmp_path / "project"
     project.mkdir()
@@ -583,7 +583,7 @@ def test_project_runner_executes_configured_argv_inside_sandbox(tmp_path, monkey
     workspace = CodeTaskWorkspace(project, "project", False)
     commands = []
     isolated = []
-    from private_agent.code_tasks import testing
+    from code_tasks import testing
 
     monkeypatch.setattr(
         testing,
@@ -617,7 +617,7 @@ def test_project_runner_executes_configured_argv_inside_sandbox(tmp_path, monkey
 
 
 def test_direct_workspace_access_does_not_copy_or_create_git(tmp_path, monkeypatch):
-    from private_agent import sandbox
+    import sandbox
 
     selected_root = tmp_path / "selected"
     selected_root.mkdir()
@@ -643,7 +643,7 @@ def test_direct_workspace_access_does_not_copy_or_create_git(tmp_path, monkeypat
 def test_checkpoint_surfaces_git_commit_failure_without_claiming_success(
     tmp_path, monkeypatch
 ):
-    from private_agent.code_tasks import checkpoints
+    from code_tasks import checkpoints
 
     project = tmp_path / "project"
     project.mkdir()
@@ -687,7 +687,7 @@ def test_checkpoint_surfaces_git_commit_failure_without_claiming_success(
 
 
 def test_checkpoint_surfaces_git_status_failure(tmp_path):
-    from private_agent.code_tasks import checkpoints
+    from code_tasks import checkpoints
 
     project = tmp_path / "project"
     project.mkdir()
@@ -721,7 +721,7 @@ def test_checkpoint_surfaces_git_status_failure(tmp_path):
 def test_checkpoint_surfaces_staging_and_post_commit_verification_failures(
     tmp_path, monkeypatch, failure_stage, expected
 ):
-    from private_agent.code_tasks import checkpoints
+    from code_tasks import checkpoints
 
     project = tmp_path / "project"
     project.mkdir()
@@ -771,7 +771,7 @@ def test_checkpoint_surfaces_staging_and_post_commit_verification_failures(
 def test_finalize_surfaces_git_status_and_staged_diff_failures(
     tmp_path, monkeypatch, failure_stage
 ):
-    from private_agent.code_tasks import checkpoints
+    from code_tasks import checkpoints
 
     project = tmp_path / "project"
     project.mkdir()

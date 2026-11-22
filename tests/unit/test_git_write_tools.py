@@ -1,8 +1,8 @@
 import subprocess
 from pathlib import Path
 
-from private_agent.sandbox import SandboxManager
-from private_agent.tools import filesystem
+from sandbox import SandboxManager
+from tools import filesystem
 
 
 def _init_repo(root: Path) -> None:

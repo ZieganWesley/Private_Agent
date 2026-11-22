@@ -1,6 +1,6 @@
 import threading
 
-from private_agent.core import events
+from core import events
 
 
 def test_emit_calls_subscribers():

@@ -1,4 +1,4 @@
-from private_agent.agent.permissions import (
+from agent.permissions import (
     evaluate_permission_rules,
     permission_rule_matches,
 )

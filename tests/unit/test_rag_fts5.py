@@ -5,8 +5,8 @@ import time
 
 from langchain_core.documents import Document
 
-from private_agent.rag import retrieval
-from private_agent.rag.retrieval import HybridRAGRetriever
+from rag import retrieval
+from rag.retrieval import HybridRAGRetriever
 
 
 def _documents(count: int) -> list[Document]:

@@ -14,7 +14,7 @@ from langchain_core.messages import (
 )
 from rich.console import Console
 
-from private_agent.agent import (
+from agent import (
     _invoke_with_budget,
     authorize_network_research,
     execute_tool_call,
@@ -25,13 +25,13 @@ from private_agent.agent import (
     streaming,
     tool_display,
 )
-from private_agent.database import PersistentMemory
-from private_agent.sandbox import SandboxManager
+from database import PersistentMemory
+from sandbox import SandboxManager
 
 try:
-    from private_agent.agent import get_robust_chat_model
+    from agent import get_robust_chat_model
 except ImportError:
-    # Fallback definition if not explicitly exposed in private_agent.agent
+    # Fallback definition if not explicitly exposed in agent
     def get_robust_chat_model(primary_model_name, fallback_model_name, tools=None):
         from langchain_ollama import ChatOllama
 
@@ -52,7 +52,7 @@ console = Console()
 
 @pytest.fixture
 def scripted_local_cli(monkeypatch, tmp_path):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -83,7 +83,7 @@ def scripted_local_cli(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "AGENT_PERMISSION_MODE", "auto")
     monkeypatch.setattr(agent, "APP_CONFIG", {})
     monkeypatch.setattr(memory_context, "_offer_local_data_reset", lambda memory: None)
-    from private_agent.tools import get_tool_context
+    from tools import get_tool_context
 
     get_tool_context().db_path = str(database_path)
     monkeypatch.setattr(
@@ -131,7 +131,7 @@ def scripted_local_cli(monkeypatch, tmp_path):
 
 
 def _install_approved_task(agent, monkeypatch, db_path, goal, task_type, steps):
-    from private_agent.tools import get_tool_context
+    from tools import get_tool_context
 
     memory = PersistentMemory(db_path=str(db_path))
     task = memory.create_task_plan(
@@ -199,7 +199,7 @@ def _capture_rendered_text(printed):
 async def test_cli_requires_a_terminal_before_starting_session(monkeypatch):
     from types import SimpleNamespace
 
-    from private_agent.agent import runtime
+    from agent import runtime
 
     printed = []
     memory_factory = MagicMock()
@@ -301,7 +301,7 @@ async def test_online_provider_preference_is_cached_for_session(
     first_provider_choice,
     expected_preference,
 ):
-    from private_agent.agent import runtime as agent
+    from agent import runtime as agent
 
     _agent, model, inputs, _workspace, _database_path = scripted_local_cli
     monkeypatch.setattr(agent, "_discover_available_local_runtimes", list)
@@ -559,7 +559,7 @@ async def test_cli_applies_explicit_skill_to_next_request(
     scripted_local_cli, monkeypatch
 ):
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
-    from private_agent.skills import AgentSkill
+    from skills import AgentSkill
 
     skill = AgentSkill(
         "Python Expert",
@@ -955,7 +955,7 @@ async def test_plan_research_decline_offline_or_unavailable_results_are_safe(
 def test_sync_connect_backend_falls_back_to_second_validated_address(monkeypatch):
     import httpcore
 
-    from private_agent.tools import _PublicOnlySyncNetworkBackend
+    from tools import _PublicOnlySyncNetworkBackend
 
     backend = _PublicOnlySyncNetworkBackend(allow_loopback=True)
     attempts = []
@@ -968,7 +968,7 @@ def test_sync_connect_backend_falls_back_to_second_validated_address(monkeypatch
 
     monkeypatch.setattr(backend._backend, "connect_tcp", connect)
     monkeypatch.setattr(
-        "private_agent.tools.network._getaddrinfo_with_timeout",
+        "tools.network._getaddrinfo_with_timeout",
         lambda *args, **kwargs: ["::1", "127.0.0.1"],
     )
     assert backend.connect_tcp("localhost", 11434) == "connected"
@@ -977,13 +977,13 @@ def test_sync_connect_backend_falls_back_to_second_validated_address(monkeypatch
 
 @pytest.mark.asyncio
 async def test_offline_research_can_continue_with_incomplete_data():
-    from private_agent.agent import runtime as agent
+    from agent import runtime as agent
 
     with (
         patch(
-            "private_agent.agent.runtime.has_internet_connection", return_value=False
+            "agent.runtime.has_internet_connection", return_value=False
         ),
-        patch("private_agent.agent.runtime.sys.stdin", MagicMock(isatty=lambda: True)),
+        patch("agent.runtime.sys.stdin", MagicMock(isatty=lambda: True)),
         patch.object(agent.console, "input", return_value="c"),
     ):
         allowed, message = await authorize_network_research(
@@ -998,7 +998,7 @@ async def test_offline_research_can_continue_with_incomplete_data():
 async def test_web_research_ask_policy_prompts_outside_manual_mode(
     permission_mode,
 ):
-    from private_agent.agent.permissions import authorize_network_research as authorize
+    from agent.permissions import authorize_network_research as authorize
 
     console = MagicMock()
     console.input.return_value = "y"
@@ -1022,7 +1022,7 @@ async def test_web_research_ask_policy_prompts_outside_manual_mode(
 @pytest.mark.asyncio
 @pytest.mark.parametrize("policy", ["ask", "session"])
 async def test_full_permission_mode_skips_web_consent_prompt(policy):
-    from private_agent.agent.permissions import authorize_network_research as authorize
+    from agent.permissions import authorize_network_research as authorize
 
     console = MagicMock()
     allowed, _ = await authorize(
@@ -1041,7 +1041,7 @@ async def test_full_permission_mode_skips_web_consent_prompt(policy):
 
 @pytest.mark.asyncio
 async def test_web_research_session_consent_is_prompted_once():
-    from private_agent.agent.permissions import authorize_network_research as authorize
+    from agent.permissions import authorize_network_research as authorize
 
     console = MagicMock()
     console.input.return_value = "y"
@@ -1065,7 +1065,7 @@ async def test_web_research_session_consent_is_prompted_once():
 
 @pytest.mark.asyncio
 async def test_manual_mode_keeps_per_request_approval_with_session_consent():
-    from private_agent.agent.permissions import authorize_network_research as authorize
+    from agent.permissions import authorize_network_research as authorize
 
     console = MagicMock()
     console.input.return_value = "y"
@@ -1144,7 +1144,7 @@ async def test_non_coding_web_research_no_longer_needs_an_approved_plan(
 
 
 def test_permission_mode_policy_matrix(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     monkeypatch.setattr(agent, "MCP_TOOL_NAMES", {"mcp_read"})
     monkeypatch.setattr(agent, "MCP_AUTO_APPROVE_TOOLS", {"mcp_trusted"})
@@ -1283,7 +1283,7 @@ async def test_tool_result_and_failure_are_returned_to_agent(monkeypatch):
     from rich.panel import Panel
     from rich.text import Text
 
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     assert agent._tool_result_is_error("Web search failed: ConnectionError")
     assert agent._tool_result_is_error("Could not open camera device 0.")
@@ -1384,7 +1384,7 @@ async def test_tool_result_and_failure_are_returned_to_agent(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_model_invocation_streams_and_aggregates_text(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     class StreamingModel:
         async def astream(self, messages):
@@ -1412,7 +1412,7 @@ async def test_model_invocation_streams_and_aggregates_text(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_empty_model_stream_retries_once_with_non_streaming_call(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     class EmptyStreamModel:
         def __init__(self):
@@ -1442,7 +1442,7 @@ async def test_empty_model_stream_retries_once_with_non_streaming_call(monkeypat
 
 @pytest.mark.asyncio
 async def test_empty_model_stream_retry_failure_stays_in_current_turn(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     class EmptyStreamModel:
         async def astream(self, _messages):
@@ -1465,7 +1465,7 @@ async def test_empty_model_stream_retry_failure_stays_in_current_turn(monkeypatc
 
 
 def test_visible_chunk_text_includes_text_blocks():
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     assert (
         agent._visible_chunk_text(
@@ -1482,7 +1482,7 @@ def test_visible_chunk_text_includes_text_blocks():
 
 
 def test_tool_request_is_visible_and_redacts_secrets(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     printed = []
     monkeypatch.setattr(
@@ -1510,7 +1510,7 @@ def test_tool_request_is_visible_and_redacts_secrets(monkeypatch):
 
 
 def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     printed = []
     monkeypatch.setattr(
@@ -1549,7 +1549,7 @@ async def test_model_invocation_falls_back_to_nonstreaming_models():
 async def test_empty_nonstreaming_response_retries_without_restarting_session(
     monkeypatch,
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     model = MagicMock()
     model.ainvoke = AsyncMock(
@@ -1589,7 +1589,7 @@ async def test_streaming_can_be_disabled_by_configuration(monkeypatch):
 
 
 def test_generation_rate_prefers_provider_token_usage(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     printed = []
     monkeypatch.setattr(
@@ -1613,7 +1613,7 @@ def test_generation_rate_prefers_provider_token_usage(monkeypatch):
 
 
 def test_visible_reasoning_only_shows_explicit_summary_when_enabled(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     printed = []
     monkeypatch.setattr(
@@ -1642,7 +1642,7 @@ def test_visible_reasoning_only_shows_explicit_summary_when_enabled(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_streaming_response_stops_the_spinner_before_rendering(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     created = []
     active = {"value": False}
@@ -1699,7 +1699,7 @@ async def test_streaming_response_stops_the_spinner_before_rendering(monkeypatch
 
 @pytest.mark.asyncio
 async def test_nonstreaming_response_keeps_live_status(monkeypatch):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     created = []
     active = {"value": False}
@@ -1753,7 +1753,7 @@ async def test_model_failure_shows_reference_without_exposing_exception(
 ):
     import re
 
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     events = []
     printed = []
@@ -1799,7 +1799,7 @@ async def test_model_failure_shows_reference_without_exposing_exception(
 async def test_agent_shutdown_closes_resources_and_restores_dynamic_tools(
     monkeypatch, tmp_path, failure
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     closed = []
     cleanup_calls = []
@@ -1855,7 +1855,7 @@ async def test_agent_shutdown_closes_resources_and_restores_dynamic_tools(
 async def test_agent_shutdown_cleans_up_when_startup_fails_before_memory_registration(
     monkeypatch,
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     cleanup = []
     monkeypatch.setattr(agent, "_ACTIVE_MEMORY", None)
@@ -1889,7 +1889,7 @@ async def test_agent_shutdown_cleans_up_when_startup_fails_before_memory_registr
 
 @pytest.mark.asyncio
 async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_path):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -2065,7 +2065,7 @@ async def test_runtime_rag_citations_are_prompted_and_shown(
 async def test_cli_requires_rebuild_confirmation_before_preserving_corrupt_rag_index(
     scripted_local_cli, monkeypatch, tmp_path
 ):
-    from private_agent.rag import indexing, initialize_knowledge_base
+    from rag import indexing, initialize_knowledge_base
 
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
     docs = tmp_path / "knowledge"
@@ -2279,8 +2279,8 @@ async def test_cli_history_search_and_reviewed_entry_deletion_flow(
 async def test_runtime_bounds_assembled_long_session_to_model_context(
     scripted_local_cli, monkeypatch
 ):
-    import private_agent.agent.runtime as agent
-    from private_agent.agent.prompts import token_count
+    import agent.runtime as agent
+    from agent.prompts import token_count
 
     _agent, model, inputs, _workspace, database_path = scripted_local_cli
     memory = PersistentMemory(db_path=str(database_path))
@@ -2344,8 +2344,8 @@ async def test_runtime_bounds_assembled_long_session_to_model_context(
 async def test_runtime_summarizes_full_context_instead_of_dropping_it(
     scripted_local_cli, monkeypatch
 ):
-    import private_agent.agent.runtime as agent
-    from private_agent.agent.prompts import token_count
+    import agent.runtime as agent
+    from agent.prompts import token_count
 
     _agent, model, inputs, _workspace, database_path = scripted_local_cli
     memory = PersistentMemory(db_path=str(database_path))
@@ -2988,8 +2988,8 @@ async def test_sensitive_tool_arguments_are_not_logged_or_persisted(
 async def test_repeated_cli_runs_remove_mcp_tools_and_sandboxes(
     scripted_local_cli, monkeypatch, tmp_path
 ):
-    import private_agent.tools.mcp as mcp_module
-    from private_agent.tools import network
+    import tools.mcp as mcp_module
+    from tools import network
 
     agent, _model, inputs, _workspace, _database_path = scripted_local_cli
     sandbox_dirs = []
@@ -3789,7 +3789,7 @@ async def test_ready_summary_is_compact_and_shows_local_hardware_only_for_local(
 async def test_maintenance_data_reset_clears_active_rag_and_session_context(
     tmp_path, monkeypatch
 ):
-    from private_agent.agent import runtime
+    from agent import runtime
 
     index_path = tmp_path / "rag-index"
     index_path.mkdir()
@@ -4581,8 +4581,8 @@ async def test_cli_code_task_workspace_creation_failure_keeps_session_available(
 
 @pytest.mark.asyncio
 async def test_checkpoint_system_failure_is_returned_to_runtime_call(monkeypatch):
-    import private_agent.agent.runtime as agent
-    from private_agent import code_tasks
+    import agent.runtime as agent
+    import code_tasks
 
     class BrokenCheckpointWorkspace:
         def checkpoint(self, label, paths):
@@ -4638,7 +4638,7 @@ async def test_concurrent_tool_execution_with_edge_case_exceptions():
     assert isinstance(results[1], ValueError)
 
 
-@patch("private_agent.agent.model_selection.ChatOllama")
+@patch("agent.model_selection.ChatOllama")
 def test_model_fallback_on_tool_incompatibility(mock_chat_ollama):
     mock_primary = MagicMock()
     mock_primary.bind_tools.side_effect = Exception("Model does not support tools")
@@ -4650,7 +4650,7 @@ def test_model_fallback_on_tool_incompatibility(mock_chat_ollama):
     assert model is not None
 
 
-@patch("private_agent.agent.model_selection.ChatOllama")
+@patch("agent.model_selection.ChatOllama")
 def test_model_fallback_total_failure_edge_case(mock_chat_ollama):
     mock_primary = MagicMock()
     mock_primary.bind_tools.side_effect = Exception("Primary fails")
@@ -4666,7 +4666,7 @@ def test_model_fallback_total_failure_edge_case(mock_chat_ollama):
         pass
 
 
-@patch("private_agent.agent.model_selection.ChatOllama")
+@patch("agent.model_selection.ChatOllama")
 def test_model_fallback_does_not_hide_unrecognized_configuration_error(
     mock_chat_ollama,
 ):
@@ -4675,9 +4675,9 @@ def test_model_fallback_does_not_hide_unrecognized_configuration_error(
     mock_chat_ollama.assert_called_once()
 
 
-@patch("private_agent.agent.model_selection.ollama.Client")
+@patch("agent.model_selection.ollama.Client")
 def test_model_capabilities_are_read_from_ollama_metadata(mock_client):
-    from private_agent.agent import runtime as agent
+    from agent import runtime as agent
 
     model_selection._MODEL_CAPABILITIES_CACHE.clear()
 
@@ -4706,7 +4706,7 @@ async def test_interrupt_summary_reports_stages_and_saves(tmp_path):
     from langchain_core.messages import AIMessage, HumanMessage
     from rich.console import Console
 
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     memory = PersistentMemory(db_path=str(tmp_path / "memory.sqlite"))
     memory.save_message("s1", "human", "hello")
@@ -4733,7 +4733,7 @@ async def test_second_interrupt_skips_summary(tmp_path):
     from langchain_core.messages import HumanMessage
     from rich.console import Console
 
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     memory = PersistentMemory(db_path=str(tmp_path / "memory.sqlite"))
     memory.save_message("s1", "human", "hello")
@@ -4756,7 +4756,7 @@ async def test_second_interrupt_skips_summary(tmp_path):
 async def test_summarize_command_then_exit_does_not_resummarize(
     scripted_local_cli, monkeypatch, capsys
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     _agent, model, inputs, _workspace, _db = scripted_local_cli
     monkeypatch.setattr(
@@ -4792,7 +4792,7 @@ async def test_summarize_command_then_exit_does_not_resummarize(
 async def test_exit_prints_session_statistics_table(
     scripted_local_cli, monkeypatch, capsys
 ):
-    import private_agent.agent.runtime as agent
+    import agent.runtime as agent
 
     _agent, model, inputs, _workspace, _db = scripted_local_cli
     monkeypatch.setattr(
@@ -4867,7 +4867,7 @@ async def test_continue_resumes_the_latest_session_and_appends_to_it(
 async def test_resuming_an_unknown_session_fails_before_startup(
     scripted_local_cli,
 ):
-    from private_agent.agent.session_resume import SessionResumeError
+    from agent.session_resume import SessionResumeError
 
     agent, _model, _inputs, _workspace, database_path = scripted_local_cli
 
@@ -5065,7 +5065,7 @@ async def test_f_runtime_integration_emits_timeline_and_json(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.agent.runtime_f_integration as f_integration
+    import agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     model.responses = [
@@ -5103,7 +5103,7 @@ async def test_enable_capability_rebuilds_tool_list_end_to_end(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.agent.runtime_f_integration as f_integration
+    import agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     model.responses = [
@@ -5136,7 +5136,7 @@ async def test_enable_capability_then_uses_newly_enabled_tool_next_iteration(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.agent.runtime_f_integration as f_integration
+    import agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     model.responses = [
@@ -5214,7 +5214,7 @@ async def test_enable_capability_rebinds_and_runs_the_new_tool_in_the_same_turn(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.agent.runtime_f_integration as f_integration
+    import agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     timeline = _record_tool_bindings(monkeypatch, model)
@@ -5268,8 +5268,8 @@ async def test_capability_packs_do_not_leak_between_turns(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.agent.runtime_f_integration as f_integration
-    from private_agent.tools import get_tool_context
+    import agent.runtime_f_integration as f_integration
+    from tools import get_tool_context
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     monkeypatch.setattr(
@@ -5340,8 +5340,8 @@ async def test_turn_context_is_reset_when_the_model_fails_before_the_tool_loop(
     scripted_local_cli, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
-    import private_agent.agent.runtime_f_integration as f_integration
-    from private_agent.tools import get_tool_context
+    import agent.runtime_f_integration as f_integration
+    from tools import get_tool_context
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
     outer = get_tool_context()
@@ -5360,7 +5360,7 @@ async def test_turn_context_is_reset_when_the_model_fails_before_the_tool_loop(
 @pytest.mark.asyncio
 async def test_startup_menus_prefer_arrow_selection(scripted_local_cli, monkeypatch):
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
-    from private_agent.agent import interactive
+    from agent import interactive
 
     arrow_calls: list[tuple[str, list[str]]] = []
 
@@ -5410,7 +5410,7 @@ async def test_startup_menus_prefer_arrow_selection(scripted_local_cli, monkeypa
 @pytest.mark.asyncio
 async def test_tasks_menu_uses_arrow_selection(scripted_local_cli, monkeypatch):
     agent, model, inputs, _workspace, database_path = scripted_local_cli
-    from private_agent.agent import interactive
+    from agent import interactive
 
     _install_approved_task(
         agent,
@@ -5453,8 +5453,8 @@ async def test_provider_and_model_flags_skip_startup_menus_and_are_remembered(
     scripted_local_cli, monkeypatch, tmp_path
 ):
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
-    from private_agent.agent import interactive
-    from private_agent.providers.selection import load_last_provider
+    from agent import interactive
+    from providers.selection import load_last_provider
 
     state_file = tmp_path / "last_provider.json"
     monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(state_file))
@@ -5497,7 +5497,7 @@ async def test_unknown_provider_flag_falls_back_to_the_menu(
     scripted_local_cli, monkeypatch, tmp_path
 ):
     agent, model, inputs, _workspace, _database_path = scripted_local_cli
-    from private_agent.agent import interactive
+    from agent import interactive
 
     monkeypatch.setenv(
         "PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "last_provider.json")
@@ -5530,8 +5530,8 @@ async def test_resumed_session_reuses_the_recorded_provider_without_prompts(
     scripted_local_cli, monkeypatch, tmp_path
 ):
     agent, model, inputs, _workspace, database_path = scripted_local_cli
-    from private_agent.database import PersistentMemory
-    from private_agent.providers.adapters import ProviderRecord
+    from database import PersistentMemory
+    from providers.adapters import ProviderRecord
 
     monkeypatch.setenv(
         "PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "last_provider.json")
@@ -5555,7 +5555,7 @@ async def test_resumed_session_reuses_the_recorded_provider_without_prompts(
     )
     memory.close()
 
-    from private_agent.agent import interactive
+    from agent import interactive
 
     arrow_titles: list[str] = []
 
@@ -5589,8 +5589,8 @@ async def test_resume_with_a_stopped_provider_falls_back_to_the_menu(
     scripted_local_cli, monkeypatch, tmp_path
 ):
     agent, model, inputs, _workspace, database_path = scripted_local_cli
-    from private_agent.database import PersistentMemory
-    from private_agent.providers.adapters import ProviderRecord
+    from database import PersistentMemory
+    from providers.adapters import ProviderRecord
 
     monkeypatch.setenv(
         "PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "last_provider.json")
@@ -5616,7 +5616,7 @@ async def test_resume_with_a_stopped_provider_falls_back_to_the_menu(
     )
     memory.close()
 
-    from private_agent.agent import interactive
+    from agent import interactive
 
     arrow_titles: list[str] = []
 

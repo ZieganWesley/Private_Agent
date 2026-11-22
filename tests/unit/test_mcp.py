@@ -1,6 +1,6 @@
 import pytest
 
-from private_agent.tools.mcp import load_configured_mcp_tools
+from tools.mcp import load_configured_mcp_tools
 
 
 @pytest.mark.asyncio
