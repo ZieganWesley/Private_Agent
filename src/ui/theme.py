@@ -11,11 +11,6 @@ from __future__ import annotations
 GAUGE_FILLED = "\u25b0"
 GAUGE_EMPTY = "\u25b1"
 
-# Widths (in cells) for the gauges shown in different places.
-CONTEXT_BAR_WIDTH = 24
-RIBBON_GAUGE_CELLS = 24
-SPINNER_GAUGE_CELLS = 10
-
 # Separators used between ribbon segments and toolbar segments.
 SEGMENT_SEPARATOR = " | "
 

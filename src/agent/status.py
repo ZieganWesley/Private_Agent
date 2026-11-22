@@ -8,13 +8,10 @@ from ``ui`` directly.
 from __future__ import annotations
 
 from ui import (
-    CONTEXT_BAR_WIDTH,
     LOADING,
     NO_COLOR_ENV,
     PROCESSING,
-    RIBBON_GAUGE_CELLS,
     SEGMENT_SEPARATOR,
-    SPINNER_GAUGE_CELLS,
     SUMMARIZING,
     THINKING,
     TURN_LABEL,
@@ -35,8 +32,6 @@ from ui import (
 )
 from ui.console import console
 
-# Back-compat alias used by older callers.
-CONTEXT_BAR_WIDTH = CONTEXT_BAR_WIDTH
 
 # Re-export StatusState-based helpers under the old names.
 def status_line(
@@ -76,9 +71,6 @@ __all__ = [
     "THINKING",
     "PROCESSING",
     "SUMMARIZING",
-    "CONTEXT_BAR_WIDTH",
-    "RIBBON_GAUGE_CELLS",
-    "SPINNER_GAUGE_CELLS",
     "SEGMENT_SEPARATOR",
     "TURN_LABEL",
     "NO_COLOR_ENV",

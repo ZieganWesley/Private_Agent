@@ -25,11 +25,9 @@ class SessionUI:
         console: Any = None,
         *,
         status_bar: bool = True,
-        verbose_timings: bool = False,
     ) -> None:
         self.console = console if console is not None else _shared_console
         self.status_bar_enabled = bool(status_bar)
-        self.verbose_timings = bool(verbose_timings)
         self._model: Any = None
         self._permission: str = "auto"
         self._output_tokens: Any = None

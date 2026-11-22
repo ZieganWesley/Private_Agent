@@ -30,13 +30,10 @@ from .state import (
     context_style,
 )
 from .theme import (
-    CONTEXT_BAR_WIDTH,
     GAUGE_EMPTY,
     GAUGE_FILLED,
     NO_COLOR_ENV,
-    RIBBON_GAUGE_CELLS,
     SEGMENT_SEPARATOR,
-    SPINNER_GAUGE_CELLS,
     TURN_LABEL,
 )
 
@@ -67,13 +64,10 @@ __all__ = [
     "PROCESSING",
     "SUMMARIZING",
     "THINKING",
-    "CONTEXT_BAR_WIDTH",
     "GAUGE_EMPTY",
     "GAUGE_FILLED",
     "NO_COLOR_ENV",
-    "RIBBON_GAUGE_CELLS",
     "SEGMENT_SEPARATOR",
-    "SPINNER_GAUGE_CELLS",
     "TURN_LABEL",
     "StatusIndicator",
     "StatusState",

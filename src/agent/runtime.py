@@ -65,7 +65,6 @@ from config import (
     SKILLS_FOLDER_DEFAULT,
     STATUS_BAR,
     SYSTEM_PROMPT,
-    VERBOSE_TIMINGS,
     TASK_STALE_AFTER_DAYS,
     THINKING_EFFORT_DEFAULT,
     THINKING_TOGGLE_DEFAULT,
@@ -2485,7 +2484,6 @@ async def _run_agent_cli_session(
         session_ui = SessionUI(
             console=console,
             status_bar=STATUS_BAR,
-            verbose_timings=VERBOSE_TIMINGS,
         )
         session_ui.bind(model=selected_model, permission=permission_mode)
         _local_model_has_answered = False
