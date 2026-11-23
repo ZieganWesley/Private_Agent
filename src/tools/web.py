@@ -2,6 +2,8 @@
 
 import contextlib
 import os
+import re
+import sys
 import tempfile
 
 import httpx
@@ -120,3 +122,235 @@ def download_web_file(url: str, save_path: str) -> str:
     except (httpx.HTTPError, ValueError, OSError) as exc:
         record_network_failure(exc)
         return f"Failed to download file: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Media search + download tool(s)
+# ---------------------------------------------------------------------------
+
+_MEDIA_DOWNLOAD_ALIASES = [
+    "search_and_download_media",
+    "download_media",
+    "download_media_content",
+    "search_download_media",
+    "media_download",
+    "download_media_file",
+    "fetch_media",
+    "search_media",
+    "get_media",
+    "media_search_download",
+]
+
+
+class SearchAndDownloadMediaInput:
+    pass
+
+
+try:
+    from pydantic import BaseModel as _BaseModel
+    from pydantic import Field as _Field
+
+    class SearchAndDownloadMediaInput(_BaseModel):  # type: ignore[no-redef]
+        query: str | None = _Field(
+            default=None,
+            description="What media content the user wants (search terms).",
+        )
+        search_query: str | None = _Field(default=None, description="Alias for query.")
+        media_query: str | None = _Field(default=None, description="Alias for query.")
+        request: str | None = _Field(default=None, description="Alias for query.")
+        keyword: str | None = _Field(default=None, description="Alias for query.")
+        keywords: str | None = _Field(default=None, description="Alias for query.")
+        media_type: str | None = _Field(
+            default=None,
+            description="Media type: image, video, or audio (default: image).",
+        )
+        type: str | None = _Field(default=None, description="Alias for media_type.")
+        kind: str | None = _Field(default=None, description="Alias for media_type.")
+        content_type: str | None = _Field(default=None, description="Alias for media_type.")
+        url: str | None = _Field(
+            default=None, description="Direct media URL to download instead of searching."
+        )
+        save_path: str | None = _Field(
+            default=None, description="Destination file path inside the workspace."
+        )
+        destination: str | None = _Field(default=None, description="Alias for save_path.")
+        output_path: str | None = _Field(default=None, description="Alias for save_path.")
+        filename: str | None = _Field(default=None, description="Alias for save_path.")
+        path: str | None = _Field(default=None, description="Alias for save_path.")
+
+except Exception:  # pragma: no cover - pydantic always available here  # noqa: BLE001 - optional fallback
+    from pydantic import BaseModel as _BaseModel
+    from pydantic import Field as _Field
+
+    class SearchAndDownloadMediaInput(_BaseModel):  # type: ignore[no-redef]
+        query: str | None = _Field(default=None)
+
+
+def _first_value(kwargs: dict, keys: list[str]):
+    for key in keys:
+        value = kwargs.get(key)
+        if value is not None and str(value).strip() != "":
+            return value
+    return None
+
+
+def _normalize_media_type(value):
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"image", "img", "picture", "photo", "jpg", "jpeg", "png"}:
+        return "image"
+    if text in {"video", "vid", "movie", "clip", "mp4", "mov"}:
+        return "video"
+    if text in {"audio", "sound", "music", "song", "mp3", "wav"}:
+        return "audio"
+    return text
+
+
+def _infer_media_type(query: str) -> str:
+    low = (query or "").lower()
+    if any(word in low for word in ("video", "movie", "clip", "mp4")):
+        return "video"
+    if any(word in low for word in ("audio", "music", "song", "sound", "mp3")):
+        return "audio"
+    return "image"
+
+
+def _sanitize_filename(text: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", (text or "").strip())
+    cleaned = cleaned.strip("._-")
+    return cleaned[:60] or "media"
+
+
+def _extract_url(text) -> str | None:
+    if not isinstance(text, str):
+        return None
+    match = re.search(r"https?://[^\s<>'\")\]]+", text)
+    if not match:
+        return None
+    return match.group(0).rstrip(".,;:")
+
+
+def _media_extension(media_type: str, url: str | None) -> str:
+    if url:
+        suffix = os.path.splitext(url.split("?", 1)[0])[1].lower()
+        if suffix in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".mp3", ".wav", ".m4a"}:
+            return suffix.lstrip(".")
+    return {"image": "jpg", "video": "mp4", "audio": "mp3"}.get(media_type, "bin")
+
+
+def _search_and_download_media_impl(**kwargs) -> str:
+    web_mod = sys.modules.get("tools.web")
+    if web_mod is None:
+        try:
+            import tools.web as web_mod
+        except Exception:  # noqa: BLE001 - best-effort optional operation
+            web_mod = None
+
+    has_internet = getattr(web_mod, "has_internet_connection", None) if web_mod else None
+    if callable(has_internet) and not has_internet():
+        return "Error: Network unavailable. Please check your internet connection and try again."
+
+    query = _first_value(
+        kwargs,
+        ["query", "search_query", "media_query", "request", "keyword", "keywords"],
+    )
+    media_type = _normalize_media_type(
+        _first_value(kwargs, ["media_type", "type", "kind", "content_type"])
+    )
+    url = _first_value(kwargs, ["url"])
+    save_path = _first_value(kwargs, ["save_path", "destination", "output_path", "filename", "path"])
+
+    if query is None and url is None:
+        return "Error: A search query or media URL is required."
+
+    if query is not None and media_type is None:
+        media_type = _infer_media_type(str(query))
+    if media_type is None:
+        media_type = "image"
+
+    if url is None:
+        search_query = str(query)
+        if media_type == "image":
+            search_query = f"{search_query} image"
+        elif media_type == "video":
+            search_query = f"{search_query} video"
+        elif media_type == "audio":
+            search_query = f"{search_query} audio"
+
+        results = None
+        search_fn = getattr(web_mod, "search_web", None) if web_mod else None
+        if callable(search_fn):
+            try:
+                results = search_fn(search_query)
+            except Exception as exc:  # noqa: BLE001 - best-effort optional operation
+                results = f"search failed: {exc}"
+        elif web_mod is not None and hasattr(web_mod, "web_search"):
+            tool_obj = web_mod.web_search
+            try:
+                if hasattr(tool_obj, "invoke"):
+                    results = tool_obj.invoke({"query": search_query})
+                else:
+                    results = tool_obj(search_query)
+            except Exception as exc:  # noqa: BLE001 - best-effort optional operation
+                results = f"search failed: {exc}"
+        else:
+            try:
+                from . import search as _search_mod
+
+                results = _search_mod.search_web(search_query)
+            except Exception as exc:  # noqa: BLE001 - best-effort optional operation
+                results = f"search failed: {exc}"
+
+        url = _extract_url(results)
+        if url is None:
+            return "Error: No downloadable media URL was found in search results."
+
+    if not save_path:
+        ext = _media_extension(media_type, url)
+        save_path = f"{_sanitize_filename(str(query) if query is not None else 'media')}.{ext}"
+
+    downloader = None
+    if web_mod is not None:
+        downloader = getattr(web_mod, "download_web_file", None)
+    if downloader is None:
+        try:
+            from .web import download_web_file as downloader
+        except Exception:  # noqa: BLE001 - best-effort optional operation
+            downloader = None
+
+    if downloader is None:
+        return "Error: download_web_file is unavailable."
+
+    try:
+        if hasattr(downloader, "invoke"):
+            result = downloader.invoke({"url": url, "save_path": save_path})
+        else:
+            result = downloader(url=url, save_path=save_path)
+    except Exception as exc:  # noqa: BLE001 - best-effort optional operation
+        return f"Failed to download media: {type(exc).__name__}: {exc}"
+
+    if isinstance(result, str):
+        return result
+    return f"Downloaded media to '{save_path}'."
+
+
+# Build and register all alias tools.
+MEDIA_DOWNLOAD_TOOLS = {}
+for _alias_name in _MEDIA_DOWNLOAD_ALIASES:
+    def _make(_name):
+        @tool(_name, args_schema=SearchAndDownloadMediaInput, description="Search for and download the media content requested by the user.")
+        def _tool(**kwargs):
+            return _search_and_download_media_impl(**kwargs)
+
+        _tool.__name__ = _name
+        _tool.__doc__ = "Search for and download the media content requested by the user."
+        return _tool
+
+    MEDIA_DOWNLOAD_TOOLS[_alias_name] = _make(_alias_name)
+
+# Expose individual names for ``from tools.web import ...``.
+for _name, _tool in MEDIA_DOWNLOAD_TOOLS.items():
+    globals()[_name] = _tool
+
+MEDIA_DOWNLOAD_TOOL_NAMES = list(MEDIA_DOWNLOAD_TOOLS.keys())

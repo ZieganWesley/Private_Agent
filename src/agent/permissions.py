@@ -71,6 +71,7 @@ def tool_needs_permission(
         return name not in network_tool_names or not network_authorized
     return (
         name in MUTATING_TOOL_NAMES
+        or ("media" in name.lower() and "download" in name.lower())
         or name in mcp_tool_names
         and name not in mcp_auto_approve_tools
     )

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+
+try:
+    from tools.web import MEDIA_DOWNLOAD_TOOL_NAMES as _MEDIA_DOWNLOAD_TOOL_NAMES
+except Exception:  # noqa: BLE001 - best-effort optional operation
+    _MEDIA_DOWNLOAD_TOOL_NAMES = []
 from dataclasses import dataclass, field
 
 # Plain chat binds only the Core pack (9.2, 13.7); other packs are added by
@@ -52,7 +57,8 @@ _register(
 )
 _register(
     "Research",
-    {"web_search", "fetch_webpage", "download_web_file"},
+    {"web_search", "fetch_webpage", "download_web_file"}
+    | set(_MEDIA_DOWNLOAD_TOOL_NAMES),
     "Search, read, check gaps, cite only real sources.",
 )
 _register(
@@ -119,7 +125,8 @@ _register(
         "list_microphone_devices",
         "record_microphone_audio",
         "transcribe_workspace_audio",
-    },
+    }
+    | set(_MEDIA_DOWNLOAD_TOOL_NAMES),
     "Media capture and transcription rules.",
 )
 _register(

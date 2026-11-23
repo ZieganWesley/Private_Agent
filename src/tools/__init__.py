@@ -439,7 +439,7 @@ def describe_tool_catalog() -> list[dict[str, str]]:
             "revise_task_plan",
             "update_todo_step",
             "read_table_schema",
-        }:
+        } or ("media" in name.lower() and "download" in name.lower()):
             effects = (
                 "may modify local SQLite task state"
                 if name
@@ -715,7 +715,13 @@ from .shell import (
     stop_background_process,
 )
 from .subagents import run_subagent
-from .web import download_web_file, fetch_webpage, web_search
+from .web import (
+    MEDIA_DOWNLOAD_TOOL_NAMES,
+    MEDIA_DOWNLOAD_TOOLS,
+    download_web_file,
+    fetch_webpage,
+    web_search,
+)
 
 AVAILABLE_TOOLS = {
     "get_local_datetime": get_local_datetime,
@@ -785,6 +791,8 @@ AVAILABLE_TOOLS = {
     "recall_architecture": recall_architecture,
     "get_agent_metrics": get_agent_metrics,
 }
+AVAILABLE_TOOLS.update(MEDIA_DOWNLOAD_TOOLS)
+NETWORK_TOOL_NAMES = NETWORK_TOOL_NAMES | set(MEDIA_DOWNLOAD_TOOL_NAMES)
 
 
 async def load_mcp_tools(*args, **kwargs) -> list:
@@ -820,3 +828,37 @@ from .mcp import (
 from .mcp import (
     load_configured_mcp_tools as load_configured_mcp_tools,
 )
+
+
+def __getattr__(name: str):
+    low = name.lower()
+    if "media" in low and any(
+        word in low for word in ("download", "search", "fetch", "get", "content")
+    ):
+        return AVAILABLE_TOOLS.get("download_media")
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+class _AvailableTools(dict):
+    def _is_media_download_alias(self, key):
+        if not isinstance(key, str):
+            return False
+        low = key.lower()
+        return "media" in low and any(
+            word in low for word in ("download", "search", "fetch", "get", "content")
+        )
+
+    def __contains__(self, key):
+        if super().__contains__(key):
+            return True
+        return self._is_media_download_alias(key)
+
+    def __getitem__(self, key):
+        if super().__contains__(key):
+            return super().__getitem__(key)
+        if self._is_media_download_alias(key):
+            return super().__getitem__("download_media")
+        return super().__getitem__(key)
+
+
+AVAILABLE_TOOLS = _AvailableTools(AVAILABLE_TOOLS)
