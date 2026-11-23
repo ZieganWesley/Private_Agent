@@ -854,3 +854,19 @@ By using these advanced techniques, you can perform complex operations on string
 
 
 Whether refining a standalone script or scaling a production-level application, these techniques, when applied judiciously, can significantly enhance performance while conserving system resources. Ultimately, the most effective optimizations strike a balance between speed and clarity.
+
+## Project-specific coding-time optimizations (Private Agent)
+
+Apply these while writing code in this repository (see AGENTS.md):
+
+- Keep heavy imports lazy: import inside functions or behind `__getattr__` (RAG, media, skills, learning).
+- Respect permission modes and workspace boundaries; never bypass the sandbox.
+- Add tools through `src/tools` and register in `AVAILABLE_TOOLS`.
+- Keep UI output through `src/ui` facades; do not call `console.print` directly in business modules.
+- Preserve exception handling; report failures concisely and continue safely.
+- Bound in-memory context: trim `chat_history`, compact when threshold is met, avoid storing unbounded tool output.
+- Prefer sets for membership checks and avoid copies in hot paths.
+- Keep context compaction enabled; cap history and truncate stored messages.
+- Prefer bounded queues/deques and explicit cleanup for caches.
+- Profile with `python -X importtime` and `cProfile` before optimizing.
+- Run `pytest -q` and `private-agent --doctor` after changes.

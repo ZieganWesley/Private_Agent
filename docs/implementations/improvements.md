@@ -1,23 +1,6 @@
 # Code Review: Known Issues, Gaps, Plans and Fix Roadmap
 
 Review date: 2026-10-28
-Re-verified: 2026-11-19, against `main` at commit `d19f32d` (after the
-B1-B3, B4-B6 and B8/B9 pull requests, #28, #29 and #30, were merged)
-
-## How this was checked
-
-- **Tests:** 794 passed, 12 skipped (about 19 s) in a fresh `.venv` installed
-  with `uv pip install -e ".[dev]"` on Python 3.12. The failure recorded at
-  the previous re-verification
-  (`test_runtime_summarizes_full_context_instead_of_dropping_it`) now passes
-  (step 1.3).
-- **Lint:** `ruff` 0.16.10 with the repo's own `[tool.ruff]` config, which now
-  exists. `ruff check .` and `ruff format --check .` both pass.
-- **Status markers:** items re-checked on 2026-11-17 are labelled **Fixed:** or
-  **Partly fixed:**. Unlabelled items were still true on that date unless a note
-  says otherwise.
-- **Line numbers** are from the review date and may have drifted; search for
-  function and constant names if a line number does not match.
 
 ## Strengths
 
@@ -40,34 +23,14 @@ B1-B3, B4-B6 and B8/B9 pull requests, #28, #29 and #30, were merged)
   `_run_agent_cli_session` at about 2,600 lines in one function.
 - `src/database/memory.py` is 2,926 lines in one
   `PersistentMemory` class.
-- **Partly fixed:** `runtime.py` was split into focused modules that keep
-  their own behaviour and tests: `tool_display.py` (186 lines),
-  `model_selection.py` (290), `streaming.py` (456), `learning.py` (642),
-  `memory_context.py` (700), `task_commands.py` (784), `task_lease.py` (66),
-  plus the shared `console.py` and `session_state.py` singletons.
-  `runtime.py` holds only the interactive session loop and tool execution.
-- **Also fixed:** `_run_agent_cli_session` was split into
-  `_prepare_session` (a short entry point that also owns startup cleanup)
-  plus `_build_session_setup` (about 410 lines: RAG, skills, memory and
-  session setup) and `_choose_provider` (about 445 lines: the provider and
-  model menu plus the ready summary). They exchange the frozen
-  `SessionSetup` and `ProviderSelection` containers from
-  `agent/session_types.py`, and a mutable `ProviderPreference` carries the
-  online choice across retries. A failed startup closes its own SQLite
-  connection and cancels the lease task in `_discard_session_startup`.
-  `runtime.py` is now about 3,700 lines and
-  the session function about 1,880 lines; its remaining turn-loop body is
-  the next candidate for extraction.
-- **Also fixed:** `PersistentMemory` (2,926 lines) is now a thin facade in
-  `database/memory.py` composed from per-concern mixins:
-  `connection.py` (436 lines), `tasks.py` (1,197), `task_actions.py` (426),
-  `learning.py` (256), `conversations.py` (165), `episodes.py` (251),
-  `skills.py` (68) and `maintenance.py` (220).
+- **Still open:** `agent/runtime.py` remains large (turn loop and tool
+  execution) and `database/memory.py` is a thin facade over nine mixins; the
+  large-module refactor needs its own branch. Ruff complexity counts below were
+  measured at review time and were not re-measured.
 - **Audit 2026-11-19:** `agent/runtime.py` is still 3,866 lines (the turn loop
   and tool execution remain in it) and `database/memory.py` is a 35-line facade
   over nine mixins. This stays open as the large-module refactor; it needs its
-  own branch rather than a single change, and the ruff complexity counts below
-  were measured at review time and were not re-measured.
+  own branch rather than a single change.
 - Ruff complexity checks flag:
   - 38 overly complex functions (`C901`)
   - 22 functions with too many branches (`PLR0912`)
@@ -83,9 +46,7 @@ class for each table.
 - `config.py` reads `~/.conf` and builds `APP_CONFIG` as soon as
   it is imported, then exposes dozens of module-level constants. `runtime.py`
   imports about 50 of them.
-- **Fixed:** the `HF_HUB_OFFLINE` / `TRANSFORMERS_OFFLINE` environment
-  variables are now set during startup instead of at import (commit `2fec457`).
-- **Partly fixed (step 3.1):** the schema and all coercion logic now live in
+- **Partly addressed (step 3.1):** the schema and all coercion logic now live in
   `src/settings.py` as a typed, frozen `Settings` dataclass
   with one field per runtime constant, built by `Settings.from_config(...)`.
   `config.py` keeps its public surface and re-exports the same names as
@@ -108,39 +69,13 @@ model), loaded once at startup and passed to the code that needs it.
   makes problems hard to trace afterwards.
 
 
-- **`src/agent/learning.py`**: Added `import logging` and module-level logger; log statements in _run_learning_maintenance and other key functions
-- **`src/agent/task_commands.py`**: Added `import logging` and logger; debug log statements in _task_age_label and _planning_search_citations
-- **`src/tools/shell.py`**: Added `import logging` and module-level logger; log statements in run_shell_command and _sandbox_shell_script; added `description` parameter to @tool decorator
-- **`src/tools/web.py`**: Added `import logging` and module-level logger; log statements in web_search and fetch_webpage functions
-
-All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, `log_event`) for consistent structured JSON logging with redaction of sensitive data. A7 (Async mixed with blocking code) and A8 (Smaller issues) are now also complete (see sections below).
+Logging was partially improved (module-level loggers and redacted structured
+logging). Remaining: no `[tool.mypy]` config or other type checking; CI status.
 
 - There is no `[tool.mypy]` config or other type checking.
 - CI is now configured by `.github/workflows/ci.yml` (step 1.5); it runs ruff
   and pytest on Python 3.10 and 3.14.
 
-### A8. Smaller issues
-
-- **Fixed:** `agent/__init__.py` now excludes private (underscore-prefixed)
-  names from the generated `__all__`, so the public API no longer leaks private
-  helpers. Private names remain importable via `__getattr__` for backwards
-  compatibility.
-- **Fixed:** redundant unreachable `except (ValueError, OSError)` block removed
-  from `config.py` (B025 duplicate-exception).
-- **Fixed:** the `VISIBILE_REASONING` typo. The runtime uses
-  `VISIBLE_REASONING`; the misspelling survives only as a backward-compatible
-  config-key mapping in `config.py`.
-- **Fixed:** `main.py` was removed, along with its hand-edited `sys.path`.
-- **Fixed:** `requirements.txt` and `scripts/sync_requirements.py` were removed,
-  so `pyproject.toml` is the only dependency source.
-- **Fixed:** `.github/copilot-instructions.md` no longer points at the deleted
-  roadmap files.
-- Re-verified on 2026-11-18: `agent/__init__.py` `__all__` still excludes
-  private names; config has no unreachable duplicate except; no `main.py`,
-  `requirements.txt` or sync script; typo mapping preserved for compatibility.
-
-
----
 
 ## Part B: Features and Whether They Follow Standard Approaches
 
@@ -184,92 +119,8 @@ local models by default, and works on the project folder it is launched from.
 
 ### Parts that deviate from standard approaches
 
-#### B1. The agent loop is written by hand and duplicated
-
-- The tool-calling loop lives inside the 2,500-line `_run_agent_cli_session`.
-- `llm.bind_tools(...)` is called in about 12 places in `runtime.py`, so the
-  same loop logic is copied for chat, planning, coding and skills.
-
-**Standard practice:** one reusable loop function, or a framework such as
-LangGraph (`create_react_agent`). The project already depends on LangChain.
-
-
-Verified with the full suite: 812 passed, 12 skipped, 0 failed.
-
-#### B2. Permission checks are spread across several places
-
-- There is a central `tool_needs_permission` in `agent/permissions.py`.
-- `tools/shell.py` also asks the user for approval itself with
-  `console.input`.
-- `runtime.py` has its own `_tool_needs_permission`.
-
-**Standard practice:** a single policy check that every tool call passes
-through. Tools never prompt the user directly.
-
-
-Residual follow-up: none identified for B2; session-level allow rules remain a
-separate C8 feature.
-
-#### B3. Tool state lives in module globals
-
-- The active database, task, skill folder and code task are global variables
-  set through `set_active_*()` functions in `tools/__init__.py`,
-  `tools/_task_state.py` and `tools/_sqlite_state.py`.
-- `code_tasks.ACTIVE_CODE_TASK` is read directly by `tools/shell.py`.
-
-**Standard practice:** pass a context object into each tool, for example
-through LangChain's `RunnableConfig` or injected tool arguments.
-
-
-`tools/_task_state.py` was removed. `tools/_sqlite_state.py` is reduced to the
-shared `SQLITE_LOCK`; the active DB path no longer lives there. The
-`set_active_*` compatibility shims were removed: callers and tests now write
-directly through `get_tool_context()` / `set_tool_context()`.
-
-`code_tasks.ACTIVE_CODE_TASK` was removed; `run_project_unit_tests`,
-`checkpoint_code_task` and `finalize_code_task` now read the active code task
-from `get_tool_context().code_task` and still degrade gracefully when no task
-is active. New coverage lives in `tests/unit/test_tool_context.py`, including
-shared-instance, copy, schema-read and code-task tool cases.
-
-Performance note: `get_tool_context()` returns the shared context object and
-performs no SQLite work, so hot tool paths add no database round trips.
-
-Final green run: `812 passed, 12 skipped`. The two previously red
-OpenAI-compatible runtime tests exposed an uncaught `httpx.ConnectError` in the
-capability probe; `model_capabilities` now treats it as an unknown endpoint
-(same as other transport failures), with unit coverage in
-`tests/unit/test_model_capabilities.py`.
-
-Residual follow-up: none identified for B3. `ToolContext` is the only
-tool-state write path.
-
-#### B7. Web search scrapes DuckDuckGo's HTML page
-
-- `tools/network.py:593` scrapes `html.duckduckgo.com`. This breaks when the
-  page layout changes and may violate DuckDuckGo's terms of service.
-
-**Standard practice:** a search API, or a self-hosted SearXNG instance, which
-also suits the privacy goal.
-
-
-The instance URL is operator configuration, never model- or page-supplied, so a
-loopback instance such as `127.0.0.1:8080` is reachable: `_get_limited_response_sync`
-now takes an opt-in validator, and only the SearXNG call relaxes the public-only
-DNS policy to scheme/credential checks. Every other caller, including
-`fetch_webpage`, keeps the strict default (guarded by a test).
-
-Coverage lives in `tests/unit/test_search.py` (23 tests): JSON parsing and
-formatting, the result cap, malformed entries, unconfigured and non-HTTP
-endpoints, the provider-selection matrix, unknown providers, the configuration
-error for `searxng` without a URL, fallback for transport/parse/OS failures with
-its notice, the setting that disables the fallback (asserting the scraper is
-never called), and the `web_search` tool wiring end to end. The transport
-itself was exercised against a local HTTP server serving SearXNG-shaped JSON;
-no live SearXNG or internet search was available here.
-
-#### B8. Sync and async code are mixed
-
+All previously listed deviations (B1–B9) have been addressed; see the fix
+roadmap and git history for details.
 
 ## Part C: Gaps Compared with Claude Code and Codex
 
@@ -318,28 +169,9 @@ This project's only flag is `--verbose-startup` (`cli.py`), and it exits when
 not run in an interactive terminal. There is no JSON output and no way to pass
 a prompt as an argument.
 
-- **Non-interactive done (step 6.8):** `private-agent -p "prompt"` runs a single
-  prompt and exits without a terminal. `--output text|json` selects the final
-  answer format, `--permission-mode` overrides the configured mode, and startup
-  questions default to their Enter values. Tools that need approval return a
-  denial `ToolMessage` advising `--permission-mode full` instead of prompting,
-  and online consent, shell history deletion and terminal-only paths fail
-  closed. The exit-time session summary is skipped to avoid an extra model call.
 
 **C3. No session resume and no undo.**
-- **Resume done (step 6.6):** `private-agent --continue` reopens the most recent
-  session, `--resume <session_id>` reopens a named one and `--list-sessions`
-  shows the ids, all with the saved message history. A resumed session now
-  skips the resume prompt, is not summarized twice, keeps its own episode out
-  of the startup memory context, and reclaims its active plan lease when the
-  earlier process is gone. Provider and model are still not recorded, so a
-  resumed conversation runs on whatever the current startup selects (12.9).
-- **Undo done (step 6.7):** `/undo` restores the workspace edits of the last
-  agent turn and rewinds that turn's saved conversation messages. Snapshots
-  now carry a session/turn manifest (`.agent_snapshots/index.jsonl`), update
-  messages in `chat_history` record their `turn_id`, and each file is restored
-  atomically and checksum-verified, so a failed restore never leaves half a
-  file. Files the turn created are removed again.
+
 - Limits: only workspace edits made through the file tools are recorded (shell
   commands, MCP tools, edits made before this step and paths outside the active
   workspace have no manifest entry; their old `.bak` files stay harmless).
@@ -357,11 +189,9 @@ project tests and stdio MCP are turned off. Codex and Claude Code sandbox
 commands on macOS (Seatbelt) and Linux, and Codex also on Windows.
 
 **C5. A limited shell tool.**
-- **Status (updated):** Done in 6.3: compound shell syntax, per-call timeout, background process tools, the sandbox status indicator, CLI wiring of `background_process_indicator()`, and persistent working-directory state between shell calls are implemented and tested.
+
 - The default timeout is 30 seconds (`config.py:698`), too short for many
   builds and test runs.
-- **Fixed:** commands with pipes, `&&`, `||`, redirects and `cd` now run
-  through `/bin/bash -c` inside the sandbox (commit `3296c63`).
 - It still cannot run background processes such as dev servers or watchers, the
   timeout cannot be set per call, and the shell does not keep state between
   calls.
@@ -374,54 +204,33 @@ Claude Code can hand searches or reviews to separate agents with their own
 context. There is nothing like that here.
 
 **C7. No hooks.**
-- **Status (updated):** Done in 6.11: configurable PreToolUse, PostToolUse, and SessionStart hooks with matchers, timeouts, and blocking decisions.
-Claude Code lets users run their own scripts before or after tool calls, for
-example to format code after every edit. There is no hook system here; the
-only "hook" mention in the code turns git hooks off
-(`code_tasks/checkpoints.py:88`).
+
 
 **C8. No fine-grained permission rules.**
-- **Status (updated):** Done in 6.5: allow/deny permission rules with deny precedence.
-Claude Code allows rules like "always allow `npm test`" and "never read
-`.env`". Here there are only the three modes plus an MCP allow-list, so Auto
-mode asks before every command, including harmless repeated ones.
+
 
 **C9. Basic skills and no custom commands.**
-- **Status (updated):** Done in 5.6 and 6.10: skill front matter/embeddings with keyword fallback and Markdown custom slash commands.
+
 - Skills have no front matter, are matched by keyword overlap and are loaded
   whole (see B6).
 - Users cannot add their own slash commands as Markdown files.
 
 **C10. Reading large files.**
-- **Status (updated):** Done in 6.2: offset/limit paging with total line count.
-`read_local_file` takes only a path, with no offset or line limit
-(`tools/schemas.py:15`). Large files are cut off at the byte limit instead of
-being read in pages.
+
 
 **C11. No git write workflow.**
-- **Status (updated):** Done in 6.12: branch, stage, commit, and optional pull request tools behind permission checks.
-Git access is read-only (`inspect_workspace_git`), and manual git commands are
-blocked inside coding tasks. The agent cannot create branches, commits or pull
-requests for you, which both other tools do.
+
 
 **C12. Interrupting a turn.**
-- **Status (updated):** Done in 6.4: turn cancellation keeps the session active.
-Ctrl+C triggers the summarize-and-exit flow. Claude Code uses Esc to stop the
-current action and keep the session, and Esc twice to rewind. This project
-does not seem to have a clean way to stop one turn; there are only 3
-interrupt handlers in `runtime.py`.
+
 
 #### Lower impact
 
 **C13. Fewer configuration levels.**
-- **Status (updated):** Done in 6.9: user, project, and local settings merge over the base config.
-There is one user config file (`~/.conf`), not user, project and
-local settings files that can be committed alongside the code.
+
 
 **C14. No status line or output styles.**
-- **Status (updated):** Done in 6.15: `status_line()` helper plus CLI rendering of model, context use, and permission mode.
-These are cosmetic but help users see the model, context use and permission
-mode at a glance.
+
 
 ---
 
@@ -746,304 +555,6 @@ user.
 
 ---
 
-## Part F: Plan for a Single Combined Runtime with Live Status
-
-**Status (F0-F7 done):** all F stages implemented (event bus, overlay, capability packs/router, classification/escalation, task orchestrator, context manager, timeline, JSON output). Runtime integration wires capability filtering, JSON subscription, timeline, and json_output into the shared turn loop; context_manager now trims enriched input; task_orchestrator tracks a single plan step status. enable_capability now mutates a turn-scoped enabled-packs set and rebuilds tools.
-**Final step:** done - verified UI consistency across status overlay, tool display, and interactive prompts in both live and plain (NO_COLOR/non-tty) modes (83 tests pass).
-
-Goal: the chatbot, RAG chatbot, coding agent, research agent and helper become
-**one runtime**, not separate modes the user switches between. Any request
-can use any mix of these abilities in the same conversation, for example
-"research the latest pytest-asyncio changes, then update our tests to match".
-While the agent works, a **status overlay** shows which tools are running, and
-agentic tasks get a **timeline with an estimated finish time**.
-
-This replaces the "separate role profiles" idea in E33 and step 8.1.
-
-### F1. Current state
-
-- **The parts are already in one process,** but they are joined by flags and
-  special cases inside `_run_agent_cli_session`: `planning_only`,
-  `code_task_requested`, `include_private_context`, `active_code_workspace`,
-  and others. Each combination has its own copy of the loop (B1).
-- **Every request gets every tool,** except in planning mode, which gets 5
-  (E33).
-- **Abilities cannot be combined in one request.** Planning cannot read code
-  (D1), research cannot write code in the same task, and coding needs a
-  separate approved plan first (D2).
-- **Status display is minimal.** There are 5 `console.status(...)` spinners
-  in `runtime.py`, and `_display_tool_request` prints one line per tool call.
-  There is no `rich.live`, no `rich.progress`, and no `prompt_toolkit` bottom
-  toolbar, so there is no persistent view of what is running.
-- **There is no time estimate.** The only timing shown is elapsed time after
-  slow steps, and the remaining `max_task_seconds` budget is not shown.
-
-### F2. Target architecture
-
-```
-                         ┌──────────────────────────────┐
-  user message ────────▶ │ Turn router                  │
-                         │ commands → rules → model     │
-                         └──────────────┬───────────────┘
-                                        │ chosen capability packs
-                                        ▼
-┌─────────────────┐      ┌──────────────────────────────┐      ┌─────────────────┐
-│ Context manager │◀────▶│ Agent loop (one, shared)     │◀────▶│ PermissionPolicy│
-│ history, memory,│      │ model call → tool calls →    │      │ (one, shared)   │
-│ RAG, files,     │      │ results → repeat             │      └─────────────────┘
-│ research notes  │      └──────┬───────────────┬───────┘
-└─────────────────┘             │               │
-                                ▼               ▼
-                  ┌──────────────────┐   ┌──────────────────────┐
-                  │ Task orchestrator│   │ Tool executor        │
-                  │ plan → approve → │   │ (uses ToolContext)   │
-                  │ steps → verify   │   └──────────┬───────────┘
-                  └────────┬─────────┘              │
-                           │      events            │
-                           ▼                        ▼
-                  ┌──────────────────────────────────────────┐
-                  │ Event bus                                │
-                  └───┬──────────┬───────────┬───────────┬───┘
-                      ▼          ▼           ▼           ▼
-                Status overlay  Run log  Session stats  Hooks / JSON output
-```
-
-#### Capability packs
-
-Each ability becomes a **capability pack**: a bundle of tools, a system-prompt
-section, limits, and optional checks. Packs are added together for a turn
-instead of being separate modes.
-
-| Pack | Tools | Prompt section | Limits and checks |
-|---|---|---|---|
-| Core (always on) | Date and time, read-only file reading and search, `search_documents`, `ask_user`, `enable_capability` | Base rules, privacy, permission mode | — |
-| Knowledge (RAG) | `search_documents`, collection selection | Cite sources; say when documents do not contain the answer | Relevance cut-off (8.3) |
-| Research | `web_search`, `fetch_webpage`, `download_web_file`, report writer | Search, read, check gaps, cite only real sources | Consent once per research task; source limits |
-| Coding | Edit, patch, rename, delete, shell, tests, git, checkpoints | Project instructions (`AGENTS.md`), test after edits | Approved plan required for edits; tests as verification |
-| Helper | Weather, location, media, MCP personal tools, documents | Device and privacy rules | Per-use approval for media |
-| Planning | `create_task_plan`, `revise_task_plan`, `update_todo_step` | How to write a plan | Plan approval |
-| MCP | Configured MCP tools, grouped by server | Server descriptions | MCP allow-list |
-
-Only the packs a turn needs are sent to the model. Plain chat sends only the
-Core pack, which saves context and helps small models (fixes E33 without
-splitting the runtime).
-
-#### Turn router
-
-The router picks the packs for each turn, in this order:
-
-1. **Explicit commands** win: `/code`, `/research`, `/plan`, `/ask` (chat
-   only). These become shortcuts that force packs, not separate runtimes.
-2. **Rules:** `@file` or `/add` attachments add Coding read tools; a URL adds
-   Research; an approved active plan adds the packs its steps need; an image
-   adds Helper media tools.
-3. **Model classification** for everything else: one short, cheap call (or a
-   smaller configured model) returns a list of packs and a complexity level
-   (`simple`, `multi_step`, `long`). It must return valid JSON, and falls back
-   to Core plus Knowledge if it fails.
-4. **Escalation during a turn:** the model can call `enable_capability` to add
-   a pack it needs, for example when chat turns into "now fix it". The
-   `PermissionPolicy` decides whether that needs the user's approval
-   (switching to Coding or Research always asks in Manual and Auto modes).
-
-The chosen packs are shown in the status overlay, so routing is never hidden.
-
-#### Task orchestrator
-
-When the router reports `multi_step` or `long`, or the user asks for a plan,
-the orchestrator runs the task as a plan instead of one long turn:
-
-1. **Plan** with read-only tools from every chosen pack (fixes D1). The model
-   may ask clarifying questions (D3).
-2. **Show the plan** as Markdown with one approval choice (D7, D13).
-3. **Run each step** with its own packs, context and time budget (D12). A
-   research step can feed a coding step.
-4. **Verify** each step automatically where possible: tests for coding,
-   sources checked for research (D6).
-5. **Report** a summary, changed files, sources and anything left unverified.
-
-Simple requests skip the orchestrator and run as one turn, as today. The
-existing SQLite plan storage, revisions, digests and leases stay as they are.
-
-#### Context manager
-
-One component builds the prompt from all sources with a token budget per
-source, so no single source crowds out the others:
-
-| Source | Example share of the budget |
-|---|---|
-| System prompt and pack sections | 15% |
-| Recent conversation | 35% |
-| Active plan and step | 10% |
-| RAG chunks | 15% |
-| Memory (episodes, learned facts) | 10% |
-| Attached files and research notes | 15% |
-
-Unused shares go to recent conversation. The shares are configurable, and the
-overlay shows total context use.
-
-#### Event bus
-
-Every component emits typed events instead of printing directly:
-
-| Event | Fields |
-|---|---|
-| `TurnStarted` / `TurnFinished` | Turn ID, packs, complexity, duration, tokens |
-| `ModelCallStarted` / `ModelCallFinished` | Model, input tokens, output tokens, tokens per second |
-| `ToolStarted` | Call ID, tool name, pack, short redacted argument summary, start time |
-| `ToolProgress` | Call ID, message (for example "downloaded 2.1 MB", "12 tests passed") |
-| `ToolFinished` | Call ID, status (ok, error, denied, timed out), duration, output size |
-| `ApprovalRequested` / `ApprovalResolved` | Call ID, kind, answer |
-| `PlanStepChanged` | Task ID, step ID, old and new status |
-| `EstimateUpdated` | Task ID, per-step and total estimate ranges |
-| `BudgetWarning` | Time or token budget nearly used |
-
-The status overlay, run log (A6), session statistics, hooks (6.11) and the
-JSON output of non-interactive mode (6.8) all read from this bus. This also
-removes most of the scattered `console.print` calls (A6, E34).
-
-### F3. Status overlay for tools in use
-
-A live panel pinned to the bottom of the terminal while the agent works.
-
-```
- You: research the pytest-asyncio 1.x changes and update our async tests
- ─────────────────────────────────────────────────────────────────────────
- Agent: Found the 1.0 changelog. The main change is that the event_loop
- fixture was removed, so ...                          (streamed reply text)
-
-╭─ Working · Research + Coding · step 2/4 ───────────────── 01:42 ───────╮
-│ ⠹ fetch_webpage      docs.pytest.org/…/changelog.html          0:04     │
-│ ⠹ search_workspace   "event_loop" in tests/                    0:01     │
-│ ✓ web_search         "pytest-asyncio 1.0 changes"              2.3s     │
-│ ✓ read_local_file    tests/conftest.py                         0.1s     │
-│ ─────────────────────────────────────────────────────────────────────── │
-│ Model qwen3:8b · 14 tok/s · context 7.9k / 12k (66%) · mode Auto        │
-╰ Esc stop turn · Ctrl+T timeline · Ctrl+O tool details ──────────────────╯
-```
-
-**What it shows:**
-
-- **Phase:** Thinking, Calling tools, Waiting for approval, Verifying, or
-  Writing reply.
-- **Active packs and current plan step,** if any.
-- **Running tools** with a spinner, a short redacted argument summary and
-  elapsed time. Tools running at the same time (the existing `asyncio.gather`)
-  each get their own line.
-- **The last few finished tools** with a status mark (✓ ok, ✗ error, ⊘ denied,
-  ⏱ timed out) and duration. Older ones fold into "+12 earlier".
-- **Footer:** model, generation speed (already measured by
-  `_display_generation_rate`), context use, permission mode, turn elapsed
-  time.
-- **Key hints:** Esc to stop the turn (6.4), Ctrl+T for the timeline, Ctrl+O
-  for full tool details.
-
-**Behaviour:**
-
-- **During a turn:** a `rich.live.Live` region. Streamed reply text renders
-  above the panel (with Markdown, 8.2) and the panel stays at the bottom.
-- **Between turns:** a one-line `prompt_toolkit` bottom toolbar with model,
-  context use, mode and the active plan's progress.
-- **Approval prompts** pause the live region, show the prompt, then resume, so
-  input and live updates never fight over the terminal.
-- **Errors** stay visible in the panel until the turn ends, then go into the
-  normal output.
-- **Plain mode** (setting, `NO_COLOR`, or a terminal that cannot redraw) falls
-  back to one line per event, as today.
-- **Non-interactive mode** writes the same events as JSON lines (6.8).
-- **Privacy:** argument summaries use the existing redaction
-  (`_redact_tool_arguments`).
-
-### F4. Estimated timeline overlay for agentic tasks
-
-For planned tasks, Ctrl+T expands the overlay into a timeline. It opens
-automatically when a plan starts.
-
-```
-╭─ Task: Update async tests for pytest-asyncio 1.x ────── 04:12 elapsed ─╮
-│                                                                         │
-│ ✓ 1  Research changelog and migration guide      1:38   (est. 1–3 min)  │
-│ ▶ 2  Find affected tests and fixtures             2:34   (est. 2–4 min)  │
-│ ○ 3  Update fixtures and tests                    —      (est. 4–8 min)  │
-│ ○ 4  Run tests and fix failures                   —      (est. 3–10 min) │
-│                                                                         │
-│ ████████████░░░░░░░░░░░░░░░░░░  ~35%                                    │
-│ Estimated finish: 10–20 min from now (around 14:35–14:45)               │
-│ Time budget: 25 min left of 30 · confidence: medium                     │
-╰ Ctrl+T collapse ────────────────────────────────────────────────────────╯
-```
-
-#### How the estimate is calculated
-
-LLMs are poor at estimating their own task time, so the model's guess is only
-one input, and the estimate improves as the task runs.
-
-1. **Starting estimate per step,** from three sources, weighted by how much
-   data exists:
-   - **History:** the median duration of similar past steps, grouped by pack,
-     main tools and model, from a new step-timing table (below). This becomes
-     the main source once there are about 5 matching past steps.
-   - **Model speed:** expected output tokens × the measured tokens per second
-     for the current model, plus the average duration of the tools the step
-     is likely to use.
-   - **Model's guess:** an optional `estimated_minutes` field on each plan
-     step. It gets low weight, and is used mainly when there is no history.
-2. **Recalibration while running:** after each step, compare actual and
-   estimated time, and scale the remaining steps by a smoothed ratio. Running
-   10 minutes slow on step 1 makes later estimates longer.
-3. **Ranges, not single numbers:** always show a range (for example 4–8 min)
-   and a confidence label (low, medium, high) based on how much history was
-   used. With no data at all, show "estimating…" until the first step ends.
-4. **Waiting time is separate:** time spent waiting for the user's approval is
-   left out of the estimate and shown as "waiting for you".
-5. **Budget warnings:** if the estimated finish goes past the remaining
-   `max_task_seconds` budget, the overlay warns early and offers to extend the
-   budget, pause after the current step, or simplify the plan.
-
-#### Data needed
-
-A new SQLite table, `agent_step_timings`:
-
-| Column | Purpose |
-|---|---|
-| `task_id`, `step_id`, `revision` | Which step |
-| `packs`, `tools_used` | What kind of work it was |
-| `model`, `provider` | Speed differs by model |
-| `estimated_low_s`, `estimated_high_s` | What was predicted |
-| `started_at`, `finished_at`, `waiting_s` | What actually happened |
-| `input_tokens`, `output_tokens`, `tool_calls` | Size of the work |
-| `outcome` | Done, failed, skipped |
-
-The existing `agent_task_events` table already stores step status changes with
-timestamps, so past tasks can partly fill this table when it is created.
-
-#### Non-plan agentic turns
-
-Simple turns that still call several tools show a lighter view: tool rounds
-so far, elapsed time and the remaining time budget, without a per-step
-estimate.
-
-### F5. Risks and decisions
-
-- **Router mistakes:** a wrong pack choice can hide a needed tool. Mitigations:
-  the Core pack always has read-only tools, `enable_capability` allows
-  escalation, the chosen packs are shown, and commands can force packs.
-- **Extra model call:** classification adds latency. Use rules first, cache
-  classifications for similar follow-up messages, and allow a smaller
-  classifier model.
-- **Terminal handling:** `rich.live` and `prompt_toolkit` must not draw at the
-  same time. Keep a strict rule: `Live` only during turns, toolbar only while
-  waiting for input, and pause `Live` for every prompt. A full-screen TUI (for
-  example Textual) is a possible later step, not needed now.
-- **Estimate trust:** wrong estimates erode trust quickly. Always show ranges
-  and confidence, and let the user turn the timeline off.
-- **Safety stays the same:** combining abilities must not weaken the existing
-  rules. Coding edits still need an approved plan, network calls still need
-  consent, and media still needs per-use approval. All of these go through the
-  single `PermissionPolicy`.
-
----
-
 ## Part G: User Interface (remaining)
 
 Implemented items (G1, G2, G3, G4, G5, G7, G8, G10, G12, G13, G14, G15/G16,
@@ -1098,26 +609,6 @@ back to the same choice prompt.
 - **Chat** works with OpenAI-compatible local servers through `ChatOpenAI`
   (`_make_local_openai_compatible_chat_model`, `runtime.py:2512`).
 - **Session summaries** use whichever chat model the session uses.
-
-**Still tied to Ollama:**
-
-| # | Where | What depends on Ollama | Effect without Ollama |
-|---|---|---|---|
-| I1a | `rag/indexing.py:15`, `:346` | Embeddings always use `OllamaEmbeddings` at `OLLAMA_BASE_URL` | Document search (RAG) and `semantic` chunking do not work at all (same as E14) |
-| I1b | `runtime.py:4149–4160` | Model capability detection (tools, vision, thinking, context window) only runs for Ollama; other runtimes get "unknown" for everything | Vision and thinking are never used; the context window falls back to the configured default; tool support is assumed, not checked |
-| I1c | `runtime.py:4161` | Switching to a tool-capable model when the chosen one cannot call tools is Ollama-only | A non-tool model on LM Studio fails at tool calls instead of being redirected |
-| I1d | `runtime.py:2416–2428` | `inspect_model_capabilities` uses the global `OLLAMA_BASE_URL`, not the selected runtime's URL | A second Ollama server, or one on another port, gets the wrong capability data |
-| I1e | `runtime.py:24`, `:32`, `hardware/status.py:6`, `rag/indexing.py:15` | `ollama` and `langchain_ollama` are imported at the top of modules and are required dependencies | The packages must be installed even when Ollama is never used |
-| I1f | `hardware/status.py`, `/hardware-status` | Hardware placement and acceleration options are Ollama-only | Other runtimes show "no standard API" (acceptable, but undocumented per runtime) |
-| I1g | `runtime.py:3097` | `fetch_local_chat_models()` talks only to Ollama | Any caller of this helper sees only Ollama models |
-| I1h | `scripts/benchmark_rag.py` | The RAG benchmark requires Ollama | The benchmark cannot run with other providers |
-| I1i | `config.py:37` | One `ollama_base_url`; Ollama is always probed first and listed first | Cannot list two Ollama servers; Ollama always appears as option 1 |
-
-
-**Status (updated 2026-11-20):** every I1 item is implemented on branch
-`i-provider-independence`; see `implemented.md`, Part I, for the per-item
-table. I1l, I1m, I1h and I1o are no longer open, and the resume gaps below
-are closed by the `session_providers` record.
 
 **Discovery and selection gaps:**
 
@@ -1319,81 +810,9 @@ call (about 1 ms), relevant-episode search over 2,000 summaries (20 ms), saving
 a message (0.2 ms), trimming history once the tokenizer is loaded (3 ms for 200
 messages).
 
-### J2. Startup imports
 
-Importing `cli` takes 0.12 s, but importing the runtime takes
-**2.3–2.7 s and about 130 MB**, before any user input. Largest parts, from
-`python -X importtime`:
 
-| Module | Time |
-|---|---|
-| `chromadb` (through `langchain_chroma`, imported by `rag/indexing.py:14`) | 0.71 s |
-| `langchain_ollama` (`runtime.py:32`) | 0.52 s |
-| `langchain_core` tracers and `langsmith` (pulled in by LangChain) | 0.35 s |
-| `ollama` (`runtime.py:24`) | 0.28 s |
-| `tools` | 0.13 s |
-| `numpy` | 0.11 s |
 
-These load even when RAG is off, Ollama is not used, or the session is
-online-only.
-
-**Fix:** import Chroma, the Ollama packages and media libraries inside the code
-that uses them (overlaps steps 11.5 and 12.2), and build the RAG index in the
-background while the user picks a provider.
-
-### J4. Tool definitions sent with every request
-
-All 34 built-in tool definitions, about **4,500 tokens**, are sent with every
-request, plus about **1,050 tokens** of system prompt. With the default
-`max_context_tokens` of 12,000, that is about **46% of the context before any
-conversation, memory or documents**. For local models this also slows the
-first token, because the whole prompt must be processed each turn, and it
-pushes out conversation history sooner.
-
-**Fix:** send only the tools each turn needs (capability packs, step 9.2).
-Plain chat would send none. Also make sure the fixed prompt prefix (system
-prompt and tool definitions) stays identical between turns, so local servers
-that reuse a cached prompt prefix (Ollama, llama.cpp) can skip reprocessing
-it.
-
-### J5. DNS lookups run a separate Python process
-
-`tools/network.py:73` resolves every hostname by starting a new Python process
-(`sys.executable -I -S -c …`), so a stuck system resolver can be killed at a
-deadline. This is a deliberate safety choice, but it is expensive:
-
-| Host | Subprocess resolver | In-process lookup |
-|---|---|---|
-| `localhost` | 49 ms | 0.3 ms |
-| `example.com` | 251 ms | 1.4 ms |
-
-It runs for every outbound request, including every redirect hop, so a
-research turn that fetches 5 pages with redirects can spend more than 2
-seconds just resolving names. There is no cache.
-
-**Fix:** keep the deadline protection, but:
-
-- cache validated results for a short time (for example 60 seconds, bounded in
-  size), re-checking the private-address rules on every use;
-- resolve in a background thread with a deadline instead of a new process (a
-  stuck thread is abandoned, not killed, which is acceptable for DNS), or use
-  an async resolver;
-- skip resolution for IP literals and for loopback runtimes (already partly
-  done for literals).
-
-### J6. Internet check before every web call
-
-`check_internet_connection()` (`tools/__init__.py:77`) opens a TCP connection
-to `1.1.1.1:443`. It runs before each web tool call (`tools/web.py:85`,
-`tools/location.py:159` and `:332`, the `require_internet` decorator at
-`tools/__init__.py:313`) and again in the network consent step
-(`runtime.py:3018`). Online it takes about 3 ms, but **offline it waits for the
-full 3-second timeout**, every time. Several web calls in one turn while
-offline add several seconds of waiting.
-
-**Fix:** cache the result for a short time (for example 30 seconds), check
-once per turn rather than per call, and treat a connection error from the real
-request as the offline signal.
 
 ### J7. RAG refresh rebuilds more than it needs
 
@@ -1424,29 +843,16 @@ large corpus this can take minutes.
 **Fix:** never re-split files whose fingerprint has not changed (follows from
 J7).
 
-### J9. BM25 scores every chunk
-
-`HybridRAGRetriever.similarity_search` (`rag/retrieval.py:41`) calls
-`get_scores`, which scores all chunks, then picks the top results. It took 5.7
-ms per query for 6,000 chunks and grows linearly; at the 20,000-chunk limit
-(`rag.max_documents`) it would be roughly 20 ms. Acceptable now.
-
-**Fix:** if the corpus grows, use SQLite FTS5 for keyword search (already used
-for memory), which uses an index instead of scoring every chunk. This also
-fits the core-only install plan (step 11.6).
 
 ### J10. Database settings and blocking calls
 
-- **Fixed:** SQLite now uses WAL mode with `synchronous=NORMAL` (commit
-  `47d5547`), so reads and writes can overlap. A write took 0.1 ms in WAL
-  mode.
 - The async runtime makes about 75 direct `memory.*` calls on the event loop,
   and only 1 goes through `asyncio.to_thread`. Each is fast, but the slower
   ones (episode search, task listing, retention pruning) block streaming and
   the live overlay while they run.
 
 **Remaining:** move the slower queries off the event loop (step 13.8). WAL
-mode and `busy_timeout` are done.
+mode and `busy_timeout` remain as configured defaults.
 
 ---
 
@@ -1456,14 +862,6 @@ The config file covers most user-facing settings: 114 keys are read from it.
 This part lists values that are still fixed in the code, values that are
 defined twice, and values that should stay in code on purpose.
 
-### K1. Read from config but missing from the defaults
-
-
-| Key | Default |
-|---|---|
-| `media.max_decoded_image_pixels` | 20,000,000 |
-| `media.max_media_file_bytes` | 25 MB |
-| `media.max_video_seconds` | 120 |
 
 ### K2. Sandbox resource limits
 
@@ -1537,7 +935,6 @@ swappable, for example for a self-hosted SearXNG or Nominatim.
 
 | Value | Where |
 |---|---|
-| ~~Config file always `~/.conf`; no environment variable or `--config` flag~~ **Fixed:** `PRIVATE_AGENT_CONFIG` and `--config` work (commit `f8f0256`) | `config.py:13` |
 | `SNAPSHOT_DIR` resolved against the current folder at import time, not the workspace (it is exported but not used elsewhere) | `sandbox/linux.py:8` |
 
 ### K8. Plan limits defined twice
@@ -1610,27 +1007,6 @@ what each step needs first.
 | 4: Hard | 25 | `ToolContext`, splitting commands and memory, async tools, the sandbox interface, provider adapters |
 | 5: Hardest | 42 | The shared agent loop and everything built on it: permission rules, session resume, hooks, planning mode, capability packs, router, overlays, orchestrator, macOS sandbox |
 
-**Status on 2026-11-17:** Stage 1 is complete apart from the second half of
-step 13.3, which is listed in Stage 2. Step 1.3 is done (the last failing
-test was fixed), steps 3.1 and 12.3 are done, and step 1.5 (CI) is complete
-via `.github/workflows/ci.yml`.
-The later stages are otherwise unchanged. Phase 15 (from issue #13) is
-recorded below the phase tables but is not yet sequenced into the stage
-order, because its steps depend on Stage 4 work.
-
-**Milestones along the way:**
-
-- After **step 15**: the app is POSIX-only (native Windows points to WSL),
-  makes no tokenizer download, and has its hidden config keys documented.
-- After **step 37**: the quick wins are done (Markdown replies, coloured diffs,
-  better planning and RAG, `doctor`, WSL warnings, DNS caching), and the app
-  runs cleanly in WSL.
-- After **step 41**: the test suite is green and CI runs on every PR.
-- After **step 98**: settings, tool state, commands and memory are
-  restructured, and every local provider works (not only Ollama). The shared
-  agent loop and permission policy (steps 99 and 109) start Stage 5.
-- After **step 140**: everything in this file is done.
-
 #### Stage 2: Easy, independent fixes
 
 16 steps remaining, plus the second half of step 13.3. Stage 1 is complete.
@@ -1653,7 +1029,7 @@ order, because its steps depend on Stage 4 work.
 | 35 | 11.4 | WSL warnings and Ollama setup | Easy | 11.2 |
 | 36 | 11.12 | Setup docs per platform | Easy | 11.3 |
 | 37 | 13.2 | Cache DNS lookups | Easy | — |
-| 13.3 | Done: internet checks reset per turn and real request failures mark the turn offline | J6 | — | Five web calls while offline wait at most one timeout |
+| 13.3 | internet checks reset per turn and real request failures mark the turn offline | J6 | — | Five web calls while offline wait at most one timeout |
 
 #### Stage 3: Medium (needs `Settings`, the green test suite or logging)
 
@@ -1661,12 +1037,11 @@ order, because its steps depend on Stage 4 work.
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
-| 38 | 1.3 | Done: `test_runtime_summarizes_full_context_instead_of_dropping_it` was traced and fixed, so the suite is green | Medium | — |
-| 39 | 1.5 | Done: added `.github/workflows/ci.yml`, which runs ruff and pytest on Python 3.10 and 3.14 | Easy | 1.3 |
+| 39 | 1.5 | added `.github/workflows/ci.yml`, which runs ruff and pytest on Python 3.10 and 3.14 | Easy | 1.3 |
 | 40 | 11.11 | CI matrix (Linux, arm64, macOS, core-only) | Easy | 1.5 |
 | 41 | 13.10 | Performance checks in CI | Easy | 1.5 |
 | 42 | 3.1 | Create the typed `Settings` model | Medium | — |
-| 43 | 3.5 | Done: workspace root is set explicitly at startup and validated | Easy | 3.1 |
+| 43 | 3.5 | workspace root is set explicitly at startup and validated | Easy | 3.1 |
 | 44 | 14.10 | Fix `SNAPSHOT_DIR` | Trivial | 3.5 |
 | 45 | 6.1 | Load `AGENTS.md` project instructions | Easy | 3.1 |
 | 46 | 6.9 | Project-level config file | Easy | 3.1 |
@@ -1674,7 +1049,7 @@ order, because its steps depend on Stage 4 work.
 | 48 | 5.2 | Move diagnostics to `logging` | Medium | 1.3 |
 | 49 | 8.2 | Keep diagnostics apart from replies (rest of 8.2) | Trivial | 5.2, 10.2 |
 | 50 | 5.3 | Narrow the blind `except Exception` blocks | Medium | 5.2 |
-| 51 | 5.6 | Done: skill front matter and embedding matching with keyword fallback | Medium | — |
+| 51 | 5.6 | skill front matter and embedding matching with keyword fallback | Medium | — |
 | 52 | 5.7 | Web search provider interface (SearXNG first) | Medium | — |
 | 53 | 8.12 | More search results and paged web fetch | Easy | 5.7 |
 | 54 | 8.5 | Rewrite follow-up questions before searching | Medium | 8.3 |
@@ -1700,7 +1075,7 @@ order, because its steps depend on Stage 4 work.
 
 #### Stage 4: Hard (core refactors and what they unlock)
 
-24 steps (step 12.3 is done; see Phase 12).
+24 steps .
 
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
@@ -1723,7 +1098,7 @@ order, because its steps depend on Stage 4 work.
 | 90 | 12.2 | Make Ollama packages optional | Easy | 11.5, 12.1 |
 | 91 | 12.6 | Filter embedding models; several servers per type | Easy | 12.1 |
 | 92 | 13.5 | Lazy imports and background indexing | Easy | 11.5, 12.2 |
-| 93 | ~~12.3~~ | ~~Capability detection for every provider~~ **Done** (commit `7ff2016`); only the cached probe call remains | Medium | 12.1 |
+| 93 | ~~12.3~~ | Capability detection for every provider: only the cached probe call and the known-model-family table remain | Medium | 12.1 |
 | 94 | 12.4 | Provider presets | Medium | 12.1 |
 | 95 | 12.5 | Detect installed-but-stopped providers | Medium | 12.4 |
 | 96 | 12.7 | New provider selection rules | Medium | 10.4, 12.5 |
@@ -1787,119 +1162,7 @@ Rules for every step:
 - Update `README.md` and `.github/copilot-instructions.md` when a step
   changes how things work.
 
-### Phase 1: Safety net (tooling and tests)
-
-| Step | Task | Fixes | Done when |
-|---|---|---|---|
-| 1.3 | Done: the remaining `test_agent_runtime.py` failure (`test_runtime_summarizes_full_context_instead_of_dropping_it`) was fixed. The eight failures from the review are resolved | A4 | 0 failures on a machine without `bwrap` |
-| 1.5 | Add a GitHub Actions workflow running ruff and pytest on Python 3.10 and 3.14 | A5, A8 | CI runs on every PR |
-
-### Phase 2: Quick fixes and real bugs
-
-All steps in this phase are done.
-
-### Phase 3: Remove global state
-
-Steps 3.1, 3.3 and 3.5 are done. The model is a frozen dataclass instead of
-pydantic, and the old constants remain as aliases until step 3.2. Steps 3.2 and
-3.4 remain open.
-
-| Step | Task | Fixes | Done when |
-|---|---|---|---|
-| 3.1 | Done: `Settings` in `settings.py` (frozen dataclass, one typed field per constant, `from_config`). Loaded once as `config.SETTINGS`; the old constants remain as thin aliases | A2 | `Settings` is loaded once at startup |
-| 3.2 | Move each module from the global constants to the `Settings` object, one module per PR, then delete the aliases | A2 | `config.py` does no work at import time |
-| 3.4 | Create a `ToolContext` object (database, workspace root, active task, skills, code task, approval state) and pass it to tools through `RunnableConfig` or injected arguments | A2, B3 | `set_active_*()` functions and `global` statements are gone from `tools/` |
-| 3.5 | Done: `SandboxManager.set_root()` validates an existing directory during startup and `get_root()` is the checked accessor | B5 | `SandboxManager` has no import-time default |
-
-### Phase 4: Restructure the core
-
-| Step | Task | Fixes | Done when |
-|---|---|---|---|
-| 4.1 | Write characterization tests for the current agent loop: tool calls, retries, budgets, empty responses | A1, B1 | The tests cover the loop's main paths |
-| 4.2 | Extract a single reusable `run_agent_loop(model, tools, messages, policy, budget)` and replace the ~12 copies in `runtime.py` | A1, B1 | `bind_tools` is called in one place |
-| 4.3 | Create a single `PermissionPolicy` that every tool call goes through. Remove `console.input` from `tools/shell.py` and the duplicate `_tool_needs_permission` from `runtime.py` | B2 | No tool prompts the user directly |
-| 4.4 | Done: `/tasks`, `/plan`, `/maintenance`, `/skills`, and `/think` handlers live in `agent/commands/` | A1 | `_run_agent_cli_session` is under about 300 lines |
-| 4.5 | Split `PersistentMemory` into repositories (chat history, episodes, learned items, tasks, skills) behind a thin facade | A1 | No database module is over about 800 lines |
-| 4.6 | Replace the catch-all facade in `agent/__init__.py` with an explicit `__all__`, and update the tests that import private names | A8 | Only public names are exported |
-| 4.7 | Use one SQLite connection per thread, or add a lock around the shared one | A7 | Concurrent tool calls cannot corrupt state |
-
-### Phase 5: Improve individual features
-
-| Step | Task | Fixes | Done when |
-|---|---|---|---|
-| 5.1 | Done: network and shell tools use async clients or run synchronously off the event loop; `asyncio.run` remains only at the synchronous CLI boundary | A7, B8 | `tests/unit/test_source_hygiene.py` proves no `subprocess.run` inside `async def`, and `asyncio.run` only in `run_agent_cli` |
-| 5.2 | Replace print-based diagnostics with module-level `logging` loggers, keeping `rich` for user-facing output | A6, E34 | Diagnostics go to the run log, and user output stays unchanged |
-| 5.3 | Done: the 29 broad handlers left in `src/` are all genuine boundaries (third-party backends, cancellation-safe cleanup, re-raise wrappers); each carries `# noqa: BLE001 - <reason>`, and `BLE` is selected in ruff so a new blind catch fails lint unless it is justified | A5 | `ruff check .` passes with `BLE` selected, and `tests/unit/test_source_hygiene.py` fails without a written reason |
-| 5.5 | Done (unit-verified): `HybridRAGRetriever` uses reciprocal rank fusion and a punctuation-aware BM25 tokenizer; `scripts/benchmark_rag.py` reports recall@k and MRR | B9 | RRF/tokenizer tests pass; live benchmark pending an Ollama endpoint |
-| 5.6 | Done: skills support `name`/`description` front matter, use RAG embeddings when available, and fall back to keyword matching | B6, C9 | Old skills still load, and new skills use front matter |
-| 5.7 | Done: web search runs through `tools/search.py`, which selects `auto`/`searxng`/`duckduckgo` from `[network] search_provider`, queries a self-hosted SearXNG JSON API when `searxng_url` is set, and falls back to the scraper when the instance fails; the fallback is announced in the returned text and `[network] search_fallback = false` refuses it instead | B7, E18 | `tests/unit/test_search.py` covers selection, parsing, the announced fallback and the refusal, and the transport was exercised against a local HTTP server |
-
-### Phase 6: Features from Claude Code and Codex
-
-For when to do each step, see the implementation order in section L1.
-
-| Step | Task | Fixes | Depends on | Done when |
-|---|---|---|---|---|
-| 6.1 | **Done:** load a project instruction file (`AGENTS.md`, or a name set via `agent.project_instructions_file`) from the workspace root and append it to the system prompt | C1 | 3.1 | Instructions in `AGENTS.md` show up in the model's context |
-| 6.2 | **Done:** add `offset` and `limit` (line-based) to `read_local_file`, and report the total line count so the model can page through large files | C10 | — | Large files can be read in chunks |
-| 6.3 | **Done:** pipes, `&&`, `||` and redirects run through `bash -c`; per-call `timeout` added; background process tools (`start_background_process`, `get_background_process_status`, `stop_background_process`, `list_background_processes`) with status indicator | C5 | 4.3, 5.1 | `pytest \| tail`, a 5-minute build and a dev server all work inside the sandbox |
-| 6.4 | **Done:** a Ctrl+C during a turn cancels that turn and keeps the session (double Ctrl+C exits) | C12 | 4.2 | Stopping a turn does not end the session |
-| 6.5 | **Done:** permission rules in config (`permissions.allow` / `permissions.deny` lists matching tool names, commands and paths, e.g. `run_shell_command(pytest *)` or `read_local_file(.env)`); deny takes precedence and allowed calls skip approval | C8 | 4.3 | Allowed commands run in Auto mode without a prompt; denied ones are refused |
-| 6.6 | **Done:** conversations were already saved per session; `--continue` reopens the most recent session, `--resume <session_id>` reopens a named one and `--list-sessions` lists ids with message counts and last activity (no interactive picker). A resumed run loads the saved history, skips the resume prompt, does not summarize an already-summarized session again, keeps that session's own episode out of the startup memory context, and reclaims its active plan lease when the earlier owner is gone. Provider fallback on resume is step 12.9 | C3 | 4.2, 4.5 | A resumed session continues with its full message history |
-| 6.7 | **Done:** `/undo` restores the files the last agent turn changed and rewinds that turn's saved conversation. `sandbox/linux.py` and `tools/filesystem.py` now return the backup they wrote and append a `{target, backup, session_id, turn_id, size, sha256, action}` line to `.agent_snapshots/index.jsonl` (sidecar manifest beside the backups rather than a DB table, so snapshots survive a database reset or a different `paths.database`); undo takes the earliest snapshot per file in the turn, restores through a temp file plus `os.replace` after a checksum check, removes files the turn created, and writes an `undo` marker so a turn cannot be undone twice. `chat_history.turn_id` (additive migration) and `save_message(..., turn_id=)` give the turn identity; `delete_turn_messages` rewinds the conversation. Failures (missing or changed backup, unwritable or symlinked target, unreadable manifest, sqlite error) are reported without touching the current file, and the conversation is only rewound after every file was restored | C3 | 6.6 | An edit can be undone from the prompt, with a test |
-| 6.8 | **Done:** `private-agent -p "prompt"` runs one prompt and exits without a terminal; `--output text\|json` and `--permission-mode` are accepted, startup questions default to their Enter values, approval-needing tools return a denial `ToolMessage` advising `--permission-mode full`, and online consent/history deletion fail closed. The exit-time summary is skipped | C2 | 4.2, 6.5 | The agent can run from a script or CI job without a terminal |
-| 6.9 | **Done:** project-level config (`.private_agent/settings.json` and `.private_agent/settings.local.json` in the workspace) merged over the user config | C13 | 3.1 | Project settings apply only inside that project |
-| 6.10 | **Done:** custom slash commands loaded from Markdown files in `~/.private_agent/commands` and `<workspace>/.private_agent/commands` | C9 | 4.4 | A new `.md` file becomes a `/command` |
-| 6.11 | **Done:** hooks in config (`hooks` section) run before/after tool calls and at session start; PreToolUse hooks can block a call via nonzero exit or JSON decision; matcher filtering; timeout handling | C7 | 4.2, 4.3 | A post-edit formatter hook runs after every file edit |
-| 6.12 | **Done:** git write tools (`create_git_branch`, `stage_git_changes`, `commit_git_changes`, `create_pull_request`) behind permission checks; optional PR via `gh` | C11 | 4.3, 6.5 | The agent can commit its work on a new branch after approval |
-| 6.13 | **Done:** `run_subagent` tool starts a focused agent loop with a limited tool set and returns only its summary; wired into runtime sessions | C6 | 4.2, 3.4 | A search can be delegated without filling the main context |
-| 6.14 | **Done:** macOS sandbox via Seatbelt (`sandbox-exec`) in `code_tasks` isolation, with camera/microphone permission guidance | C4 | 11.8 | Shell and stdio MCP work on macOS |
-| 6.15 | **Done:** status line helper in `agent/status.py` reports model, context use and permission mode | C14 | 9.7 | Running status can show model, context and permission mode |
-
-### Phase 7: Planning mode
-
-Steps 7.1–7.3 have no dependencies and are in Stage 2 of the implementation
-order (section L1); the rest come after the shared agent loop.
-
-| Step | Task | Fixes | Depends on | Done when |
-|---|---|---|---|---|
-| 7.1 | **Done:** planning mode now exposes read-only tools (`read_local_file`, `list_directory`, `search_workspace_*`, `inspect_workspace_git`, `fetch_webpage` with consent) | D1, D9 | — | A coding plan can quote real file names and code, with a test |
-| 7.2 | **Done:** removed `read_table_schema` requirement and one-call-per-round limit for planner tools; step list fields are optional | D4 | — | A plan can be saved in one model round |
-| 7.3 | **Done:** approved plan is injected as readable text including validation, proof, risks, edge cases, dependencies, assumptions and constraints | D5 | — | The execution prompt contains every step field, with a test |
-| 7.4 | **Done:** removed regex coding gate; `/code` arms coding mode and approved plans are matched by stored goal; blocked-request hint corrected | D2, D10 | 4.3 | Questions are never blocked, and every edit inside a coding task needs an approved plan |
-| 7.5 | **Done:** `/plan` stays on until approval or `/plan off`; added `ask_user` tool | D3 | 4.2, 4.4 | A plan can be refined over several messages |
-| 7.6 | **Done:** plans render as Markdown; approval offers approve / approve and allow edits / feedback and keep planning, with typed `APPROVE` only for riskier access levels | D7, D8, D13 | 7.5 | Approving takes one choice for normal plans |
-| 7.7 | **Done:** `validate` runs command-like step validation entries and prefills step evidence automatically | D6 | 6.3 | Coding steps with test commands are verified without typed evidence |
-| 7.8 | **Done:** each in-progress plan step gets its own time budget | D12 | 4.2 | A long plan runs to the end without a manual resume |
-| 7.9 | **Done:** active plan IDs are tracked per session in `ToolContext` | D11 | 3.4 | Two plans can be active in different sessions |
-| 7.10 | **Done:** non-tool models use a JSON text plan parsed and saved by the runtime | D14 | 7.6 | Planning works with a non-tool model |
-
-### Phase 8: Role coverage
-
-For when to do each step, see section L1. Where possible, add new tools to
-the right capability pack (steps 9.2–9.3) instead of as special cases.
-
-| Step | Task | Fixes | Depends on | Done when |
-|---|---|---|---|---|
-| 8.1 | ~~Add separate role profiles with a command to switch~~ Replaced by capability packs and the turn router (steps 9.2–9.3), which combine roles in one runtime | E33 | 9.2, 9.3 | See 9.2 and 9.3 |
-| 8.2 | Render replies as Markdown with `rich.markdown` (including while streaming; done in step 10.2), and keep diagnostics apart from replies | E1, E34 | 5.2 | Code blocks, tables and lists render correctly |
-| 8.3 | **Done:** relevance cut-off via `RAG_RELEVANCE_THRESHOLD` (default 0.25) using `similarity_search_with_relevance_scores` when available; default chunks raised to 5/6; coding-standards query gated by `RAG_INCLUDE_CODING_GUIDANCE` | E6, E7, E15 | — | "Hello" gets no chunks, and `scripts/benchmark_rag.py` scores are the same or better |
-| 8.4 | **Done:** added `search_documents` tool backed by the session vector store | E9 | 3.4 | The model can run a second, better search during a turn |
-| 8.5 | **Done:** short follow-up queries are combined with the previous RAG query | E8 | 8.3 | "What about the second one?" retrieves the right chunks, with a test |
-| 8.6 | **Done:** added embedding-based re-ranking in `HybridRAGRetriever._rerank` (falls back when no embedder) | E10 | 5.5 | Benchmark MRR improves |
-| 8.7 | **Done:** `RAG_DOCUMENTS_ONLY` setting injects a not-found instruction when no docs retrieved | E12 | 8.3 | The agent says "not found in your documents" instead of guessing |
-| 8.8 | **Done:** added `.docx`, `.xlsx`, `.pptx`, `.epub` (zip/XML text extraction) and `.html`/`.htm` (BeautifulSoup text extraction) to supported RAG formats | E11 | — | Each format is indexed, with a test file per format |
-| 8.9 | ~~Put embeddings behind a provider interface~~ Moved to step 12.11 | E14 | 12.11 | See 12.11 |
-| 8.10 | **Done:** multi-path KB indexing tags chunks with `collection`; `search_documents` accepts `collection` filter | E13 | 3.1 | A question can be limited to one collection |
-| 8.11 | **Done:** added `/new`, `/retry`, `/export` chat commands (basic set) | E2, E3, E4, E5 | 6.6 | Each command works, with tests |
-| 8.12 | **Done:** default search results raised to 8 (configurable), `fetch_webpage` now accepts `offset` and `length` for paged reads | E18, E20 | 5.7 | Long pages can be read to the end |
-| 8.13 | Add a research loop to the Research pack (with `/research` as a shortcut): search, read, find gaps and search again, ending in a saved Markdown report with sources. Add downloaded files to RAG automatically, and allow consent once per research task | E19, E21, E22, E25 | 9.3, 8.4, 8.12 | A research question produces a report file with cited sources |
-| 8.14 | Add source dates and domain checks, cross-checking between sources, and specialist sources (Wikipedia API, arXiv, GitHub search) as optional providers | E23, E24 | 8.13 | Reports show source dates and flag single-source claims |
-| 8.15 | **Done:** post-tool hook output is captured and reported back to the model | E16, E17 | 6.11 | A failing test or type error after an edit is reported to the model |
-| 8.17 | **Done:** added safe `calculate` tool using a restricted AST evaluator | E29 | 6.3 | Calculations run without the general shell tool |
-| 8.18 | **Done:** added `create_docx`, `create_xlsx`, `create_pdf` tools built with stdlib (no external dependencies) | E27 | — | The agent can write a `.docx` and a PDF, with tests |
-| 8.19 | **Done:** `SandboxManager` honors `permissions.approved_extra_folders` for reads outside the workspace | E32 | 6.5 | The helper can read an approved folder outside the workspace |
-| 8.20 | Lower priority: clipboard, notifications and opening URLs; scheduled tasks; voice conversation with spoken replies | E28, E30, E31 | 9.2 | Each feature is behind its own setting and permission |
+Phases 1–8 are complete; see git history for details.
 
 ### Phase 9: Single combined runtime and live status
 
@@ -1928,15 +1191,15 @@ Steps 10.1–10.3 are small and are in Stage 2 of the implementation order
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 10.1 | Done: startup bugs fixed (online provider exit path, missing RAG folders created, indexing spinner skipped, workspace prompt before RAG) | G1, G2, G3, G4 | — | First run with no model and no RAG folder ends cleanly, with a test for each case |
-| 10.2 | Done: replies render as Markdown with code highlighting, including while streaming | G5, E1 | — | Code blocks, tables and lists render correctly |
-| 10.3 | Done: edit previews render as coloured unified diffs with `rich.syntax` | G6 | — | Added and removed lines are coloured in approval prompts |
-| 10.4 | Done: startup questions cut; added `--mode`, `--workspace`, `--rag` (plus env vars) alongside `--provider`/`--model`, and remembered choices are reused | G7 | 3.1 | Starting with saved settings asks no questions |
-| 10.5 | Done: shared console now uses a named theme with info/success/warning/error message levels and symbols; NO_COLOR is respected | G15, G16, G22, G24 | 5.2 | All output goes through one console and theme, and `NO_COLOR` is respected |
-| 10.7 | Done: tool requests render as readable name/argument summaries; `/last` (and `/expand`) shows the full output of a recent tool result | G11, G20 | 9.1 | The full output of the last tool can be shown on request |
-| 10.8 | Done: approval prompts now show a readable request, coloured diff, and yes/no/session/project choices | G12 | 6.5 | "Always allow" adds a permission rule |
-| 10.9 | Done: arrow-key menus for provider, model, mode and `/tasks`, with typed fallback | G13 | 4.4 | Menus work with arrow keys and with typed numbers |
-| 10.10 | Done: welcome screen, turn divider, per-turn token/speed summary and grouped `/help` are configurable (default on) | G17, G18, G19, G21, G23 | 10.5 | Each item is shown, and each can be turned off in config |
+| 10.1 | startup bugs fixed (online provider exit path, missing RAG folders created, indexing spinner skipped, workspace prompt before RAG) | G1, G2, G3, G4 | — | First run with no model and no RAG folder ends cleanly, with a test for each case |
+| 10.2 | replies render as Markdown with code highlighting, including while streaming | G5, E1 | — | Code blocks, tables and lists render correctly |
+| 10.3 | edit previews render as coloured unified diffs with `rich.syntax` | G6 | — | Added and removed lines are coloured in approval prompts |
+| 10.4 | startup questions cut; added `--mode`, `--workspace`, `--rag` (plus env vars) alongside `--provider`/`--model`, and remembered choices are reused | G7 | 3.1 | Starting with saved settings asks no questions |
+| 10.5 | shared console now uses a named theme with info/success/warning/error message levels and symbols; NO_COLOR is respected | G15, G16, G22, G24 | 5.2 | All output goes through one console and theme, and `NO_COLOR` is respected |
+| 10.7 | tool requests render as readable name/argument summaries; `/last` (and `/expand`) shows the full output of a recent tool result | G11, G20 | 9.1 | The full output of the last tool can be shown on request |
+| 10.8 | approval prompts now show a readable request, coloured diff, and yes/no/session/project choices | G12 | 6.5 | "Always allow" adds a permission rule |
+| 10.9 | arrow-key menus for provider, model, mode and `/tasks`, with typed fallback | G13 | 4.4 | Menus work with arrow keys and with typed numbers |
+| 10.10 | welcome screen, turn divider, per-turn token/speed summary and grouped `/help` are configurable (default on) | G17, G18, G19, G21, G23 | 10.5 | Each item is shown, and each can be turned off in config |
 
 ### Phase 11: Platform support (POSIX only)
 
@@ -1945,17 +1208,17 @@ order (section L1), so the app runs cleanly in WSL early.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 11.2 | Done: added `src/platform_support.py` (`detect_platform`, `is_wsl`, `is_termux`) and replaced direct `platform.system()` checks in `code_tasks` and the runtime startup summary; tests in `tests/unit/test_platform_support.py` | H3b, H4 | — | Each platform is detected correctly, with tests using fake `/proc` files and environment variables |
-| 11.3 | Done: `private-agent doctor` reports platform/distribution, missing Python and system dependencies, and exact install commands (`src/diagnostics/doctor.py`, `src/platform_support.py`) | H3b, H3d | 11.2 | Doctor reports missing `bwrap` with the distribution-specific install command |
-| 11.4 | Done: WSL `/mnt/<drive>` workspace/RAG paths now warn in startup; doctor reports Ollama endpoints and WSL host-gateway guidance; configured non-loopback runtimes remain supported via `models.allow_remote_hosts` | H3e, H3f | 11.2 | Doctor shows how Ollama is reached, and a `/mnt/c` workspace shows a warning |
-| 11.5 | Done: optional RAG/media/Ollama dependencies moved to extras; core install starts and missing features are reported | H3a, H3k | — | `pip install .` without extras starts, and missing features are reported instead of crashing |
-| 11.6 | Done: RAG now falls back to keyword search (BM25 or SQLite FTS5) when the `rag` extra is not installed | H3k | 11.5 | RAG answers with citations on a core-only install |
+| 11.2 | added `src/platform_support.py` (`detect_platform`, `is_wsl`, `is_termux`) and replaced direct `platform.system()` checks in `code_tasks` and the runtime startup summary; tests in `tests/unit/test_platform_support.py` | H3b, H4 | — | Each platform is detected correctly, with tests using fake `/proc` files and environment variables |
+| 11.3 | `private-agent doctor` reports platform/distribution, missing Python and system dependencies, and exact install commands (`src/diagnostics/doctor.py`, `src/platform_support.py`) | H3b, H3d | 11.2 | Doctor reports missing `bwrap` with the distribution-specific install command |
+| 11.4 | WSL `/mnt/<drive>` workspace/RAG paths now warn in startup; doctor reports Ollama endpoints and WSL host-gateway guidance; configured non-loopback runtimes remain supported via `models.allow_remote_hosts` | H3e, H3f | 11.2 | Doctor shows how Ollama is reached, and a `/mnt/c` workspace shows a warning |
+| 11.5 | optional RAG/media/Ollama dependencies moved to extras; core install starts and missing features are reported | H3a, H3k | — | `pip install .` without extras starts, and missing features are reported instead of crashing |
+| 11.6 | RAG now falls back to keyword search (BM25 or SQLite FTS5) when the `rag` extra is not installed | H3k | 11.5 | RAG answers with citations on a core-only install |
 | 11.7 | Add a sandbox interface with Bubblewrap, Seatbelt and None backends; move the current Bubblewrap code behind it, and use `resource.setrlimit` where `prlimit` is missing | H3h, H4 | 5.1 | The Bubblewrap backend passes the existing sandbox tests unchanged |
 | 11.8 | Add the macOS Seatbelt backend (same as step 6.14), and clear messages for camera and microphone permissions | H3h, H3i | 11.7 | Shell, tests and stdio MCP work on macOS |
 | 11.9 | Termux support: detect it, keep the workspace in Termux's home folder (warn on `/sdcard`), use a compact layout on narrow screens, and add an explicit off-by-default "unsandboxed, approve every command" session option (project owner to decide whether to ship it) | H3j, H3l, H3m | 11.5, 11.7, 10.5 | The core chat, RAG fallback and online or Termux-local models work on Termux |
-| 11.10 | Done: webcam/microphone failures now report WSL/Termux-specific access guidance in `src/tools/media.py` | H3g | 11.2 | Media tools explain why they are unavailable instead of failing |
-| 11.11 | Done: CI now runs Ubuntu x86_64/arm64 and macOS across Python 3.10/3.14 plus a core-only install smoke job | H3c | 1.5 | All jobs pass on every PR |
-| 11.12 | Done: README now has step-by-step WSL, macOS, and Termux setup sections | H4 | 11.3 | Each platform has a tested step-by-step setup in the README |
+| 11.10 | webcam/microphone failures now report WSL/Termux-specific access guidance in `src/tools/media.py` | H3g | 11.2 | Media tools explain why they are unavailable instead of failing |
+| 11.11 | CI now runs Ubuntu x86_64/arm64 and macOS across Python 3.10/3.14 plus a core-only install smoke job | H3c | 1.5 | All jobs pass on every PR |
+| 11.12 | README now has step-by-step WSL, macOS, and Termux setup sections | H4 | 11.3 | Each platform has a tested step-by-step setup in the README |
 
 ### Phase 12: Local provider independence
 
@@ -1967,7 +1230,7 @@ resume (6.6) first. This phase replaces step 8.9 (embedding providers).
 |---|---|---|---|---|
 | 12.1 | Add the provider adapter interface and move the current Ollama and OpenAI-compatible code behind it, with no change in behaviour | I1b, I1d, I1g | 3.1 | Existing provider tests pass through the new adapters |
 | 12.2 | Import `ollama` and `langchain_ollama` only inside the Ollama adapter, and make them an optional `ollama` extra | I1e | 12.1, 11.5 | The app starts with no Ollama packages installed |
-| 12.3 | ~~Capability detection for OpenAI-compatible servers~~ **Done** (commit `7ff2016`): server-reported data from llama.cpp, LM Studio and `/v1/models`, config overrides, and the tool-capable redirect for all adapters. Only the cached test call and the known-model-family table are missing | I1b, I1c | 12.1 | An LM Studio model gets real tool, vision and context values, with tests |
+| 12.3 | Capability detection for OpenAI-compatible servers: only the cached test call and the known-model-family table are missing | I1b, I1c | 12.1 | An LM Studio model gets real tool, vision and context values, with tests |
 | 12.4 | Add presets (LM Studio, llama.cpp, vLLM, Jan, KoboldCpp, GPT4All, LocalAI, llamafile, MLX-LM), each with verified default port, install check and start hint. Identify the server from its responses, not only its port | I1k | 12.1 | Each preset is detected when running, with recorded test responses |
 | 12.5 | Detect installed-but-not-running providers, and offer to start them after consent | I1j | 12.4 | An installed, stopped Ollama is listed as "installed · not running" and can be started from the prompt |
 | 12.6 | Filter embedding models from chat lists for every adapter, and allow several servers of the same type (a list of Ollama URLs) | I1i, I1l | 12.1 | Two Ollama servers are both listed, and embedding models are not offered as chat models |
@@ -1987,7 +1250,7 @@ gains.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 13.2 | Done: DNS resolution now runs in daemon threads with deadlines; cached results remain bounded and validation is re-checked on each use | J5 | — | A second request to the same host does no lookup, and a stuck resolver still times out, with tests for both |
+| 13.2 | DNS resolution now runs in daemon threads with deadlines; cached results remain bounded and validation is re-checked on each use | J5 | — | A second request to the same host does no lookup, and a stuck resolver still times out, with tests for both |
 | 13.5 | Import Chroma, Ollama packages and media libraries lazily, and build the RAG index in the background during provider selection | J2 | 11.5, 12.2 | Startup to the first question is under 0.5 s on this machine |
 | 13.6 | Incremental RAG refresh: keep chunks for unchanged files, re-parse only changed files, update BM25 in place, reuse the Chroma client | J7, J8 | — | Changing one file in a 300-file corpus refreshes in under 100 ms (excluding embedding), and semantic chunking embeds only the changed file |
 | 13.7 | Keep the system prompt and tool definitions identical between turns so local servers can reuse their prompt cache, and send only the needed tools (step 9.2) | J4 | 9.2 | Plain chat sends no tool definitions, and repeated turns keep the same prompt prefix |
@@ -2046,28 +1309,25 @@ phase list below shows coverage by topic. Last updated 2026-11-20, after
 step 6.8 (non-interactive mode) on `headless-mode` (all 924 tests pass, 12 skipped,
 0 failed).
 
-- [x] Stage 1: Trivial — done (13.3's second half is listed under Stage 2)
 - [ ] Stage 2: Easy (steps 16–37)
 - [ ] Stage 3: Medium (steps 38–73)
-- [ ] Stage 4: Hard (steps 74–98; 12.3 done)
+- [ ] Stage 4: Hard 
 - [ ] Stage 5: Hardest (steps 99–140)
 
 By phase:
 
-- [x] Phase 1: Safety net — 1.1, 1.2, 1.3, 1.4, 1.5 and 1.6 done
-- [x] Phase 2: Quick fixes and real bugs (2.1–2.5)
-- [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
+- [ ] Phase 3: Remove global state (3.1–3.5]
 - [ ] Phase 4: Restructure the core (4.1–4.7)
-- [ ] Phase 5: Improve individual features (5.1–5.9; 5.1, 5.3, 5.4, 5.5, 5.6 and 5.7 done)
-- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15; 6.6, 6.7 and 6.8 done)
+- [ ] Phase 5: Improve individual features (5.1–5.9]
+- [ ] Phase 6: Features from Claude Code and Codex (6.1–6.15]
 - [ ] Phase 7: Planning mode (7.1–7.10)
-- [ ] Phase 8: Role coverage (8.1–8.20; 8.16 done)
+- [ ] Phase 8: Role coverage (8.1–8.20]
 - [ ] Phase 9: Single combined runtime and live status (9.1–9.11)
-- [ ] Phase 10: User interface (10.1–10.10; 10.6 done)
-- [ ] Phase 11: Platform support, POSIX only (11.1–11.12; 11.1 done)
-- [ ] Phase 12: Local provider independence (12.1–12.13; 12.3 done)
-- [ ] Phase 13: Performance (13.1–13.10; 13.1 and 13.4 done, 13.3 partly)
-- [ ] Phase 14: Configuration (14.1–14.11; 14.1 and 14.2 done)
+- [ ] Phase 10: User interface (10.1–10.10]
+- [ ] Phase 11: Platform support, POSIX only (11.1–11.12]
+- [ ] Phase 12: Local provider independence (12.1–12.13]
+- [ ] Phase 13: Performance (13.1–13.10]
+- [ ] Phase 14: Configuration (14.1–14.11]
 - [ ] Phase 15: Repository intelligence, architecture memory and metrics (15.1–15.15)
 
 ---
