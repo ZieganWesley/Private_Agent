@@ -4,6 +4,7 @@ import contextlib
 import os
 import re
 import sys
+import urllib.parse
 import tempfile
 
 import httpx
@@ -222,13 +223,117 @@ def _sanitize_filename(text: str) -> str:
     return cleaned[:60] or "media"
 
 
-def _extract_url(text) -> str | None:
+def _resolve_search_url(url: str) -> str:
+    """Resolve search-provider redirect URLs to their destination."""
+    if not isinstance(url, str):
+        return url
+    if url.startswith("//"):
+        url = "https:" + url
+    try:
+        parsed = urllib.parse.urlparse(url)
+        if "duckduckgo.com" in (parsed.netloc or "").lower():
+            query = urllib.parse.parse_qs(parsed.query)
+            if "uddg" in query and query["uddg"]:
+                return urllib.parse.unquote(query["uddg"][0])
+    except Exception:  # noqa: BLE001 - best-effort redirect resolution
+        pass
+    return url.rstrip(".,;:")
+
+
+_MEDIA_EXTENSIONS_BY_TYPE = {
+    "image": {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp"},
+    "video": {".mp4", ".mov", ".mkv", ".webm", ".avi"},
+    "audio": {".mp3", ".wav", ".m4a", ".ogg", ".flac"},
+}
+_ALL_MEDIA_EXTENSIONS = set().union(*_MEDIA_EXTENSIONS_BY_TYPE.values())
+
+
+def _all_urls(text) -> list[str]:
     if not isinstance(text, str):
-        return None
-    match = re.search(r"https?://[^\s<>'\")\]]+", text)
-    if not match:
-        return None
-    return match.group(0).rstrip(".,;:")
+        return []
+    urls = []
+    for match in re.finditer(r"(?:https?:)?//[^\s<>'\")\]]+", text):
+        urls.append(_resolve_search_url(match.group(0)))
+    for match in re.finditer(r"uddg=([^\s&'\")\]]+)", text):
+        try:
+            urls.append(urllib.parse.unquote(match.group(1)))
+        except Exception:  # noqa: BLE001 - best-effort URL decoding
+            pass
+    # De-duplicate while preserving order.
+    seen = set()
+    unique = []
+    for url in urls:
+        if url and url not in seen:
+            seen.add(url)
+            unique.append(url)
+    return unique
+
+
+def _extract_url(text) -> str | None:
+    urls = _all_urls(text)
+    return urls[0] if urls else None
+
+
+def _extract_media_url(text, media_type: str | None = None) -> str | None:
+    """Extract a direct downloadable media URL from search results."""
+    allowed = _MEDIA_EXTENSIONS_BY_TYPE.get(media_type or "image", _ALL_MEDIA_EXTENSIONS)
+    urls = _all_urls(text)
+    for url in urls:
+        suffix = os.path.splitext(url.split("?", 1)[0])[1].lower()
+        if suffix in allowed:
+            return url
+    # Fall back to any recognized media extension when the type is unknown.
+    for url in urls:
+        suffix = os.path.splitext(url.split("?", 1)[0])[1].lower()
+        if suffix in _ALL_MEDIA_EXTENSIONS:
+            return url
+
+    # If search results only point to pages, fetch the first result and look
+    # for a direct media URL in its content.
+    web_mod = sys.modules.get("tools.web")
+    if web_mod is None:
+        try:
+            import tools.web as web_mod
+        except Exception:  # noqa: BLE001 - best-effort optional operation
+            web_mod = None
+    fetcher = getattr(web_mod, "fetch_webpage", None) if web_mod else None
+    if fetcher is None and web_mod is not None:
+        fetcher = getattr(web_mod, "fetch_webpage", None)
+    if fetcher is None:
+        try:
+            from .web import fetch_webpage as fetcher
+        except Exception:  # noqa: BLE001 - best-effort optional operation
+            fetcher = None
+    if callable(fetcher) and urls:
+        try:
+            if hasattr(fetcher, "invoke"):
+                content = fetcher.invoke({"url": urls[0]})
+            else:
+                content = fetcher(urls[0])
+        except Exception:  # noqa: BLE001 - best-effort optional operation
+            content = None
+        if isinstance(content, str):
+            candidates = _all_urls(content)
+            base_url = urls[0] if urls else None
+            # Also handle relative image sources in HTML.
+            for match in re.finditer(
+                r'<img[^>]+src=["\']([^"\']+)["\']', content, re.IGNORECASE
+            ):
+                src = match.group(1).strip()
+                if base_url:
+                    src = urllib.parse.urljoin(base_url, src)
+                if src.startswith("http"):
+                    candidates.append(src)
+            for url in candidates:
+                suffix = os.path.splitext(url.split("?", 1)[0])[1].lower()
+                if suffix in allowed or suffix in _ALL_MEDIA_EXTENSIONS:
+                    return url
+            # Last resort: return the first absolute image source even if it
+            # has no recognizable file extension.
+            for url in candidates:
+                if any(token in url.lower() for token in (".jpg", ".png", "image", "img")):
+                    return url
+    return None
 
 
 def _media_extension(media_type: str, url: str | None) -> str:
@@ -302,7 +407,7 @@ def _search_and_download_media_impl(**kwargs) -> str:
             except Exception as exc:  # noqa: BLE001 - best-effort optional operation
                 results = f"search failed: {exc}"
 
-        url = _extract_url(results)
+        url = _extract_media_url(results, media_type)
         if url is None:
             return "Error: No downloadable media URL was found in search results."
 
