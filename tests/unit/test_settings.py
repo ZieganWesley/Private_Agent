@@ -327,8 +327,7 @@ def test_override_tool_list_keeps_only_named_tools():
     )
     assert settings.override_tool_list == frozenset({"read_file", "write_file"})
 
-    with pytest.warns(RuntimeWarning, match="override_tool_list"):
-        settings = build({"tools": {"override_tool_list": "read_file"}})
+    settings = build({"tools": {"override_tool_list": "read_file"}})
     assert settings.override_tool_list == frozenset()
 
 

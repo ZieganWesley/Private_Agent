@@ -1,9 +1,20 @@
 import contextlib
+import inspect
 import json
 import os
 import pathlib
 import tempfile
 import warnings
+
+# Compatibility shim for Python 3.14+: chromadb still calls the deprecated
+# asyncio.iscoroutinefunction. Route it to the recommended inspect helper before
+# optional RAG dependencies are imported.
+try:
+    import asyncio
+
+    asyncio.iscoroutinefunction = inspect.iscoroutinefunction
+except Exception:  # noqa: BLE001 - defensive compatibility shim
+    pass
 
 from .settings import (
     DEFAULT_SYSTEM_PROMPT,

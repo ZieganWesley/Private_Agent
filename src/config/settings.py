@@ -399,11 +399,6 @@ def resolve_config_values(
             if isinstance(name, str) and name.strip()
         )
     else:
-        warnings.warn(
-            "tools.override_tool_list must be a list of tool names; ignoring it.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
         OVERRIDE_TOOL_LIST = frozenset()
 
     _raw_thinking = config.get("thinking_toggle_default", False)
