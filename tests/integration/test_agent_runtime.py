@@ -82,6 +82,7 @@ def scripted_local_cli(monkeypatch, tmp_path):
     monkeypatch.setattr(agent, "MCP_SERVERS", {})
     monkeypatch.setattr(agent, "AGENT_PERMISSION_MODE", "auto")
     monkeypatch.setattr(agent, "APP_CONFIG", {})
+    monkeypatch.setattr("providers.selection.installed_but_idle", lambda *args, **kwargs: [])
     monkeypatch.setattr(memory_context, "_offer_local_data_reset", lambda memory: None)
     from tools import get_tool_context
 

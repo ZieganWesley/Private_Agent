@@ -210,12 +210,9 @@ def _package_manager_for(
     candidates = [distro_id] + id_like.split()
     for candidate in candidates:
         if candidate in {"debian", "ubuntu", "linuxmint", "pop", "raspbian"}:
-            return "apt-get" if shutil.which("apt-get") else "apt"
+            return "apt-get"
         if candidate in {"fedora", "rhel", "centos", "rocky", "almalinux", "amzn"}:
-            if shutil.which("dnf"):
-                return "dnf"
-            if shutil.which("yum"):
-                return "yum"
+            return "dnf" if shutil.which("dnf") else "yum"
         if candidate in {"opensuse", "opensuse-leap", "opensuse-tumbleweed", "sles"}:
             return "zypper"
         if candidate in {"arch", "manjaro", "endeavouros"}:
