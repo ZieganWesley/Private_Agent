@@ -28,3 +28,9 @@
 - Unit and integration tests under `tests/`.
 - UI accessibility and boundary tests.
 - Sandbox and provider tests.
+
+## Media Download Tool
+- Model-callable tool to search for media content and download a selected result into the sandboxed workspace (commonly `downloads/`).
+- Registered aliases include `download_media`, `search_and_download_media`, and related names.
+- Supports direct URLs and search-result URL extraction; returns concise status and saved file path.
+- Tests: `tests/unit/test_media_download.py`.
