@@ -11,7 +11,7 @@ from langchain_core.tools import tool
 
 from config import NETWORK_REQUEST_TIMEOUT
 
-from . import has_internet_connection
+from . import has_internet_connection, record_network_failure
 from .network import _get_limited_response_sync, public_only_sync_client
 from .schemas import GetWeatherInput
 
@@ -144,6 +144,7 @@ def fetch_current_location() -> str:
     try:
         location = locate_current_position()
     except (httpx.HTTPError, ValueError, OSError, RuntimeError) as exc:
+        record_network_failure(exc)
         return f"Location lookup failed: {exc}"
     return (
         f"Approximate current location: {_describe_location(location)}\n"
@@ -321,6 +322,8 @@ def get_weather(
         place = _geocode(location) if location else locate_current_position()
         return fetch_weather(place, first, last, hour, today)
     except (httpx.HTTPError, ValueError, KeyError) as exc:
+        record_network_failure(exc)
         return f"Weather lookup failed: {exc}"
     except RuntimeError as exc:
+        record_network_failure(exc)
         return f"Weather lookup failed: {type(exc).__name__}: {exc}"

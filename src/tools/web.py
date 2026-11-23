@@ -15,7 +15,7 @@ from config import (
 )
 from sandbox import SandboxManager
 
-from . import has_internet_connection, require_internet
+from . import has_internet_connection, record_network_failure, require_internet
 from .network import (
     _get_limited_response_sync,
     public_only_sync_client,
@@ -31,6 +31,7 @@ def web_search(query: str) -> str:
     try:
         return search_web(query)
     except (httpx.HTTPError, ValueError, OSError) as exc:
+        record_network_failure(exc)
         return f"Web search failed: {type(exc).__name__}: {exc}"
 
 
@@ -68,6 +69,7 @@ def fetch_webpage(url: str, offset: int = 0, length: int | None = None) -> str:
     except ImportError:
         return "Failed to fetch webpage: Required package 'httpx' or 'beautifulsoup4' is not installed."
     except (httpx.HTTPError, ValueError, OSError) as exc:
+        record_network_failure(exc)
         return f"Failed to fetch webpage: {exc}"
 
 
@@ -116,4 +118,5 @@ def download_web_file(url: str, save_path: str) -> str:
             raise
         return f"Success: File downloaded and saved to '{save_path}'."
     except (httpx.HTTPError, ValueError, OSError) as exc:
+        record_network_failure(exc)
         return f"Failed to download file: {exc}"

@@ -102,10 +102,6 @@ def _probe_endpoint(
                 for model in all_models
                 if model not in embedding_models
             )
-            if kind == "openai-compatible":
-                from providers.identify import identify_server
-
-                name = identify_server(client, base_url) or name
             return LocalRuntime(
                 name, kind, base_url.rstrip("/"), models, embedding_models
             )

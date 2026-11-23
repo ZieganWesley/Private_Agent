@@ -227,6 +227,29 @@ def resolve_config_values(
     VISIBLE_REASONING = configured_bool(config, "agent", "visible_reasoning", False)
     VERBOSE_TIMINGS = configured_bool(config, "agent", "verbose_timings", False)
     STATUS_BAR = configured_bool(config, "agent", "status_bar", True)
+    SHOW_WELCOME_SCREEN = configured_bool(config, "ui", "show_welcome_screen", True) or configured_bool(
+        config, "agent", "show_welcome_screen", True
+    ) or configured_bool(config, "ui", "welcome_screen", True) or configured_bool(
+        config, "agent", "welcome_screen", True
+    )
+    INFORMATIVE_PROMPT = configured_bool(config, "ui", "informative_prompt", True) or configured_bool(
+        config, "agent", "informative_prompt", True
+    )
+    SHOW_TURN_DIVIDER = configured_bool(config, "ui", "show_turn_divider", True) or configured_bool(
+        config, "agent", "show_turn_divider", True
+    ) or configured_bool(config, "ui", "turn_divider", True) or configured_bool(
+        config, "agent", "turn_divider", True
+    )
+    SHOW_TURN_STATS = configured_bool(config, "ui", "show_turn_stats", True) or configured_bool(
+        config, "agent", "show_turn_stats", True
+    ) or configured_bool(config, "ui", "turn_stats", True) or configured_bool(
+        config, "agent", "turn_stats", True
+    ) or configured_bool(config, "ui", "per_turn_tokens", True) or configured_bool(
+        config, "agent", "per_turn_tokens", True
+    )
+    GROUPED_HELP = configured_bool(config, "ui", "grouped_help", True) or configured_bool(
+        config, "agent", "grouped_help", True
+    )
     _configured_system_prompt = config_section(config, "agent").get("system_prompt")
     PROJECT_INSTRUCTIONS_FILE = config_section(config, "agent").get(
         "project_instructions_file", "AGENTS.md"
@@ -240,6 +263,9 @@ def resolve_config_values(
     APPROVED_EXTRA_FOLDERS = list(
         config_section(config, "permissions").get("approved_extra_folders", []) or []
     )
+    SANDBOX_NETWORK_DEFAULT = configured_bool(
+        config, "sandbox", "network", False
+    ) or configured_bool(config, "permissions", "sandbox_network", False)
     SYSTEM_PROMPT = (
         _configured_system_prompt.strip()
         if isinstance(_configured_system_prompt, str)
@@ -632,10 +658,16 @@ class Settings:
     visible_reasoning: bool
     verbose_timings: bool
     status_bar: bool
+    show_welcome_screen: bool
+    informative_prompt: bool
+    show_turn_divider: bool
+    show_turn_stats: bool
+    grouped_help: bool
     system_prompt: str
     permission_allow_rules: list
     permission_deny_rules: list
     approved_extra_folders: list
+    sandbox_network_default: bool
     project_instructions_file: str | None
     conversation_retention_days: Any
     episode_retention_days: Any

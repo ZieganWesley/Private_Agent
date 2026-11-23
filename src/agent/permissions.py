@@ -1,8 +1,12 @@
 """Permission policy helpers for agent tool calls."""
 
+import contextlib
+import difflib
 import fnmatch
+import json
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 MUTATING_TOOL_NAMES = frozenset(
@@ -95,7 +99,7 @@ def select_coding_access_level(
         if not 1 <= choice <= len(choices):
             choice = 4
     else:
-        console.print("[bold cyan][Coding Workspace Access][/bold cyan]")
+        console.print("[bold info][Coding Workspace Access][/bold info]")
         for index, (_, description) in enumerate(choices, 1):
             console.print(f"  {index}. {description}")
         selection = console.input(
@@ -104,10 +108,10 @@ def select_coding_access_level(
         try:
             choice = int(selection) if selection else 4
         except ValueError:
-            console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
+            console.print("[warning]Invalid choice; using isolated workspace.[/warning]")
             choice = 4
         if not 1 <= choice <= len(choices):
-            console.print("[yellow]Invalid choice; using isolated workspace.[/yellow]")
+            console.print("[warning]Invalid choice; using isolated workspace.[/warning]")
             choice = 4
     return choices[choice - 1][0]
 
@@ -131,6 +135,96 @@ def coding_allows_command_network(access_level: str) -> bool:
     return access_level in {"full_hitl", "full_governed", "full_monitored"}
 
 
+def _permission_rule_for_tool(name: str, safe_args: Any) -> str:
+    """Build a permission rule that matches this tool call."""
+    target = _permission_rule_target(name, safe_args if isinstance(safe_args, dict) else {})
+    target = target.strip()
+    if target:
+        return f"{name}({target})"
+    return name
+
+
+def _approval_diff(name: str, safe_args: Any) -> str | None:
+    """Return a coloured unified diff for edit-like tool calls, if possible."""
+    if not isinstance(safe_args, dict):
+        return None
+    old_key = next(
+        (key for key in ("old_text", "old_string", "before") if key in safe_args),
+        None,
+    )
+    new_key = next(
+        (key for key in ("new_text", "new_string", "after", "content") if key in safe_args),
+        None,
+    )
+    if old_key is None or new_key is None:
+        return None
+    old_text = str(safe_args.get(old_key, ""))
+    new_text = str(safe_args.get(new_key, ""))
+    if old_text == new_text:
+        return None
+    diff_lines = difflib.unified_diff(
+        old_text.splitlines(),
+        new_text.splitlines(),
+        fromfile=f"{name}: before",
+        tofile=f"{name}: after",
+        lineterm="",
+    )
+    rendered = []
+    for line in diff_lines:
+        if line.startswith("+++") or line.startswith("---"):
+            rendered.append(f"[bold]{line}[/bold]")
+        elif line.startswith("@@"):
+            rendered.append(f"[info]{line}[/info]")
+        elif line.startswith("+"):
+            rendered.append(f"[success]{line}[/success]")
+        elif line.startswith("-"):
+            rendered.append(f"[error]{line}[/error]")
+        else:
+            rendered.append(line)
+    return "\n".join(rendered) if rendered else None
+
+
+def add_project_permission_rule(rule: str, workspace_root: Any = None) -> bool:
+    """Persist an allow rule in the project config and the active rule list."""
+    try:
+        from config import discover_project_config_paths
+
+        paths = discover_project_config_paths(workspace_root)
+        path = next((item for item in paths if item.is_file()), None)
+        if path is None:
+            path = paths[0] if paths else Path.cwd() / ".private_agent" / "settings.json"
+        existing: dict[str, Any] = {}
+        if path.is_file():
+            try:
+                loaded = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    existing = loaded
+            except (json.JSONDecodeError, OSError, ValueError):
+                existing = {}
+        permissions = existing.setdefault("permissions", {})
+        if not isinstance(permissions, dict):
+            permissions = {}
+            existing["permissions"] = permissions
+        allow_rules = permissions.setdefault("allow", [])
+        if not isinstance(allow_rules, list):
+            allow_rules = []
+            permissions["allow"] = allow_rules
+        if rule not in allow_rules:
+            allow_rules.append(rule)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(existing, indent=4) + "\n", encoding="utf-8")
+        try:
+            import config as config_module
+
+            if rule not in config_module.PERMISSION_ALLOW_RULES:
+                config_module.PERMISSION_ALLOW_RULES.append(rule)
+        except Exception:  # noqa: BLE001 - in-memory rule refresh is best effort
+            pass
+        return True
+    except Exception:  # noqa: BLE001 - persisting a project allow rule must not crash approval
+        return False
+
+
 def prompt_tool_approval(
     *,
     console: Any,
@@ -138,29 +232,58 @@ def prompt_tool_approval(
     description: str,
     safe_args: Any,
     on_always_allow: Any = None,
+    on_always_allow_session: Any = None,
+    on_always_allow_project: Any = None,
+    diff: str | None = None,
 ) -> bool:
     """Prompt the user for approval of a tool call.
 
-    Returns ``True`` when the user approves (answers ``y`` or ``a``).
-    ``a`` approves and, when ``on_always_allow`` is provided, registers the
-    tool as always-allowed for the rest of the session.
+    Returns ``True`` when the user approves.  ``a``/``session`` approves and
+    registers the tool for the rest of the session; ``p``/``project`` also
+    persists an allow rule for the project.
     """
+    session_callback = on_always_allow_session or on_always_allow
+    if on_always_allow_project is None:
+        on_always_allow_project = lambda rule: add_project_permission_rule(rule)
+    rule = _permission_rule_for_tool(name, safe_args)
+
+    console.print("[bold info][Tool Approval][/bold info]")
+    console.print(f"Tool: {name}")
+    if description:
+        console.print(f"Purpose: {description}")
+    if isinstance(safe_args, dict) and safe_args:
+        console.print("Arguments:")
+        for key, value in safe_args.items():
+            console.print(f"  {key}: {value}")
+    rendered_diff = diff if diff is not None else _approval_diff(name, safe_args)
+    if rendered_diff:
+        console.print(rendered_diff)
     approval = (
         console.input(
-            f"[yellow]Approve tool '{name}'? {description}\n"
-            f"Arguments: {safe_args}\nRun? [y/N/a (always allow)]: [/yellow]"
+            "[warning]Approve tool '"
+            + name
+            + "'? "
+            + (description or "")
+            + "\nRun? [y/N/a (session)/p (project)]: [/warning]"
         )
         .strip()
         .lower()
     )
-    if approval == "a":
-        if on_always_allow is not None:
-            import contextlib
-
+    if approval in {"a", "session", "s", "always"}:
+        if session_callback is not None:
             with contextlib.suppress(Exception):
-                on_always_allow(name)
+                session_callback(name)
         return True
-    return approval == "y"
+    if approval in {"p", "project", "pr"}:
+        with contextlib.suppress(Exception):
+            on_always_allow_project(rule)
+        if session_callback is not None:
+            with contextlib.suppress(Exception):
+                session_callback(name)
+        return True
+    if approval in {"y", "yes", "run"}:
+        return True
+    return False
 
 
 def select_permission_mode(
@@ -187,7 +310,7 @@ def select_permission_mode(
             return chosen
     except Exception:  # noqa: BLE001 - fall back to typed prompt
         pass
-    console.print("[bold cyan][Agent Permission Mode][/bold cyan]")
+    console.print("[bold info][Agent Permission Mode][/bold info]")
     for number, mode in enumerate(("manual", "auto", "full"), 1):
         console.print(f"  {number}. {labels[mode]}")
     selection = (
@@ -236,8 +359,8 @@ async def authorize_network_research(
             )
         choice = (
             console.input(
-                "[yellow]Internet is unavailable. Restore access and retry (r), "
-                "continue with incomplete offline data (c), or cancel (x)? [/yellow]"
+                "[warning]Internet is unavailable. Restore access and retry (r), "
+                "continue with incomplete offline data (c), or cancel (x)? [/warning]"
             )
             .strip()
             .lower()
@@ -275,8 +398,8 @@ async def authorize_network_research(
         request_summary = _request_summary(tool_name, tool_args)
         choice = (
             console.input(
-                f"[yellow]'{tool_name}' will send this to an external service: "
-                f"{request_summary}\nProceed? \\[y/N]: [/yellow]"
+                f"[warning]'{tool_name}' will send this to an external service: "
+                f"{request_summary}\nProceed? \\[y/N]: [/warning]"
             )
             .strip()
             .lower()
@@ -291,8 +414,8 @@ async def authorize_network_research(
         request_summary = _request_summary(tool_name, tool_args)
         choice = (
             console.input(
-                f"[yellow]Approve this '{tool_name}' action for the current request: "
-                f"{request_summary}\nProceed? \\[y/N]: [/yellow]"
+                f"[warning]Approve this '{tool_name}' action for the current request: "
+                f"{request_summary}\nProceed? \\[y/N]: [/warning]"
             )
             .strip()
             .lower()

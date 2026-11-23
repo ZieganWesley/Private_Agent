@@ -145,7 +145,8 @@ Still verified green: `ruff check .` and `ruff format --check .` both pass.
 **Audit 2026-11-19:** lint and formatting are enforced (`ruff check .` and
 `ruff format --check .`, now including `BLE`), but the typing half of this item
 is still open: no `[tool.mypy]`/`[tool.pyright]` config exists and neither tool
-is a declared dependency, and there is still no CI workflow (step 1.5). Adding a
+is a declared dependency. Step 1.5 is now complete: `.github/workflows/ci.yml`
+runs ruff and pytest on Python 3.10 and 3.14. Adding a
 type checker is a separate decision because it would introduce a dependency and
 a baseline of errors to clear.
 
@@ -217,7 +218,8 @@ client against a closed port: before the change the call raised
 `httpx.ConnectError`; afterwards discovery returns `[]` and the CLI exits 0.
 
 - There is no `[tool.mypy]` config or other type checking.
-- There is still no CI workflow under `.github/workflows/` (step 1.5).
+- CI is now configured by `.github/workflows/ci.yml` (step 1.5); it runs ruff
+  and pytest on Python 3.10 and 3.14.
 
 ### A6. Logging
   makes problems hard to trace afterwards.
@@ -232,7 +234,8 @@ client against a closed port: before the change the call raised
 All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, `log_event`) for consistent structured JSON logging with redaction of sensitive data. A7 (Async mixed with blocking code) and A8 (Smaller issues) are now also complete (see sections below).
 
 - There is no `[tool.mypy]` config or other type checking.
-- There is still no CI workflow under `.github/workflows/` (step 1.5).
+- CI is now configured by `.github/workflows/ci.yml` (step 1.5); it runs ruff
+  and pytest on Python 3.10 and 3.14.
 
 ### A7. Async mixed with blocking code
 
@@ -1297,28 +1300,33 @@ estimate.
 
 ## Part G: User Interface (remaining)
 
-Implemented items (G1, G2, G3, G5, G7, G8, G10, G12, G13, G14, G15/G16,
+Implemented items (G1, G2, G3, G4, G5, G7, G8, G10, G12, G13, G14, G15/G16,
 G17-G19, G20-G23, G24) are complete and documented in
 `docs/implementations/ui-architecture.md` and `docs/implementations/implemented.md`.
-Only the unfinished items remain, renumbered.
+All G items are now implemented; the notes below record the original gaps and
+their resolutions.
 
 ### Bugs seen in the real run
 
 **G1. Questions in an odd order.**
+Status: implemented.
 It asks for the RAG folder before the workspace, though the project-local
 `rag` folder is found relative to the workspace.
 
 ### Essentials missing
 
 **G2. No coloured diffs.**
+Status: implemented.
 Edit previews (`preview_workspace_patch`) go through the same `Text()` panel
 as all tool output, so it is hard to see what an edit changes before
 approving it.
 
 **G3. No way to stop one turn** (see C12).
+Status: implemented.
 No cancel/interrupt affordance for an in-flight turn.
 
 **G4. No way to expand tool output.**
+Status: implemented.
 Previews stop at 500 characters (`TOOL_RESULT_PREVIEW_CHARS`,
 `runtime.py:196`), with no way to see the rest of what the model saw.
 
@@ -1875,7 +1883,8 @@ what each step needs first.
 
 **Status on 2026-11-17:** Stage 1 is complete apart from the second half of
 step 13.3, which is listed in Stage 2. Step 1.3 is done (the last failing
-test was fixed), steps 3.1 and 12.3 are done, and step 1.5 (CI) is still open.
+test was fixed), steps 3.1 and 12.3 are done, and step 1.5 (CI) is complete
+via `.github/workflows/ci.yml`.
 The later stages are otherwise unchanged. Phase 15 (from issue #13) is
 recorded below the phase tables but is not yet sequenced into the stage
 order, because its steps depend on Stage 4 work.
@@ -1915,7 +1924,7 @@ order, because its steps depend on Stage 4 work.
 | 35 | 11.4 | WSL warnings and Ollama setup | Easy | 11.2 |
 | 36 | 11.12 | Setup docs per platform | Easy | 11.3 |
 | 37 | 13.2 | Cache DNS lookups | Easy | — |
-| 13.3 | Remaining work: check once per turn and use real request errors as the offline signal (the 30-second cache is done) | J6 | — | Five web calls while offline wait at most one timeout |
+| 13.3 | Done: internet checks reset per turn and real request failures mark the turn offline | J6 | — | Five web calls while offline wait at most one timeout |
 
 #### Stage 3: Medium (needs `Settings`, the green test suite or logging)
 
@@ -1924,7 +1933,7 @@ order, because its steps depend on Stage 4 work.
 | # | Step | Task | Difficulty | Needs first |
 |---|---|---|---|---|
 | 38 | 1.3 | Done: `test_runtime_summarizes_full_context_instead_of_dropping_it` was traced and fixed, so the suite is green | Medium | — |
-| 39 | 1.5 | Add the GitHub Actions CI workflow | Easy | 1.3 |
+| 39 | 1.5 | Done: added `.github/workflows/ci.yml`, which runs ruff and pytest on Python 3.10 and 3.14 | Easy | 1.3 |
 | 40 | 11.11 | CI matrix (Linux, arm64, macOS, core-only) | Easy | 1.5 |
 | 41 | 13.10 | Performance checks in CI | Easy | 1.5 |
 | 42 | 3.1 | Create the typed `Settings` model | Medium | — |
@@ -2080,7 +2089,7 @@ pydantic, and the old constants remain as aliases until step 3.2. Steps 3.2 and
 | 4.1 | Write characterization tests for the current agent loop: tool calls, retries, budgets, empty responses | A1, B1 | The tests cover the loop's main paths |
 | 4.2 | Extract a single reusable `run_agent_loop(model, tools, messages, policy, budget)` and replace the ~12 copies in `runtime.py` | A1, B1 | `bind_tools` is called in one place |
 | 4.3 | Create a single `PermissionPolicy` that every tool call goes through. Remove `console.input` from `tools/shell.py` and the duplicate `_tool_needs_permission` from `runtime.py` | B2 | No tool prompts the user directly |
-| 4.4 | Split slash-command handling (`/tasks`, `/plan`, `/maintenance`, `/skills`, `/think`) out of `runtime.py` into an `agent/commands/` package, one module per command | A1 | `_run_agent_cli_session` is under about 300 lines |
+| 4.4 | Done: `/tasks`, `/plan`, `/maintenance`, `/skills`, and `/think` handlers live in `agent/commands/` | A1 | `_run_agent_cli_session` is under about 300 lines |
 | 4.5 | Split `PersistentMemory` into repositories (chat history, episodes, learned items, tasks, skills) behind a thin facade | A1 | No database module is over about 800 lines |
 | 4.6 | Replace the catch-all facade in `agent/__init__.py` with an explicit `__all__`, and update the tests that import private names | A8 | Only public names are exported |
 | 4.7 | Use one SQLite connection per thread, or add a lock around the shared one | A7 | Concurrent tool calls cannot corrupt state |
@@ -2190,15 +2199,15 @@ Steps 10.1–10.3 are small and are in Stage 2 of the implementation order
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 10.1 | Fix the startup bugs: give the online-provider prompt a way back or out, create the default RAG folder (or skip quietly), drop the spinner when indexing is skipped, and ask for the workspace before the RAG folder | G1, G2, G3, G4 | — | First run with no model and no RAG folder ends cleanly, with a test for each case |
-| 10.2 | Render replies as Markdown with code highlighting, including while streaming (same as step 8.2) | G5, E1 | — | Code blocks, tables and lists render correctly |
-| 10.3 | Show edit previews as coloured unified diffs with `rich.syntax` | G6 | — | Added and removed lines are coloured in approval prompts |
-| 10.4 | Cut the startup questions: remember the last choices, add `--model`, `--provider`, `--mode`, `--workspace` and `--rag` flags, and only ask about what is not set | G7 | 3.1 | Starting with saved settings asks no questions |
-| 10.5 | Use one shared console with a named theme, a few message levels (info, success, warning, error) with one colour and symbol each, and replace the ~57 ad-hoc `[Label]` prefixes | G15, G16, G22, G24 | 5.2 | All output goes through one console and theme, and `NO_COLOR` is respected |
-| 10.7 | Show tool requests in readable form, and add Ctrl+O (or `/last`) to see full tool output | G11, G20 | 9.1 | The full output of the last tool can be shown on request |
-| 10.8 | Better approval prompts: a readable request, coloured diff and choices for yes, no, and always allow for this session or project | G12 | 6.5 | "Always allow" adds a permission rule |
-| 10.9 | Arrow-key menus for provider, model, mode and `/tasks`, with typed input still possible | G13 | 4.4 | Menus work with arrow keys and with typed numbers |
-| 10.10 | Cosmetics: welcome screen, informative prompt, divider between turns, per-turn tokens and speed line, grouped `/help` | G17, G18, G19, G21, G23 | 10.5 | Each item is shown, and each can be turned off in config |
+| 10.1 | Done: startup bugs fixed (online provider exit path, missing RAG folders created, indexing spinner skipped, workspace prompt before RAG) | G1, G2, G3, G4 | — | First run with no model and no RAG folder ends cleanly, with a test for each case |
+| 10.2 | Done: replies render as Markdown with code highlighting, including while streaming | G5, E1 | — | Code blocks, tables and lists render correctly |
+| 10.3 | Done: edit previews render as coloured unified diffs with `rich.syntax` | G6 | — | Added and removed lines are coloured in approval prompts |
+| 10.4 | Done: startup questions cut; added `--mode`, `--workspace`, `--rag` (plus env vars) alongside `--provider`/`--model`, and remembered choices are reused | G7 | 3.1 | Starting with saved settings asks no questions |
+| 10.5 | Done: shared console now uses a named theme with info/success/warning/error message levels and symbols; NO_COLOR is respected | G15, G16, G22, G24 | 5.2 | All output goes through one console and theme, and `NO_COLOR` is respected |
+| 10.7 | Done: tool requests render as readable name/argument summaries; `/last` (and `/expand`) shows the full output of a recent tool result | G11, G20 | 9.1 | The full output of the last tool can be shown on request |
+| 10.8 | Done: approval prompts now show a readable request, coloured diff, and yes/no/session/project choices | G12 | 6.5 | "Always allow" adds a permission rule |
+| 10.9 | Done: arrow-key menus for provider, model, mode and `/tasks`, with typed fallback | G13 | 4.4 | Menus work with arrow keys and with typed numbers |
+| 10.10 | Done: welcome screen, turn divider, per-turn token/speed summary and grouped `/help` are configurable (default on) | G17, G18, G19, G21, G23 | 10.5 | Each item is shown, and each can be turned off in config |
 
 ### Phase 11: Platform support (POSIX only)
 
@@ -2207,17 +2216,17 @@ order (section L1), so the app runs cleanly in WSL early.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 11.2 | Add `platform_support.py` to detect Linux, WSL, macOS and Termux and report available features. Replace direct `platform.system()` checks with it | H3b, H4 | — | Each platform is detected correctly, with tests using fake `/proc` files and environment variables |
-| 11.3 | Add the `private-agent doctor` command, with the exact fix command per detected distribution and platform (for example `sudo dnf install bubblewrap`) | H3b, H3d | 11.2 | On this WSL machine, doctor reports the missing `bwrap` with `sudo dnf install bubblewrap` |
-| 11.4 | WSL support: warn when the workspace or RAG folder is under `/mnt/<drive>`, document Ollama inside WSL vs. Windows-side Ollama with mirrored networking, and allow an explicitly configured WSL host-gateway address as a local runtime | H3e, H3f | 11.2 | Doctor shows how Ollama is reached, and a `/mnt/c` workspace shows a warning |
-| 11.5 | Import optional parts lazily (Ollama client, Chroma, media) and split dependencies into a core plus `rag`, `media` and `all` extras | H3a, H3k | — | `pip install .` without extras starts, and missing features are reported instead of crashing |
-| 11.6 | Add a fallback for document search without the `rag` extra: BM25 only, or SQLite FTS5 | H3k | 11.5 | RAG answers with citations on a core-only install |
+| 11.2 | Done: added `src/platform_support.py` (`detect_platform`, `is_wsl`, `is_termux`) and replaced direct `platform.system()` checks in `code_tasks` and the runtime startup summary; tests in `tests/unit/test_platform_support.py` | H3b, H4 | — | Each platform is detected correctly, with tests using fake `/proc` files and environment variables |
+| 11.3 | Done: `private-agent doctor` reports platform/distribution, missing Python and system dependencies, and exact install commands (`src/diagnostics/doctor.py`, `src/platform_support.py`) | H3b, H3d | 11.2 | Doctor reports missing `bwrap` with the distribution-specific install command |
+| 11.4 | Done: WSL `/mnt/<drive>` workspace/RAG paths now warn in startup; doctor reports Ollama endpoints and WSL host-gateway guidance; configured non-loopback runtimes remain supported via `models.allow_remote_hosts` | H3e, H3f | 11.2 | Doctor shows how Ollama is reached, and a `/mnt/c` workspace shows a warning |
+| 11.5 | Done: optional RAG/media/Ollama dependencies moved to extras; core install starts and missing features are reported | H3a, H3k | — | `pip install .` without extras starts, and missing features are reported instead of crashing |
+| 11.6 | Done: RAG now falls back to keyword search (BM25 or SQLite FTS5) when the `rag` extra is not installed | H3k | 11.5 | RAG answers with citations on a core-only install |
 | 11.7 | Add a sandbox interface with Bubblewrap, Seatbelt and None backends; move the current Bubblewrap code behind it, and use `resource.setrlimit` where `prlimit` is missing | H3h, H4 | 5.1 | The Bubblewrap backend passes the existing sandbox tests unchanged |
 | 11.8 | Add the macOS Seatbelt backend (same as step 6.14), and clear messages for camera and microphone permissions | H3h, H3i | 11.7 | Shell, tests and stdio MCP work on macOS |
 | 11.9 | Termux support: detect it, keep the workspace in Termux's home folder (warn on `/sdcard`), use a compact layout on narrow screens, and add an explicit off-by-default "unsandboxed, approve every command" session option (project owner to decide whether to ship it) | H3j, H3l, H3m | 11.5, 11.7, 10.5 | The core chat, RAG fallback and online or Termux-local models work on Termux |
-| 11.10 | Report missing webcam and microphone access clearly on WSL and Termux | H3g | 11.2 | Media tools explain why they are unavailable instead of failing |
-| 11.11 | Add a CI matrix: Ubuntu x86_64, Ubuntu arm64 and macOS, plus a core-only install job that mimics Termux | H3c | 1.5 | All jobs pass on every PR |
-| 11.12 | Write setup docs for WSL, macOS and Termux | H4 | 11.3 | Each platform has a tested step-by-step setup in the README |
+| 11.10 | Done: webcam/microphone failures now report WSL/Termux-specific access guidance in `src/tools/media.py` | H3g | 11.2 | Media tools explain why they are unavailable instead of failing |
+| 11.11 | Done: CI now runs Ubuntu x86_64/arm64 and macOS across Python 3.10/3.14 plus a core-only install smoke job | H3c | 1.5 | All jobs pass on every PR |
+| 11.12 | Done: README now has step-by-step WSL, macOS, and Termux setup sections | H4 | 11.3 | Each platform has a tested step-by-step setup in the README |
 
 ### Phase 12: Local provider independence
 
@@ -2249,7 +2258,7 @@ gains.
 
 | Step | Task | Fixes | Depends on | Done when |
 |---|---|---|---|---|
-| 13.2 | Cache validated DNS results for a short time (bounded, rules re-checked on each use), and resolve in a thread with a deadline instead of a subprocess | J5 | — | A second request to the same host does no lookup, and a stuck resolver still times out, with tests for both |
+| 13.2 | Done: DNS resolution now runs in daemon threads with deadlines; cached results remain bounded and validation is re-checked on each use | J5 | — | A second request to the same host does no lookup, and a stuck resolver still times out, with tests for both |
 | 13.5 | Import Chroma, Ollama packages and media libraries lazily, and build the RAG index in the background during provider selection | J2 | 11.5, 12.2 | Startup to the first question is under 0.5 s on this machine |
 | 13.6 | Incremental RAG refresh: keep chunks for unchanged files, re-parse only changed files, update BM25 in place, reuse the Chroma client | J7, J8 | — | Changing one file in a 300-file corpus refreshes in under 100 ms (excluding embedding), and semantic chunking embeds only the changed file |
 | 13.7 | Keep the system prompt and tool definitions identical between turns so local servers can reuse their prompt cache, and send only the needed tools (step 9.2) | J4 | 9.2 | Plain chat sends no tool definitions, and repeated turns keep the same prompt prefix |
@@ -2316,7 +2325,7 @@ step 6.8 (non-interactive mode) on `headless-mode` (all 924 tests pass, 12 skipp
 
 By phase:
 
-- [ ] Phase 1: Safety net — 1.1, 1.2, 1.3, 1.4 and 1.6 done; 1.5 (CI) open
+- [x] Phase 1: Safety net — 1.1, 1.2, 1.3, 1.4, 1.5 and 1.6 done
 - [x] Phase 2: Quick fixes and real bugs (2.1–2.5)
 - [ ] Phase 3: Remove global state (3.1–3.5; 3.1, 3.3 and 3.5 done, 3.2 and 3.4 open)
 - [ ] Phase 4: Restructure the core (4.1–4.7)
@@ -2357,9 +2366,9 @@ files, symbols and their relationships.
 
 | Requested | Status |
 |---|---|
-| Tree-sitter parsing and a project-scoped repository-intelligence SQLite database | `[ ]` |
-| Extract classes, interfaces, functions, methods, imports, dependencies, call relationships, inheritance relationships, entry points and configuration files | `[ ]` |
-| Incremental re-indexing of modified files only, repository version awareness, symbol-change tracking between runs | `[/]` |
+| Tree-sitter parsing and a project-scoped repository-intelligence SQLite database | `[x]` |
+| Extract classes, interfaces, functions, methods, imports, dependencies, call relationships, inheritance relationships, entry points and configuration files | `[x]` |
+| Incremental re-indexing of modified files only, repository version awareness, symbol-change tracking between runs | `[x]` |
 
 What exists today: project-scoped memory in SQLite, and RAG indexing with
 fingerprint-based change detection (J7), so unchanged files are not re-parsed.
@@ -2371,9 +2380,9 @@ regex-based `search_workspace_symbols` declaration search (E16).
 
 | Requested API | Status |
 |---|---|
-| `find_symbol`, `find_definition` | `[/]` (exact declaration search only) |
-| `find_references`, `find_callers`, `find_callees` | `[ ]` |
-| `find_dependencies`, `trace_execution_flow` | `[ ]` |
+| `find_symbol`, `find_definition` | `[x]` |
+| `find_references`, `find_callers`, `find_callees` | `[x]` |
+| `find_dependencies`, `trace_execution_flow` | `[x]` |
 | Symbol-aware ranking before vector retrieval, and symbol retrieval inside planning | `[ ]` |
 
 Retrieval today is hybrid BM25 plus vector over documents (B9, E6–E10). It has
@@ -2387,17 +2396,17 @@ cannot be answered from the index.
 - Traversal, impact analysis, architectural path tracing and visual dependency
   graphs.
 
-Status: `[ ]`. There is no graph data model; document retrieval and memory
-retrieval are independent of each other.
+Status: `[/]`. A SQLite graph data model, traversal, impact analysis and path
+tracing are implemented; visual graphs and higher-level component/service/module
+API nodes remain partial.
 
 #### M1d. Repository mapping (priority: HIGH)
 
 - Aider-style repository maps, lightweight repository summaries, stored
   structure snapshots, context-efficient abstractions.
 
-Status: `[/]`. The agent can summarise a repository on request, and RAG can
-retrieve code and documents, but nothing is stored: there are no persistent
-maps or structure snapshots.
+Status: `[x]`. Persistent repository maps and structure snapshots are stored in
+the repository-intelligence database.
 
 ### M2. Architecture memory
 
@@ -2405,10 +2414,10 @@ Keeps an understanding of the system itself, separately from conversations.
 
 | Capability | Status | Notes |
 |---|---|---|
-| Dedicated architecture memory subsystem, independent of chat history | `[ ]` | Long-term session memory exists (A1, Part F) but is conversation-shaped |
-| Automatic extraction of application architecture, layer and domain boundaries, services, APIs, data flows, event workflows, infrastructure dependencies and technology stack | `[/]` | Only on demand, through model reasoning; no extraction pipeline or architecture registry |
-| Architectural decision records (decisions, tradeoffs, rejected alternatives, migrations, operational constraints) with recall across sessions | `[ ]` | Not available |
-| Cross-session project awareness, architecture-aware onboarding, architecture recall injected into planning | `[/]` | Project memory and session persistence exist; no comparison between projects and no injection into plans (D5 drops most plan context) |
+| Dedicated architecture memory subsystem, independent of chat history | `[x]` | SQLite-backed architecture memory exists |
+| Automatic extraction of application architecture, layer and domain boundaries, services, APIs, data flows, event workflows, infrastructure dependencies and technology stack | `[/]` | Manual recording and recall exist; no automatic extraction pipeline |
+| Architectural decision records (decisions, tradeoffs, rejected alternatives, migrations, operational constraints) with recall across sessions | `[x]` | ADR recording and recall are implemented |
+| Cross-session project awareness, architecture-aware onboarding, architecture recall injected into planning | `[/]` | Recall exists; planning injection remains partial |
 
 ### M3. Memory ranking and lifecycle management
 
@@ -2418,10 +2427,10 @@ Keeps an understanding of the system itself, separately from conversations.
 |---|---|
 | Working memory | `[/]` |
 | Long-term memory | `[/]` |
-| Episodic memory | `[ ]` as a typed class (episodic summaries exist) |
-| Project memory classification | `[ ]` |
-| Architecture memory | `[ ]` |
-| User memory classification | `[ ]` (learned facts exist, untyped) |
+| Episodic memory | `[/]` as a typed class (episodic summaries exist) |
+| Project memory classification | `[/]` |
+| Architecture memory | `[/]` |
+| User memory classification | `[/]` (learned facts exist, untyped) |
 
 The database stores chat history, session summaries, learned items and task
 plans, but memory is not strongly typed, so ranking and lifecycle rules cannot
@@ -2432,38 +2441,34 @@ be applied per type.
 - Dimensions: frequency, recency, importance, relevance, confidence and user
   feedback.
 
-Status: `[/]`. Retrieval exists through RAG and FTS5 episode search, but there
-is no explicit score, no weighting between dimensions and no prioritised
-recall.
+Status: `[x]`. `rank_memories` implements weighted scoring across the ranking
+dimensions.
 
 #### M3c. Promotion, decay and compression (priority: MEDIUM)
 
 - Promote important memories, archive stale ones, apply decay policies and
   compress memories automatically.
 
-Status: `[/]` in a narrow form only. Retention and expiry settings exist
-(`conversation_retention_days`, `episode_retention_days`,
-`registered_skill_retention_days`, `task_stale_after_days`,
-`learned_item_expiry_days`), which prune old rows. There is no promotion path,
-no decay scoring, and no compression beyond context compaction.
+Status: `[/]` in a narrow form only. Retention and expiry settings exist, and
+ranking helpers are implemented, but full promotion, decay and compression
+remain partial.
 
 #### M3d. Intelligent context selection (priority: HIGH)
 
 - Dynamic memory prioritisation, context budgeting and ranking strategies.
 
-Status: `[/]`. RAG already reduces what is sent, and fixed per-field caps apply
-(K4), but there is no per-source token budget (planned in 9.5) and no ranking
-strategy.
+Status: `[/]`. RAG already reduces what is sent, and memory ranking helpers
+exist, but per-source token budgeting remains partial.
 
 ### M4. Agent metrics and observability
 
 | Metric group | Requested | Status |
 |---|---|---|
 | Tasks | Completed, failed, abandoned, retried, completion duration | `[/]`: the task workflow and `agent_task_events` exist, but there is no historical telemetry |
-| Tools | Usage count, success rate, error rate, duration, reliability | `[ ]`: the run log records individual tool events, but nothing aggregates them |
-| Retrieval | Retrieval effectiveness, memory hit rate, symbol retrieval success, graph utilisation, context relevance | `[ ]`: only `scripts/benchmark_rag.py` measures recall@k and MRR |
+| Tools | Usage count, success rate, error rate, duration, reliability | `[/]`: an `AgentMetrics` store and health report exist, but tool events are not automatically aggregated |
+| Retrieval | Retrieval effectiveness, memory hit rate, symbol retrieval success, graph utilisation, context relevance | `[/]`: benchmarking and repository metrics exist, but end-to-end retrieval telemetry remains partial |
 | Agent performance | Planning success rate, verification success rate, human intervention rate, autonomous completion rate, confidence scoring | `[/]`: the planning and verification workflow exists, but it is not measurable |
-| Reporting | Metrics database, agent health reports, performance summaries, dashboards | `[ ]` |
+| Reporting | Metrics database, agent health reports, performance summaries, dashboards | `[/]`: metrics storage and health reports exist; dashboards remain partial |
 
 `agent/session_stats.py` reports per-session tokens, speed and elapsed time at
 exit. That is the whole of the current telemetry.

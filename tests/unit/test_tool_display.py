@@ -75,7 +75,7 @@ def test_tool_request_panel_uses_shared_console(monkeypatch):
         {"name": "web_search", "args": {"query": "public", "api_key": "hidden"}}
     )
 
-    assert printed[0][0] == "[cyan][Tool Request][/cyan]"
+    assert printed[0][0] == "[info][Tool Request][/info]"
     summary = printed[0][1].plain
     assert summary.startswith("web_search")
     assert "[REDACTED]" in summary

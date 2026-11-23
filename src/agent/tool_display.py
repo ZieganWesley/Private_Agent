@@ -7,6 +7,7 @@ from typing import Any
 
 from langchain_core.messages import ToolMessage
 from rich.panel import Panel
+from rich.syntax import Syntax
 from rich.text import Text
 
 from .console import console
@@ -112,7 +113,7 @@ def _display_tool_request(tool_call: dict) -> None:
     if len(summary) > 300:
         summary = summary[:297] + "..."
     console.print(
-        "[cyan][Tool Request][/cyan]",
+        "[info][Tool Request][/info]",
         Text(f"{name} \u00b7 {summary}", overflow="ellipsis"),
     )
 
@@ -128,28 +129,22 @@ def _display_tool_error(tool_name: str, details: str) -> None:
 
 
 def _render_tool_result_text(result: str) -> Text:
-    """Render a tool result, colouring diff-like output when detected."""
+    """Render a tool result, colouring diff-like output when detected.
+
+    Unified diffs are rendered with ``rich.syntax.Syntax`` so added and
+    removed lines receive the diff lexer's colours.
+    """
     lines = result.splitlines()
     looks_like_diff = any(
         line.startswith(("+++", "---", "@@", "+", "-")) for line in lines
     ) and any(line.startswith(("+++", "---")) for line in lines)
+    if looks_like_diff:
+        return Syntax(result, "diff", theme="ansi_dark", word_wrap=False)
     text = Text()
     for index, line in enumerate(lines):
         if index:
             text.append("\n")
-        if looks_like_diff:
-            if line.startswith("+++") or line.startswith("---"):
-                text.append(line, style="bold")
-            elif line.startswith("@@"):
-                text.append(line, style="cyan")
-            elif line.startswith("+"):
-                text.append(line, style="green")
-            elif line.startswith("-"):
-                text.append(line, style="red")
-            else:
-                text.append(line)
-        else:
-            text.append(line)
+        text.append(line)
     return text
 
 
@@ -272,8 +267,17 @@ class _LazyProxy:
     def __getattr__(self, item):
         return getattr(self._load(), item)
 
+    def __setattr__(self, name, value):
+        if name in self.__slots__:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._load(), name, value)
+
     def __call__(self, *args, **kwargs):
         return self._load()(*args, **kwargs)
+
+    def __bool__(self) -> bool:
+        return bool(self._load())
 
     def __repr__(self):
         return repr(self._load())

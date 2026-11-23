@@ -9,6 +9,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from platform_support import (
+    detect_distribution,
+    detect_platform,
+    format_install_command,
+    system_dependency_status,
+)
 from rich.console import Console
 from rich.table import Table
 
@@ -102,20 +108,130 @@ def recommend_config(info: dict[str, Any]) -> dict[str, Any]:
     return {"profile": profile, "settings": profiles[profile]}
 
 
+def ollama_configuration_summary() -> tuple[list[str], bool]:
+    """Return configured Ollama endpoints and remote-host permission."""
+    try:
+        from config import APP_CONFIG, OLLAMA_BASE_URLS
+    except Exception:  # noqa: BLE001 - doctor must not fail on config errors
+        return [], False
+    endpoints = [
+        str(url).strip()
+        for url in (OLLAMA_BASE_URLS or [])
+        if str(url).strip()
+    ]
+    allow_remote = False
+    if isinstance(APP_CONFIG, dict):
+        model_config = APP_CONFIG.get("models", {})
+        if isinstance(model_config, dict):
+            raw = model_config.get("allow_remote_hosts", False)
+            allow_remote = (
+                raw
+                if isinstance(raw, bool)
+                else str(raw).strip().lower() in {"true", "1", "yes", "on"}
+            )
+    return endpoints, allow_remote
+
+
+def missing_system_dependencies() -> list[dict[str, str | bool]]:
+    """Return required system tools that are not installed."""
+    return [
+        item
+        for item in system_dependency_status(detect_platform())
+        if not item["available"]
+    ]
+
+
+def system_dependency_fix_command() -> str:
+    """Return an install command for missing system dependencies."""
+    missing = missing_system_dependencies()
+    if not missing:
+        return ""
+    distro = detect_distribution()
+    return format_install_command(
+        [str(item["package"]) for item in missing], distro.package_manager
+    )
+
+
 def run_doctor() -> int:
-    console.print("[bold cyan]Private Agent Doctor[/bold cyan]")
+    console.print("[bold info]Private Agent Doctor[/bold info]")
+    platform_info = detect_platform()
+    distro = detect_distribution()
+    platform_table = Table(title="Platform")
+    platform_table.add_column("Field")
+    platform_table.add_column("Value")
+    platform_table.add_row("Platform", platform_info.name)
+    platform_table.add_row("Machine", platform_info.machine or "unknown")
+    platform_table.add_row("Features", ", ".join(platform_info.available_features) or "none")
+    console.print(platform_table)
+    console.print(
+        "[info]Distribution:[/info] "
+        + f"{distro.name} {distro.version}".strip()
+        + f" (package manager: {distro.package_manager})"
+    )
+
     deps = check_dependencies()
     table = Table(title="Dependencies")
     table.add_column("Status")
     table.add_column("Item")
     if deps["required"]:
         for item in deps["required"]:
-            table.add_row("[red]MISSING (required)[/red]", item)
+            table.add_row("[error]MISSING (required)[/error]", item)
     else:
-        table.add_row("[green]OK[/green]", "All required dependencies present")
+        table.add_row("[success]OK[/success]", "All required dependencies present")
     for item in deps["optional"]:
-        table.add_row("[yellow]OPTIONAL[/yellow]", item)
+        table.add_row("[warning]OPTIONAL[/warning]", item)
     console.print(table)
+
+    system_table = Table(title="System dependencies")
+    system_table.add_column("Tool")
+    system_table.add_column("Package")
+    system_table.add_column("Status")
+    for item in system_dependency_status(platform_info):
+        system_table.add_row(
+            str(item["tool"]),
+            str(item["package"]),
+            "[success]available[/success]"
+            if item["available"]
+            else "[error]missing[/error]",
+        )
+    console.print(system_table)
+    fix_command = system_dependency_fix_command()
+    if fix_command:
+        console.print("[warning]Missing system dependencies. Install them with:[/warning]")
+        console.print(f"  {fix_command}", markup=False)
+    if deps["required"]:
+        console.print(
+            "[warning]Install required Python dependencies with:[/warning]"
+        )
+        console.print('  python -m pip install -e ".[dev]"', markup=False)
+    media_missing = [
+        item
+        for item in deps["optional"]
+        if any(name in item for name in ("faster_whisper", "cv2", "sounddevice", "PIL"))
+    ]
+    if media_missing:
+        console.print("[warning]Install optional media dependencies with:[/warning]")
+        console.print('  python -m pip install -e ".[media]"', markup=False)
+    if any("ollama" in item for item in deps["optional"]):
+        console.print("[warning]Install optional Ollama dependencies with:[/warning]")
+        console.print('  python -m pip install -e ".[ollama]"', markup=False)
+
+    endpoints, allow_remote = ollama_configuration_summary()
+    ollama_table = Table(title="Ollama")
+    ollama_table.add_column("Field")
+    ollama_table.add_column("Value")
+    ollama_table.add_row(
+        "Configured endpoints",
+        ", ".join(endpoints) if endpoints else "none (default localhost:11434)",
+    )
+    ollama_table.add_row("Remote hosts allowed", "yes" if allow_remote else "no")
+    console.print(ollama_table)
+    if detect_platform().is_wsl:
+        console.print(
+            "[info][WSL][/info] Ollama inside WSL: http://localhost:11434. "
+            "Windows-side Ollama: use the WSL host gateway (commonly "
+            "172.x.x.1:11434) and set models.allow_remote_hosts to true."
+        )
 
     info = analyze_machine()
     mtable = Table(title="Machine")
@@ -126,12 +242,12 @@ def run_doctor() -> int:
     console.print(mtable)
 
     console.print(
-        "[cyan]Configuration file path:[/cyan] "
+        "[info]Configuration file path:[/info] "
         f"{Path.home() / '.config' / 'private_agent' / 'conf'}"
     )
     if deps["required"]:
         console.print(
-            "[red]Install missing required dependencies before running.[/red]"
+            "[error]Install missing required dependencies before running.[/error]"
         )
         return 1
     return 0
@@ -149,17 +265,17 @@ def doctor_interactive() -> int:
         answer = ""
     if answer not in {"y", "yes"}:
         console.print(
-            "[yellow]Manual config changes cannot be performed from the application. "
+            "[warning]Manual config changes cannot be performed from the application. "
             "Please edit the configuration file directly at "
-            f"{Path.home() / '.config' / 'private_agent' / 'conf'}.[/yellow]"
+            f"{Path.home() / '.config' / 'private_agent' / 'conf'}.[/warning]"
         )
         return 0
     rec = recommend_config(info)
-    console.print(f"\n[green]Recommended profile:[/green] {rec['profile']}")
+    console.print(f"\n[success]Recommended profile:[/success] {rec['profile']}")
     for key, value in rec["settings"].items():
         console.print(f"  {key}: {value}")
     console.print(
-        "[cyan]Apply these values under the appropriate sections of "
-        f"{Path.home() / '.config' / 'private_agent' / 'conf'}.[/cyan]"
+        "[info]Apply these values under the appropriate sections of "
+        f"{Path.home() / '.config' / 'private_agent' / 'conf'}.[/info]"
     )
     return 0

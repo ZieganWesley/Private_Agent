@@ -14,7 +14,6 @@ class SessionSetup:
 
     memory: PersistentMemory
     local_runtimes: list[Any]
-    hardware_status_by_url: dict[str, dict[str, Any]]
     isolation_warning: str | None
     vectorstore: Any
     docs_input: str

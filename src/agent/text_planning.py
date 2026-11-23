@@ -56,5 +56,5 @@ def create_text_plan(memory, session_id, user_input, llm, console) -> None:
     set_tool_context(_tool_context)
     console.print(Markdown(_task_plan_markdown(task)))
     console.print(
-        "[green]Text plan saved in SQLite; review and approve it with /tasks.[/green]"
+        "[success]Text plan saved in SQLite; review and approve it with /tasks.[/success]"
     )

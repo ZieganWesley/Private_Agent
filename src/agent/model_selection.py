@@ -9,7 +9,6 @@ except Exception:  # noqa: BLE001 - optional dependency
     ollama = None
 
 import contextlib
-import logging
 import sys
 from collections.abc import Sequence
 from getpass import getpass
@@ -33,19 +32,14 @@ from config import (
     ONLINE_REQUEST_TIMEOUT,
 )
 from hardware import ollama_acceleration_options
-from utils.run_logging import RUN_LOGGER, log_event
 
 from .console import console
 from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
 from .model_capabilities import detect_openai_compatible_capabilities
-from .providers import create_local_chat_model as _create_local_chat_model
 from .providers import (
     create_openai_compatible_chat_model as _create_openai_compatible_chat_model,
 )
 from .providers import create_robust_local_chat_model as _create_robust_local_chat_model
-from .providers import (
-    inspect_local_model_capabilities as _inspect_local_model_capabilities,
-)
 from .providers import select_online_model as _select_online_model
 from .providers import validate_online_base_url as _validate_online_base_url
 from .session_state import SESSION_STATS as _SESSION_STATS
@@ -71,39 +65,6 @@ def ChatOllama(*args, **kwargs):
     from langchain_ollama import ChatOllama as _ChatOllama
 
     return _ChatOllama(*args, **kwargs)
-
-
-def _close_ollama_client(client):
-    try:
-        client.close()
-    except (ValueError, OSError, RuntimeError) as exc:
-        log_event(
-            RUN_LOGGER,
-            "provider.ollama_client_close_failed",
-            level=logging.WARNING,
-            error_type=type(exc).__name__,
-            exc_info=True,
-        )
-        console.print(
-            f"[yellow][Shutdown warning] Could not close Ollama client: "
-            f"{type(exc).__name__}[/yellow]"
-        )
-
-
-def inspect_model_capabilities(
-    model_name: str,
-) -> dict[str, bool | None | int]:
-    """Compatibility entry point for Ollama capability discovery."""
-    return _inspect_local_model_capabilities(
-        model_name,
-        base_url=OLLAMA_BASE_URL,
-        client_factory=_ollama_client,
-        client_kwargs=ollama_client_kwargs,
-        capability_cache=_MODEL_CAPABILITIES_CACHE,
-        max_cache_entries=MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
-        console=console,
-        close_client=_close_ollama_client,
-    )
 
 
 def _local_endpoint_capability_overrides(base_url: str) -> dict | None:
@@ -174,36 +135,6 @@ def get_robust_chat_model(
     )
 
 
-def _make_chat_model(
-    model_name: str,
-    *,
-    thinking_enabled: bool,
-    thinking_effort: str,
-    supports_thinking: bool | None,
-    context_window: int | None = None,
-):
-    global _MODEL_CONSTRUCTION_COUNT
-    _MODEL_CONSTRUCTION_COUNT += 1
-    with contextlib.suppress(Exception):
-        _SESSION_STATS.model_constructions += 1
-    effective_context = min(MAX_CONTEXT_TOKENS, context_window or MAX_CONTEXT_TOKENS)
-    return _create_local_chat_model(
-        model_name,
-        temperature=MODEL_TEMPERATURE,
-        base_url=OLLAMA_BASE_URL,
-        acceleration_mode=HARDWARE_ACCELERATION_MODE,
-        thinking=(thinking_effort if thinking_enabled else False)
-        if supports_thinking
-        else None,
-        chat_model_factory=ChatOllama,
-        client_kwargs=ollama_langchain_client_kwargs,
-        acceleration_options=ollama_acceleration_options,
-        track_clients=track_ollama_http_clients,
-        max_output_tokens=min(MAX_OUTPUT_TOKENS, max(1, effective_context // 3)),
-        context_window=effective_context,
-    )
-
-
 def _make_online_chat_model(base_url: str, model_name: str, api_key: str):
     global _MODEL_CONSTRUCTION_COUNT
     _MODEL_CONSTRUCTION_COUNT += 1
@@ -238,19 +169,11 @@ def _make_selected_local_chat_model(
     thinking_effort: str,
     capabilities: dict,
 ):
-    """Build a chat model using the selected local runtime's supported API."""
+    """Build a chat model using the selected local runtime's OpenAI-compatible API."""
     if not _is_loopback_url(runtime.base_url):
         console.print(
-            f"[yellow][Remote host][/yellow] {runtime.base_url} is not on this "
+            f"[warning][Remote host][/warning] {runtime.base_url} is not on this "
             "machine; prompts and model responses leave the local device."
-        )
-    if runtime.kind == "ollama":
-        return _make_chat_model(
-            model_name,
-            thinking_enabled=thinking_enabled,
-            thinking_effort=thinking_effort,
-            supports_thinking=capabilities.get("thinking"),
-            context_window=capabilities.get("context_window"),
         )
     return _make_local_openai_compatible_chat_model(runtime.base_url, model_name)
 
@@ -259,17 +182,17 @@ def _configured_endpoint_models(entry: dict[str, Any]) -> tuple[str, ...] | None
     """Return explicitly configured model names for an endpoint, if any."""
     if not isinstance(entry, dict):
         return None
-    if isinstance(entry.get("models"), list):
+    raw_models = entry.get("models", entry.get("model"))
+    if isinstance(raw_models, str):
+        raw_models = [raw_models]
+    if isinstance(raw_models, list):
         models = tuple(
             str(model).strip()
-            for model in entry["models"]
+            for model in raw_models
             if isinstance(model, str) and str(model).strip()
         )
         if models:
             return models
-    model = entry.get("model")
-    if isinstance(model, str) and model.strip():
-        return (model.strip(),)
     return None
 
 
@@ -294,15 +217,22 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
     # Drop instance detection/presets: only endpoints explicitly present in the
     # local configuration are eligible, and every one is treated as OpenAI
     # compatible.
-    configured_entries = [
-        entry for entry in configured if isinstance(entry, dict)
-    ]
-    # Keep configured entries only; do not probe installed-provider defaults.
-    probe_entries = configured_entries
+    configured_entries = []
+    for entry in configured:
+        if not isinstance(entry, dict):
+            continue
+        normalized = dict(entry)
+        if not (isinstance(normalized.get("name"), str) and str(normalized.get("name")).strip()):
+            provider = normalized.get("provider")
+            if isinstance(provider, str) and provider.strip():
+                normalized["name"] = provider.strip()
+            elif isinstance(normalized.get("base_url"), str):
+                normalized["name"] = "OpenAI-compatible"
+        configured_entries.append(normalized)
 
     runtimes = discover_local_runtimes(
         [],
-        probe_entries,
+        configured_entries,
         client_factory=public_only_sync_client,
         allow_remote=allow_remote,
     )
@@ -368,7 +298,7 @@ def fetch_local_chat_models() -> list[str]:
     try:
         runtimes = _discover_available_local_runtimes()
     except (ValueError, OSError) as e:  # noqa: BLE001 - discovery boundary
-        console.print(f"[red][Warning] Could not discover local runtimes: {e}[/red]")
+        console.print(f"[error][Warning] Could not discover local runtimes: {e}[/error]")
         return []
     chat_models: list[str] = []
     seen: set[str] = set()
@@ -402,8 +332,17 @@ class _LazyProxy:
     def __getattr__(self, item):
         return getattr(self._load(), item)
 
+    def __setattr__(self, name, value):
+        if name in self.__slots__:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._load(), name, value)
+
     def __call__(self, *args, **kwargs):
         return self._load()(*args, **kwargs)
+
+    def __bool__(self) -> bool:
+        return bool(self._load())
 
     def __repr__(self):
         return repr(self._load())

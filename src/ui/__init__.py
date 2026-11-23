@@ -6,7 +6,13 @@ rendering in business modules.
 
 from __future__ import annotations
 
-from .console import console  # re-exported leaf
+from .console import (
+    console,  # re-exported leaf
+    error,
+    info,
+    success,
+    warning,
+)
 from .ribbon import status_ribbon
 from .spinner import (
     LOADING,
@@ -30,8 +36,12 @@ from .state import (
     context_style,
 )
 from .theme import (
+    MESSAGE_LEVELS,
+    MESSAGE_SYMBOLS,
     NO_COLOR_ENV,
     SEGMENT_SEPARATOR,
+    THEME,
+    THEME_NAME,
     TURN_LABEL,
 )
 
@@ -70,8 +80,16 @@ __all__ = [
     "console",
     "context_bar",
     "context_percent",
+    "MESSAGE_LEVELS",
+    "MESSAGE_SYMBOLS",
+    "THEME",
+    "THEME_NAME",
     "context_state_line",
     "context_style",
+    "error",
+    "info",
+    "success",
+    "warning",
     "loading_message",
     "phase_spinner",
     "processing_message",

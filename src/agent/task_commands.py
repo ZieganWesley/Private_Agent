@@ -220,12 +220,12 @@ def _run_automatic_step_validation(
             argv = _validated_validation_command(item, root)
             if argv is None:
                 console.print(
-                    f"[yellow]Skipping unsafe or unsupported validation command: "
-                    f"{item}[/yellow]"
+                    f"[warning]Skipping unsafe or unsupported validation command: "
+                    f"{item}[/warning]"
                 )
                 continue
             console.print(
-                f"[cyan]Running automatic validation for {step['step_id']}: {item}[/cyan]"
+                f"[info]Running automatic validation for {step['step_id']}: {item}[/info]"
             )
             try:
                 completed = subprocess.run(
@@ -237,7 +237,7 @@ def _run_automatic_step_validation(
                 )
             except (OSError, subprocess.SubprocessError, ValueError) as exc:
                 console.print(
-                    f"[yellow]Automatic validation could not run: {exc}[/yellow]"
+                    f"[warning]Automatic validation could not run: {exc}[/warning]"
                 )
                 continue
             output = (completed.stdout + completed.stderr).strip()
@@ -252,16 +252,16 @@ def _run_automatic_step_validation(
                         owner_id=get_tool_context().runtime_owner_id,
                     )
                     console.print(
-                        f"[green]Step {step['step_id']} verified automatically.[/green]"
+                        f"[success]Step {step['step_id']} verified automatically.[/success]"
                     )
                 except (ValueError, OSError) as exc:
                     console.print(
-                        f"[yellow]Could not save automatic evidence: {exc}[/yellow]"
+                        f"[warning]Could not save automatic evidence: {exc}[/warning]"
                     )
             else:
                 console.print(
-                    f"[red]Automatic validation failed for {step['step_id']} "
-                    f"(exit {completed.returncode}).[/red]"
+                    f"[error]Automatic validation failed for {step['step_id']} "
+                    f"(exit {completed.returncode}).[/error]"
                 )
                 if snippet:
                     console.print(snippet)
@@ -298,7 +298,7 @@ def _run_task_management(
     def show_tasks() -> None:
         tasks = memory.list_tasks()
         if not tasks:
-            console.print("[yellow]No saved task plans are stored in SQLite.[/yellow]")
+            console.print("[warning]No saved task plans are stored in SQLite.[/warning]")
             return
         table = Table(title="Saved task plans", box=None, expand=True)
         table.add_column("ID", style="cyan", no_wrap=True)
@@ -329,7 +329,7 @@ def _run_task_management(
         ]
         if len(matches) > 1:
             console.print(
-                "[yellow]Task ID prefix is ambiguous; use a longer ID.[/yellow]"
+                "[warning]Task ID prefix is ambiguous; use a longer ID.[/warning]"
             )
             return None
         return matches[0] if matches else None
@@ -451,12 +451,12 @@ def _run_task_management(
                 "discard",
                 "delete",
             }:
-                _tid = console.input("[cyan]Task id: [/cyan]").strip()
+                _tid = console.input("[info]Task id: [/info]").strip()
                 if _tid:
                     command = f"{command} {_tid}"
         if not command:
             command = console.input(
-                "[cyan]Tasks[/cyan] [list/view/approve/resume/pause/cancel/"
+                "[info]Tasks[/info] [list/view/approve/resume/pause/cancel/"
                 "verify/validate/reconcile/complete/discard/delete/done]: "
             ).strip()
         if command.lower() in {"done", "exit", "back", "q"}:
@@ -483,14 +483,14 @@ def _run_task_management(
             and not sys.stdin.isatty()
         ):
             console.print(
-                "[yellow]Saved task plans are read-only in non-interactive "
-                "sessions; no approval or state change was applied.[/yellow]"
+                "[warning]Saved task plans are read-only in non-interactive "
+                "sessions; no approval or state change was applied.[/warning]"
             )
             continue
         if action == "view" and len(parts) == 2:
             task = resolve_task(parts[1])
             if task is None:
-                console.print("[yellow]Task plan not found.[/yellow]")
+                console.print("[warning]Task plan not found.[/warning]")
             else:
                 show_task(task)
                 unresolved = memory.list_task_actions(
@@ -499,8 +499,8 @@ def _run_task_management(
                 )
                 if unresolved:
                     console.print(
-                        "[yellow]Unresolved tool actions require verification "
-                        "before retry:[/yellow]"
+                        "[warning]Unresolved tool actions require verification "
+                        "before retry:[/warning]"
                     )
                     for action_record in unresolved:
                         console.print(
@@ -537,7 +537,7 @@ def _run_task_management(
         task_id = parts[1]
         task = resolve_task(task_id)
         if task is None:
-            console.print("[yellow]Task plan not found.[/yellow]")
+            console.print("[warning]Task plan not found.[/warning]")
             continue
         task_id = task["task_id"]
 
@@ -545,8 +545,8 @@ def _run_task_management(
             if action == "approve":
                 if task["status"] != "awaiting_approval":
                     console.print(
-                        "[yellow]Only an awaiting-approval plan can be approved. "
-                        "Resume a paused/interrupted plan first.[/yellow]"
+                        "[warning]Only an awaiting-approval plan can be approved. "
+                        "Resume a paused/interrupted plan first.[/warning]"
                     )
                     continue
                 show_task(task)
@@ -561,17 +561,17 @@ def _run_task_management(
                 if approval_choice == "3":
                     feedback = console.input("Feedback to keep planning: ").strip()
                     console.print(
-                        "[yellow]Keeping planning. Resubmit the updated "
+                        "[warning]Keeping planning. Resubmit the updated "
                         "request with /plan, including this feedback: "
-                        f"{feedback}[/yellow]"
+                        f"{feedback}[/warning]"
                     )
                     continue
                 if approval_choice not in {"1", "2", "3"}:
                     console.print(
-                        "[yellow]Plan approval declined; no task actions ran. "
+                        "[warning]Plan approval declined; no task actions ran. "
                         f"To retry, enter approve {task_id[:12]} and type the exact "
                         f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
-                        "leave Tasks and submit the updated request with /plan.[/yellow]"
+                        "leave Tasks and submit the updated request with /plan.[/warning]"
                     )
                     continue
                 allow_edits = approval_choice == "2"
@@ -582,14 +582,14 @@ def _run_task_management(
                     )
                     if _coding_uses_isolated_copy(access_level):
                         source_input = console.input(
-                            "[cyan]Existing project directory to copy into the "
-                            "isolated output workspace (Enter for a new project): [/cyan]"
+                            "[info]Existing project directory to copy into the "
+                            "isolated output workspace (Enter for a new project): [/info]"
                         ).strip()
                     else:
                         allowed_root = SandboxManager.get_root().resolve()
                         source_input = console.input(
-                            "[cyan]Project directory to edit directly (Enter for "
-                            f"the selected workspace {allowed_root}): [/cyan]"
+                            "[info]Project directory to edit directly (Enter for "
+                            f"the selected workspace {allowed_root}): [/info]"
                         ).strip()
                         requested_source = pathlib.Path(source_input).expanduser()
                         source_path = (
@@ -605,25 +605,25 @@ def _run_task_management(
                             allowed_root
                         ):
                             console.print(
-                                "[yellow]Direct access must target an existing "
+                                "[warning]Direct access must target an existing "
                                 "directory inside the workspace selected at "
-                                "session start. Approval cancelled.[/yellow]"
+                                "session start. Approval cancelled.[/warning]"
                             )
                             continue
                         source_input = str(source_path)
                     if _coding_allows_command_network(access_level):
                         console.print(
-                            "[yellow]This access level enables network access "
+                            "[warning]This access level enables network access "
                             "for approved sandboxed commands, including package "
                             "installation. Commands remain filesystem-limited to "
                             "the selected workspace, but network access may include "
                             "local/private network destinations. Shell commands "
-                            "still require per-command approval.[/yellow]"
+                            "still require per-command approval.[/warning]"
                         )
                     else:
                         console.print(
-                            "[cyan]This access level keeps code-task command "
-                            "network access disabled.[/cyan]"
+                            "[info]This access level keeps code-task command "
+                            "network access disabled.[/info]"
                         )
                     scope = json.dumps(
                         {
@@ -646,10 +646,10 @@ def _run_task_management(
                     and task.get("validation_evidence")
                 ):
                     console.print(
-                        "[yellow]This approval accepts the plan for execution "
+                        "[warning]This approval accepts the plan for execution "
                         "only. It does not mark the research findings or listed "
                         "sources as verified; evidence must be checked and "
-                        "recorded separately.[/yellow]"
+                        "recorded separately.[/warning]"
                     )
                 risky_approval = task["task_type"] == "research" or (
                     task["task_type"] == "coding"
@@ -665,10 +665,10 @@ def _run_task_management(
                     ).strip()
                     if confirmation != f"APPROVE {task_id[:8]}":
                         console.print(
-                            "[yellow]Plan approval declined; no task actions ran. "
+                            "[warning]Plan approval declined; no task actions ran. "
                             f"To retry, enter approve {task_id[:12]} and type the exact "
                             f"confirmation APPROVE {task_id[:8]}. To change the strategy, "
-                            "leave Tasks and submit the updated request with /plan.[/yellow]"
+                            "leave Tasks and submit the updated request with /plan.[/warning]"
                         )
                         continue
                 else:
@@ -682,7 +682,7 @@ def _run_task_management(
                         f"approve {task_id[:8]}".lower(),
                     }:
                         console.print(
-                            "[yellow]Plan approval declined; no task actions ran.[/yellow]"
+                            "[warning]Plan approval declined; no task actions ran.[/warning]"
                         )
                         continue
                 owner_id = get_tool_context().runtime_owner_id
@@ -695,8 +695,8 @@ def _run_task_management(
                             time.localtime(lease["expires_at"]),
                         )
                         console.print(
-                            "[yellow]Another process holds this task lease until "
-                            f"{expires}. Wait for it to expire before taking over.[/yellow]"
+                            "[warning]Another process holds this task lease until "
+                            f"{expires}. Wait for it to expire before taking over.[/warning]"
                         )
                         continue
                     takeover_confirmation = console.input(
@@ -704,7 +704,7 @@ def _run_task_management(
                         f"TAKEOVER {task_id[:8]} to claim it: "
                     ).strip()
                     if takeover_confirmation != f"TAKEOVER {task_id[:8]}":
-                        console.print("[yellow]Task takeover declined.[/yellow]")
+                        console.print("[warning]Task takeover declined.[/warning]")
                         continue
                     takeover = True
                 if not memory.acquire_task_lease(
@@ -715,8 +715,8 @@ def _run_task_management(
                     allow_takeover=takeover,
                 ):
                     console.print(
-                        "[yellow]Task lease acquisition failed; no approval "
-                        "or execution was started.[/yellow]"
+                        "[warning]Task lease acquisition failed; no approval "
+                        "or execution was started.[/warning]"
                     )
                     continue
                 try:
@@ -737,28 +737,28 @@ def _run_task_management(
                 _tool_context.task_id = task_id
                 set_tool_context(_tool_context)
                 console.print(
-                    "[green]This plan revision is approved and active. "
-                    "Existing tool permissions and confirmations still apply.[/green]"
+                    "[success]This plan revision is approved and active. "
+                    "Existing tool permissions and confirmations still apply.[/success]"
                 )
             elif action == "resume":
                 if task["status"] not in {"active", "paused", "interrupted", "stale"}:
                     console.print(
-                        "[yellow]Only active, paused, interrupted, or stale tasks "
-                        "can be returned to review.[/yellow]"
+                        "[warning]Only active, paused, interrupted, or stale tasks "
+                        "can be returned to review.[/warning]"
                     )
                     continue
                 show_task(task)
                 console.print(
-                    "[cyan]Before continuing, recheck the workspace/repository "
+                    "[info]Before continuing, recheck the workspace/repository "
                     "state, research freshness, available tools, permissions, and "
                     "plan assumptions. Revise the plan if any scope or assumption "
-                    "changed; fresh approval is required before execution.[/cyan]"
+                    "changed; fresh approval is required before execution.[/info]"
                 )
                 confirmation = console.input(
                     "Move this task back to review? Type REVIEW: "
                 ).strip()
                 if confirmation != "REVIEW":
-                    console.print("[yellow]Task resume cancelled.[/yellow]")
+                    console.print("[warning]Task resume cancelled.[/warning]")
                     continue
                 memory.set_task_status(
                     task_id,
@@ -766,8 +766,8 @@ def _run_task_management(
                     owner_id=get_tool_context().runtime_owner_id,
                 )
                 console.print(
-                    "[cyan]Task restored from SQLite and returned to approval. "
-                    "Review it, then approve the current revision to continue.[/cyan]"
+                    "[info]Task restored from SQLite and returned to approval. "
+                    "Review it, then approve the current revision to continue.[/info]"
                 )
             elif action in {"pause", "cancel", "discard"}:
                 target_status = {
@@ -784,7 +784,7 @@ def _run_task_management(
                     f"Confirm task {action}. Type {confirm_text}: "
                 ).strip()
                 if confirmation != confirm_text:
-                    console.print(f"[yellow]Task {action} cancelled.[/yellow]")
+                    console.print(f"[warning]Task {action} cancelled.[/warning]")
                     continue
                 memory.set_task_status(
                     task_id,
@@ -797,7 +797,7 @@ def _run_task_management(
                     _tool_context.task_session_id = session_id
                     _tool_context.task_id = None
                     set_tool_context(_tool_context)
-                console.print(f"[green]Task status saved as {target_status}.[/green]")
+                console.print(f"[success]Task status saved as {target_status}.[/success]")
             elif action == "verify":
                 if len(parts) != 4:
                     console.print(
@@ -811,7 +811,7 @@ def _run_task_management(
                     parts[3],
                     owner_id=get_tool_context().runtime_owner_id,
                 )
-                console.print("[green]Step verification saved in SQLite.[/green]")
+                console.print("[success]Step verification saved in SQLite.[/success]")
             elif action == "validate":
                 _run_automatic_step_validation(memory, task)
                 if len(parts) < 3:
@@ -835,16 +835,16 @@ def _run_task_management(
                         )
                     else:
                         console.print(
-                            "[yellow]No consent-approved web citations are "
+                            "[warning]No consent-approved web citations are "
                             "attached. Validate using identified local evidence "
-                            "or record which claims remain unverified.[/yellow]"
+                            "or record which claims remain unverified.[/warning]"
                         )
                 confirmation = console.input(
                     "Record this task-level validation evidence after checking "
                     "the listed claims/sources? Type VALIDATE: "
                 ).strip()
                 if confirmation != "VALIDATE":
-                    console.print("[yellow]Task validation cancelled.[/yellow]")
+                    console.print("[warning]Task validation cancelled.[/warning]")
                     continue
                 validated_task = memory.record_task_validation(
                     task_id,
@@ -853,8 +853,8 @@ def _run_task_management(
                     owner_id=get_tool_context().runtime_owner_id,
                 )
                 console.print(
-                    "[green]Task validation saved for revision "
-                    f"{validated_task['validation_revision']}.[/green]"
+                    "[success]Task validation saved for revision "
+                    f"{validated_task['validation_revision']}.[/success]"
                 )
             elif action == "reconcile":
                 if len(parts) != 4 or parts[3] not in {"completed", "not-run"}:
@@ -870,8 +870,8 @@ def _run_task_management(
                 ]
                 if len(action_matches) != 1:
                     console.print(
-                        "[yellow]Use an unambiguous unresolved action ID from "
-                        "view <ID>.[/yellow]"
+                        "[warning]Use an unambiguous unresolved action ID from "
+                        "view <ID>.[/warning]"
                     )
                     continue
                 resolution = "verified" if parts[3] == "completed" else "not_executed"
@@ -880,26 +880,26 @@ def _run_task_management(
                     f"{parts[3]} based on your verification? Type RECONCILE: "
                 ).strip()
                 if confirmation != "RECONCILE":
-                    console.print("[yellow]Action reconciliation declined.[/yellow]")
+                    console.print("[warning]Action reconciliation declined.[/warning]")
                     continue
                 memory.resolve_task_action(
                     action_matches[0]["action_id"],
                     resolution,
                     owner_id=get_tool_context().runtime_owner_id,
                 )
-                console.print("[green]Action reconciliation saved in SQLite.[/green]")
+                console.print("[success]Action reconciliation saved in SQLite.[/success]")
             elif action == "complete":
                 confirmation = console.input(
                     "Mark task complete only if every step is verified. Type COMPLETE: "
                 ).strip()
                 if confirmation != "COMPLETE":
-                    console.print("[yellow]Task completion cancelled.[/yellow]")
+                    console.print("[warning]Task completion cancelled.[/warning]")
                     continue
                 completed_task = memory.complete_task(
                     task_id,
                     owner_id=get_tool_context().runtime_owner_id,
                 )
-                console.print("[green]Verified task marked complete.[/green]")
+                console.print("[success]Verified task marked complete.[/success]")
                 if completed_task:
                     _offer_skill_capture(
                         memory,
@@ -916,7 +916,7 @@ def _run_task_management(
             elif action == "delete":
                 if task["status"] == "active":
                     console.print(
-                        "[yellow]Pause or cancel an active task before deleting it.[/yellow]"
+                        "[warning]Pause or cancel an active task before deleting it.[/warning]"
                     )
                     continue
                 skill_paths = memory.get_task_linked_skill_paths(task_id)
@@ -945,9 +945,9 @@ def _run_task_management(
                         unsafe_skill_paths.append(raw_path)
                 if unsafe_skill_paths:
                     console.print(
-                        "[yellow]Cannot delete task records while linked skill "
+                        "[warning]Cannot delete task records while linked skill "
                         "files cannot be safely resolved inside the configured "
-                        "skills directory. No records were deleted.[/yellow]"
+                        "skills directory. No records were deleted.[/warning]"
                     )
                     continue
                 confirmation = console.input(
@@ -955,7 +955,7 @@ def _run_task_management(
                     f"registrations, and skill files? Type DELETE {task_id[:8]}: "
                 ).strip()
                 if confirmation != f"DELETE {task_id[:8]}":
-                    console.print("[yellow]Task deletion cancelled.[/yellow]")
+                    console.print("[warning]Task deletion cancelled.[/warning]")
                     continue
                 deleted = memory.delete_task_records(task_id)
                 failed_skill_deletions = []
@@ -973,20 +973,20 @@ def _run_task_management(
                     _tool_context.task_id = None
                     set_tool_context(_tool_context)
                 console.print(
-                    "[green]Task records deleted: "
+                    "[success]Task records deleted: "
                     f"{deleted['episodes_deleted']} linked episode(s), "
                     f"{deleted['skills_deleted']} skill registration(s), and "
-                    "linked learned items.[/green]"
+                    "linked learned items.[/success]"
                 )
                 if failed_skill_deletions:
                     console.print(
-                        "[red]Some linked skill files could not be removed; "
-                        "delete or review them manually:[/red]"
+                        "[error]Some linked skill files could not be removed; "
+                        "delete or review them manually:[/error]"
                     )
                     for failure in failed_skill_deletions:
                         console.print(f"- {failure}")
         except (ValueError, sqlite3.Error, OSError) as exc:
-            console.print(f"[red][Task state error] {type(exc).__name__}: {exc}[/red]")
+            console.print(f"[error][Task state error] {type(exc).__name__}: {exc}[/error]")
     return approved_for_execution_id
 
 
@@ -1066,8 +1066,17 @@ class _LazyProxy:
     def __getattr__(self, item):
         return getattr(self._load(), item)
 
+    def __setattr__(self, name, value):
+        if name in self.__slots__:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._load(), name, value)
+
     def __call__(self, *args, **kwargs):
         return self._load()(*args, **kwargs)
+
+    def __bool__(self) -> bool:
+        return bool(self._load())
 
     def __repr__(self):
         return repr(self._load())

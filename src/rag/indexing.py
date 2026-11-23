@@ -256,8 +256,8 @@ def load_chunking_settings() -> ChunkingSettings:
         )
     except ValueError as exc:
         console.print(
-            f"[yellow][Warning] Invalid chunking settings ({exc}); "
-            "using defaults.[/yellow]"
+            f"[warning][Warning] Invalid chunking settings ({exc}); "
+            "using defaults.[/warning]"
         )
         return ChunkingSettings(chunk_size=1200, chunk_overlap=200)
 
@@ -333,8 +333,12 @@ def _preserve_corrupt_index(index_path: pathlib.Path) -> pathlib.Path:
 def _ensure_rag_dependencies():
     global Chroma, OllamaEmbeddings
     if Chroma is None:
-        from langchain_chroma import Chroma as _Chroma
-        Chroma = _Chroma
+        try:
+            from langchain_chroma import Chroma as _Chroma
+
+            Chroma = _Chroma
+        except ImportError:  # noqa: BLE001 - optional dependency
+            Chroma = None
     if OllamaEmbeddings is None:
         try:
             from langchain_ollama import OllamaEmbeddings as _OllamaEmbeddings
@@ -396,8 +400,8 @@ def initialize_knowledge_base(
                 valid_paths.append(candidate)
             except OSError:
                 console.print(
-                    f"[yellow][Warning] Provided KB path '{candidate}' is not a "
-                    f"valid directory. Skipping it.[/yellow]"
+                    f"[warning][Warning] Provided KB path '{candidate}' is not a "
+                    f"valid directory. Skipping it.[/warning]"
                 )
     if not valid_paths:
         return None
@@ -409,101 +413,110 @@ def initialize_knowledge_base(
         index_state = _read_index_state(state_file_path)
     except ValueError as exc:
         if confirm_rebuild is None or not confirm_rebuild(str(exc)):
-            console.print(f"[red][RAG state error] {exc}[/red]")
+            console.print(f"[error][RAG state error] {exc}[/error]")
             return None
         try:
             backup_path = _preserve_corrupt_index(state_file_path.parent)
         except OSError as recovery_error:
             console.print(
-                f"[red][RAG recovery error] Could not preserve the damaged "
-                f"index: {recovery_error}[/red]"
+                f"[error][RAG recovery error] Could not preserve the damaged "
+                f"index: {recovery_error}[/error]"
             )
             return None
         console.print(
-            f"[yellow][RAG recovery][/yellow] Preserved the previous index at "
+            f"[warning][RAG recovery][/warning] Preserved the previous index at "
             f"'{backup_path}' and will build a new index."
         )
         index_state = {}
 
+    embeddings = None
+    signature = None
+    if Chroma is None:
+        console.print(
+            "[warning][RAG] 'langchain-chroma' is not installed; RAG will use "
+            "keyword search only. Install the 'rag' extra for semantic search.[/warning]"
+        )
+        _embedding_provider = "none"
+
     if _embedding_provider == "none":
         console.print(
-            "[cyan][Info] Embedding provider disabled; RAG will use keyword search only.[/cyan]"
+            "[info][Info] Embedding provider disabled; RAG will use keyword search only.[/info]"
         )
-        return None
-
-    signature = embedding_signature(
-        embedding_provider=_embedding_provider,
-        embedding_model=_embedding_model,
-        embedding_base_url=_embedding_base_url,
-    )
-    recorded_signatures = {
-        str(fingerprint.get("embedding"))
-        for fingerprint in index_state.values()
-        if isinstance(fingerprint, dict) and fingerprint.get("embedding")
-    }
-    if recorded_signatures and signature not in recorded_signatures:
-        console.print(
-            "[yellow][RAG] The embedding provider or model changed "
-            f"({', '.join(sorted(recorded_signatures))} -> {signature}); "
-            "rebuilding the index.[/yellow]"
+    else:
+        signature = embedding_signature(
+            embedding_provider=_embedding_provider,
+            embedding_model=_embedding_model,
+            embedding_base_url=_embedding_base_url,
         )
-
-    console.print(
-        f"[cyan][Info] Initializing local embedding model '{_embedding_model}' via "
-        f"{_embedding_provider}...[/cyan]"
-    )
-    try:
-        if _embedding_provider == "ollama":
-            from tools import (
-                ollama_langchain_client_kwargs,
-                track_ollama_http_clients,
-            )
-
-            embeddings = OllamaEmbeddings(
-                model=_embedding_model,
-                base_url=OLLAMA_BASE_URL,
-                **ollama_langchain_client_kwargs(),
-                **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
-            )
-            track_ollama_http_clients(embeddings)
-        else:
-            from agent.local_runtimes import _is_loopback_url
-            from providers.adapters import OpenAICompatibleAdapter
-
-            if not _is_loopback_url(_embedding_base_url):
-                console.print(
-                    f"[yellow][Remote host][/yellow] {_embedding_base_url} is not "
-                    "on this machine; document chunks leave the local device."
-                )
-            embeddings = OpenAICompatibleAdapter().embeddings(
-                _embedding_model, base_url=_embedding_base_url
-            )
-            if embeddings is None:
-                console.print(
-                    "[red][Error] Could not create the embedding client for "
-                    f"'{_embedding_base_url}'.[/red]"
-                )
-                return None
-    except (ValueError, OSError, TypeError, RuntimeError) as e:  # noqa: BLE001 - optional dependency boundary
-        console.print(f"[red][Error] Could not bind embedding model: {e}[/red]")
-        return None
-
-    # Verify the embedding runtime is actually reachable before indexing, so a
-    # configured-but-absent runtime (for example Ollama on a llama.cpp-only
-    # machine) disables RAG instead of failing on every later search.
-    if hasattr(embeddings, "embed_query"):
-        try:
-            embeddings.embed_query("embedding availability check")
-        except Exception as e:  # noqa: BLE001 - embedding runtimes are optional
+        recorded_signatures = {
+            str(fingerprint.get("embedding"))
+            for fingerprint in index_state.values()
+            if isinstance(fingerprint, dict) and fingerprint.get("embedding")
+        }
+        if recorded_signatures and signature not in recorded_signatures:
             console.print(
-                f"[yellow][RAG] Embedding runtime is unavailable "
-                f"({type(e).__name__}); continuing without RAG.[/yellow]"
+                "[warning][RAG] The embedding provider or model changed "
+                f"({', '.join(sorted(recorded_signatures))} -> {signature}); "
+                "rebuilding the index.[/warning]"
             )
+
+        console.print(
+            f"[info][Info] Initializing local embedding model '{_embedding_model}' via "
+            f"{_embedding_provider}...[/info]"
+        )
+        try:
+            if _embedding_provider == "ollama":
+                from tools import (
+                    ollama_langchain_client_kwargs,
+                    track_ollama_http_clients,
+                )
+
+                embeddings = OllamaEmbeddings(
+                    model=_embedding_model,
+                    base_url=OLLAMA_BASE_URL,
+                    **ollama_langchain_client_kwargs(),
+                    **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
+                )
+                track_ollama_http_clients(embeddings)
+            else:
+                from agent.local_runtimes import _is_loopback_url
+                from providers.adapters import OpenAICompatibleAdapter
+
+                if not _is_loopback_url(_embedding_base_url):
+                    console.print(
+                        f"[warning][Remote host][/warning] {_embedding_base_url} is not "
+                        "on this machine; document chunks leave the local device."
+                    )
+                embeddings = OpenAICompatibleAdapter().embeddings(
+                    _embedding_model, base_url=_embedding_base_url
+                )
+                if embeddings is None:
+                    console.print(
+                        "[error][Error] Could not create the embedding client for "
+                        f"'{_embedding_base_url}'.[/error]"
+                    )
+                    return None
+        except (ValueError, OSError, TypeError, RuntimeError) as e:  # noqa: BLE001 - optional dependency boundary
+            console.print(f"[error][Error] Could not bind embedding model: {e}[/error]")
             return None
 
-    console.print(
-        f"[bold green][Chroma DB][/bold green] Initializing local project vector store at: [cyan]{chroma_persist_dir}[/cyan]"
-    )
+        # Verify the embedding runtime is actually reachable before indexing, so a
+        # configured-but-absent runtime (for example Ollama on a llama.cpp-only
+        # machine) disables RAG instead of failing on every later search.
+        if hasattr(embeddings, "embed_query"):
+            try:
+                embeddings.embed_query("embedding availability check")
+            except Exception as e:  # noqa: BLE001 - embedding runtimes are optional
+                console.print(
+                    f"[warning][RAG] Embedding runtime is unavailable "
+                    f"({type(e).__name__}); continuing without RAG.[/warning]"
+                )
+                return None
+
+    if Chroma is not None:
+        console.print(
+            f"[bold success][Chroma DB][/bold success] Initializing local project vector store at: [info]{chroma_persist_dir}[/info]"
+        )
 
     db_exists = os.path.exists(chroma_persist_dir) and any(
         f for f in os.listdir(chroma_persist_dir) if f != ".index_state.json"
@@ -529,15 +542,15 @@ def initialize_knowledge_base(
             file_key = str(file_path)
             if stat.st_size > RAG_MAX_FILE_BYTES:
                 console.print(
-                    f"[yellow][Warning] Skipping {file_path.name}: file size "
-                    f"{stat.st_size} exceeds the {RAG_MAX_FILE_BYTES}-byte limit.[/yellow]"
+                    f"[warning][Warning] Skipping {file_path.name}: file size "
+                    f"{stat.st_size} exceeds the {RAG_MAX_FILE_BYTES}-byte limit.[/warning]"
                 )
                 failed_sources.add(file_key)
                 continue
             if total_source_bytes + stat.st_size > RAG_MAX_CORPUS_BYTES:
                 console.print(
-                    f"[yellow][Warning] Skipping {file_path.name}: corpus byte "
-                    f"limit ({RAG_MAX_CORPUS_BYTES}) reached.[/yellow]"
+                    f"[warning][Warning] Skipping {file_path.name}: corpus byte "
+                    f"limit ({RAG_MAX_CORPUS_BYTES}) reached.[/warning]"
                 )
                 failed_sources.add(file_key)
                 continue
@@ -554,8 +567,8 @@ def initialize_knowledge_base(
                 if cached_docs:
                     if len(all_parsed_docs) + len(cached_docs) > RAG_MAX_DOCUMENTS:
                         console.print(
-                            f"[yellow][Warning] Skipping {file_path.name}: document "
-                            f"chunk limit ({RAG_MAX_DOCUMENTS}) would be exceeded.[/yellow]"
+                            f"[warning][Warning] Skipping {file_path.name}: document "
+                            f"chunk limit ({RAG_MAX_DOCUMENTS}) would be exceeded.[/warning]"
                         )
                         failed_sources.add(file_key)
                         continue
@@ -575,8 +588,8 @@ def initialize_knowledge_base(
                     reader = PdfReader(str(file_path))
                     if len(reader.pages) > RAG_MAX_PDF_PAGES:
                         console.print(
-                            f"[yellow][Warning] Skipping {file_path.name}: PDF has "
-                            f"{len(reader.pages)} pages; limit is {RAG_MAX_PDF_PAGES}.[/yellow]"
+                            f"[warning][Warning] Skipping {file_path.name}: PDF has "
+                            f"{len(reader.pages)} pages; limit is {RAG_MAX_PDF_PAGES}.[/warning]"
                         )
                         failed_sources.add(file_key)
                         continue
@@ -586,7 +599,7 @@ def initialize_knowledge_base(
                     ]
                 except ImportError:
                     console.print(
-                        f"[yellow][Warning] pypdf not installed, skipping PDF: {file_path.name}[/yellow]"
+                        f"[warning][Warning] pypdf not installed, skipping PDF: {file_path.name}[/warning]"
                     )
                     failed_sources.add(file_key)
                     continue
@@ -663,8 +676,8 @@ def initialize_knowledge_base(
             if file_docs:
                 if len(all_parsed_docs) + len(file_docs) > RAG_MAX_DOCUMENTS:
                     console.print(
-                        f"[yellow][Warning] Skipping {file_path.name}: document "
-                        f"chunk limit ({RAG_MAX_DOCUMENTS}) would be exceeded.[/yellow]"
+                        f"[warning][Warning] Skipping {file_path.name}: document "
+                        f"chunk limit ({RAG_MAX_DOCUMENTS}) would be exceeded.[/warning]"
                     )
                     failed_sources.add(file_key)
                     continue
@@ -678,12 +691,14 @@ def initialize_knowledge_base(
         except (ValueError, OSError) as e:
             failed_sources.add(str(file_path))
             console.print(
-                f"[yellow][Warning] Failed parsing {file_path.name}: {e}[/yellow]"
+                f"[warning][Warning] Failed parsing {file_path.name}: {e}[/warning]"
             )
 
     state_write_started = False
     try:
-        if db_exists:
+        if Chroma is None or embeddings is None:
+            vectorstore = None
+        elif db_exists:
             vectorstore = Chroma(
                 persist_directory=chroma_persist_dir, embedding_function=embeddings
             )
@@ -694,7 +709,7 @@ def initialize_knowledge_base(
                 old_ids_by_source[source] = set(previous.get("ids", []))
             if changed_docs:
                 console.print(
-                    f"[green][Incremental Indexing][/green] Embedding {len(changed_docs)} new or modified chunk(s)..."
+                    f"[success][Incremental Indexing][/success] Embedding {len(changed_docs)} new or modified chunk(s)..."
                 )
                 vectorstore.add_documents(
                     changed_docs,
@@ -711,7 +726,7 @@ def initialize_knowledge_base(
                         vectorstore.delete(ids=list(obsolete_ids))
             else:
                 console.print(
-                    "[green][Incremental Indexing][/green] No document changes detected. Skipping re-embedding."
+                    "[success][Incremental Indexing][/success] No document changes detected. Skipping re-embedding."
                 )
             removed_sources = set(index_state) - set(updated_state) - failed_sources
             for source in removed_sources:
@@ -719,7 +734,7 @@ def initialize_knowledge_base(
         else:
             if all_parsed_docs:
                 console.print(
-                    f"[green][Initial Indexing][/green] Creating vector store with {len(all_parsed_docs)} chunk(s)..."
+                    f"[success][Initial Indexing][/success] Creating vector store with {len(all_parsed_docs)} chunk(s)..."
                 )
                 vectorstore = Chroma.from_documents(
                     all_parsed_docs,
@@ -732,11 +747,17 @@ def initialize_knowledge_base(
                     persist_directory=chroma_persist_dir, embedding_function=embeddings
                 )
 
-        for source in failed_sources:
-            if source in index_state:
-                updated_state[source] = index_state[source]
-        state_write_started = True
-        _write_index_state_atomic(state_file_path, updated_state)
+        if vectorstore is not None:
+            for source in failed_sources:
+                if source in index_state:
+                    updated_state[source] = index_state[source]
+            state_write_started = True
+            _write_index_state_atomic(state_file_path, updated_state)
+        else:
+            console.print(
+                f"[success][Keyword RAG][/success] Indexed {len(all_parsed_docs)} "
+                "chunk(s) for keyword search."
+            )
 
         # Return Hybrid RAG retriever wrapper
         from .retrieval import HybridRAGRetriever
@@ -755,7 +776,7 @@ def initialize_knowledge_base(
             try:
                 backup_path = _preserve_corrupt_index(pathlib.Path(chroma_persist_dir))
                 console.print(
-                    f"[yellow][RAG recovery][/yellow] Preserved the previous "
+                    f"[warning][RAG recovery][/warning] Preserved the previous "
                     f"vector index at '{backup_path}'. Rebuilding from current "
                     "knowledge-base files."
                 )
@@ -777,9 +798,9 @@ def initialize_knowledge_base(
                 return HybridRAGRetriever(vectorstore, all_parsed_docs)
             except (ValueError, OSError, RuntimeError) as recovery_error:
                 console.print(
-                    f"[red][RAG recovery error] Rebuild failed after preserving "
-                    f"the previous index: {recovery_error}[/red]"
+                    f"[error][RAG recovery error] Rebuild failed after preserving "
+                    f"the previous index: {recovery_error}[/error]"
                 )
                 return None
-        console.print(f"[red][Error] Vector DB initialization error: {e}[/red]")
+        console.print(f"[error][Error] Vector DB initialization error: {e}[/error]")
         return None

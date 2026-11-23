@@ -7,6 +7,7 @@ from langchain_core.tools import tool
 from repository_intelligence import (
     AgentMetrics,
     ArchitectureMemory,
+    build_repository_graph,
     build_repository_map,
     find_callees,
     find_callers,
@@ -14,7 +15,10 @@ from repository_intelligence import (
     find_dependencies,
     find_references,
     find_symbol,
+    get_repository_graph,
+    impact_analysis,
     trace_execution_flow,
+    trace_path,
 )
 
 
@@ -97,6 +101,42 @@ def trace_execution_flow_tool(entry: str, root_path: str = ".") -> str:
     if not results:
         return f"No flow from {entry!r} found."
     return "\n".join(f"{'  ' * r['depth']}{r['symbol']}" for r in results)
+
+
+@tool
+def build_repository_graph_tool(root_path: str = ".") -> str:
+    """Build and return a repository knowledge graph summary."""
+    result = build_repository_graph(root_path=root_path)
+    return (
+        f"Graph: {len(result['nodes'])} nodes, {len(result['edges'])} edges.\n"
+        f"{result['mermaid']}"
+    )
+
+
+@tool
+def trace_impact_tool(target: str, root_path: str = ".") -> str:
+    """Trace impact for a repository symbol or file."""
+    results = impact_analysis(target, root_path=root_path)
+    if not results:
+        return f"No impact found for {target!r}."
+    return "\n".join(
+        f"{r['node']} (via {r['via']}, depth {r['depth']})" for r in results
+    )
+
+
+@tool
+def trace_architectural_path_tool(source: str, target: str, root_path: str = ".") -> str:
+    """Trace a path between two repository graph nodes."""
+    path = trace_path(source, target, root_path=root_path)
+    if not path:
+        return f"No path from {source!r} to {target!r}."
+    return " -> ".join(path)
+
+
+@tool
+def get_repository_graph_tool(root_path: str = ".") -> str:
+    """Return a Mermaid rendering of the repository graph."""
+    return get_repository_graph(root_path=root_path)
 
 
 @tool

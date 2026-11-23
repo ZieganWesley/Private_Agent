@@ -37,22 +37,22 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
     action = parts[1].lower()
     if action == "status":
         console.print(
-            "[cyan]Adaptive learning is "
-            f"{'enabled' if memory.learning_is_enabled() else 'disabled'}.[/cyan]"
+            "[info]Adaptive learning is "
+            f"{'enabled' if memory.learning_is_enabled() else 'disabled'}.[/info]"
         )
         return
     if action in {"on", "off"}:
         expected = "LEARNING ON" if action == "on" else "LEARNING OFF"
         if console.input(f"Type {expected} to confirm: ").strip() != expected:
-            console.print("[yellow]Learning setting unchanged.[/yellow]")
+            console.print("[warning]Learning setting unchanged.[/warning]")
             return
         memory.set_learning_enabled(action == "on")
-        console.print(f"[green]Adaptive learning {action}.[/green]")
+        console.print(f"[success]Adaptive learning {action}.[/success]")
         return
     if action == "list":
         items = memory.list_learned_items()
         if not items:
-            console.print("[yellow]No learned preferences are stored.[/yellow]")
+            console.print("[warning]No learned preferences are stored.[/warning]")
             return
         table = Table(title="User-confirmed learned items", box=None, expand=True)
         table.add_column("ID", style="cyan", no_wrap=True)
@@ -84,8 +84,8 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
             return
         if not sys.stdin.isatty():
             console.print(
-                "[yellow]Task-derived learning proposals require an interactive "
-                "preview and confirmation.[/yellow]"
+                "[warning]Task-derived learning proposals require an interactive "
+                "preview and confirmation.[/warning]"
             )
             return
         task_prefix = parts[2]
@@ -97,7 +97,7 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
                 if item["task_id"].startswith(task_prefix)
             ]
             if len(matches) > 1:
-                console.print("[yellow]Task ID prefix is ambiguous.[/yellow]")
+                console.print("[warning]Task ID prefix is ambiguous.[/warning]")
                 return
             task = matches[0] if matches else None
         if (
@@ -111,14 +111,14 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
             )
         ):
             console.print(
-                "[yellow]Learning proposals require a completed task with "
+                "[warning]Learning proposals require a completed task with "
                 "current-revision validation evidence and at least one verified "
-                "step.[/yellow]"
+                "step.[/warning]"
             )
             return
         if not memory.learning_is_enabled():
             console.print(
-                "[yellow]Adaptive learning is disabled; no proposal was saved.[/yellow]"
+                "[warning]Adaptive learning is disabled; no proposal was saved.[/warning]"
             )
             return
         scope = parts[3].lower()
@@ -126,10 +126,10 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
         try:
             statement = PersistentMemory._validate_learned_statement(statement)
         except ValueError as exc:
-            console.print(f"[yellow]Learning proposal rejected: {exc}[/yellow]")
+            console.print(f"[warning]Learning proposal rejected: {exc}[/warning]")
             return
         if scope not in {"global", "coding", "research", "other"}:
-            console.print("[yellow]Choose a valid learning scope.[/yellow]")
+            console.print("[warning]Choose a valid learning scope.[/warning]")
             return
         evidence = "\n".join(
             f"- {step['description']}"
@@ -152,7 +152,7 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
             ).strip()
             != "PREVIEW TASK LEARNING"
         ):
-            console.print("[yellow]Learning proposal cancelled.[/yellow]")
+            console.print("[warning]Learning proposal cancelled.[/warning]")
             return
         if (
             console.input(
@@ -161,7 +161,7 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
             ).strip()
             != "SAVE LEARNED ITEM"
         ):
-            console.print("[yellow]Learning proposal was not saved.[/yellow]")
+            console.print("[warning]Learning proposal was not saved.[/warning]")
             return
         item = memory.add_learned_item(
             statement,
@@ -170,8 +170,8 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
             source_task_id=task["task_id"],
         )
         console.print(
-            f"[green]Task-derived preference saved: {item['item_id'][:12]} "
-            f"({item['scope']}).[/green]"
+            f"[success]Task-derived preference saved: {item['item_id'][:12]} "
+            f"({item['scope']}).[/success]"
         )
         return
     if action in {"add", "correct"}:
@@ -191,7 +191,7 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
                 ).strip()
                 != "SAVE LEARNED ITEM"
             ):
-                console.print("[yellow]Learning item was not saved.[/yellow]")
+                console.print("[warning]Learning item was not saved.[/warning]")
                 return
             item = memory.add_learned_item(
                 statement,
@@ -204,11 +204,11 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
                 console.input("Apply this correction? Type APPLY CORRECTION: ").strip()
                 != "APPLY CORRECTION"
             ):
-                console.print("[yellow]Learning correction cancelled.[/yellow]")
+                console.print("[warning]Learning correction cancelled.[/warning]")
                 return
             item = _resolve_learned_item(memory, item_id)
             if item is None:
-                console.print("[yellow]Learned item not found.[/yellow]")
+                console.print("[warning]Learned item not found.[/warning]")
                 return
             item = memory.update_learned_item(
                 item["item_id"],
@@ -216,14 +216,14 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
                 scope,
             )
         console.print(
-            f"[green]Learned item saved: {item['item_id'][:12]} "
-            f"({item['scope']}).[/green]"
+            f"[success]Learned item saved: {item['item_id'][:12]} "
+            f"({item['scope']}).[/success]"
         )
         return
     if action in {"view", "disable", "enable", "delete", "review"} and len(parts) >= 3:
         item = _resolve_learned_item(memory, parts[2])
         if item is None:
-            console.print("[yellow]Learned item not found.[/yellow]")
+            console.print("[warning]Learned item not found.[/warning]")
             return
         if action == "view":
             console.print(
@@ -245,22 +245,22 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
             "review": "REVIEW LEARNED ITEM",
         }[action]
         if console.input(f"Type {expected} to confirm: ").strip() != expected:
-            console.print("[yellow]Learned item unchanged.[/yellow]")
+            console.print("[warning]Learned item unchanged.[/warning]")
             return
         if action == "delete":
             memory.delete_learned_item(item["item_id"])
-            console.print("[green]Learned item deleted.[/green]")
+            console.print("[success]Learned item deleted.[/success]")
         elif action == "review":
             reviewed = memory.review_learned_item(item["item_id"])
             console.print(
-                f"[green]Learned item renewed through {reviewed['expires_at']}.[/green]"
+                f"[success]Learned item renewed through {reviewed['expires_at']}.[/success]"
             )
         else:
             memory.set_learned_item_status(
                 item["item_id"],
                 "disabled" if action == "disable" else "active",
             )
-            console.print(f"[green]Learned item {action}d.[/green]")
+            console.print(f"[success]Learned item {action}d.[/success]")
         return
     console.print(
         "Use learn status|on|off|list|view <ID>|add <scope> <statement>|"
@@ -294,20 +294,20 @@ async def _run_learning_suggestion(
         return
     if not sys.stdin.isatty():
         console.print(
-            "[yellow]Model-suggested learning requires an interactive review "
-            "and confirmation.[/yellow]"
+            "[warning]Model-suggested learning requires an interactive review "
+            "and confirmation.[/warning]"
         )
         return
     if not local_model_allowed:
         console.print(
-            "[yellow]Task contents are not sent to an online model for learning "
-            "suggestions. Switch to a local model to use this command.[/yellow]"
+            "[warning]Task contents are not sent to an online model for learning "
+            "suggestions. Switch to a local model to use this command.[/warning]"
         )
         return
     if not memory.learning_is_enabled():
         console.print(
-            "[yellow]Adaptive learning is disabled; no suggestion was generated "
-            "or saved.[/yellow]"
+            "[warning]Adaptive learning is disabled; no suggestion was generated "
+            "or saved.[/warning]"
         )
         return
 
@@ -320,7 +320,7 @@ async def _run_learning_suggestion(
             if item["task_id"].startswith(task_prefix)
         ]
         if len(matches) > 1:
-            console.print("[yellow]Task ID prefix is ambiguous.[/yellow]")
+            console.print("[warning]Task ID prefix is ambiguous.[/warning]")
             return
         task = matches[0] if matches else None
     if (
@@ -332,15 +332,15 @@ async def _run_learning_suggestion(
         or any(step["status"] not in {"verified", "skipped"} for step in task["steps"])
     ):
         console.print(
-            "[yellow]Learning suggestions require a completed task with "
+            "[warning]Learning suggestions require a completed task with "
             "current-revision validation evidence and at least one verified "
-            "step.[/yellow]"
+            "step.[/warning]"
         )
         return
 
     scope = parts[3].strip().lower() if len(parts) == 4 else task["task_type"]
     if scope not in {"global", "coding", "research", "other"}:
-        console.print("[yellow]Choose a valid learning scope.[/yellow]")
+        console.print("[warning]Choose a valid learning scope.[/warning]")
         return
     evidence = "\n".join(
         f"- {step['description']}: {step['evidence']}"
@@ -373,21 +373,21 @@ async def _run_learning_suggestion(
         )
     except (ValueError, RuntimeError) as exc:
         console.print(
-            f"[red][Learning suggestion error] {type(exc).__name__}: {exc}[/red]"
+            f"[error][Learning suggestion error] {type(exc).__name__}: {exc}[/error]"
         )
         return
     suggestion = response.content.strip() if isinstance(response.content, str) else ""
     if not suggestion or suggestion.upper() == "NONE":
         console.print(
-            "[yellow]The model found no reusable preference supported by the "
-            "verified task evidence; nothing was saved.[/yellow]"
+            "[warning]The model found no reusable preference supported by the "
+            "verified task evidence; nothing was saved.[/warning]"
         )
         return
     try:
         suggestion = PersistentMemory._validate_learned_statement(suggestion)
     except ValueError as exc:
         console.print(
-            f"[yellow]Model suggestion rejected by privacy/size checks: {exc}[/yellow]"
+            f"[warning]Model suggestion rejected by privacy/size checks: {exc}[/warning]"
         )
         return
     _run_learning_maintenance(
@@ -538,26 +538,26 @@ def _offer_skill_capture(
     ).strip()
     if rating not in {"0", "1", "2", "3", "4", "5"}:
         if rating:
-            console.print("[yellow]Invalid rating; no feedback was recorded.[/yellow]")
+            console.print("[warning]Invalid rating; no feedback was recorded.[/warning]")
         return
     try:
         memory.rate_completed_task(task["task_id"], int(rating))
     except (ValueError, sqlite3.Error, OSError) as exc:
         console.print(
-            f"[red][Feedback error] Could not save the rating: "
-            f"{type(exc).__name__}: {exc}[/red]"
+            f"[error][Feedback error] Could not save the rating: "
+            f"{type(exc).__name__}: {exc}[/error]"
         )
         return
     if rating != "5":
         console.print(
-            "[cyan]Feedback saved. A skill is offered only for a fully "
-            "complete, verified task rated 5.[/cyan]"
+            "[info]Feedback saved. A skill is offered only for a fully "
+            "complete, verified task rated 5.[/info]"
         )
         return
     if not skills_directory:
         console.print(
-            "[yellow]Skill capture is unavailable because no skills directory "
-            "is configured.[/yellow]"
+            "[warning]Skill capture is unavailable because no skills directory "
+            "is configured.[/warning]"
         )
         return
     consent = (
@@ -573,7 +573,7 @@ def _offer_skill_capture(
     try:
         normalized_name, content = _build_skill_capture_draft(task, name)
     except ValueError as exc:
-        console.print(f"[yellow][Skill capture skipped] {exc}[/yellow]")
+        console.print(f"[warning][Skill capture skipped] {exc}[/warning]")
         return
     console.print(
         Panel(
@@ -586,7 +586,7 @@ def _offer_skill_capture(
         console.input(f"Save this new skill? Type SAVE {normalized_name}: ").strip()
         != f"SAVE {normalized_name}"
     ):
-        console.print("[yellow]Skill was not saved.[/yellow]")
+        console.print("[warning]Skill was not saved.[/warning]")
         return
     description = content.split("\n\n", maxsplit=2)[1]
     try:
@@ -607,10 +607,10 @@ def _offer_skill_capture(
             skill_path.unlink(missing_ok=True)
             raise
     except (OSError, ValueError, sqlite3.Error) as exc:
-        console.print(f"[red][Skill capture error] {type(exc).__name__}: {exc}[/red]")
+        console.print(f"[error][Skill capture error] {type(exc).__name__}: {exc}[/error]")
         return
     console.print(
-        f"[green]Skill saved and linked to this session: {skill_path}[/green]"
+        f"[success]Skill saved and linked to this session: {skill_path}[/success]"
     )
 
 

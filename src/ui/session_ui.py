@@ -82,11 +82,14 @@ class SessionUI:
             self._context_max = 0
         self._footer.update(self._current_state())
 
-    def ribbon_text(self, *, width: int | None = None) -> str:
+    def ribbon_text(self, *, width: int | None = None, accessible: bool | None = None) -> str:
         """Return the full status ribbon for use as a prompt toolbar.
 
         Width-aware segment dropping keeps it usable on narrow terminals.
+        ``accessible`` defaults to the ``PRIVATE_AGENT_ACCESSIBLE`` setting.
         """
+        if accessible is None:
+            accessible = bool(os.environ.get(ACCESSIBLE_ENV))
         if width is None:
             try:
                 width = int(getattr(self.console, "width", 0) or 0)
@@ -99,7 +102,9 @@ class SessionUI:
                 width = shutil.get_terminal_size().columns
             except (OSError, ValueError):
                 width = 80
-        return status_ribbon(self._current_state(), width=width)
+        return status_ribbon(
+            self._current_state(), width=width, accessible=accessible
+        )
 
     def turn_started(self, user_input: str = "") -> TurnReport:
         self._turn_start = time.monotonic()
@@ -126,7 +131,7 @@ class SessionUI:
         else:
             if getattr(report, "generation", None) is None:
                 report.generation = self._generation
-        self.console.print(f"[dim green]{report.summary_line()}[/dim green]")
+        self.console.print(f"[dim success]{report.summary_line()}[/dim success]")
         self._footer.turn_finished()
 
     def print_markup(self, text: Any) -> None:

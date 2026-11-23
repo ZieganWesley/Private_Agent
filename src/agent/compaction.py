@@ -18,8 +18,8 @@ _MAX_SOURCE_TOKENS = 6000
 
 
 def message_text(message: Any) -> str:
-    logger.debug(f"message_text called with message type: {type(message).__name__}")
-    content = getattr(message, "content", "")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("message_text called with message type: %s", type(message).__name__)
     content = getattr(message, "content", "")
     if isinstance(content, list):
         return "".join(
@@ -34,13 +34,15 @@ def message_text(message: Any) -> str:
 
 
 def messages_tokens(messages: list[Any]) -> int:
-    logger.debug(f"messages_tokens called with {len(messages)} messages")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("messages_tokens called with %d messages", len(messages))
     total = 0
     for message in messages:
         total += token_count(message_text(message))
         for call in getattr(message, "tool_calls", None) or []:
             total += token_count(str(call.get("args", "")))
-    logger.debug(f"messages_tokens returning {total} tokens")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("messages_tokens returning %d tokens", total)
     return total
 
 
@@ -53,7 +55,8 @@ async def _summarize(
     *,
     model_name: str = "model",
 ) -> str:
-    logger.debug(f"_summarize called with purpose={purpose}, model_name={model_name}")
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug("_summarize called with purpose=%s, model_name=%s", purpose, model_name)
     prompt = (
         f"Condense the following {purpose} into a compact working summary of at most "
         f"{max_chars} characters. Keep the user's goals, decisions, facts, file names, "

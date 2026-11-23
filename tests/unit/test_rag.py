@@ -978,3 +978,46 @@ def test_remote_embedding_endpoint_warns_before_sending_chunks(
     initialize_knowledge_base(str(docs), index_path=str(tmp_path / "index-remote"))
 
     assert "is not on this machine" in capsys.readouterr().out
+
+
+def test_initialize_knowledge_base_works_without_chroma_extra(monkeypatch, tmp_path):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "langchain_chroma", None)
+    import rag.indexing as _indexing
+
+    monkeypatch.setattr(_indexing, "Chroma", None, raising=False)
+    kb = tmp_path / "kb"
+    kb.mkdir()
+    (kb / "a.txt").write_text("hello world", encoding="utf-8")
+    (kb / "b.txt").write_text("foo bar", encoding="utf-8")
+    (kb / "c.txt").write_text("hello again", encoding="utf-8")
+
+    from rag import initialize_knowledge_base
+
+    retriever = initialize_knowledge_base(str(kb))
+    assert retriever is not None
+    assert getattr(retriever, "vectorstore", None) is None
+    assert getattr(retriever, "keyword_backend", None) in {"bm25", "fts5"}
+    results = retriever.similarity_search("hello", k=2)
+    assert results
+    assert "hello" in results[0].page_content
+
+
+def test_hybrid_retriever_uses_fts5_when_rank_bm25_missing(monkeypatch):
+    import sys
+
+    from langchain_core.documents import Document
+
+    from rag.retrieval import HybridRAGRetriever, _Fts5KeywordIndex
+
+    monkeypatch.setitem(sys.modules, "rank_bm25", None)
+    documents = [
+        Document(page_content=f"chunk {index} topic{index}", metadata={"source": f"d{index}.md"})
+        for index in range(5)
+    ]
+    retriever = HybridRAGRetriever(None, documents)
+    if _Fts5KeywordIndex.available():
+        assert retriever.keyword_backend == "fts5"
+    else:
+        assert retriever.keyword_backend is None

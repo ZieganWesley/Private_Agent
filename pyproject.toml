@@ -10,19 +10,15 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 dependencies = [
-    "beautifulsoup4==4.15.0",
     "httpx==0.28.1",
     "httpcore==1.0.9",
-    "langchain-chroma==1.1.0",
     "langchain-core==1.6.3",
     "langchain-mcp-adapters==0.3.2",
     "langchain-openai==1.1.14",
     "mcp>=1.24.0,<2.0.0",
     "pydantic==2.13.5",
     "prompt-toolkit==3.0.53",
-    "pypdf==6.21.4",
     "pyyaml==6.0.3",
-    "rank-bm25==0.2.2",
     "rich==15.0.0",
     "tiktoken==0.14.0",
     "tree-sitter==0.26.1",
@@ -50,11 +46,30 @@ ollama = [
     "langchain-ollama==1.1.0",
     "ollama==0.6.2",
 ]
+rag = [
+    "beautifulsoup4==4.15.0",
+    "langchain-chroma==1.1.0",
+    "pypdf==6.21.4",
+    "rank-bm25==0.2.2",
+]
 media = [
     "opencv-python-headless>=4.10,<5",
     "Pillow>=10,<13",
     "sounddevice>=0.5,<1",
     "faster-whisper>=1.1,<2",
+]
+
+all = [
+    "beautifulsoup4==4.15.0",
+    "langchain-chroma==1.1.0",
+    "pypdf==6.21.4",
+    "rank-bm25==0.2.2",
+    "opencv-python-headless>=4.10,<5",
+    "Pillow>=10,<13",
+    "sounddevice>=0.5,<1",
+    "faster-whisper>=1.1,<2",
+    "langchain-ollama==1.1.0",
+    "ollama==0.6.2",
 ]
 
 [build-system]

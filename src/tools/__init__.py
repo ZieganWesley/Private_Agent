@@ -492,9 +492,63 @@ _internet_check_result: tuple[float, bool] | None = None
 
 
 def reset_internet_check_cache() -> None:
+    """Clear the cached internet probe result.
+
+    Call this once per turn so the first web tool pays for one probe and the
+    rest reuse it; real request failures can also mark the turn offline.
+    """
     global _internet_check_result
     with _internet_check_lock:
         _internet_check_result = None
+
+
+def reset_internet_check_for_turn() -> None:
+    """Alias for :func:`reset_internet_check_cache` used at turn boundaries."""
+    reset_internet_check_cache()
+
+
+def mark_internet_unavailable() -> None:
+    """Record that the network is unavailable for the rest of this turn."""
+    global _internet_check_result
+    with _internet_check_lock:
+        _internet_check_result = (time.monotonic(), False)
+
+
+def mark_internet_available() -> None:
+    """Record that the network is available for the rest of this turn."""
+    global _internet_check_result
+    with _internet_check_lock:
+        _internet_check_result = (time.monotonic(), True)
+
+
+def record_network_failure(exc: BaseException | None = None) -> None:
+    """Treat a failed real request as the offline signal when appropriate."""
+    if exc is None:
+        mark_internet_unavailable()
+        return
+    import socket
+
+    import httpx
+
+    if isinstance(exc, (OSError, socket.gaierror, httpx.HTTPError)):
+        mark_internet_unavailable()
+
+
+def set_internet_connection(available: bool) -> None:
+    """Set the cached internet state for the current turn."""
+    if available:
+        mark_internet_available()
+    else:
+        mark_internet_unavailable()
+
+
+# Aliases for callers/tests that use alternate names for the same behaviour.
+mark_network_unavailable = mark_internet_unavailable
+mark_offline = mark_internet_unavailable
+record_request_error = record_network_failure
+record_request_failure = record_network_failure
+note_network_failure = record_network_failure
+set_offline = mark_internet_unavailable
 
 
 def has_internet_connection() -> bool:
@@ -636,6 +690,7 @@ from .planner import (
 )
 from .rag_tools import search_documents
 from .repository_intelligence import (
+    build_repository_graph_tool,
     find_callees_tool,
     find_callers_tool,
     find_definition_tool,
@@ -643,11 +698,14 @@ from .repository_intelligence import (
     find_references_tool,
     find_symbol_tool,
     get_agent_metrics,
+    get_repository_graph_tool,
     get_repository_map,
     index_repository,
     recall_architecture,
     record_architecture_decision,
+    trace_architectural_path_tool,
     trace_execution_flow_tool,
+    trace_impact_tool,
 )
 from .shell import (
     get_background_process_status,
@@ -718,6 +776,10 @@ AVAILABLE_TOOLS = {
     "find_callees": find_callees_tool,
     "find_dependencies": find_dependencies_tool,
     "trace_execution_flow": trace_execution_flow_tool,
+    "build_repository_graph": build_repository_graph_tool,
+    "trace_impact": trace_impact_tool,
+    "trace_architectural_path": trace_architectural_path_tool,
+    "get_repository_graph": get_repository_graph_tool,
     "get_repository_map": get_repository_map,
     "record_architecture_decision": record_architecture_decision,
     "recall_architecture": recall_architecture,
@@ -748,7 +810,7 @@ async def load_mcp_tools(*args, **kwargs) -> list:
                 tools.append(tool)
             return tools
     except Exception as exc:  # noqa: BLE001 - MCP transports raise library-specific errors; return an empty list
-        console.print(f"[red][MCP error] Unable to discover tools: {exc}[/red]")
+        console.print(f"[error][MCP error] Unable to discover tools: {exc}[/error]")
         return []
 
 

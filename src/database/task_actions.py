@@ -3,6 +3,7 @@
 import hashlib
 import json
 import logging
+import secrets
 import time
 import uuid
 
@@ -192,7 +193,7 @@ class TaskActionMixin:
             default=str,
         )
         args_digest = hashlib.sha256(args_json.encode("utf-8")).hexdigest()
-        action_id = uuid.uuid4().hex
+        action_id = secrets.token_hex(16)
         with self._lock, self._write_transaction():
             task = self.conn.execute(
                 "SELECT current_revision, approved_revision, approved_digest, status "

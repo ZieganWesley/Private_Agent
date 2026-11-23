@@ -49,8 +49,8 @@ async def _maintain_task_lease(memory: PersistentMemory, session_id: str) -> Non
                     task_id=task_id,
                 )
                 console.print(
-                    "[yellow][Task lease warning] This process no longer owns "
-                    "the active task. No further task actions will run.[/yellow]"
+                    "[warning][Task lease warning] This process no longer owns "
+                    "the active task. No further task actions will run.[/warning]"
                 )
         except (ValueError, sqlite3.Error, OSError) as exc:
             log_event(
@@ -63,6 +63,6 @@ async def _maintain_task_lease(memory: PersistentMemory, session_id: str) -> Non
                 exc_info=True,
             )
             console.print(
-                "[yellow][Task lease warning] Could not renew the task lease: "
-                f"{type(exc).__name__}: {exc}[/yellow]"
+                "[warning][Task lease warning] Could not renew the task lease: "
+                f"{type(exc).__name__}: {exc}[/warning]"
             )

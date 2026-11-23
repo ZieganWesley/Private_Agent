@@ -60,7 +60,7 @@ def inspect_local_model_capabilities(
             exc_info=True,
         )
         console.print(
-            f"[yellow][Model capabilities] Could not inspect {model_name}: {exc}[/yellow]"
+            f"[warning][Model capabilities] Could not inspect {model_name}: {exc}[/warning]"
         )
         return result
     finally:
@@ -226,7 +226,7 @@ def create_robust_local_chat_model(
                 exc_info=True,
             )
             console.print(
-                f"[yellow][Model fallback] {model_name} unavailable: {exc}[/yellow]"
+                f"[warning][Model fallback] {model_name} unavailable: {exc}[/warning]"
             )
             message = str(exc).lower()
             retryable = isinstance(exc, (ConnectionError, TimeoutError)) or any(
@@ -246,7 +246,7 @@ def create_robust_local_chat_model(
             if model_name == primary_model_name and not retryable:
                 break
     if last_error:
-        console.print(f"[red][Model error] No usable local model: {last_error}[/red]")
+        console.print(f"[error][Model error] No usable local model: {last_error}[/error]")
     return None
 
 
@@ -340,7 +340,7 @@ def select_online_model(
     """Collect session-only OpenAI-compatible settings after connectivity check."""
     if not is_interactive():
         console.print(
-            "[yellow]Online mode requires an interactive terminal for secure key entry.[/yellow]"
+            "[warning]Online mode requires an interactive terminal for secure key entry.[/warning]"
         )
         return None
 
@@ -361,8 +361,8 @@ def select_online_model(
     )
     if use_saved_details is True and not configured_key:
         console.print(
-            "[red]Saved online configuration was selected, but no API key is "
-            "configured. Choose manual entry or update the config file.[/red]"
+            "[error]Saved online configuration was selected, but no API key is "
+            "configured. Choose manual entry or update the config file.[/error]"
         )
         return None
     use_configured = use_saved_details is True
@@ -371,8 +371,8 @@ def select_online_model(
     elif use_saved_details is None and configured_key:
         answer = (
             console.input(
-                f"[cyan]Online configuration: 1. Use saved details ({configured_url}; "
-                "key hidden), 2. Enter URL and key manually [1]: [/cyan]"
+                f"[info]Online configuration: 1. Use saved details ({configured_url}; "
+                "key hidden), 2. Enter URL and key manually [1]: [/info]"
             )
             .strip()
             .lower()
@@ -383,7 +383,7 @@ def select_online_model(
             use_configured = False
         else:
             console.print(
-                "[red]Choose 1 for saved details or 2 for manual entry.[/red]"
+                "[error]Choose 1 for saved details or 2 for manual entry.[/error]"
             )
             return None
 
@@ -391,16 +391,16 @@ def select_online_model(
         try:
             base_url = validate_base_url(configured_url)
         except ValueError as exc:
-            console.print(f"[red]Invalid configured endpoint: {exc}[/red]")
+            console.print(f"[error]Invalid configured endpoint: {exc}[/error]")
             return None
     else:
         base_input = console.input(
-            f"[cyan]OpenAI-compatible API base URL [{configured_url}]: [/cyan]"
+            f"[info]OpenAI-compatible API base URL [{configured_url}]: [/info]"
         ).strip()
         try:
             base_url = validate_base_url(base_input or configured_url)
         except ValueError as exc:
-            console.print(f"[red]Invalid endpoint: {exc}[/red]")
+            console.print(f"[error]Invalid endpoint: {exc}[/error]")
             return None
 
     parsed_endpoint = urlsplit(base_url)
@@ -412,8 +412,8 @@ def select_online_model(
     ):
         choice = (
             console.input(
-                "[yellow]The selected API endpoint is not reachable. Restore access and "
-                "retry (r), or return to local model selection (l)? [/yellow]"
+                "[warning]The selected API endpoint is not reachable. Restore access and "
+                "retry (r), or return to local model selection (l)? [/warning]"
             )
             .strip()
             .lower()
@@ -425,7 +425,7 @@ def select_online_model(
     if (
         not use_configured
         and console.input(
-            f"[yellow]Online mode will send requests to {host}. Continue? \\[y/N]: [/yellow]"
+            f"[warning]Online mode will send requests to {host}. Continue? \\[y/N]: [/warning]"
         )
         .strip()
         .lower()
@@ -439,7 +439,7 @@ def select_online_model(
         else get_api_key("API key (input hidden; used for this session only): ").strip()
     )
     if not api_key:
-        console.print("[red]No API key entered; returning to model selection.[/red]")
+        console.print("[error]No API key entered; returning to model selection.[/error]")
         return None
 
     model_choices: list[str] = []
@@ -471,13 +471,13 @@ def select_online_model(
         )
         if exc.response.status_code in {401, 403}:
             console.print(
-                "[red]Provider authentication failed while listing models. "
-                "The API key was not logged; verify the endpoint and key.[/red]"
+                "[error]Provider authentication failed while listing models. "
+                "The API key was not logged; verify the endpoint and key.[/error]"
             )
             return None
         console.print(
-            f"[yellow]Could not list provider models (HTTP "
-            f"{exc.response.status_code}); you can enter a model identifier manually.[/yellow]"
+            f"[warning]Could not list provider models (HTTP "
+            f"{exc.response.status_code}); you can enter a model identifier manually.[/warning]"
         )
     except Exception as exc:  # noqa: BLE001 - provider listing errors vary by backend; degrade to manual entry
         log_event(
@@ -488,8 +488,8 @@ def select_online_model(
             exc_info=True,
         )
         console.print(
-            f"[yellow]Could not list provider models ({type(exc).__name__}); "
-            "you can enter a model identifier manually.[/yellow]"
+            f"[warning]Could not list provider models ({type(exc).__name__}); "
+            "you can enter a model identifier manually.[/warning]"
         )
 
     configured_model_value = model_config.get("online_model")
@@ -499,12 +499,12 @@ def select_online_model(
     if model_choices:
         console.print("[bold]Available API models:[/bold]")
         for index, candidate in enumerate(model_choices[:model_list_limit], 1):
-            console.print(f"  [cyan]{index}.[/cyan] {candidate}")
+            console.print(f"  [info]{index}.[/info] {candidate}")
         default_model = (
             configured_model if configured_model in model_choices else model_choices[0]
         )
         model_input = console.input(
-            f"[cyan]Select model number or enter ID [{default_model}]: [/cyan]"
+            f"[info]Select model number or enter ID [{default_model}]: [/info]"
         ).strip()
         if model_input.isdigit() and 1 <= int(model_input) <= min(
             model_list_limit, len(model_choices)
@@ -515,23 +515,23 @@ def select_online_model(
     else:
         model_name = (
             console.input(
-                f"[cyan]Model identifier [{configured_model or 'enter model name'}]: [/cyan]"
+                f"[info]Model identifier [{configured_model or 'enter model name'}]: [/info]"
             ).strip()
             or configured_model
         )
     if not model_name:
-        console.print("[red]A model identifier is required.[/red]")
+        console.print("[error]A model identifier is required.[/error]")
         return None
 
     console.print(
-        "[yellow]Every user message is sent to this online provider. Local chat "
+        "[warning]Every user message is sent to this online provider. Local chat "
         "history, summaries, skills, and RAG documents are excluded unless you "
-        "opt in. Local tool calls can send tool arguments/results to this provider.[/yellow]"
+        "opt in. Local tool calls can send tool arguments/results to this provider.[/warning]"
     )
     share_context = (
         console.input(
-            "[yellow]Allow this online model to receive local history and retrieved "
-            "RAG context for this session? \\[y/N]: [/yellow]"
+            "[warning]Allow this online model to receive local history and retrieved "
+            "RAG context for this session? \\[y/N]: [/warning]"
         )
         .strip()
         .lower()
@@ -540,16 +540,16 @@ def select_online_model(
     if permission_override:
         allow_tools = True
         console.print(
-            "[yellow][Online permission override] All tools (including local-only "
+            "[warning][Online permission override] All tools (including local-only "
             "location and media tools) are enabled for this online session; their "
             "arguments and results are sent to the provider. Workspace and "
-            "permission-mode approvals still apply.[/yellow]"
+            "permission-mode approvals still apply.[/warning]"
         )
     else:
         allow_tools = (
             console.input(
-                "[yellow]Allow this online model to call local/MCP tools? Their arguments "
-                "and results will be sent to the provider. \\[y/N]: [/yellow]"
+                "[warning]Allow this online model to call local/MCP tools? Their arguments "
+                "and results will be sent to the provider. \\[y/N]: [/warning]"
             )
             .strip()
             .lower()
@@ -560,10 +560,10 @@ def select_online_model(
     if allow_tools:
         enforce_tool_call_limits = (
             console.input(
-                "[yellow]Apply configured limits to this online model "
+                "[warning]Apply configured limits to this online model "
                 f"({max_tool_iterations} tool rounds and {max_tool_calls} tool calls "
                 "per request)? Choose No to leave counts uncapped; request time and "
-                "permission checks still apply. \\[y/N]: [/yellow]"
+                "permission checks still apply. \\[y/N]: [/warning]"
             )
             .strip()
             .lower()
@@ -581,8 +581,8 @@ def select_online_model(
             exc_info=True,
         )
         console.print(
-            f"[red]Could not initialize online model ({type(exc).__name__}); "
-            "check the endpoint, model, and key. Key details were not logged.[/red]"
+            f"[error]Could not initialize online model ({type(exc).__name__}); "
+            "check the endpoint, model, and key. Key details were not logged.[/error]"
         )
         return None
     return {

@@ -28,7 +28,7 @@ AGENT_DIR = pathlib.Path(inspect.getfile(runtime)).parent
         (tool_display._redact_tool_arguments, tool_display),
         (streaming._invoke_with_budget, streaming),
         (streaming._invoke_with_status, streaming),
-        (model_selection.inspect_model_capabilities, model_selection),
+        (model_selection.inspect_openai_compatible_model_capabilities, model_selection),
         (model_selection.get_robust_chat_model, model_selection),
         (learning._offer_skill_capture, learning),
         (learning._run_learning_suggestion, learning),

@@ -278,13 +278,24 @@ async def test_context_usage_reaches_the_streaming_spinner(monkeypatch):
 @pytest.mark.asyncio
 async def test_streamed_text_is_printed_only_after_the_spinner_stops(monkeypatch):
     indicator, printed = _patch_streaming(monkeypatch, visible_reasoning=False)
-    active_at_print = []
+    created_live = []
 
-    monkeypatch.setattr(
-        streaming.console,
-        "print",
-        lambda *values, **kwargs: active_at_print.append((values, indicator.active)),
-    )
+    class FakeLive:
+        def __init__(self, renderable, *, console=None, **kwargs):
+            self.renderable = renderable
+            self.started_while_spinner_active = indicator.active
+            created_live.append(self)
+
+        def start(self):
+            return None
+
+        def update(self, renderable):
+            self.renderable = renderable
+
+        def stop(self):
+            return None
+
+    monkeypatch.setattr(streaming, "Live", FakeLive)
 
     class SimpleModel:
         async def astream(self, _messages):
@@ -294,8 +305,8 @@ async def test_streamed_text_is_printed_only_after_the_spinner_stops(monkeypatch
         SimpleModel(), [], time.monotonic() + 5, model_name="m"
     )
 
-    answer_prints = [
-        active for values, active in active_at_print if values == ("hello",)
-    ]
-    assert answer_prints == [False]
+    assert created_live
+    assert all(
+        not live.started_while_spinner_active for live in created_live
+    )
     assert indicator.stops == 1

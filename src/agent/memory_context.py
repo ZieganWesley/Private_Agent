@@ -320,7 +320,7 @@ async def _retrieve_rag_documents(
         )
     except (ValueError, RuntimeError) as exc:
         console.print(
-            "[yellow][RAG guidance][/yellow] Could not retrieve coding manuals "
+            "[warning][RAG guidance][/warning] Could not retrieve coding manuals "
             f"or standards: {exc}"
         )
         guidance_documents = []
@@ -356,7 +356,7 @@ async def _run_memory_maintenance(
     on_data_reset: Callable[[frozenset[str]], None] | None = None,
 ) -> Any:
     console.print(
-        "[bold cyan][Memory maintenance][/bold cyan] "
+        "[bold info][Memory maintenance][/bold info] "
         "Commands: list, view <ID>, ask <ID> <question>, delete <ID>, "
         "learn status|on|off|list|add|correct|propose|suggest|disable|enable|delete, "
         "rag status|list|reindex|reset, data reset, done."
@@ -368,11 +368,11 @@ async def _run_memory_maintenance(
             message_count = memory.count_conversation_messages()
             session_count = memory.count_conversation_sessions()
             console.print(
-                "[yellow]No episodic summaries are stored. "
+                "[warning]No episodic summaries are stored. "
                 f"Saved conversation history: {message_count} message(s) across "
                 f"{session_count} session(s). Conversation history is not "
                 "listed as episodic memory; summaries are created when exiting "
-                "a session with available chat history.[/yellow]"
+                "a session with available chat history.[/warning]"
             )
             return
         table = Table(
@@ -401,7 +401,7 @@ async def _run_memory_maintenance(
         display_memories()
         while True:
             command = console.input(
-                "[cyan]Maintenance[/cyan] "
+                "[info]Maintenance[/info] "
                 "[memory commands / learn ... / rag status|list|reindex|reset / done]: "
             ).strip()
             if command.lower() in {"done", "exit", "back", "q"}:
@@ -415,8 +415,8 @@ async def _run_memory_maintenance(
                 continue
             if command.lower().startswith("data "):
                 console.print(
-                    "[yellow]Use `data reset` to reset local stores with "
-                    "explicit confirmation.[/yellow]"
+                    "[warning]Use `data reset` to reset local stores with "
+                    "explicit confirmation.[/warning]"
                 )
                 continue
             if command.lower() == "list":
@@ -438,7 +438,7 @@ async def _run_memory_maintenance(
                         _run_learning_maintenance(memory, command)
                 except (ValueError, sqlite3.Error, OSError) as exc:
                     console.print(
-                        f"[red][Learning state error] {type(exc).__name__}: {exc}[/red]"
+                        f"[error][Learning state error] {type(exc).__name__}: {exc}[/error]"
                     )
                 continue
             if command.lower().startswith("rag"):
@@ -450,8 +450,8 @@ async def _run_memory_maintenance(
                     "reset",
                 }:
                     console.print(
-                        "[yellow]Use: rag status, rag list, rag reindex, "
-                        "or rag reset.[/yellow]"
+                        "[warning]Use: rag status, rag list, rag reindex, "
+                        "or rag reset.[/warning]"
                     )
                     continue
                 rag_action = rag_command[1].lower()
@@ -471,12 +471,12 @@ async def _run_memory_maintenance(
                         ValueError,
                     ) as exc:
                         console.print(
-                            f"[red][RAG state error] Could not read "
-                            f"{state_path}: {exc}[/red]"
+                            f"[error][RAG state error] Could not read "
+                            f"{state_path}: {exc}[/error]"
                         )
                         continue
                     console.print(
-                        f"[cyan][RAG status][/cyan] Documents: "
+                        f"[info][RAG status][/info] Documents: "
                         f"{rag_docs_path or 'not configured'}; index: {index_path}; "
                         f"tracked sources: {len(state)}; active in memory: "
                         f"{vectorstore is not None}."
@@ -488,49 +488,49 @@ async def _run_memory_maintenance(
                                     f"  {source} ({fingerprint.get('size', '?')} bytes)"
                                 )
                         else:
-                            console.print("[yellow]No tracked RAG sources.[/yellow]")
+                            console.print("[warning]No tracked RAG sources.[/warning]")
                     continue
                 if rag_action == "reset":
                     confirmation = (
                         console.input(
-                            "[red]Delete the configured local RAG index? "
-                            "Type 'reset rag' to confirm: [/red]"
+                            "[error]Delete the configured local RAG index? "
+                            "Type 'reset rag' to confirm: [/error]"
                         )
                         .strip()
                         .lower()
                     )
                     if confirmation != "reset rag":
-                        console.print("[yellow]RAG reset cancelled.[/yellow]")
+                        console.print("[warning]RAG reset cancelled.[/warning]")
                         continue
                     try:
                         reset_path = reset_knowledge_base(RAG_INDEX_PATH)
                         vectorstore = None
                         console.print(
-                            f"[green]Removed local RAG index at {reset_path}. "
-                            "Original documents were not changed.[/green]"
+                            f"[success]Removed local RAG index at {reset_path}. "
+                            "Original documents were not changed.[/success]"
                         )
                     except (ValueError, RuntimeError) as exc:
                         console.print(
-                            f"[red][RAG reset error] {type(exc).__name__}: {exc}[/red]"
+                            f"[error][RAG reset error] {type(exc).__name__}: {exc}[/error]"
                         )
                     continue
 
                 if not rag_docs_path:
                     console.print(
-                        "[yellow]No RAG documents path is configured. "
-                        "Set paths.rag_documents or enter a path in config.[/yellow]"
+                        "[warning]No RAG documents path is configured. "
+                        "Set paths.rag_documents or enter a path in config.[/warning]"
                     )
                     continue
                 confirmation = (
                     console.input(
-                        f"[yellow]Reindex local documents from '{rag_docs_path}'? "
-                        "Type 'reindex rag' to confirm: [/yellow]"
+                        f"[warning]Reindex local documents from '{rag_docs_path}'? "
+                        "Type 'reindex rag' to confirm: [/warning]"
                     )
                     .strip()
                     .lower()
                 )
                 if confirmation != "reindex rag":
-                    console.print("[yellow]RAG reindex cancelled.[/yellow]")
+                    console.print("[warning]RAG reindex cancelled.[/warning]")
                     continue
                 try:
                     vectorstore = initialize_knowledge_base(
@@ -538,29 +538,29 @@ async def _run_memory_maintenance(
                         index_path=RAG_INDEX_PATH,
                         confirm_rebuild=lambda detail: (
                             console.input(
-                                f"[yellow]RAG state is damaged: {detail}\n"
-                                "Preserve the old index and rebuild? Type REBUILD: [/yellow]"
+                                f"[warning]RAG state is damaged: {detail}\n"
+                                "Preserve the old index and rebuild? Type REBUILD: [/warning]"
                             ).strip()
                             == "REBUILD"
                         ),
                     )
                     if vectorstore is None:
                         console.print(
-                            "[yellow]RAG reindex did not produce an active index.[/yellow]"
+                            "[warning]RAG reindex did not produce an active index.[/warning]"
                         )
                     else:
-                        console.print("[green]RAG reindex completed.[/green]")
+                        console.print("[success]RAG reindex completed.[/success]")
                 except (ValueError, RuntimeError) as exc:
                     console.print(
-                        f"[red][RAG reindex error] {type(exc).__name__}: {exc}[/red]"
+                        f"[error][RAG reindex error] {type(exc).__name__}: {exc}[/error]"
                     )
                 continue
 
             parts = command.split(maxsplit=2)
             if len(parts) < 2 or parts[0].lower() not in {"view", "ask", "delete"}:
                 console.print(
-                    "[yellow]Use list, view <ID>, ask <ID> <question>, "
-                    "delete <ID>, or done.[/yellow]"
+                    "[warning]Use list, view <ID>, ask <ID> <question>, "
+                    "delete <ID>, or done.[/warning]"
                 )
                 continue
             try:
@@ -568,13 +568,13 @@ async def _run_memory_maintenance(
                 if entry_id <= 0:
                     raise ValueError
             except ValueError:
-                console.print("[red]Memory ID must be a positive integer.[/red]")
+                console.print("[error]Memory ID must be a positive integer.[/error]")
                 continue
 
             entry = memory.get_episodic_memory(entry_id)
             if entry is None:
                 console.print(
-                    f"[yellow]No episodic memory with ID {entry_id}.[/yellow]"
+                    f"[warning]No episodic memory with ID {entry_id}.[/warning]"
                 )
                 continue
 
@@ -592,13 +592,13 @@ async def _run_memory_maintenance(
                 )
             elif action == "ask":
                 if len(parts) < 3 or not parts[2].strip():
-                    console.print("[yellow]Usage: ask <ID> <question>[/yellow]")
+                    console.print("[warning]Usage: ask <ID> <question>[/warning]")
                     continue
                 if not allow_model_episode_context:
                     console.print(
-                        "[yellow]This provider is not approved to receive local "
+                        "[warning]This provider is not approved to receive local "
                         "episodic memory. Switch to Local or enable context sharing "
-                        "for this Online session.[/yellow]"
+                        "for this Online session.[/warning]"
                     )
                     continue
                 try:
@@ -628,42 +628,42 @@ async def _run_memory_maintenance(
                     console.print(Panel(str(response.content), title="Episode answer"))
                 except (ValueError, RuntimeError) as exc:
                     console.print(
-                        f"[yellow][Memory question failed] "
-                        f"{type(exc).__name__}: {exc}[/yellow]"
+                        f"[warning][Memory question failed] "
+                        f"{type(exc).__name__}: {exc}[/warning]"
                     )
             else:
                 confirmation = (
                     console.input(
-                        f"[red]Delete episodic memory {entry_id} only? "
-                        f"Type 'delete {entry_id}' to confirm: [/red]"
+                        f"[error]Delete episodic memory {entry_id} only? "
+                        f"Type 'delete {entry_id}' to confirm: [/error]"
                     )
                     .strip()
                     .lower()
                 )
                 if confirmation != f"delete {entry_id}":
-                    console.print("[yellow]Deletion cancelled.[/yellow]")
+                    console.print("[warning]Deletion cancelled.[/warning]")
                     continue
                 if memory.delete_episodic_memory(entry_id):
                     console.print(
-                        f"[green]Deleted episodic memory {entry_id}; "
-                        "conversation messages were kept.[/green]"
+                        f"[success]Deleted episodic memory {entry_id}; "
+                        "conversation messages were kept.[/success]"
                     )
                     display_memories()
                 else:
                     console.print(
-                        f"[yellow]Episodic memory {entry_id} was already removed.[/yellow]"
+                        f"[warning]Episodic memory {entry_id} was already removed.[/warning]"
                     )
     finally:
         try:
             result = memory.maintain_database()
             console.print(
-                "[green][SQLite maintenance][/green] Integrity check: "
+                "[success][SQLite maintenance][/success] Integrity check: "
                 f"{result['integrity']}; page count "
                 f"{result['pages_before']} → {result['pages_after']}."
             )
         except (ValueError, RuntimeError) as exc:
             console.print(
-                f"[red][SQLite maintenance error] {type(exc).__name__}: {exc}[/red]"
+                f"[error][SQLite maintenance error] {type(exc).__name__}: {exc}[/error]"
             )
     return vectorstore
 
@@ -702,7 +702,7 @@ def _prune_memory_retention(
             )
     if any(retention[key] for key in ("conversation", "episodes", "skills")):
         console.print(
-            "[cyan][Memory retention][/cyan] Removed "
+            "[info][Memory retention][/info] Removed "
             f"{retention['conversation']} conversation row(s), "
             f"{retention['episodes']} episode(s), and "
             f"{retention['skills']} registered skill record(s); "
@@ -710,7 +710,7 @@ def _prune_memory_retention(
         )
     for failure in unsafe_files:
         console.print(
-            "[yellow][Memory retention warning][/yellow] Registered skill "
+            "[warning][Memory retention warning][/warning] Registered skill "
             f"metadata expired, but its file was not removed: {failure}"
         )
     return {**retention, "skill_files_deleted": removed_files}
@@ -721,8 +721,8 @@ def _offer_local_data_reset(memory: PersistentMemory) -> frozenset[str]:
         return frozenset()
     selection = (
         console.input(
-            "[yellow]Local data reset: [1] Chroma knowledge index, "
-            "[2] SQLite conversation memory, [3] both (Enter to skip): [/yellow]"
+            "[warning]Local data reset: [1] Chroma knowledge index, "
+            "[2] SQLite conversation memory, [3] both (Enter to skip): [/warning]"
         )
         .strip()
         .lower()
@@ -733,33 +733,33 @@ def _offer_local_data_reset(memory: PersistentMemory) -> frozenset[str]:
         return frozenset()
     reset_scopes: set[str] = set()
     confirmation = console.input(
-        f"[red]This permanently resets {'ChromaDB' if scope == 'chroma' else 'SQLite memory' if scope == 'sqlite' else 'ChromaDB and SQLite memory'}. "
-        "Type RESET to confirm: [/red]"
+        f"[error]This permanently resets {'ChromaDB' if scope == 'chroma' else 'SQLite memory' if scope == 'sqlite' else 'ChromaDB and SQLite memory'}. "
+        "Type RESET to confirm: [/error]"
     ).strip()
     if confirmation != "RESET":
         console.print(
-            "[yellow]Local data reset cancelled; no data was changed.[/yellow]"
+            "[warning]Local data reset cancelled; no data was changed.[/warning]"
         )
         return frozenset()
     if scope in {"chroma", "both"}:
         try:
             reset_path = reset_knowledge_base(RAG_INDEX_PATH)
             reset_scopes.add("chroma")
-            console.print(f"[green]Chroma index reset: {reset_path}[/green]")
+            console.print(f"[success]Chroma index reset: {reset_path}[/success]")
         except (OSError, ValueError) as exc:
-            console.print(f"[red]Chroma reset failed: {exc}[/red]")
+            console.print(f"[error]Chroma reset failed: {exc}[/error]")
             return frozenset()
     if scope in {"sqlite", "both"}:
         try:
             memory.clear_history()
             console.print(
-                "[green]SQLite conversation memory, summaries, task plans, "
-                "todos, and task events reset.[/green]"
+                "[success]SQLite conversation memory, summaries, task plans, "
+                "todos, and task events reset.[/success]"
             )
             reset_scopes.add("sqlite")
         except (sqlite3.Error, OSError, RuntimeError) as exc:
             console.print(
-                f"[red]SQLite reset failed ({type(exc).__name__}): {exc}[/red]"
+                f"[error]SQLite reset failed ({type(exc).__name__}): {exc}[/error]"
             )
     return frozenset(reset_scopes)
 
@@ -792,16 +792,16 @@ async def _initialize_rag_for_docs(
     if existing_index.exists():
         rag_init_started = time.monotonic()
         try:
-            with console.status("[bold cyan]Indexing local knowledge base...[/bold cyan]"):
+            with console.status("[bold info]Indexing local knowledge base...[/bold info]"):
                 vectorstore = await asyncio.to_thread(
                     initialize_knowledge_base_fn,
                     docs_input,
                     index_path=rag_index_path,
                     confirm_rebuild=lambda detail: (
                         input_fn(
-                            f"[yellow]RAG index state is damaged: {detail}\n"
+                            f"[warning]RAG index state is damaged: {detail}\n"
                             "Preserve the existing index as a timestamped backup and rebuild? "
-                            "Type REBUILD to confirm: [/yellow]"
+                            "Type REBUILD to confirm: [/warning]"
                         ).strip()
                         == "REBUILD"
                     ),
@@ -810,8 +810,8 @@ async def _initialize_rag_for_docs(
             vectorstore = None
             reference_id = uuid.uuid4().hex[:8]
             console.print(
-                f"[yellow][RAG warning] Knowledge base is unavailable; continuing "
-                f"without RAG ({type(exc).__name__}; reference {reference_id}).[/yellow]"
+                f"[warning][RAG warning] Knowledge base is unavailable; continuing "
+                f"without RAG ({type(exc).__name__}; reference {reference_id}).[/warning]"
             )
         is_rag_active = vectorstore is not None
         rag_signature = (
@@ -826,7 +826,7 @@ async def _initialize_rag_for_docs(
         )
         return vectorstore, is_rag_active, rag_signature, None, rag_last_check
 
-    console.print("[cyan][RAG][/cyan] Indexing local knowledge base in the background...")
+    console.print("[info][RAG][/info] Indexing local knowledge base in the background...")
 
     async def _background_rag_init():
         try:
@@ -839,8 +839,8 @@ async def _initialize_rag_for_docs(
         except Exception as exc:  # noqa: BLE001 - Chroma/embedding failures must not block startup
             reference_id = uuid.uuid4().hex[:8]
             console.print(
-                f"[yellow][RAG warning] Knowledge base is unavailable; continuing "
-                f"without RAG ({type(exc).__name__}; reference {reference_id}).[/yellow]"
+                f"[warning][RAG warning] Knowledge base is unavailable; continuing "
+                f"without RAG ({type(exc).__name__}; reference {reference_id}).[/warning]"
             )
             log_event(
                 run_logger,

@@ -124,16 +124,26 @@ class HybridRAGRetriever:
         try:
             from rank_bm25 import BM25Okapi
 
-            if documents:
-                tokenized_corpus = [_tokenize(doc.page_content) for doc in documents]
-                if any(tokenized_corpus):
-                    self.bm25 = BM25Okapi(tokenized_corpus)
-                    self.keyword_backend = "bm25"
+            _rank_bm25_available = True
         except ImportError:
-            console.print(
-                "[yellow][Warning] 'rank_bm25' package not found. Falling back "
-                "to pure vector similarity search.[/yellow]"
-            )
+            _rank_bm25_available = False
+            BM25Okapi = None
+
+        if _rank_bm25_available:
+            try:
+                if documents:
+                    tokenized_corpus = [_tokenize(doc.page_content) for doc in documents]
+                    if any(tokenized_corpus):
+                        self.bm25 = BM25Okapi(tokenized_corpus)
+                        self.keyword_backend = "bm25"
+            except Exception:  # noqa: BLE001 - optional dependency boundary
+                self.bm25 = None
+
+        if self.keyword_backend is None and _Fts5KeywordIndex.available() and documents:
+            # Core-only installs may have neither Chroma nor rank_bm25, but the
+            # standard library's SQLite usually provides FTS5.
+            self.keyword_backend = "fts5"
+
 
     def _active_keyword_backend(self) -> str | None:
         """Infer BM25 when a caller built the retriever without ``__init__``."""
@@ -201,9 +211,12 @@ class HybridRAGRetriever:
     ) -> list[Document]:
         threshold = RAG_RELEVANCE_THRESHOLD
         vector_results = None
-        scored_method = getattr(
-            self.vectorstore, "similarity_search_with_relevance_scores", None
-        )
+        if self.vectorstore is None:
+            scored_method = None
+        else:
+            scored_method = getattr(
+                self.vectorstore, "similarity_search_with_relevance_scores", None
+            )
         if callable(scored_method):
             try:
                 scored = scored_method(query, k=k)
@@ -218,7 +231,10 @@ class HybridRAGRetriever:
                 if not vector_results:
                     return []
         if vector_results is None:
-            vector_results = self.vectorstore.similarity_search(query, k=k)
+            if self.vectorstore is None:
+                vector_results = []
+            else:
+                vector_results = self.vectorstore.similarity_search(query, k=k)
             if threshold > 0:
                 # No scores available; keep results to preserve behaviour.
                 pass

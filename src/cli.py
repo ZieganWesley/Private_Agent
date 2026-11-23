@@ -26,7 +26,7 @@ def ensure_supported_platform() -> None:
     """Exit with a pointer to WSL when started on native Windows."""
     if sys.platform == "win32":
         console.print(
-            f"[red][Unsupported platform] {WINDOWS_UNSUPPORTED_MESSAGE}[/red]"
+            f"[error][Unsupported platform] {WINDOWS_UNSUPPORTED_MESSAGE}[/error]"
         )
         raise SystemExit(1)
 
@@ -44,13 +44,13 @@ def list_saved_sessions(limit: int = 20) -> int:
         memory = PersistentMemory()
         sessions = memory.list_sessions_with_metadata(limit=limit)
     except (ValueError, sqlite3.Error, OSError) as exc:
-        console.print(f"[red][Session list] Could not read saved sessions: {exc}[/red]")
+        console.print(f"[error][Session list] Could not read saved sessions: {exc}[/error]")
         return 1
     finally:
         if memory is not None:
             memory.close()
     if not sessions:
-        console.print("[cyan][Session list][/cyan] No saved sessions yet.")
+        console.print("[info][Session list][/info] No saved sessions yet.")
         return 0
     table = Table(title="Saved sessions")
     table.add_column("Session ID", overflow="fold")
@@ -64,7 +64,7 @@ def list_saved_sessions(limit: int = 20) -> int:
         )
     console.print(table)
     console.print(
-        "[cyan][Session list][/cyan] Resume one with "
+        "[info][Session list][/info] Resume one with "
         "`private-agent --resume <SESSION ID>`."
     )
     return 0
@@ -144,6 +144,30 @@ def main():
         help="Preferred model name; skips the model menu when available.",
     )
     parser.add_argument(
+        "--mode",
+        choices=("manual", "auto", "full", "monitored"),
+        default=None,
+        help="Permission mode for this run (alias for --permission-mode).",
+    )
+    parser.add_argument(
+        "--workspace",
+        metavar="PATH",
+        default=None,
+        help="Workspace root for the security sandbox; skips its prompt.",
+    )
+    parser.add_argument(
+        "--sandbox-network",
+        action="store_true",
+        help="Allow network access for commands run in the OS sandbox "
+        "(disabled by default).",
+    )
+    parser.add_argument(
+        "--rag",
+        metavar="PATH",
+        default=None,
+        help="RAG documents directory; skips its prompt.",
+    )
+    parser.add_argument(
         "--light",
         action="store_true",
         help="Use a light-terminal colour theme.",
@@ -152,6 +176,11 @@ def main():
         "--doctor",
         action="store_true",
         help="Run dependency, environment and machine-resource diagnostics.",
+    )
+    parser.add_argument(
+        "--ui-check",
+        action="store_true",
+        help="Run the manual UI self-check and exit (remove before production).",
     )
     args = parser.parse_args()
     if args.config:
@@ -162,12 +191,25 @@ def main():
         os.environ["PRIVATE_AGENT_PROVIDER"] = args.provider
     if args.model:
         os.environ["PRIVATE_AGENT_MODEL"] = args.model
+    if args.mode:
+        os.environ["PRIVATE_AGENT_MODE"] = args.mode
+    if args.workspace:
+        os.environ["PRIVATE_AGENT_WORKSPACE"] = args.workspace
+    if args.rag:
+        os.environ["PRIVATE_AGENT_RAG"] = args.rag
+    if args.sandbox_network:
+        os.environ["PRIVATE_AGENT_SANDBOX_NETWORK"] = "1"
     if args.list_sessions:
         raise SystemExit(list_saved_sessions())
     if args.doctor:
         from diagnostics.doctor import doctor_interactive
 
         raise SystemExit(doctor_interactive())
+    if args.ui_check or os.environ.get("PRIVATE_AGENT_UI_CHECK"):
+        # REMOVE BEFORE PRODUCTION: manual UI trigger point.
+        from ui.check import run_ui_check
+
+        raise SystemExit(run_ui_check())
     originals = []
     exit_code = 0
     from config import DEBUG_LOG_ENABLED
@@ -185,10 +227,10 @@ def main():
         log_path = start_debug_logging()
         if DEBUG_LOG_ENABLED and log_path is None:
             console.print(
-                "[yellow][Debug log] Logging is enabled but no file was created.[/yellow]"
+                "[warning][Debug log] Logging is enabled but no file was created.[/warning]"
             )
         elif log_path is not None:
-            console.print(f"[cyan][Debug log][/cyan] Writing run trace to {log_path}")
+            console.print(f"[info][Debug log][/info] Writing run trace to {log_path}")
         from agent import run_agent_cli
 
         if log_path is not None:
@@ -206,17 +248,17 @@ def main():
             continue_session=args.continue_session,
             prompt=args.prompt,
             output=args.output,
-            permission_mode=args.permission_mode,
+            permission_mode=args.permission_mode or args.mode,
             non_interactive=non_interactive,
             interactive=not non_interactive,
             input_provider=(lambda *a, **k: "") if non_interactive else None,
         )
     except KeyboardInterrupt:
-        console.print("\n[yellow][Info] Interrupted by user.[/yellow]")
+        console.print("\n[warning][Info] Interrupted by user.[/warning]")
     except EOFError:
         # stdin was closed at an interactive prompt (Ctrl+D), which is an
         # orderly exit rather than an unexpected crash.
-        console.print("\n[yellow][Info] Input closed; exiting.[/yellow]")
+        console.print("\n[warning][Info] Input closed; exiting.[/warning]")
     except RuntimeError as exc:
         log_event(
             RUN_LOGGER,
@@ -225,7 +267,7 @@ def main():
             error_type=type(exc).__name__,
             exc_info=True,
         )
-        console.print(f"[red][Startup error] {exc}[/red]")
+        console.print(f"[error][Startup error] {exc}[/error]")
         exit_code = 1
     except (ValueError, OSError):
         log_event(
@@ -242,7 +284,7 @@ def main():
 
             restore_logging_consoles(originals)
         stop_debug_logging()
-        console.print("[cyan][Info] Goodbye.[/cyan]")
+        console.print("[info][Info] Goodbye.[/info]")
     if exit_code:
         raise SystemExit(exit_code)
 

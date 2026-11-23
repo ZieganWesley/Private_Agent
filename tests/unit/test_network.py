@@ -153,31 +153,34 @@ def test_outbound_url_rejects_domains_resolving_to_private_addresses(monkeypatch
         validate_outbound_url("http://internal.example.test/")
 
 
-def test_resolver_child_timeout_is_bounded_and_reported(monkeypatch):
-    import subprocess
-
-    import httpcore
-
-    run = MagicMock(side_effect=subprocess.TimeoutExpired("resolver", 0.025))
-    monkeypatch.setattr(network_tools.subprocess, "run", run)
-
-    with pytest.raises(httpcore.ConnectTimeout, match="DNS resolution timed out"):
-        network_tools._getaddrinfo_with_timeout("slow.example.test", 443, 0.025)
-
-    assert run.call_args.kwargs["timeout"] == 0.025
-    assert run.call_args.kwargs["check"] is True
-
-
-def test_stalled_system_dns_child_is_terminated_within_deadline(monkeypatch):
+def test_resolver_timeout_is_bounded_and_reported(monkeypatch):
     import time
 
     import httpcore
 
-    monkeypatch.setattr(
-        network_tools,
-        "_RESOLVER_SCRIPT",
-        "import time; time.sleep(5)",
-    )
+    def slow_getaddrinfo(*args, **kwargs):
+        time.sleep(5)
+        return []
+
+    monkeypatch.setattr(network_tools.socket, "getaddrinfo", slow_getaddrinfo)
+
+    started = time.monotonic()
+    with pytest.raises(httpcore.ConnectTimeout, match="DNS resolution timed out"):
+        network_tools._getaddrinfo_with_timeout("slow.example.test", 443, 0.025)
+
+    assert time.monotonic() - started < 1
+
+
+def test_stalled_system_dns_resolver_times_out_within_deadline(monkeypatch):
+    import time
+
+    import httpcore
+
+    def slow_getaddrinfo(*args, **kwargs):
+        time.sleep(5)
+        return []
+
+    monkeypatch.setattr(network_tools.socket, "getaddrinfo", slow_getaddrinfo)
     started = time.monotonic()
     with pytest.raises(httpcore.ConnectTimeout, match="DNS resolution timed out"):
         network_tools._getaddrinfo_with_timeout("stalled.example.test", 443, 0.1)
@@ -186,53 +189,37 @@ def test_stalled_system_dns_child_is_terminated_within_deadline(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_async_resolver_kills_and_reaps_child_on_timeout(monkeypatch):
+@pytest.mark.asyncio
+async def test_async_resolver_times_out_within_deadline(monkeypatch):
+    import time
+
     import httpcore
 
-    class DelayedResolver:
-        returncode = None
+    def slow_getaddrinfo(*args, **kwargs):
+        time.sleep(5)
+        return []
 
-        def __init__(self):
-            self.killed = False
-            self.finished = asyncio.Event()
-
-        async def communicate(self):
-            await self.finished.wait()
-            self.returncode = -9
-            return b"", b""
-
-        def kill(self):
-            self.killed = True
-            self.finished.set()
-
-    process = DelayedResolver()
-    create_process = AsyncMock(return_value=process)
-    monkeypatch.setattr(
-        network_tools.asyncio,
-        "create_subprocess_exec",
-        create_process,
-    )
-
+    monkeypatch.setattr(network_tools.socket, "getaddrinfo", slow_getaddrinfo)
+    started = time.monotonic()
     with pytest.raises(httpcore.ConnectTimeout, match="DNS resolution timed out"):
         await network_tools._getaddrinfo_async_with_timeout(
             "slow.example.test", 443, 0.01
         )
 
-    assert process.killed
-    create_process.assert_awaited_once()
+    assert time.monotonic() - started < 1
 
 
 @pytest.mark.asyncio
-async def test_stalled_async_dns_child_is_terminated_within_deadline(monkeypatch):
+async def test_stalled_async_dns_resolver_times_out_within_deadline(monkeypatch):
     import time
 
     import httpcore
 
-    monkeypatch.setattr(
-        network_tools,
-        "_RESOLVER_SCRIPT",
-        "import time; time.sleep(5)",
-    )
+    def slow_getaddrinfo(*args, **kwargs):
+        time.sleep(5)
+        return []
+
+    monkeypatch.setattr(network_tools.socket, "getaddrinfo", slow_getaddrinfo)
     started = time.monotonic()
     with pytest.raises(httpcore.ConnectTimeout, match="DNS resolution timed out"):
         await network_tools._getaddrinfo_async_with_timeout(
@@ -243,29 +230,15 @@ async def test_stalled_async_dns_child_is_terminated_within_deadline(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_async_resolver_kills_and_reaps_child_on_cancellation(monkeypatch):
-    class DelayedResolver:
-        returncode = None
+async def test_async_resolver_propagates_cancellation(monkeypatch):
+    import asyncio
+    import time
 
-        def __init__(self):
-            self.killed = False
-            self.finished = asyncio.Event()
+    def slow_getaddrinfo(*args, **kwargs):
+        time.sleep(5)
+        return []
 
-        async def communicate(self):
-            await self.finished.wait()
-            self.returncode = -9
-            return b"", b""
-
-        def kill(self):
-            self.killed = True
-            self.finished.set()
-
-    process = DelayedResolver()
-    monkeypatch.setattr(
-        network_tools.asyncio,
-        "create_subprocess_exec",
-        AsyncMock(return_value=process),
-    )
+    monkeypatch.setattr(network_tools.socket, "getaddrinfo", slow_getaddrinfo)
     task = asyncio.create_task(
         network_tools._getaddrinfo_async_with_timeout("slow.example.test", 443, 5)
     )
@@ -274,8 +247,6 @@ async def test_async_resolver_kills_and_reaps_child_on_cancellation(monkeypatch)
 
     with pytest.raises(asyncio.CancelledError):
         await task
-
-    assert process.killed
 
 
 @pytest.mark.asyncio
@@ -1105,5 +1076,28 @@ def test_internet_check_is_cached_for_repeated_offline_calls(monkeypatch):
         clock[0] += 31
         assert tools.has_internet_connection() is False
         assert len(calls) == 2
+    finally:
+        tools.reset_internet_check_cache()
+
+
+def test_real_request_failure_marks_internet_unavailable(monkeypatch):
+    import tools
+
+    calls = []
+
+    def probe(*_args):
+        calls.append(1)
+        return True
+
+    monkeypatch.setattr(tools, "check_internet_connection", probe)
+    monkeypatch.setattr(tools.time, "monotonic", lambda: 1000.0)
+    tools.reset_internet_check_cache()
+    try:
+        assert tools.has_internet_connection() is True
+        assert len(calls) == 1
+
+        tools.record_network_failure(ConnectionError("offline"))
+        assert tools.has_internet_connection() is False
+        assert len(calls) == 1
     finally:
         tools.reset_internet_check_cache()

@@ -32,8 +32,8 @@ def _report_tokenizer_fallback(stage: str, exc: Exception) -> None:
         fallback="character_estimate",
     )
     _warning_console.print(
-        "[yellow][Tokenizer warning] Token counting fell back to a rough "
-        "character estimate; context trimming may be less accurate.[/yellow]"
+        "[warning][Tokenizer warning] Token counting fell back to a rough "
+        "character estimate; context trimming may be less accurate.[/warning]"
     )
 
 

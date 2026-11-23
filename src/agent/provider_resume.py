@@ -71,7 +71,7 @@ def warn_capability_changes(console, previous, capabilities, model):
     """Print one warning per capability a resumed model no longer reports."""
     for warning in capability_change_warnings(previous, capabilities):
         console.print(
-            f"[yellow][Resume][/yellow] {model}: {warning}; "
+            f"[warning][Resume][/warning] {model}: {warning}; "
             "continuing, but expect a weaker result."
         )
 
@@ -143,7 +143,7 @@ def offer_provider_start(
             if wanted_names is not None and name.lower() not in wanted_names:
                 continue
             console.print(
-                f"[yellow]{name} is installed but not running.[/yellow]"
+                f"[warning]{name} is installed but not running.[/warning]"
             )
             start_hint = getattr(idle, "start_hint", "") or getattr(
                 idle.preset, "start_hint", ""
@@ -152,7 +152,7 @@ def offer_provider_start(
                 console.print(f"  Start it with: {start_hint}")
             try:
                 answer = input_fn(
-                    f"[cyan]Start {name} now? [y/N]: [/cyan]"
+                    f"[info]Start {name} now? [y/N]: [/info]"
                 ).strip().lower()
             except (EOFError, KeyboardInterrupt):
                 continue
@@ -161,8 +161,8 @@ def offer_provider_start(
             start = start_provider or _start_provider
             if not start(name):
                 console.print(
-                    f"[yellow]Could not start {name} automatically; "
-                    "start it yourself and try again.[/yellow]"
+                    f"[warning]Could not start {name} automatically; "
+                    "start it yourself and try again.[/warning]"
                 )
                 continue
             started_any = True
@@ -174,7 +174,7 @@ def offer_provider_start(
                 found = _match_runtime(name, current)
                 if found is not None:
                     console.print(
-                        f"[green]{name} is running again.[/green]"
+                        f"[success]{name} is running again.[/success]"
                     )
                     if matched is None:
                         matched = found
@@ -184,8 +184,8 @@ def offer_provider_start(
                     pause(delay)
             else:
                 console.print(
-                    f"[yellow]{name} did not answer after starting; "
-                    "continuing without it.[/yellow]"
+                    f"[warning]{name} did not answer after starting; "
+                    "continuing without it.[/warning]"
                 )
                 current_runtimes = list(refresh())
         if started_any and len(idle_providers) > 1:
@@ -207,7 +207,7 @@ def offer_provider_start(
     if idle is None:
         return runtimes, None
     console.print(
-        f"[yellow][Resume][/yellow] {name} (recorded for this session) is not running."
+        f"[warning][Resume][/warning] {name} (recorded for this session) is not running."
     )
     start_hint = getattr(idle, "start_hint", "") or getattr(
         idle.preset, "start_hint", ""
@@ -215,7 +215,7 @@ def offer_provider_start(
     if start_hint:
         console.print(f"  Start it with: {start_hint}")
     try:
-        answer = input_fn(f"[cyan]Start {name} now? [y/N]: [/cyan]").strip().lower()
+        answer = input_fn(f"[info]Start {name} now? [y/N]: [/info]").strip().lower()
     except (EOFError, KeyboardInterrupt):
         return runtimes, None
     if answer not in {"y", "yes"}:
@@ -225,7 +225,7 @@ def offer_provider_start(
     start = start_provider or _start_provider
     if not start(name):
         console.print(
-            f"[yellow][Resume][/yellow] Could not start {name} automatically; "
+            f"[warning][Resume][/warning] Could not start {name} automatically; "
             "start it yourself and resume again."
         )
         return runtimes, None
@@ -236,12 +236,12 @@ def offer_provider_start(
             getattr(record, "base_url", ""), current
         )
         if matched is not None:
-            console.print(f"[green][Resume][/green] {name} is running again.")
+            console.print(f"[success][Resume][/success] {name} is running again.")
             return current, matched
         if attempt + 1 < max(int(attempts), 1):
             pause(delay)
     console.print(
-        f"[yellow][Resume][/yellow] {name} did not answer after starting; "
+        f"[warning][Resume][/warning] {name} did not answer after starting; "
         "continuing without it."
     )
     return refresh(), None
@@ -309,7 +309,7 @@ def persist_provider_choice(
                     error_type=type(exc).__name__,
                 )
         console.print(
-            f"[yellow][Provider changed][/yellow] This session now runs on "
+            f"[warning][Provider changed][/warning] This session now runs on "
             f"{record.display_name} · {record.model}."
         )
     save_last_provider(
@@ -355,7 +355,7 @@ def provider_loss_guidance(*, runtime_name, session_id, discover):
     except (OSError, RuntimeError):
         reachable = []
     lines = [
-        f"[yellow][Provider lost][/yellow] {runtime_name} stopped answering; "
+        f"[warning][Provider lost][/warning] {runtime_name} stopped answering; "
         "the turn was not completed."
     ]
     if reachable:

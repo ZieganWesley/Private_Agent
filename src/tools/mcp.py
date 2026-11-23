@@ -19,8 +19,8 @@ def _remove_mcp_sandbox_dir(directory: str):
         pass
     except OSError as exc:
         console.print(
-            f"[yellow][Shutdown warning] Could not remove MCP workspace "
-            f"'{directory}': {type(exc).__name__}[/yellow]"
+            f"[warning][Shutdown warning] Could not remove MCP workspace "
+            f"'{directory}': {type(exc).__name__}[/warning]"
         )
         return
     if directory in _mcp_sandbox_dirs:

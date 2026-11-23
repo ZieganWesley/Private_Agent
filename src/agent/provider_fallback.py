@@ -6,9 +6,8 @@ from utils.run_logging import RUN_LOGGER, log_event
 
 from .model_selection import (
     _discover_available_local_runtimes,
-    _make_chat_model,
+    _make_local_openai_compatible_chat_model,
     _make_selected_local_chat_model,
-    inspect_model_capabilities,
     inspect_openai_compatible_model_capabilities,
 )
 from .provider_resume import persist_provider_choice, provider_loss_guidance
@@ -43,11 +42,7 @@ def next_local_provider(*, exclude_name, discover=None):
             continue
         model = str(models[0])
         try:
-            capabilities = (
-                inspect_model_capabilities(model)
-                if getattr(runtime, "kind", "") == "ollama"
-                else inspect_openai_compatible_model_capabilities(runtime, model)
-            )
+            capabilities = inspect_openai_compatible_model_capabilities(runtime, model)
         except (OSError, RuntimeError, ValueError) as exc:
             log_event(
                 RUN_LOGGER,
@@ -93,7 +88,7 @@ async def _recover_on_another_provider(
     runtime, model, capabilities = candidate
     ask = input_fn or console.input
     try:
-        answer = ask(f"[cyan]Retry this turn on {runtime.name} · {model}? [y/N]: [/cyan]")
+        answer = ask(f"[info]Retry this turn on {runtime.name} · {model}? [y/N]: [/info]")
     except (EOFError, KeyboardInterrupt):
         return None
     if str(answer).strip().lower() not in {"y", "yes"}:
@@ -120,8 +115,8 @@ async def _recover_on_another_provider(
         )
     except Exception as exc:  # noqa: BLE001 - a second provider may fail too; report it as a failed turn
         console.print(
-            f"[red][Provider fallback] {runtime.name} also failed "
-            f"({type(exc).__name__}); the turn was not completed.[/red]"
+            f"[error][Provider fallback] {runtime.name} also failed "
+            f"({type(exc).__name__}); the turn was not completed.[/error]"
         )
         return None
     persist_provider_choice(
@@ -134,7 +129,7 @@ async def _recover_on_another_provider(
         previous=None,
     )
     console.print(
-        f"[green][Provider switched][/green] Continuing this session on "
+        f"[success][Provider switched][/success] Continuing this session on "
         f"{runtime.name} · {model}."
     )
     return llm, llm_with_tools, model, capabilities, response, runtime
@@ -196,7 +191,7 @@ async def _invoke_initial_model_with_fallback(
                     candidate
                     for candidate in available_models
                     if candidate != selected_model
-                    and inspect_model_capabilities(candidate)["tools"] is True
+                    and inspect_openai_compatible_model_capabilities(selected_local_runtime, candidate)["tools"] is True
                 ),
                 None,
             )
@@ -204,7 +199,6 @@ async def _invoke_initial_model_with_fallback(
                 tool_unsupported
                 and provider_type == "local"
                 and selected_local_runtime is not None
-                and selected_local_runtime.kind == "ollama"
             )
             else None
         )
@@ -233,17 +227,14 @@ async def _invoke_initial_model_with_fallback(
                 return recovered
             raise RuntimeError(f"Local model request failed: {e}") from e
         console.print(
-            f"[yellow][Model fallback] {selected_model} rejected tool use; "
-            f"retrying with {fallback_model}.[/yellow]"
+            f"[warning][Model fallback] {selected_model} rejected tool use; "
+            f"retrying with {fallback_model}.[/warning]"
         )
         selected_model = fallback_model
-        capabilities = inspect_model_capabilities(selected_model)
-        llm = _make_chat_model(
+        capabilities = inspect_openai_compatible_model_capabilities(selected_local_runtime, selected_model)
+        llm = _make_local_openai_compatible_chat_model(
+            selected_local_runtime.base_url,
             selected_model,
-            thinking_enabled=thinking_enabled,
-            thinking_effort=thinking_effort,
-            supports_thinking=capabilities["thinking"],
-            context_window=capabilities.get("context_window"),
         )
         llm_with_tools = _bind_tools(llm, tools_list)
         response = await _invoke_with_status(

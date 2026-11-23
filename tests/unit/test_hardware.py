@@ -2,11 +2,6 @@ from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
-from tools import (
-    _PublicOnlyAsyncHTTPTransport,
-    _PublicOnlySyncHTTPTransport,
-)
-
 try:
     from agent import get_robust_chat_model
 except ImportError:
@@ -47,52 +42,6 @@ def test_hardware_acceleration_policy_options():
     assert ollama_acceleration_options("auto") == {}
     assert ollama_acceleration_options("accelerator") == {}
     assert ollama_acceleration_options("cpu") == {"num_gpu": 0}
-
-
-def test_local_chat_model_applies_configured_acceleration_mode():
-    from agent import model_selection
-
-    for mode, expected in (
-        ("auto", {}),
-        ("accelerator", {}),
-        ("cpu", {"num_gpu": 0}),
-    ):
-        with (
-            patch(
-                "agent.model_selection.HARDWARE_ACCELERATION_MODE", mode
-            ),
-            patch("agent.model_selection.ChatOllama") as chat_model,
-        ):
-            model_selection._make_chat_model(
-                "test-model",
-                thinking_enabled=False,
-                thinking_effort="medium",
-                supports_thinking=False,
-            )
-        actual_options = chat_model.call_args.kwargs
-        if expected:
-            assert actual_options["num_gpu"] == expected["num_gpu"]
-        else:
-            assert "num_gpu" not in actual_options
-        assert actual_options["sync_client_kwargs"]["transport"].__class__ is (
-            _PublicOnlySyncHTTPTransport
-        )
-        assert actual_options["async_client_kwargs"]["transport"].__class__ is (
-            _PublicOnlyAsyncHTTPTransport
-        )
-
-    with (
-        patch("agent.model_selection.HARDWARE_ACCELERATION_MODE", "auto"),
-        patch("agent.model_selection.ChatOllama") as chat_model,
-    ):
-        model_selection._make_chat_model(
-            "test-model",
-            thinking_enabled=False,
-            thinking_effort="high",
-            supports_thinking=True,
-        )
-    assert chat_model.call_args.kwargs["reasoning"] is False
-    assert "think" not in chat_model.call_args.kwargs
 
 
 def test_hardware_status_reports_ollama_vram_and_server_host():

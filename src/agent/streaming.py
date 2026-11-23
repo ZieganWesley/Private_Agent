@@ -12,6 +12,8 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from langchain_core.messages import AIMessage, AIMessageChunk
+from rich.live import Live
+from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
@@ -207,6 +209,8 @@ async def _invoke_with_budget(
             first_token_at = None
             emitted_header = False
             reasoning_open = False
+            streamed_text = ""
+            live: Live | None = None
             try:
                 async for chunk in stream_method(messages):
                     aggregate = chunk if aggregate is None else aggregate + chunk
@@ -245,18 +249,25 @@ async def _invoke_with_budget(
                             reasoning_open = False
                         if not emitted_header:
                             console.print(
-                                f"\n[bold green]AI ({model_name}):[/bold green] ",
+                                f"\n[bold success]AI ({model_name}):[/bold success] ",
                                 end="",
                             )
                             emitted_header = True
-                        console.print(
-                            text,
-                            end="",
-                            markup=False,
-                            highlight=False,
-                            soft_wrap=True,
-                        )
+                        streamed_text += text
+                        if live is None:
+                            live = Live(
+                                Markdown(streamed_text),
+                                console=console,
+                                refresh_per_second=8,
+                                transient=False,
+                            )
+                            live.start()
+                        else:
+                            live.update(Markdown(streamed_text))
             finally:
+                if live is not None:
+                    with contextlib.suppress(Exception):  # noqa: BLE001
+                        live.stop()
                 indicator.stop()
                 if reasoning_open:
                     console.print()
@@ -535,7 +546,7 @@ async def _invoke_with_status(
                 error_type=type(exc).__name__,
             )
             console.print(
-                "[red][Model request][/red] Failed "
+                "[error][Model request][/error] Failed "
                 f"(reference {reference_id}). Retry or use `switch` to choose "
                 "another provider."
             )
@@ -579,7 +590,7 @@ async def _invoke_with_status(
                 error_type=type(exc).__name__,
             )
             console.print(
-                "[red][Model request][/red] Failed "
+                "[error][Model request][/error] Failed "
                 f"(reference {reference_id}). Retry or use `switch` to choose "
                 "another provider."
             )

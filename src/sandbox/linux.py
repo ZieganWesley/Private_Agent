@@ -5,6 +5,7 @@ import os
 import pathlib
 import shlex
 import shutil
+import threading
 import uuid
 
 from code_tasks.snapshots import SnapshotError, record_snapshot
@@ -57,6 +58,68 @@ class SandboxManager:
     def get_root_or_none(cls) -> pathlib.Path | None:
         """Return the configured workspace root, or None when unset."""
         return cls.root_dir
+
+    # Optional network access for commands run in the OS sandbox.  It is
+    # intentionally disabled by default; callers must explicitly opt in.
+    allow_network: bool = False
+    network_allowed: bool = False
+    _network_lock = threading.RLock()
+
+    @classmethod
+    def _coerce_network_permission(cls, value: object) -> bool:
+        """Validate an untrusted permission value without accepting truthiness."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int) and value in (0, 1):
+            return bool(value)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "enabled"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "disabled"}:
+                return False
+        raise ValueError(
+            "Sandbox network permission must be a boolean or one of: "
+            "true, false, 1, 0, yes, no, on, off."
+        )
+
+    @classmethod
+    def set_network_allowed(cls, value: object = True) -> bool:
+        """Enable or disable network access for sandboxed commands."""
+        coerced = cls._coerce_network_permission(value)
+        with cls._network_lock:
+            cls.allow_network = coerced
+            cls.network_allowed = coerced
+        return coerced
+
+    # Compatibility aliases for callers/tests that use either name.
+    set_network_permission = set_network_allowed
+    enable_network = set_network_allowed
+
+    @classmethod
+    def disable_network(cls) -> bool:
+        return cls.set_network_allowed(False)
+
+    @classmethod
+    def is_network_allowed(cls) -> bool:
+        """Return the effective, validated sandbox network permission.
+
+        Direct class-attribute assignments can bypass the setter, so validate
+        both aliases here and fail closed for any unrecognised value.
+        """
+        with cls._network_lock:
+            allowed = False
+            for value in (
+                getattr(cls, "allow_network", False),
+                getattr(cls, "network_allowed", False),
+            ):
+                try:
+                    if cls._coerce_network_permission(value):
+                        allowed = True
+                except ValueError:
+                    # Any tampered/invalid alias disables the whole permission.
+                    return False
+            return allowed
 
     @classmethod
     def validate_path(cls, file_path: str) -> pathlib.Path:

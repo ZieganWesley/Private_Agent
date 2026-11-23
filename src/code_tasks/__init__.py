@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from config import (
     CODE_TASK_GIT_TIMEOUT,
 )
+from platform_support import detect_platform
 from ui.console import console
 
 from .workspace import CodeTaskWorkspace as CodeTaskWorkspace
@@ -74,8 +75,8 @@ def _run_git(
 
 def isolation_unavailable_reason() -> str | None:
     """Explain why OS-isolated project commands cannot run on this host."""
-    system = platform.system()
-    if system == "Darwin":
+    info = detect_platform()
+    if info.is_macos:
         if not shutil.which("sandbox-exec"):
             return (
                 "Install macOS sandbox support (sandbox-exec) for filesystem, "
@@ -84,7 +85,7 @@ def isolation_unavailable_reason() -> str | None:
                 "features are needed."
             )
         return None
-    if system != "Linux":
+    if not info.is_linux:
         return (
             "OS-level command isolation is currently supported only on Linux and macOS."
         )
@@ -121,7 +122,7 @@ def _isolated_command(
     unavailable_reason = isolation_unavailable_reason()
     if unavailable_reason:
         raise RuntimeError(f"Command execution is disabled: {unavailable_reason}")
-    if platform.system() == "Darwin":
+    if detect_platform().is_macos:
         sandbox_exec = shutil.which("sandbox-exec")
         if not sandbox_exec:
             raise RuntimeError(
@@ -334,15 +335,15 @@ def _isolated_command(
 def _ask_without_git(reason: str) -> bool:
     if not sys.stdin.isatty():
         console.print(
-            f"[red]Git is unavailable for this code task ({reason}). "
-            "A user must explicitly approve continuing without Git.[/red]"
+            f"[error]Git is unavailable for this code task ({reason}). "
+            "A user must explicitly approve continuing without Git.[/error]"
         )
         return False
-    console.print(f"[yellow]Git checkpointing is unavailable: {reason}[/yellow]")
+    console.print(f"[warning]Git checkpointing is unavailable: {reason}[/warning]")
     return (
         console.input(
-            "[yellow]Proceed with this isolated code task without Git initialization "
-            "and checkpoint commits? \\[y/N]: [/yellow]"
+            "[warning]Proceed with this isolated code task without Git initialization "
+            "and checkpoint commits? \\[y/N]: [/warning]"
         )
         .strip()
         .lower()

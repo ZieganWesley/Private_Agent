@@ -6,16 +6,17 @@ import ipaddress
 import json
 import logging
 import os
+import socket
 import subprocess
 import sys
 import threading
 import time
 import urllib.parse
 from collections.abc import Iterable
+from typing import Any
 
 import httpcore
 import httpx
-from bs4 import BeautifulSoup
 from httpcore._backends.base import (
     SOCKET_OPTION,
     AsyncNetworkBackend,
@@ -110,44 +111,57 @@ def _parse_resolver_output(output: str):
     return addresses
 
 
+def _dns_timeout_value(timeout: float | None) -> float:
+    if timeout is None:
+        return NETWORK_REQUEST_TIMEOUT
+    return min(max(0.0, float(timeout)), NETWORK_REQUEST_TIMEOUT)
+
+
 def _getaddrinfo_with_timeout(host: str, port: int, timeout: float):
-    """Resolve in a killable child so stalled system DNS cannot outlive its deadline."""
-    try:
-        result = subprocess.run(
-            _resolver_command(host, port),
-            capture_output=True,
-            check=True,
-            close_fds=True,
-            env=_resolver_environment(),
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.") from exc
-    except subprocess.CalledProcessError as exc:
-        raise OSError("Outbound hostname could not be resolved.") from exc
-    return _parse_resolver_output(result.stdout)
+    """Resolve in a daemon thread so stalled DNS cannot outlive its deadline."""
+    timeout = _dns_timeout_value(timeout)
+    result: dict[str, Any] = {}
+    error: dict[str, BaseException] = {}
+
+    def _resolve() -> None:
+        try:
+            result["records"] = socket.getaddrinfo(
+                host, port, 0, socket.SOCK_STREAM
+            )
+        except BaseException as exc:  # noqa: BLE001 - re-raised below with context
+            error["exception"] = exc
+
+    thread = threading.Thread(
+        target=_resolve, name="outbound-dns-resolver", daemon=True
+    )
+    thread.start()
+    thread.join(timeout)
+    if thread.is_alive():
+        raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.")
+    if "exception" in error:
+        exc = error["exception"]
+        if isinstance(exc, (socket.gaierror, OSError)):
+            raise OSError("Outbound hostname could not be resolved.") from exc
+        raise exc
+    return result.get("records", [])
 
 
 async def _getaddrinfo_async_with_timeout(host: str, port: int, timeout: float):
-    """Resolve asynchronously and kill/reap the resolver if cancelled or timed out."""
-    process = await asyncio.create_subprocess_exec(
-        *_resolver_command(host, port),
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env=_resolver_environment(),
-    )
+    """Resolve in a worker thread so stalled DNS cannot outlive its deadline."""
+    timeout = _dns_timeout_value(timeout)
+    loop = asyncio.get_running_loop()
     try:
-        stdout, _ = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        records = await asyncio.wait_for(
+            loop.run_in_executor(
+                None, socket.getaddrinfo, host, port, 0, socket.SOCK_STREAM
+            ),
+            timeout=timeout,
+        )
     except asyncio.TimeoutError as exc:
-        await _kill_and_reap_resolver(process)
         raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.") from exc
-    except asyncio.CancelledError:
-        await _kill_and_reap_resolver(process)
-        raise
-    if process.returncode:
-        raise OSError("Outbound hostname could not be resolved.")
-    return _parse_resolver_output(stdout.decode("utf-8", errors="strict"))
+    except (socket.gaierror, OSError) as exc:
+        raise OSError("Outbound hostname could not be resolved.") from exc
+    return records
 
 
 async def _kill_and_reap_resolver(process):
@@ -494,8 +508,8 @@ async def close_outbound_http_clients():
                 error_type=type(exc).__name__,
             )
             console.print(
-                f"[yellow][Shutdown warning] Could not close an outbound "
-                f"HTTP client: {type(exc).__name__}[/yellow]"
+                f"[warning][Shutdown warning] Could not close an outbound "
+                f"HTTP client: {type(exc).__name__}[/warning]"
             )
 
 
@@ -784,6 +798,8 @@ def search_duckduckgo(query: str, client_factory=public_only_sync_client) -> str
                             raise ValueError(
                                 f"Response exceeds the {MAX_WEBPAGE_BYTES}-byte size limit."
                             )
+                    from bs4 import BeautifulSoup
+
                     soup = BeautifulSoup(
                         bytes(body).decode(
                             response.encoding or "utf-8", errors="replace"

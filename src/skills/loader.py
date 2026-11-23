@@ -64,8 +64,8 @@ def load_skills_from_folder(folder_path: str) -> dict[str, AgentSkill]:
                 metadata, body = _split_front_matter(content)
             except (ValueError, yaml.YAMLError) as exc:
                 console.print(
-                    f"[yellow][Warning] Ignoring invalid front matter in "
-                    f"{markdown_file.name}: {exc}[/yellow]"
+                    f"[warning][Warning] Ignoring invalid front matter in "
+                    f"{markdown_file.name}: {exc}[/warning]"
                 )
                 metadata, body = {}, content
             skill_name = _metadata_text(metadata, "name") or (
@@ -82,7 +82,7 @@ def load_skills_from_folder(folder_path: str) -> dict[str, AgentSkill]:
             )
         except OSError as exc:
             console.print(
-                f"[red][Warning] Failed loading markdown skill file "
-                f"{markdown_file.name}: {exc}[/red]"
+                f"[error][Warning] Failed loading markdown skill file "
+                f"{markdown_file.name}: {exc}[/error]"
             )
     return skills

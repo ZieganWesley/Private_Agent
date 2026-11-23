@@ -12,7 +12,7 @@ def ask_user(question: str, options: list[str] | None = None) -> str:
     """Ask the user a clarifying question and return their answer."""
     from ui.console import console
 
-    console.print(f"[cyan][Question][/cyan] {question}")
+    console.print(f"[info][Question][/info] {question}")
     if options:
         for index, option in enumerate(options, 1):
             console.print(f"  {index}. {option}")

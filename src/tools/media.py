@@ -28,6 +28,7 @@ from config import (
     MAX_VIDEO_SECONDS,
     MICROPHONE_SAMPLE_RATE,
 )
+from platform_support import detect_platform
 from sandbox import SandboxManager
 from ui.console import console
 
@@ -107,7 +108,7 @@ def list_microphone_devices() -> str:
         return (
             "\n".join(available)
             if available
-            else "No microphone input devices were found."
+            else _media_access_message("Microphone")
         )
     except OSError as exc:
         return f"Could not list microphone devices ({type(exc).__name__}): {exc}"
@@ -183,10 +184,27 @@ def approve_local_capture(tool_name: str, args: dict) -> bool:
     else:
         privacy_action = "Image processing stays on this machine."
     answer = console.input(
-        f"[yellow]Allow {tool_name.replace('_', ' ')} {details}? "
-        f"{privacy_action} \\[y/N]: [/yellow]"
+        f"[warning]Allow {tool_name.replace('_', ' ')} {details}? "
+        f"{privacy_action} \\[y/N]: [/warning]"
     )
     return answer.strip().lower() == "y"
+
+
+def _media_access_message(device: str) -> str:
+    """Return a platform-specific explanation for unavailable media access."""
+    info = detect_platform()
+    if info.is_wsl:
+        return (
+            f"{device} access is unavailable on this WSL installation. WSL does not "
+            f"provide {device.lower()} passthrough by default; use workspace files "
+            "or run on native Linux."
+        )
+    if info.is_termux:
+        return (
+            f"{device} access is unavailable. Grant Termux the required "
+            "permission in Android settings, then retry."
+        )
+    return f"{device} access is unavailable on this {info.name} system."
 
 
 def _normalize_video_frame(cv2, frame) -> bytes | None:
@@ -416,7 +434,10 @@ def capture_webcam_image(device_index: int = DEFAULT_CAMERA_DEVICE_INDEX) -> str
     try:
         capture = cv2.VideoCapture(device_index)
         if not capture.isOpened():
-            return f"Could not open camera device {device_index}; check its index and permissions."
+            return (
+                f"Could not open camera device {device_index}; check its index and "
+                f"permissions. {_media_access_message('Webcam')}"
+            )
         ok, frame = capture.read()
         if not ok or frame is None:
             return f"Camera device {device_index} did not provide a frame."
@@ -589,7 +610,10 @@ def record_microphone_audio(
         )
         sd.wait()
     except RuntimeError as exc:
-        return f"Microphone recording failed ({type(exc).__name__}): {exc}"
+        return (
+            f"Microphone recording failed ({type(exc).__name__}): {exc} "
+            f"{_media_access_message('Microphone')}"
+        )
 
     try:
         with io.BytesIO() as audio_file:

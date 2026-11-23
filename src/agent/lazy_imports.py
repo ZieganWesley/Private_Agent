@@ -25,6 +25,12 @@ class _LazyProxy:
     def __getattr__(self, item: str):
         return getattr(self._load(), item)
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self.__slots__:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._load(), name, value)
+
     def __call__(self, *args: Any, **kwargs: Any):
         return self._load()(*args, **kwargs)
 
@@ -45,6 +51,9 @@ class _LazyProxy:
 
     def __len__(self) -> int:
         return len(self._load())
+
+    def __bool__(self) -> bool:
+        return bool(self._load())
 
     def items(self):
         return self._load().items()
@@ -80,6 +89,16 @@ _LAZY_SPECS: dict[str, tuple[str, str]] = {
     "describe_tool_catalog": ("tools", "describe_tool_catalog"),
     "get_tool_context": ("tools", "get_tool_context"),
     "has_internet_connection": ("tools", "has_internet_connection"),
+    "mark_internet_unavailable": ("tools", "mark_internet_unavailable"),
+    "mark_network_unavailable": ("tools", "mark_network_unavailable"),
+    "mark_offline": ("tools", "mark_offline"),
+    "record_network_failure": ("tools", "record_network_failure"),
+    "record_request_error": ("tools", "record_request_error"),
+    "record_request_failure": ("tools", "record_request_failure"),
+    "note_network_failure": ("tools", "note_network_failure"),
+    "set_offline": ("tools", "set_offline"),
+    "reset_internet_check_cache": ("tools", "reset_internet_check_cache"),
+    "reset_internet_check_for_turn": ("tools", "reset_internet_check_for_turn"),
     "load_configured_mcp_tools": ("tools", "load_configured_mcp_tools"),
     "ollama_client_kwargs": ("tools", "ollama_client_kwargs"),
     "set_tool_context": ("tools", "set_tool_context"),
@@ -94,7 +113,6 @@ _LAZY_SPECS: dict[str, tuple[str, str]] = {
     "_discover_available_local_runtimes": ("agent.model_selection", "_discover_available_local_runtimes"),
     "_effective_context_window": ("agent.model_selection", "_effective_context_window"),
     "_make_selected_local_chat_model": ("agent.model_selection", "_make_selected_local_chat_model"),
-    "inspect_model_capabilities": ("agent.model_selection", "inspect_model_capabilities"),
     "inspect_openai_compatible_model_capabilities": ("agent.model_selection", "inspect_openai_compatible_model_capabilities"),
     "select_online_model": ("agent.model_selection", "select_online_model"),
     "_display_tool_error": ("agent.tool_display", "_display_tool_error"),
@@ -110,6 +128,9 @@ _LAZY_SPECS: dict[str, tuple[str, str]] = {
     "checkpoint_code_task": ("code_tasks", "checkpoint_code_task"),
     "finalize_code_task": ("code_tasks", "finalize_code_task"),
     "run_project_unit_tests": ("code_tasks", "run_project_unit_tests"),
+    "load_skills_from_folder": ("skills", "load_skills_from_folder"),
+    "match_skill_by_relevancy": ("skills", "match_skill_by_relevancy"),
+    "_record_code_task_validation": ("agent.learning", "_record_code_task_validation"),
 }
 
 
@@ -127,6 +148,12 @@ class _LazyModule:
 
     def __getattr__(self, item: str):
         return getattr(self._load(), item)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in self.__slots__:
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self._load(), name, value)
 
     def __setattr__(self, key: str, value: Any) -> None:
         if key.startswith("_"):

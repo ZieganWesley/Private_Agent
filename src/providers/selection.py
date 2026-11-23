@@ -17,6 +17,10 @@ from .adapters import ProviderPreset, all_presets
 STATE_ENV = "PRIVATE_AGENT_PROVIDER_STATE"
 PROVIDER_ENV = "PRIVATE_AGENT_PROVIDER"
 MODEL_ENV = "PRIVATE_AGENT_MODEL"
+WORKSPACE_ENV = "PRIVATE_AGENT_WORKSPACE"
+RAG_ENV = "PRIVATE_AGENT_RAG"
+MODE_ENV = "PRIVATE_AGENT_MODE"
+PERMISSION_MODE_ENV = "PRIVATE_AGENT_PERMISSION_MODE"
 
 
 def state_path() -> pathlib.Path:
@@ -158,6 +162,24 @@ def requested_provider() -> str:
 def requested_model() -> str:
     """Return the model requested on the command line, if any."""
     return os.environ.get(MODEL_ENV, "").strip()
+
+
+def requested_workspace() -> str:
+    """Return the workspace root requested on the command line, if any."""
+    return os.environ.get(WORKSPACE_ENV, "").strip()
+
+
+def requested_rag() -> str:
+    """Return the RAG documents directory requested on the command line."""
+    return os.environ.get(RAG_ENV, "").strip()
+
+
+def requested_mode() -> str:
+    """Return the permission mode requested on the command line, if any."""
+    return (
+        os.environ.get(MODE_ENV, "").strip()
+        or os.environ.get(PERMISSION_MODE_ENV, "").strip()
+    )
 
 
 def match_runtime(name: str, runtimes: Iterable[Any]) -> Any | None:

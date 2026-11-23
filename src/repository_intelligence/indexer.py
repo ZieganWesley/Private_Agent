@@ -117,7 +117,10 @@ class RepositoryIndex:
 
     def __init__(self, db_path: str | None = None, root_path: str | None = None):
         if db_path is None:
-            db_path = str(Path.home() / ".config" / "private_agent" / "repo_index.db")
+            if root_path is not None:
+                db_path = str(Path(root_path).expanduser().resolve() / ".private_agent" / "repo_index.db")
+            else:
+                db_path = str(Path.cwd() / ".private_agent" / "repo_index.db")
         self.db_path = str(Path(db_path).expanduser())
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.root_path = str(Path(root_path).expanduser().resolve()) if root_path else None
@@ -163,6 +166,25 @@ class RepositoryIndex:
                 target_name TEXT,
                 kind TEXT
             );
+            CREATE TABLE IF NOT EXISTS graph_nodes (
+                id INTEGER PRIMARY KEY,
+                repository_id INTEGER,
+                kind TEXT,
+                name TEXT,
+                file_path TEXT,
+                UNIQUE(repository_id, kind, name, file_path)
+            );
+            CREATE TABLE IF NOT EXISTS graph_edges (
+                id INTEGER PRIMARY KEY,
+                repository_id INTEGER,
+                source TEXT,
+                target TEXT,
+                kind TEXT,
+                file_path TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_graph_nodes_name ON graph_nodes(name);
+            CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source);
+            CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target);
             CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
             CREATE INDEX IF NOT EXISTS idx_symbols_file ON symbols(file_id);
             CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_symbol);
@@ -170,6 +192,134 @@ class RepositoryIndex:
             """
         )
         self.conn.commit()
+
+    def graph_nodes(self, kind: str | None = None) -> list[dict[str, Any]]:
+        """Return repository knowledge-graph nodes."""
+        with self._lock:
+            cur = self.conn.cursor()
+            if kind:
+                cur.execute(
+                    "SELECT id, kind, name, file_path FROM graph_nodes WHERE kind=?",
+                    (kind,),
+                )
+            else:
+                cur.execute("SELECT id, kind, name, file_path FROM graph_nodes")
+            return [
+                {"id": row[0], "kind": row[1], "name": row[2], "file": row[3]}
+                for row in cur.fetchall()
+            ]
+
+    def graph_edges(self, kind: str | None = None) -> list[dict[str, Any]]:
+        """Return repository knowledge-graph edges."""
+        with self._lock:
+            cur = self.conn.cursor()
+            if kind:
+                cur.execute(
+                    "SELECT id, source, target, kind, file_path FROM graph_edges WHERE kind=?",
+                    (kind,),
+                )
+            else:
+                cur.execute("SELECT id, source, target, kind, file_path FROM graph_edges")
+            return [
+                {"id": row[0], "source": row[1], "target": row[2], "kind": row[3], "file": row[4]}
+                for row in cur.fetchall()
+            ]
+
+    def graph_neighbors(self, node: str, direction: str = "both") -> list[dict[str, Any]]:
+        """Return edges incident to a graph node."""
+        with self._lock:
+            cur = self.conn.cursor()
+            rows = []
+            if direction in {"out", "both"}:
+                cur.execute(
+                    "SELECT source, target, kind, file_path FROM graph_edges WHERE source=?",
+                    (node,),
+                )
+                rows.extend(
+                    {"source": r[0], "target": r[1], "kind": r[2], "file": r[3], "direction": "out"}
+                    for r in cur.fetchall()
+                )
+            if direction in {"in", "both"}:
+                cur.execute(
+                    "SELECT source, target, kind, file_path FROM graph_edges WHERE target=?",
+                    (node,),
+                )
+                rows.extend(
+                    {"source": r[0], "target": r[1], "kind": r[2], "file": r[3], "direction": "in"}
+                    for r in cur.fetchall()
+                )
+            return rows
+
+    def impact_analysis(self, target: str, max_depth: int = 5) -> list[dict[str, Any]]:
+        """Return nodes that can reach or be reached by *target*."""
+        seen: set[str] = {target}
+        frontier = [target]
+        impacted: list[dict[str, Any]] = []
+        depth = 0
+        while frontier and depth < max_depth:
+            next_frontier: list[str] = []
+            with self._lock:
+                cur = self.conn.cursor()
+                for node in frontier:
+                    cur.execute(
+                        "SELECT source, target, kind, file_path FROM graph_edges WHERE source=? OR target=?",
+                        (node, node),
+                    )
+                    for source, target, kind, file_path in cur.fetchall():
+                        other = target if source == node else source
+                        if other not in seen:
+                            seen.add(other)
+                            next_frontier.append(other)
+                            impacted.append(
+                                {
+                                    "node": other,
+                                    "via": node,
+                                    "kind": kind,
+                                    "file": file_path,
+                                    "depth": depth + 1,
+                                }
+                            )
+            frontier = next_frontier
+            depth += 1
+        return impacted
+
+    def path_between(self, source: str, target: str, max_depth: int = 8) -> list[str] | None:
+        """Find a shortest path between two graph nodes."""
+        if source == target:
+            return [source]
+        visited = {source}
+        queue: list[tuple[str, list[str]]] = [(source, [source])]
+        depth = 0
+        while queue and depth < max_depth:
+            next_queue: list[tuple[str, list[str]]] = []
+            for node, path in queue:
+                with self._lock:
+                    cur = self.conn.cursor()
+                    cur.execute(
+                        "SELECT target FROM graph_edges WHERE source=? UNION SELECT source FROM graph_edges WHERE target=?",
+                        (node, node),
+                    )
+                    neighbors = [r[0] for r in cur.fetchall()]
+                for neighbor in neighbors:
+                    if neighbor == target:
+                        return path + [neighbor]
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        next_queue.append((neighbor, path + [neighbor]))
+            queue = next_queue
+            depth += 1
+        return None
+
+    def to_mermaid(self) -> str:
+        """Render the repository graph as Mermaid."""
+        lines = ["graph TD"]
+        for node in self.graph_nodes():
+            safe = node["name"].replace("\"", "'")
+            lines.append(f'  N{node["id"]}["{safe}"]')
+        for edge in self.graph_edges():
+            # Mermaid needs node identifiers; use names as stable labels.
+            lines.append(f'  "{edge["source"]}" -->|{edge["kind"]}| "{edge["target"]}"')
+        return "\n".join(lines)
 
     def close(self) -> None:
         import contextlib
@@ -234,6 +384,11 @@ class RepositoryIndex:
             else:
                 with self._lock:
                     cur = self.conn.cursor()
+                    cur.execute("SELECT id FROM files WHERE repository_id=? AND path=?", (repo_id, rel))
+                    old_row = cur.fetchone()
+                    if old_row:
+                        cur.execute("DELETE FROM symbols WHERE file_id=?", (old_row[0],))
+                        cur.execute("DELETE FROM edges WHERE file_id=?", (old_row[0],))
                     cur.execute(
                         "DELETE FROM files WHERE repository_id=? AND path=?",
                         (repo_id, rel),
@@ -266,6 +421,7 @@ class RepositoryIndex:
             files_indexed += 1
         # remove deleted files
         self._prune_deleted(root, repo_id)
+        self._rebuild_graph(repo_id)
         return {
             "root": str(root),
             "files_indexed": files_indexed,
@@ -293,6 +449,43 @@ class RepositoryIndex:
                     c.execute("DELETE FROM edges WHERE file_id=?", (fid,))
                     c.execute("DELETE FROM files WHERE id=?", (fid,))
                     self.conn.commit()
+
+    def _rebuild_graph(self, repo_id: int) -> None:
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM graph_nodes WHERE repository_id=?", (repo_id,))
+            cur.execute("DELETE FROM graph_edges WHERE repository_id=?", (repo_id,))
+            cur.execute("SELECT id, path FROM files WHERE repository_id=?", (repo_id,))
+            files = cur.fetchall()
+            for _fid, path in files:
+                cur.execute(
+                    "INSERT OR IGNORE INTO graph_nodes(repository_id, kind, name, file_path) VALUES(?,?,?,?)",
+                    (repo_id, "file", path, path),
+                )
+            cur.execute(
+                "SELECT s.id, s.name, s.kind, f.path FROM symbols s JOIN files f ON s.file_id=f.id WHERE f.repository_id=?",
+                (repo_id,),
+            )
+            for _sid, name, kind, path in cur.fetchall():
+                cur.execute(
+                    "INSERT OR IGNORE INTO graph_nodes(repository_id, kind, name, file_path) VALUES(?,?,?,?)",
+                    (repo_id, kind or "symbol", name, path),
+                )
+                cur.execute(
+                    "INSERT INTO graph_edges(repository_id, source, target, kind, file_path) VALUES(?,?,?,?,?)",
+                    (repo_id, path, name, "contains", path),
+                )
+            cur.execute(
+                "SELECT e.source_symbol, e.target_name, e.kind, f.path FROM edges e JOIN files f ON e.file_id=f.id WHERE f.repository_id=?",
+                (repo_id,),
+            )
+            for source, target, kind, path in cur.fetchall():
+                if source and target:
+                    cur.execute(
+                        "INSERT INTO graph_edges(repository_id, source, target, kind, file_path) VALUES(?,?,?,?,?)",
+                        (repo_id, source, target, kind or "reference", path),
+                    )
+            self.conn.commit()
 
     def _parse_file(self, path: Path, rel: str, suffix: str) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
         return _parse_file_impl(path, rel, suffix)
@@ -335,8 +528,8 @@ class RepositoryIndex:
     def find_references(self, name: str) -> list[dict[str, Any]]:
         cur = self.conn.cursor()
         cur.execute(
-            "SELECT e.source_symbol, f.path, e.kind FROM edges e JOIN files f ON e.file_id=f.id WHERE e.target_name LIKE ?",
-            (f"%{name}%",),
+            "SELECT e.source_symbol, f.path, e.kind FROM edges e JOIN files f ON e.file_id=f.id WHERE e.target_name = ?",
+            (name,),
         )
         return [{"source": r[0], "file": r[1], "kind": r[2]} for r in cur.fetchall()]
 

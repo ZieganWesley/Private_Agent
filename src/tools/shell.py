@@ -38,6 +38,21 @@ _SHELL_CWD_LOCK = threading.RLock()
 _SHELL_CWD = _SANDBOX_WORKSPACE
 
 
+def _sandbox_network_allowed() -> bool:
+    """Return whether the current sandboxed command may use the network."""
+    code_task = None
+    try:
+        code_task = get_tool_context().code_task
+    except Exception:  # noqa: BLE001 - tool context must never crash shell execution
+        code_task = None
+    if code_task is not None:
+        return bool(getattr(code_task, "allow_network", False))
+    try:
+        return SandboxManager.is_network_allowed()
+    except Exception:  # noqa: BLE001 - permission lookup must fail closed
+        return False
+
+
 def _current_shell_cwd(sandbox_root: Path) -> str:
     """Return the sandbox path used as the starting directory for shell calls."""
     global _SHELL_CWD
@@ -103,14 +118,13 @@ def run_shell_command(command: str, timeout: int | None = None) -> str:
         import code_tasks
 
         console.print(
-            "[yellow]Commands run in a Linux OS sandbox with "
+            "[warning]Commands run in a Linux OS sandbox with "
             + (
                 "network access enabled by the approved coding access level, "
-                if get_tool_context().code_task is not None
-                and getattr(get_tool_context().code_task, "allow_network", False)
+                if _sandbox_network_allowed()
                 else "network disabled, "
             )
-            + f"workspace-only writes, and resource limits.{risk_notice}[/yellow]"
+            + f"workspace-only writes, and resource limits.{risk_notice}[/warning]"
         )
         if not _tool_invocation_approved.get():
             return (
@@ -146,10 +160,7 @@ def run_shell_command(command: str, timeout: int | None = None) -> str:
         isolated_command, environment = code_tasks._isolated_command(
             command_args,
             sandbox_root,
-            allow_network=(
-                get_tool_context().code_task is not None
-                and getattr(get_tool_context().code_task, "allow_network", False)
-            ),
+            allow_network=_sandbox_network_allowed(),
         )
         effective_timeout = (
             SHELL_COMMAND_TIMEOUT
@@ -261,10 +272,7 @@ def start_background_process(command: str, timeout: int | None = None) -> str:
         isolated_command, environment = code_tasks._isolated_command(
             command_args,
             sandbox_root,
-            allow_network=(
-                get_tool_context().code_task is not None
-                and getattr(get_tool_context().code_task, "allow_network", False)
-            ),
+            allow_network=_sandbox_network_allowed(),
         )
         process_id = uuid.uuid4().hex[:12]
         output_handle = tempfile.NamedTemporaryFile(  # noqa: SIM115

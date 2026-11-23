@@ -44,14 +44,14 @@ def _path_line(path: str) -> str:
 
 def _format_undone(result: snapshots.UndoResult, deleted_messages: int) -> str:
     parts = [
-        f"[green][Undo][/green] Restored turn {_short(result.turn_id)} "
+        f"[success][Undo][/success] Restored turn {_short(result.turn_id)} "
         f"({result.turn_created_at or 'time unknown'})."
     ]
     if result.restored:
-        parts.append(f"[green]Restored {len(result.restored)} file(s):[/green]")
+        parts.append(f"[success]Restored {len(result.restored)} file(s):[/success]")
         parts.extend(_path_line(path) for path in result.restored)
     if result.deleted:
-        parts.append(f"[green]Removed {len(result.deleted)} created file(s):[/green]")
+        parts.append(f"[success]Removed {len(result.deleted)} created file(s):[/success]")
         parts.extend(_path_line(path) for path in result.deleted)
     if not result.restored and not result.deleted:
         parts.append(
@@ -59,7 +59,7 @@ def _format_undone(result: snapshots.UndoResult, deleted_messages: int) -> str:
         )
     if deleted_messages:
         parts.append(
-            f"[green]Conversation rewound:[/green] removed {deleted_messages} "
+            f"[success]Conversation rewound:[/success] removed {deleted_messages} "
             "message(s) saved by that turn."
         )
     else:
@@ -72,7 +72,7 @@ def _format_undone(result: snapshots.UndoResult, deleted_messages: int) -> str:
 
 def _format_partial(result: snapshots.UndoResult) -> str:
     lines = [
-        f"[red][Undo error][/red] Could not fully restore turn "
+        f"[error][Undo error][/error] Could not fully restore turn "
         f"{_short(result.turn_id)}. The conversation was left untouched so you "
         "can retry.",
     ]
@@ -120,7 +120,7 @@ def undo_last_turn(
         )
         return UndoOutcome(
             "error",
-            f"[red][Undo error][/red] Could not read the snapshot manifest: "
+            f"[error][Undo error][/error] Could not read the snapshot manifest: "
             f"{type(exc).__name__}: {exc}\nNothing was changed.",
         )
 
@@ -128,7 +128,7 @@ def undo_last_turn(
         log_event(RUN_LOGGER, "session.undo_empty", session_id=session_id)
         return UndoOutcome(
             "empty",
-            "[yellow][Undo][/yellow] Nothing to undo: this session has no "
+            "[warning][Undo][/warning] Nothing to undo: this session has no "
             "recorded workspace changes left. `/undo` restores edits made by "
             "agent tools in earlier turns of this workspace.",
         )
@@ -142,7 +142,7 @@ def undo_last_turn(
         )
         return UndoOutcome(
             "already_undone",
-            f"[yellow][Undo][/yellow] Turn {_short(result.turn_id)} was already "
+            f"[warning][Undo][/warning] Turn {_short(result.turn_id)} was already "
             "undone; nothing was changed.",
         )
     if result.status == "partial":
@@ -176,7 +176,7 @@ def undo_last_turn(
         )
         return UndoOutcome(
             "partial",
-            f"[red][Undo warning][/red] Turn {_short(result.turn_id)} was "
+            f"[error][Undo warning][/error] Turn {_short(result.turn_id)} was "
             "restored on disk, but the conversation history could not be "
             f"rewound ({type(exc).__name__}: {exc}). The files are already "
             "back; use `/undo` again to retry only the conversation step or "

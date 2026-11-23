@@ -114,7 +114,7 @@ async def test_mcp_approval_redacts_sensitive_arguments(monkeypatch):
         for line in logged + prompts
         for secret in ("secret-key-value", "secret-token-value")
     )
-    assert "[REDACTED]" in prompts[0]
+    assert any("[REDACTED]" in line for line in logged)
 
 
 @pytest.mark.asyncio

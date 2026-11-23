@@ -80,8 +80,8 @@ class CodeTaskWorkspace:
             from . import console
 
             console.print(
-                f"[yellow]Directly editing the user-selected workspace: {source}. "
-                "No isolated copy or automatic Git commits will be used.[/yellow]"
+                f"[warning]Directly editing the user-selected workspace: {source}. "
+                "No isolated copy or automatic Git commits will be used.[/warning]"
             )
             return cls(
                 source,
@@ -121,15 +121,15 @@ class CodeTaskWorkspace:
             from . import console
 
             console.print(
-                f"[cyan]Copied project to isolated workspace: {destination} "
+                f"[info]Copied project to isolated workspace: {destination} "
                 "(original left unchanged; .git, symlinks, secrets, caches, and "
-                "build output excluded)[/cyan]"
+                "build output excluded)[/info]"
             )
         else:
             from . import console
 
             console.print(
-                f"[cyan]Created isolated code workspace: {destination}[/cyan]"
+                f"[info]Created isolated code workspace: {destination}[/info]"
             )
 
         git_path = shutil.which("git")
@@ -192,10 +192,10 @@ class CodeTaskWorkspace:
             from . import console
 
             name = console.input(
-                "[cyan]Name for local project commits: [/cyan]"
+                "[info]Name for local project commits: [/info]"
             ).strip()
             email = console.input(
-                "[cyan]Email for local project commits: [/cyan]"
+                "[info]Email for local project commits: [/info]"
             ).strip()
             if not name or not email:
                 if not ask(
@@ -241,7 +241,7 @@ class CodeTaskWorkspace:
                     return None
                 from . import console
 
-                console.print(f"[yellow]{checkpoint}[/yellow]")
+                console.print(f"[warning]{checkpoint}[/warning]")
                 return continue_without_git()
             workspace.initial_commit = _run_git(
                 destination, "rev-parse", "HEAD"
@@ -258,7 +258,7 @@ class CodeTaskWorkspace:
                     return None
                 from . import console
 
-                console.print(f"[yellow]{checkpoint}[/yellow]")
+                console.print(f"[warning]{checkpoint}[/warning]")
                 return continue_without_git()
             workspace.initial_commit = _run_git(
                 destination, "rev-parse", "HEAD"

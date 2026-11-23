@@ -28,10 +28,17 @@ from . import capabilities as capability_packs
 from ui import json_output
 from . import runtime_f_integration as f_integration
 from ui.chat_ui import ChatTranscript
+from platform_support import (
+    detect_platform,
+    is_windows_mount_path,
+    is_wsl,
+)
+
 from config import (
     AGENT_PERMISSION_MODE,
     APP_CONFIG,
     APPROVED_EXTRA_FOLDERS,
+    SANDBOX_NETWORK_DEFAULT,
     CODE_OUTPUT_ROOT,
     CONFIG_FILE_PATH,
     CONTEXT_COMPACTION_THRESHOLD,
@@ -41,7 +48,6 @@ from config import (
     DEFAULT_DB_PATH,
     ENABLE_WEB_RESEARCH,
     EPISODE_RETENTION_DAYS,
-    HARDWARE_ACCELERATION_MODE,
     MAX_CONTEXT_TOKENS,
     MAX_HISTORY_MESSAGES,
     MAX_OUTPUT_TOKENS,
@@ -63,6 +69,11 @@ from config import (
     RAG_INDEX_PATH,
     REGISTERED_SKILL_RETENTION_DAYS,
     SKILLS_FOLDER_DEFAULT,
+    GROUPED_HELP,
+    INFORMATIVE_PROMPT,
+    SHOW_TURN_DIVIDER,
+    SHOW_TURN_STATS,
+    SHOW_WELCOME_SCREEN,
     STATUS_BAR,
     SYSTEM_PROMPT,
     TASK_STALE_AFTER_DAYS,
@@ -75,10 +86,6 @@ from config import (
 )
 from database import PersistentMemory
 from core.events import Event, ToolFinished, ToolStarted, get_event_bus
-from hardware import (
-    format_hardware_status,
-    inspect_ollama_hardware,
-)
 from core.hooks import (
     collect_post_tool_hook_output,
     evaluate_pre_tool_hooks,
@@ -88,10 +95,6 @@ from core.hooks import (
 from rag.citations import format_retrieved_citations
 from utils.run_logging import RUN_LOGGER, log_event, logging_context
 from sandbox import SandboxManager
-from skills import (
-    load_skills_from_folder,
-    match_skill_by_relevancy,
-)
 from ui import SessionUI
 from .compaction import (
     compact_history,
@@ -103,7 +106,6 @@ from .compaction import (
 )
 from .console import console
 from .lazy_imports import install_lazy_globals
-from .learning import _record_code_task_validation
 from .memory_context import (
     _build_learned_context,
     _build_relevant_episode_context,
@@ -838,7 +840,7 @@ async def execute_tool_call(
         call_id=str(call_id or ""),
     )
     console.print(
-        f"[yellow][Tool Execution][/yellow] Calling '{name}' "
+        f"[warning][Tool Execution][/warning] Calling '{name}' "
         f"with argument summary: {safe_args if isinstance(safe_args, dict) else type(args).__name__}"
     )
     get_event_bus().emit(
@@ -909,8 +911,8 @@ async def execute_tool_call(
                 scope = args.get("session_id", "")
                 approval = (
                     console.input(
-                        f"[red]Delete the reviewed SQLite history entry {entry_id} "
-                        f"from session '{scope}'? Type 'delete {entry_id}' to confirm: [/red]"
+                        f"[error]Delete the reviewed SQLite history entry {entry_id} "
+                        f"from session '{scope}'? Type 'delete {entry_id}' to confirm: [/error]"
                     )
                     .strip()
                     .lower()
@@ -920,7 +922,7 @@ async def execute_tool_call(
                 scope = args.get("session_id") or "all sessions"
                 approval = (
                     console.input(
-                        f"[red]Type 'delete' to delete chat history for {scope}: [/red]"
+                        f"[error]Type 'delete' to delete chat history for {scope}: [/error]"
                     )
                     .strip()
                     .lower()
@@ -1037,8 +1039,8 @@ async def execute_tool_call(
                 result_text = result_text[:available]
         _display_tool_error(str(name), result_text)
         console.print(
-            "[yellow][Reflection Loop] Tool error details were returned to the "
-            "model for recovery.[/yellow]"
+            "[warning][Reflection Loop] Tool error details were returned to the "
+            "model for recovery.[/warning]"
         )
         result_text += reflection_suffix
     tool_event = "tool.failed" if has_error else "tool.completed"
@@ -1167,8 +1169,8 @@ async def _prepare_session(
     _SESSION_INFO.clear()
     if not non_interactive and (not interactive or not sys.stdin.isatty()):
         console.print(
-            "[red]Private Agent requires an interactive terminal. "
-            "Run it from a terminal session.[/red]"
+            "[error]Private Agent requires an interactive terminal. "
+            "Run it from a terminal session.[/error]"
         )
         return
     try:
@@ -1184,6 +1186,30 @@ async def _prepare_session(
     except BaseException:  # noqa: BLE001 - startup cleanup must also run for cancellation, then re-raises
         await _discard_session_startup()
         raise
+
+
+def _apply_sandbox_network_permission(
+    configured_default: object = None,
+    environ=None,
+) -> bool:
+    """Apply the sandbox network policy during startup, failing closed."""
+    default = SANDBOX_NETWORK_DEFAULT if configured_default is None else configured_default
+    environment = os.environ if environ is None else environ
+    try:
+        if "PRIVATE_AGENT_SANDBOX_NETWORK" in environment:
+            # An explicitly set but empty/ambiguous value must fail closed.
+            enabled = SandboxManager._coerce_network_permission(
+                environment["PRIVATE_AGENT_SANDBOX_NETWORK"]
+            )
+        else:
+            enabled = SandboxManager._coerce_network_permission(default)
+        return SandboxManager.set_network_allowed(enabled)
+    except (TypeError, ValueError, RuntimeError, OSError) as exc:
+        console.print(
+            "[warning][Sandbox] Invalid sandbox network configuration; "
+            f"network access remains disabled: {exc}[/warning]"
+        )
+        return SandboxManager.disable_network()
 
 
 async def _build_session_setup(
@@ -1228,10 +1254,9 @@ async def _build_session_setup(
             if folder is not None:
                 discovered.append(f"{label}: {folder}")
         console.print(
-            "[green][Project folders][/green] Auto-detected " + " | ".join(discovered)
+            "[success][Project folders][/success] Auto-detected " + " | ".join(discovered)
         )
     local_runtimes = _discover_available_local_runtimes()
-    hardware_status_by_url: dict[str, dict[str, Any]] = {}
     log_event(
         RUN_LOGGER,
         "providers.local_discovery_completed",
@@ -1241,63 +1266,50 @@ async def _build_session_setup(
     if local_runtimes:
         names = ", ".join(runtime.name for runtime in local_runtimes)
         console.print(
-            f"[bold green][Local runtimes][/bold green] "
+            f"[bold success][Local runtimes][/bold success] "
             f"{len(local_runtimes)} found ({names})."
         )
         if verbose_startup:
             for runtime_index, runtime in enumerate(local_runtimes, 1):
                 console.print(
-                    f"  [cyan]{runtime_index}.[/cyan] {runtime.name} "
+                    f"  [info]{runtime_index}.[/info] {runtime.name} "
                     f"({len(runtime.models)} chat model(s)) — {runtime.base_url}"
                 )
                 if runtime.models:
                     console.print("     Models: " + ", ".join(runtime.models))
                 else:
                     console.print("     No chat models are currently advertised.")
-                if runtime.kind == "ollama":
-                    hardware_info = inspect_ollama_hardware(
-                        runtime.base_url,
-                        HARDWARE_ACCELERATION_MODE,
-                        client_factory=lambda **kwargs: __import__("ollama").Client(
-                            **kwargs, **ollama_client_kwargs()
-                        ),
-                    )
-                    hardware_status_by_url[runtime.base_url] = hardware_info
-                    console.print(
-                        "[bold green][Ollama hardware][/bold green]\n"
-                        + format_hardware_status(hardware_info)
-                    )
     else:
         console.print(
-            "[yellow]No local runtimes found to proceed with local inference. "
-            "Online configuration is available.[/yellow]"
+            "[warning]No local runtimes found to proceed with local inference. "
+            "Online configuration is available.[/warning]"
         )
     if verbose_startup:
         console.print(
-            "[bold green][Config Status][/bold green] Loaded configuration "
-            f"from: [cyan]{CONFIG_FILE_PATH.resolve()}[/cyan]"
+            "[bold success][Config Status][/bold success] Loaded configuration "
+            f"from: [info]{CONFIG_FILE_PATH.resolve()}[/info]"
         )
         console.print(
-            "[bold green][Configured paths][/bold green] "
-            f"RAG documents: [cyan]{rag_docs_default or 'not configured'}[/cyan] | "
-            f"RAG index: [cyan]{RAG_INDEX_PATH}[/cyan] | "
-            f"Skills: [cyan]{skills_folder_default or 'not configured'}[/cyan]"
+            "[bold success][Configured paths][/bold success] "
+            f"RAG documents: [info]{rag_docs_default or 'not configured'}[/info] | "
+            f"RAG index: [info]{RAG_INDEX_PATH}[/info] | "
+            f"Skills: [info]{skills_folder_default or 'not configured'}[/info]"
         )
     import code_tasks as code_tasks_module
     isolation_warning = code_tasks_module.isolation_unavailable_reason()
     if verbose_startup:
         if isolation_warning:
             console.print(
-                "[yellow][Platform limitation][/yellow] Shell execution, isolated "
+                "[warning][Platform limitation][/warning] Shell execution, isolated "
                 f"project tests, and stdio MCP servers are disabled: {isolation_warning}"
             )
         else:
             console.print(
-                "[green][Platform capability][/green] OS-isolated command "
+                "[success][Platform capability][/success] OS-isolated command "
                 "execution is available."
             )
         console.print(
-            f"[bold green][Online Research][/bold green] "
+            f"[bold success][Online Research][/bold success] "
             f"{'enabled; consent policy: ' + WEB_RESEARCH_CONSENT if ENABLE_WEB_RESEARCH else 'disabled'}"
         )
     memory = PersistentMemory(db_path=DEFAULT_DB_PATH)
@@ -1305,7 +1317,7 @@ async def _build_session_setup(
     recovered_actions = memory.reconcile_task_actions_after_restart()
     if recovered_actions:
         console.print(
-            "[yellow][Task recovery][/yellow] Marked "
+            "[warning][Task recovery][/warning] Marked "
             f"{recovered_actions} orphaned action(s) as outcome unknown. "
             "Review and verify them before retrying."
         )
@@ -1316,7 +1328,7 @@ async def _build_session_setup(
         saved_skill_files = memory.count_registered_skill_files()
         if any((saved_messages, saved_sessions, saved_episodes, saved_skill_files)):
             console.print(
-                f"[cyan][SQLite memory][/cyan] File: {memory.db_path}; "
+                f"[info][SQLite memory][/info] File: {memory.db_path}; "
                 f"{saved_messages} saved conversation message(s) "
                 f"across {saved_sessions} session(s); "
                 f"{saved_episodes} episodic summary/summaries; "
@@ -1325,7 +1337,7 @@ async def _build_session_setup(
     stale_task_ids = memory.mark_stale_tasks(TASK_STALE_AFTER_DAYS)
     if stale_task_ids:
         console.print(
-            "[yellow][Task recovery][/yellow] Marked "
+            "[warning][Task recovery][/warning] Marked "
             f"{len(stale_task_ids)} stale task(s) for review and cleared their "
             "old approvals. Nothing was deleted."
         )
@@ -1333,7 +1345,7 @@ async def _build_session_setup(
         task_plans, approved_task_plans = memory.count_task_plans()
         if task_plans:
             console.print(
-                "[cyan][Saved plans][/cyan] "
+                "[info][Saved plans][/info] "
                 f"{task_plans} total | {approved_task_plans} approved | "
                 f"{task_plans - approved_task_plans} not approved — "
                 "use `/tasks` to review or proceed."
@@ -1344,14 +1356,14 @@ async def _build_session_setup(
     for server_name, server_config in MCP_SERVERS.items():
         if server_config.get("transport", "stdio") == "stdio" and isolation_warning:
             console.print(
-                f"[yellow][MCP warning] Skipping stdio server '{server_name}': "
-                f"{isolation_warning}[/yellow]"
+                f"[warning][MCP warning] Skipping stdio server '{server_name}': "
+                f"{isolation_warning}[/warning]"
             )
             continue
         mcp_started = time.monotonic()
         try:
             with console.status(
-                f"[bold cyan]Connecting to MCP server {server_name}...[/bold cyan]"
+                f"[bold info]Connecting to MCP server {server_name}...[/bold info]"
             ):
                 discovered_tools = await load_configured_mcp_tools(
                     server_name,
@@ -1367,12 +1379,12 @@ async def _build_session_setup(
                 tool_name = getattr(mcp_tool, "name", None)
                 if not tool_name:
                     console.print(
-                        f"[yellow][MCP warning] Server '{server_name}' returned a tool without a name; skipped.[/yellow]"
+                        f"[warning][MCP warning] Server '{server_name}' returned a tool without a name; skipped.[/warning]"
                     )
                 elif tool_name in AVAILABLE_TOOLS:
                     console.print(
-                        f"[yellow][MCP warning] Tool name '{tool_name}' from '{server_name}' "
-                        "conflicts with an existing tool; skipped.[/yellow]"
+                        f"[warning][MCP warning] Tool name '{tool_name}' from '{server_name}' "
+                        "conflicts with an existing tool; skipped.[/warning]"
                     )
                 else:
                     AVAILABLE_TOOLS[tool_name] = mcp_tool
@@ -1383,13 +1395,13 @@ async def _build_session_setup(
                     )
             if verbose_startup:
                 console.print(
-                    f"[green][MCP][/green] Loaded {len(discovered_tools)} "
+                    f"[success][MCP][/success] Loaded {len(discovered_tools)} "
                     f"tool(s) from '{server_name}'."
                 )
         except Exception as exc:  # noqa: BLE001 - third-party MCP transport errors vary; isolate one server
             reference_id = uuid.uuid4().hex[:8]
             console.print(
-                f"[red][MCP error][/red] Could not load {server_name} "
+                f"[error][MCP error][/error] Could not load {server_name} "
                 f"({type(exc).__name__}; reference {reference_id}). "
                 "Check its transport, command or endpoint configuration."
             )
@@ -1411,40 +1423,79 @@ async def _build_session_setup(
                 tool_count=len(discovered_tools),
                 elapsed_seconds=round(time.monotonic() - mcp_started, 3),
             )
-    if project_resources.workspace is not None:
+    from providers.selection import requested_workspace
+
+    flagged_workspace = requested_workspace()
+    if flagged_workspace:
+        workspace_input = flagged_workspace
+        console.print(
+            f"[success][Workspace flag][/success] Using {workspace_input}."
+        )
+    elif project_resources.workspace is not None:
         workspace_input = str(project_resources.workspace)
+        if is_windows_mount_path(workspace_input):
+            console.print(
+                "[warning][WSL][/warning] Workspace is under a Windows drive mount "
+                f"({workspace_input}); file operations may be slow. Prefer a "
+                "Linux filesystem path such as ~/projects."
+            )
     else:
         workspace_input = (
             WORKSPACE_ROOT_DEFAULT
             if WORKSPACE_ROOT_DEFAULT != "."
             else _input(
-                "[cyan]Enter workspace root path for security sandbox "
-                "(Press Enter for current dir): [/cyan]"
+                "[info]Enter workspace root path for security sandbox "
+                "(Press Enter for current dir): [/info]"
             ).strip()
         )
     if not workspace_input:
         workspace_input = "."
+    if is_windows_mount_path(workspace_input):
+        console.print(
+            "[warning][WSL][/warning] Workspace is under a Windows drive mount "
+            f"({workspace_input}); file operations may be slow. Prefer a "
+            "Linux filesystem path such as ~/projects."
+        )
     SandboxManager.set_root(workspace_input)
     SandboxManager.set_approved_extra_folders(APPROVED_EXTRA_FOLDERS)
+    _apply_sandbox_network_permission()
     if verbose_startup:
         console.print(
-            f"[bold green][Security][/bold green] Workspace root locked to: "
+            f"[bold success][Security][/bold success] Workspace root locked to: "
             f"{SandboxManager.get_root()}"
         )
-    if project_resources.rag is not None:
+    from providers.selection import requested_rag
+
+    flagged_rag = requested_rag()
+    if flagged_rag:
+        docs_input = flagged_rag
+        console.print(f"[success][RAG flag][/success] Using {docs_input}.")
+    elif project_resources.rag is not None:
         docs_input = str(project_resources.rag)
+        if is_windows_mount_path(docs_input):
+            console.print(
+                "[warning][WSL][/warning] RAG documents are under a Windows drive "
+                f"mount ({docs_input}); indexing may be slow. Prefer a Linux "
+                "filesystem path."
+            )
     elif rag_docs_default:
         rag_override = _input(
-            "[yellow]RAG documents directory "
+            "[warning]RAG documents directory "
             f"(Enter to use configured path '{rag_docs_default}', or enter a "
-            "project-specific path): [/yellow]"
+            "project-specific path): [/warning]"
         ).strip()
         docs_input = rag_override or rag_docs_default
     else:
         docs_input = _input(
-            "[yellow]Enter knowledge base (KB) files directory path "
-            "(Press Enter to skip): [/yellow]"
+            "[warning]Enter knowledge base (KB) files directory path "
+            "(Press Enter to skip): [/warning]"
         ).strip()
+    if docs_input and is_windows_mount_path(docs_input):
+        console.print(
+            "[warning][WSL][/warning] RAG documents are under a Windows drive "
+            f"mount ({docs_input}); indexing may be slow. Prefer a Linux "
+            "filesystem path."
+        )
     import config as _rag_config
     rag_embedding_provider = _rag_config.EMBEDDING_PROVIDER
     rag_embedding_model = _rag_config.EMBEDDING_MODEL
@@ -1481,14 +1532,14 @@ async def _build_session_setup(
                 )
                 rag_embedding_model = selected_model
                 console.print(
-                    "[cyan][RAG][/cyan] Ollama is unavailable; using "
+                    "[info][RAG][/info] Ollama is unavailable; using "
                     f"{getattr(selected_runtime, 'name', 'local runtime')} "
                     f"embeddings ({selected_model})."
                 )
             elif local_runtimes:
                 rag_embedding_provider = "none"
                 console.print(
-                    "[yellow][RAG][/yellow] No embedding-capable runtime is "
+                    "[warning][RAG][/warning] No embedding-capable runtime is "
                     "available; continuing without local RAG."
                 )
     def _initialize_knowledge_base_with_embeddings(
@@ -1532,8 +1583,8 @@ async def _build_session_setup(
         skills_folder_default
         if skills_folder_default
         else _input(
-            "[cyan]Enter path to skills folder containing .md files "
-            "(Press Enter for none): [/cyan]"
+            "[info]Enter path to skills folder containing .md files "
+            "(Press Enter for none): [/info]"
         ).strip()
     )
     if (
@@ -1562,24 +1613,24 @@ async def _build_session_setup(
     set_tool_context(_tool_context)
     if loaded_skills and verbose_startup:
         console.print(
-            f"[bold green][Skills Loaded][/bold green] Successfully loaded {len(loaded_skills)} markdown skill profile(s)."
+            f"[bold success][Skills Loaded][/bold success] Successfully loaded {len(loaded_skills)} markdown skill profile(s)."
         )
     elif not loaded_skills and verbose_startup:
         console.print(
-            "[yellow][Skills Mode][/yellow] No skills folder specified or found. Running in plain agent mode."
+            "[warning][Skills Mode][/warning] No skills folder specified or found. Running in plain agent mode."
         )
     has_skills = len(loaded_skills) > 0
     if has_skills and is_rag_active:
-        mode_label = "[cyan]Skilled Private Agent[/cyan]"
+        mode_label = "[info]Skilled Private Agent[/info]"
     elif has_skills:
-        mode_label = "[cyan]Skilled Agent[/cyan]"
+        mode_label = "[info]Skilled Agent[/info]"
     elif is_rag_active:
-        mode_label = "[cyan]Private Agent[/cyan]"
+        mode_label = "[info]Private Agent[/info]"
     else:
-        mode_label = "[cyan]Agent[/cyan]"
+        mode_label = "[info]Agent[/info]"
     if verbose_startup:
         console.print(
-            f"[bold green][Runtime Mode][/bold green] "
+            f"[bold success][Runtime Mode][/bold success] "
             f"Active Mode Indicator: {mode_label}"
         )
     log_event(
@@ -1592,7 +1643,7 @@ async def _build_session_setup(
     resume_prompt = (
         (
             lambda latest: _input(
-                f"[cyan]Resume latest session '{latest}'? \\[Y/n]: [/cyan]"
+                f"[info]Resume latest session '{latest}'? \\[Y/n]: [/info]"
             )
         )
         if interactive
@@ -1618,9 +1669,9 @@ async def _build_session_setup(
         == "held"
     ):
         console.print(
-            "[yellow][Task lease warning] This session's active plan is still "
+            "[warning][Task lease warning] This session's active plan is still "
             "owned by another running process; task actions wait until it "
-            "releases or expires.[/yellow]"
+            "releases or expires.[/warning]"
         )
     network_consent_state: dict[str, bool] = {}
     _TASK_LEASE_HEARTBEAT = asyncio.create_task(
@@ -1631,10 +1682,24 @@ async def _build_session_setup(
     if permission_mode is not None:
         _permission_mode = permission_mode
     else:
-        _permission_mode = _select_permission_mode(interactive=interactive)
+        from providers.selection import requested_mode
+
+        flagged_mode = requested_mode()
+        if flagged_mode and flagged_mode in {"manual", "auto", "full", "monitored"}:
+            _permission_mode = flagged_mode
+            console.print(
+                f"[success][Mode flag][/success] Using {flagged_mode} permission mode."
+            )
+        else:
+            if flagged_mode:
+                console.print(
+                    f"[warning][Mode flag][/warning] '{flagged_mode}' is not a valid "
+                    "permission mode; choosing interactively."
+                )
+            _permission_mode = _select_permission_mode(interactive=interactive)
     permission_mode = _permission_mode
     if verbose_startup:
-        console.print(f"[cyan][Agent Permission Mode][/cyan] {permission_mode.title()}")
+        console.print(f"[info][Agent Permission Mode][/info] {permission_mode.title()}")
     safe_run_session_start_hooks(
         hooks=load_hooks(
             merge_project_config(load_or_create_config(), SandboxManager.get_root())
@@ -1645,7 +1710,6 @@ async def _build_session_setup(
     return SessionSetup(
         memory=memory,
         local_runtimes=local_runtimes,
-        hardware_status_by_url=hardware_status_by_url,
         isolation_warning=isolation_warning,
         vectorstore=vectorstore,
         docs_input=docs_input,
@@ -1686,7 +1750,6 @@ async def _choose_provider(
     preference: ProviderPreference,
     memory,
     local_runtimes,
-    hardware_status_by_url,
     isolation_warning,
     thinking_enabled,
     thinking_effort,
@@ -1718,7 +1781,7 @@ async def _choose_provider(
     idle_providers = installed_but_idle(local_runtimes)
     for idle in idle_providers:
         console.print(
-            f"  [yellow]–[/yellow] {idle.preset.name} is installed but not running "
+            f"  [warning]–[/warning] {idle.preset.name} is installed but not running "
             f"— {idle.start_hint}"
         )
     if (resumed_record := provider_record_for_resume(memory, session_id)) is None and interactive and idle_providers:
@@ -1787,14 +1850,14 @@ async def _choose_provider(
     flagged_runtime = match_runtime(flagged_provider, local_runtimes)
     if flagged_provider and flagged_runtime is None:
         console.print(
-            f"[yellow][Provider flag][/yellow] '{flagged_provider}' is not "
+            f"[warning][Provider flag][/warning] '{flagged_provider}' is not "
             "reachable; choose from the list below."
         )
     preselected_model: str | None = None
     if flagged_runtime is not None:
         provider_choice = str(local_runtimes.index(flagged_runtime) + 1)
         console.print(
-            f"[green][Provider flag][/green] Using {flagged_runtime.name} "
+            f"[success][Provider flag][/success] Using {flagged_runtime.name} "
             "(from --provider)."
         )
     elif resumed_runtime is not None:
@@ -1803,22 +1866,22 @@ async def _choose_provider(
         if resumed_record.model in resumed_models:
             preselected_model = resumed_record.model
             console.print(
-                f"[green][Resume][/green] Continuing with {resumed_runtime.name} "
+                f"[success][Resume][/success] Continuing with {resumed_runtime.name} "
                 f"· {resumed_record.model} (recorded provider)."
             )
         elif resumed_models:
             console.print(
-                f"[yellow][Resume][/yellow] {resumed_runtime.name} no longer has "
+                f"[warning][Resume][/warning] {resumed_runtime.name} no longer has "
                 f"'{resumed_record.model}'; choosing the closest available model."
             )
         else:
             console.print(
-                f"[yellow][Resume][/yellow] {resumed_runtime.name} is running but "
+                f"[warning][Resume][/warning] {resumed_runtime.name} is running but "
                 "advertises no chat models."
             )
     elif len(local_runtimes) == 1 and not always_ask_provider(APP_CONFIG) and auto_select_single_provider(APP_CONFIG):
         provider_choice = "1"
-        console.print(f"[green][Local runtime][/green] Using {local_runtimes[0].name} (only reachable local provider).")
+        console.print(f"[success][Local runtime][/success] Using {local_runtimes[0].name} (only reachable local provider).")
     else:
         try:
             from .interactive import arrow_select as _arrow_select
@@ -1832,21 +1895,21 @@ async def _choose_provider(
         else:
             for runtime_index, runtime in enumerate(local_runtimes, 1):
                 marker = (
-                    " [green](last used)[/green]"
+                    " [success](last used)[/success]"
                     if last_used.get("display_name") == runtime.name
                     else ""
                 )
                 console.print(
-                    f"  [cyan]{runtime_index}.[/cyan] Local ({runtime.name}) "
+                    f"  [info]{runtime_index}.[/info] Local ({runtime.name}) "
                     f"— {len(runtime.models)} model(s){marker}"
                 )
             for choice_number, label, _use_saved_details in online_options:
-                console.print(f"  [cyan]{choice_number}.[/cyan] {label}")
-            console.print("  [cyan]0.[/cyan] Exit")
+                console.print(f"  [info]{choice_number}.[/info] {label}")
+            console.print("  [info]0.[/info] Exit")
             provider_choice = (
                 _input(
-                    f"[cyan]Choose provider [1-{last_choice}] "
-                    f"(Default: {default_choice}): [/cyan]"
+                    f"[info]Choose provider [1-{last_choice}] "
+                    f"(Default: {default_choice}): [/info]"
                 ).strip()
                 or default_choice
             )
@@ -1900,8 +1963,8 @@ async def _choose_provider(
                 llm_with_tools = _bind_tools(llm, tools_list)
             except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the endpoint; continue without tools
                 console.print(
-                    f"[yellow]The selected endpoint/model does not accept tool calls "
-                    f"({type(exc).__name__}); continuing without tools.[/yellow]"
+                    f"[warning]The selected endpoint/model does not accept tool calls "
+                    f"({type(exc).__name__}); continuing without tools.[/warning]"
                 )
                 llm_with_tools = llm
                 capabilities["tools"] = False
@@ -1910,7 +1973,7 @@ async def _choose_provider(
             llm_with_tools = llm
         if verbose_startup:
             console.print(
-                f"[green][Online model][/green] {selected_model} at "
+                f"[success][Online model][/success] {selected_model} at "
                 f"{preference.online_selection['base_url']}"
             )
     elif provider_choice.isdigit() and 1 <= int(provider_choice) <= len(local_runtimes):
@@ -1928,14 +1991,14 @@ async def _choose_provider(
             available_models.insert(0, flagged_model)
         if not available_models:
             console.print(
-                f"[yellow]{local_runtime.name} is running, but it advertises "
-                "no chat models. Choose another runtime or online mode.[/yellow]"
+                f"[warning]{local_runtime.name} is running, but it advertises "
+                "no chat models. Choose another runtime or online mode.[/warning]"
             )
             return None
         if PREFERRED_MODEL and PREFERRED_MODEL not in available_models:
             console.print(
-                f"[yellow]Configured preferred model '{PREFERRED_MODEL}' is not "
-                f"installed in {local_runtime.name}.[/yellow]"
+                f"[warning]Configured preferred model '{PREFERRED_MODEL}' is not "
+                f"installed in {local_runtime.name}.[/warning]"
             )
         requested_exact = next(
             (
@@ -1962,7 +2025,7 @@ async def _choose_provider(
             _model_choice = None
         if preselected_model is not None:
             selected_model = preselected_model
-            console.print(f"[green][Model][/green] Using {preselected_model}.")
+            console.print(f"[success][Model][/success] Using {preselected_model}.")
         elif _model_choice is not None and _model_choice.isdigit():
             _mc = int(_model_choice) - 1
             if 0 <= _mc < len(available_models):
@@ -1975,14 +2038,14 @@ async def _choose_provider(
             )
             for idx, model_name in enumerate(available_models, 1):
                 marker = (
-                    " [green](configured, preferred)[/green]"
+                    " [success](configured, preferred)[/success]"
                     if PREFERRED_MODEL and model_name == PREFERRED_MODEL
                     else ""
                 )
-                console.print(f"  [cyan]{idx}.[/cyan] {model_name}{marker}")
+                console.print(f"  [info]{idx}.[/info] {model_name}{marker}")
             while True:
                 choice_input = _input(
-                    f"[cyan]Select model choice [1-{len(available_models)}] (Default: 1): [/cyan]"
+                    f"[info]Select model choice [1-{len(available_models)}] (Default: 1): [/info]"
                 ).strip()
                 if not choice_input:
                     selected_model = available_models[0]
@@ -1994,28 +2057,21 @@ async def _choose_provider(
                         break
                 except ValueError:
                     pass
-                console.print("[red][Error] Invalid selection.[/red]")
+                console.print("[error][Error] Invalid selection.[/error]")
         console.print(
-            f"[green][Info] Initializing local model client for: {selected_model}[/green]"
+            f"[success][Info] Initializing local model client for: {selected_model}[/success]"
         )
-        if local_runtime.kind == "ollama":
-            capabilities = inspect_model_capabilities(selected_model)
-        else:
-            capabilities = inspect_openai_compatible_model_capabilities(
-                local_runtime, selected_model
-            )
+        capabilities = inspect_openai_compatible_model_capabilities(
+            local_runtime, selected_model
+        )
         if capabilities["tools"] is False:
             tool_capable_model = next(
                 (
                     candidate
                     for candidate in available_models
                     if candidate != selected_model
-                    and (
-                        inspect_model_capabilities(candidate)
-                        if local_runtime.kind == "ollama"
-                        else inspect_openai_compatible_model_capabilities(
-                            local_runtime, candidate
-                        )
+                    and inspect_openai_compatible_model_capabilities(
+                        local_runtime, candidate
                     )["tools"]
                     is True
                 ),
@@ -2023,11 +2079,11 @@ async def _choose_provider(
             )
             if tool_capable_model:
                 console.print(
-                    f"[yellow][Capability routing] {selected_model} does not support tools; "
-                    f"using compatible local model {tool_capable_model} for agent tasks.[/yellow]"
+                    f"[warning][Capability routing] {selected_model} does not support tools; "
+                    f"using compatible local model {tool_capable_model} for agent tasks.[/warning]"
                 )
                 selected_model = tool_capable_model
-                capabilities = inspect_model_capabilities(selected_model) if local_runtime.kind == "ollama" else inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
+                capabilities = inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
         try:
             llm = _make_selected_local_chat_model(
                 local_runtime,
@@ -2048,12 +2104,12 @@ async def _choose_provider(
             )
             hint = optional_dependency_hint(local_runtime.kind, exc)
             console.print(
-                f"[red]Could not initialize {local_runtime.name} "
+                f"[error]Could not initialize {local_runtime.name} "
                 f"model '{selected_model}' ({type(exc).__name__}). "
-                "Choose another runtime or online mode.[/red]"
+                "Choose another runtime or online mode.[/error]"
             )
             if hint:
-                console.print(f"[yellow]{hint}[/yellow]")
+                console.print(f"[warning]{hint}[/warning]")
             return None
         tools_list = _tools_for_model(
             provider_type=provider_type,
@@ -2072,9 +2128,7 @@ async def _choose_provider(
                         for candidate in available_models
                         if candidate != selected_model
                         and (
-                            inspect_model_capabilities(candidate)
-                            if local_runtime.kind == "ollama"
-                            else inspect_openai_compatible_model_capabilities(
+                            inspect_openai_compatible_model_capabilities(
                                 local_runtime, candidate
                             )
                         )["tools"]
@@ -2084,16 +2138,16 @@ async def _choose_provider(
                 )
                 if fallback_model is None:
                     console.print(
-                        f"[yellow][Model limitation] Tool binding failed for {selected_model} "
-                        f"({type(exc).__name__}); continuing without tools.[/yellow]"
+                        f"[warning][Model limitation] Tool binding failed for {selected_model} "
+                        f"({type(exc).__name__}); continuing without tools.[/warning]"
                     )
                     llm_with_tools = llm
                 else:
                     console.print(
-                        f"[yellow][Model fallback] Switching to tool-capable model {fallback_model}.[/yellow]"
+                        f"[warning][Model fallback] Switching to tool-capable model {fallback_model}.[/warning]"
                     )
                     selected_model = fallback_model
-                    capabilities = inspect_model_capabilities(selected_model) if local_runtime.kind == "ollama" else inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
+                    capabilities = inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
                     llm = _make_selected_local_chat_model(
                         local_runtime,
                         selected_model,
@@ -2119,7 +2173,7 @@ async def _choose_provider(
             previous=resumed_record,
         )
     else:
-        console.print(f"[red]Select a provider from 1 to {last_choice}.[/red]")
+        console.print(f"[error]Select a provider from 1 to {last_choice}.[/error]")
         return None
     if provider_type == "local":
         webcam_status = (
@@ -2142,16 +2196,16 @@ async def _choose_provider(
         ]
         if missing_media:
             console.print(
-                "[yellow][Local media][/yellow] "
+                "[warning][Local media][/warning] "
                 f"{webcam_status}; optional media packages missing "
                 f"({', '.join(missing_media)}); install with "
                 '`pip install ".[media]"`. Workspace PCM WAV transcription '
                 "is local-only and requires per-use approval."
             )
         elif capabilities["vision"] is not True:
-            console.print(f"[yellow][Local media][/yellow] {webcam_status}.")
+            console.print(f"[warning][Local media][/warning] {webcam_status}.")
     console.print(
-        "[cyan][Capabilities][/cyan] "
+        "[info][Capabilities][/info] "
         + ", ".join(
             f"{name}={'yes' if value else 'no' if value is False else 'unknown'}"
             for name, value in capabilities.items()
@@ -2209,8 +2263,9 @@ async def _choose_provider(
     )
     startup_summary.add_column("Setting", style="cyan")
     startup_summary.add_column("Value", overflow="fold")
-    os_name = platform.system() or sys.platform
-    architecture = platform.machine()
+    _platform_info = detect_platform()
+    os_name = _platform_info.name or _platform_info.system or sys.platform
+    architecture = _platform_info.machine
     startup_summary.add_row(
         "Platform",
         f"{os_name} ({architecture})" if architecture else os_name,
@@ -2242,45 +2297,13 @@ async def _choose_provider(
         "active" if is_rag_active else "inactive",
     )
     startup_summary.add_row("Skills", str(len(loaded_skills)))
-    if (
-        provider_type == "local"
-        and selected_local_runtime is not None
-        and selected_local_runtime.kind == "ollama"
-    ):
-        hardware_info = hardware_status_by_url.get(selected_local_runtime.base_url)
-        if hardware_info is None:
-            hardware_info = inspect_ollama_hardware(
-                selected_local_runtime.base_url,
-                HARDWARE_ACCELERATION_MODE,
-                client_factory=lambda **kwargs: __import__("ollama").Client(
-                    **kwargs, **ollama_client_kwargs()
-                ),
-            )
-            hardware_status_by_url[selected_local_runtime.base_url] = hardware_info
-        hardware_value = str(hardware_info.get("placement", "unknown"))
-        reported_models = hardware_info.get("models")
-        if isinstance(reported_models, list) and reported_models:
-            loaded_models = ", ".join(
-                str(model.get("name") or "unnamed model")
-                + (
-                    f" ({model['size_vram'] / (1024**3):.2f} GiB VRAM)"
-                    if isinstance(model, dict)
-                    and isinstance(model.get("size_vram"), int)
-                    else " (VRAM unknown)"
-                )
-                for model in reported_models
-                if isinstance(model, dict)
-            )
-            if loaded_models:
-                hardware_value += f" — {loaded_models}"
-        startup_summary.add_row("Ollama hardware", hardware_value)
     console.print(startup_summary)
     console.print(
         "[dim]Version: dev "
         f"\u00b7 Workspace: {SandboxManager.get_root()} \u00b7 Type /help for commands.[/dim]"
     )
     console.print(
-        f"\n[bold green]--- {mode_label} Ready! Type 'exit' or 'switch' ---[/bold green]"
+        f"\n[bold success]--- {mode_label} Ready! Type 'exit' or 'switch' ---[/bold success]"
     )
     return ProviderSelection(
         provider_type=provider_type,
@@ -2328,7 +2351,6 @@ async def _run_agent_cli_session(
     set_tool_context(_tc)
     memory = setup.memory
     local_runtimes = setup.local_runtimes
-    hardware_status_by_url = setup.hardware_status_by_url
     isolation_warning = setup.isolation_warning
     vectorstore = setup.vectorstore
     docs_input = setup.docs_input
@@ -2352,8 +2374,7 @@ async def _run_agent_cli_session(
             preference=provider_preference,
             memory=memory,
             local_runtimes=local_runtimes,
-            hardware_status_by_url=hardware_status_by_url,
-            isolation_warning=isolation_warning,
+                isolation_warning=isolation_warning,
             thinking_enabled=thinking_enabled,
             thinking_effort=thinking_effort,
             permission_mode=permission_mode,
@@ -2380,7 +2401,7 @@ async def _run_agent_cli_session(
             try:
                 if not rag_task.done():
                     with console.status(
-                        "[bold cyan]Finishing RAG index...[/bold cyan]"
+                        "[bold info]Finishing RAG index...[/bold info]"
                     ):
                         vectorstore = await rag_task
                 else:
@@ -2389,8 +2410,8 @@ async def _run_agent_cli_session(
                 vectorstore = None
                 reference_id = uuid.uuid4().hex[:8]
                 console.print(
-                    f"[yellow][RAG warning] Knowledge base is unavailable; continuing "
-                    f"without RAG ({type(exc).__name__}; reference {reference_id}).[/yellow]"
+                    f"[warning][RAG warning] Knowledge base is unavailable; continuing "
+                    f"without RAG ({type(exc).__name__}; reference {reference_id}).[/warning]"
                 )
             is_rag_active = vectorstore is not None
             if is_rag_active:
@@ -2449,6 +2470,8 @@ async def _run_agent_cli_session(
                 return None
             result = active_code_workspace.finalize() if finalize else None
             try:
+                from .learning import _record_code_task_validation
+
                 _record_code_task_validation(
                     memory,
                     get_tool_context().task_id,
@@ -2457,9 +2480,9 @@ async def _run_agent_cli_session(
                 )
             except (ValueError, sqlite3.Error, OSError) as exc:
                 console.print(
-                    "[yellow][Task validation warning] Code checks passed, "
+                    "[warning][Task validation warning] Code checks passed, "
                     "but the evidence could not be persisted: "
-                    f"{type(exc).__name__}: {exc}[/yellow]"
+                    f"{type(exc).__name__}: {exc}[/warning]"
                 )
             SandboxManager.set_root(str(previous_workspace_root))  # noqa: B023
             _tool_context = get_tool_context()
@@ -2474,8 +2497,8 @@ async def _run_agent_cli_session(
                     llm_with_tools = _bind_tools(llm, tools_list)  # noqa: B023
                 except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the runtime; continue without tools
                     console.print(
-                        f"[yellow]Could not restore the base tool set "
-                        f"({type(exc).__name__}); tool calls are disabled for this model.[/yellow]"
+                        f"[warning]Could not restore the base tool set "
+                        f"({type(exc).__name__}); tool calls are disabled for this model.[/warning]"
                     )
                     llm_with_tools = llm  # noqa: B023
             active_code_workspace = None
@@ -2485,16 +2508,31 @@ async def _run_agent_cli_session(
             status_bar=STATUS_BAR,
         )
         session_ui.bind(model=selected_model, permission=permission_mode)
+        if SHOW_WELCOME_SCREEN and not non_interactive:
+            from rich.panel import Panel
+
+            session_ui.print(
+                Panel(
+                    f"Private Agent\nModel: {selected_model}\nWorkspace: {SandboxManager.get_root()}",
+                    title="Welcome",
+                    border_style="cyan",
+                )
+            )
         _local_model_has_answered = False
+        _pending_user_input = None
         try:
             while True:
                 try:
-                    if non_interactive:
+                    if _pending_user_input is not None:
+                        user_input = _pending_user_input
+                        _pending_user_input = None
+                    elif non_interactive:
                         user_input = (prompt or "").strip() or "exit"
                         prompt = None
                     else:
                         session_ui._footer.stop()
-                        session_ui.console.rule(style="dim")
+                        if SHOW_TURN_DIVIDER:
+                            session_ui.console.rule(style="dim")
                         user_input = (
                             await prompt_user_input(
                                 console,
@@ -2532,7 +2570,7 @@ async def _run_agent_cli_session(
                         )
                     user_input = _custom_command_content
                     console.print(
-                        f"[cyan][Command][/cyan] Running {_custom_command_name}"
+                        f"[info][Command][/info] Running {_custom_command_name}"
                     )
                 if user_input and not user_input.startswith("/"):
                     last_user_request = user_input
@@ -2554,7 +2592,7 @@ async def _run_agent_cli_session(
                 if _handled and _cont:
                     continue
                 if user_input.lower() in {"/help", "/commands"}:
-                    session_ui.print(_format_interactive_help())
+                    session_ui.print(_format_interactive_help(GROUPED_HELP))
                     continue
                 if user_input.lower() == "/doctor":
                     from diagnostics.doctor import doctor_interactive
@@ -2563,7 +2601,7 @@ async def _run_agent_cli_session(
                 if user_input.lower() == "/context":
                     if not pending_folder_context:
                         session_ui.print(
-                            "[cyan][Context][/cyan] No folder context is queued."
+                            "[info][Context][/info] No folder context is queued."
                         )
                     else:
                         table = Table(
@@ -2583,19 +2621,19 @@ async def _run_agent_cli_session(
                         session_ui.print(table)
                         if provider_type == "online":
                             session_ui.print(
-                                "[yellow]This context will be sent to the selected "
-                                "online provider with your next prompt.[/yellow]"
+                                "[warning]This context will be sent to the selected "
+                                "online provider with your next prompt.[/warning]"
                             )
                     continue
                 if user_input.lower() == "/context clear":
                     pending_folder_context = ""
                     pending_folder_context_files = ()
                     pending_folder_context_bytes = 0
-                    session_ui.print("[green][Context][/green] Queued context cleared.")
+                    session_ui.print("[success][Context][/success] Queued context cleared.")
                     continue
                 if user_input.lower().startswith("/context "):
                     session_ui.print(
-                        "[yellow][Context][/yellow] Use `/context` to review "
+                        "[warning][Context][/warning] Use `/context` to review "
                         "queued files or `/context clear` to remove them."
                     )
                     continue
@@ -2656,13 +2694,41 @@ async def _run_agent_cli_session(
                             memory.ends_with_summary, session_id
                         )
                     continue
+                lowered_input = user_input.strip().lower()
+                if lowered_input == "/expand" or lowered_input == "/last" or lowered_input.startswith(
+                    "/last "
+                ):
+                    from . import tool_display as _tool_display
+
+                    result_index = -1
+                    parts = user_input.split()
+                    if len(parts) > 1:
+                        try:
+                            result_index = int(parts[1])
+                        except ValueError:
+                            session_ui.print(
+                                "[warning][Last][/warning] Usage: `/last [N]` "
+                                "where N selects a recent tool result."
+                            )
+                            continue
+                    if len(parts) > 1:
+                        expanded = _tool_display.expand_last_tool_result(result_index)
+                    else:
+                        expanded = _tool_display.expand_last_tool_result()
+                    if expanded is None:
+                        session_ui.print(
+                            "[warning][Last][/warning] No tool output to expand."
+                        )
+                    else:
+                        session_ui.print(expanded)
+                    continue
                 if user_input.lower() == "/add" or user_input.lower().startswith(
                     "/add "
                 ):
                     folder_argument = user_input[len("/add") :].strip()
                     if not folder_argument:
                         session_ui.print(
-                            "[yellow][Context][/yellow] Usage: "
+                            "[warning][Context][/warning] Usage: "
                             "`/add <workspace-relative-folder>`."
                         )
                         continue
@@ -2674,10 +2740,10 @@ async def _run_agent_cli_session(
                         ) = include_folder_context(folder_argument)
                         pending_folder_context_bytes = folder_context_bytes
                     except (OSError, ValueError) as exc:
-                        session_ui.print(f"[red][Folder context error] {exc}[/red]")
+                        session_ui.print(f"[error][Folder context error] {exc}[/error]")
                         continue
                     session_ui.print(
-                        "[green][Context][/green] Added "
+                        "[success][Context][/success] Added "
                         f"{len(pending_folder_context_files)} file(s) "
                         f"({folder_context_bytes} bytes) from that folder to the "
                         "next request only. A new `/add` replaces previously "
@@ -2685,9 +2751,11 @@ async def _run_agent_cli_session(
                     )
                     continue
                 if user_input.lower() == "/maintenance":
-                    vectorstore = await _run_memory_maintenance(
-                        memory,
-                        llm,
+                    from .commands import maintenance as _maintenance_command
+
+                    vectorstore = await _maintenance_command.handle_maintenance_command(
+                        memory=memory,
+                        llm=llm,
                         allow_model_episode_context=include_private_context,
                         local_model_suggestions_allowed=provider_type == "local",
                         rag_docs_path=docs_input or None,
@@ -2695,134 +2763,73 @@ async def _run_agent_cli_session(
                         on_data_reset=clear_context_after_data_reset,
                     )
                     continue
-                if user_input.lower() == "/plan" or user_input.lower() == "/plan on":
-                    planning_mode_persistent = True
-                    session_ui.print(
-                        "[cyan][Planning mode][/cyan] Planning stays on until a "
-                        "plan is approved or you run /plan off."
+                if user_input.lower() in {"/plan", "/plan on"}:
+                    from .commands import plan as _plan_command
+
+                    planning_mode_persistent = _plan_command.handle_plan_command(
+                        user_input, planning_mode_persistent, session_ui
                     )
                     continue
                 if user_input.lower() == "/plan off":
-                    planning_mode_persistent = False
-                    session_ui.print("[cyan][Planning mode off][/cyan]")
+                    from .commands import plan as _plan_command
+
+                    planning_mode_persistent = _plan_command.handle_plan_command(
+                        user_input, planning_mode_persistent, session_ui
+                    )
                     continue
                 if user_input.lower() == "/code":
-                    coding_mode_armed = True
-                    session_ui.print(
-                        "[cyan][Coding mode][/cyan] Next request requires an "
-                        "approved coding plan before edits or commands run."
-                    )
+                    from .commands import plan as _plan_command
+
+                    coding_mode_armed = _plan_command.handle_code_command(session_ui)
                     continue
                 if user_input.lower() == "/skills" or user_input.lower().startswith(
                     "/skills "
                 ):
-                    requested_skill = user_input[len("/skills") :].strip()
-                    if not requested_skill:
-                        if not loaded_skills:
-                            session_ui.print(
-                                "[yellow][Skills][/yellow] No skills are loaded. "
-                                "Configure a skills folder containing Markdown "
-                                "skill files to use this command."
-                            )
-                        else:
-                            skill_table = Table(
-                                title="Available Skills",
-                                show_header=True,
-                                header_style="bold cyan",
-                            )
-                            skill_table.add_column("Name")
-                            skill_table.add_column("Command key")
-                            skill_table.add_column("Description")
-                            for key, skill in sorted(
-                                loaded_skills.items(),
-                                key=lambda item: item[1].name.casefold(),
-                            ):
-                                skill_table.add_row(
-                                    skill.name,
-                                    key,
-                                    skill.description,
-                                )
-                            session_ui.print(skill_table)
-                            session_ui.print(
-                                "Select one for your next request with "
-                                "`/skills <command key>`; use Tab to complete "
-                                "available keys."
-                            )
-                        continue
-                    normalized_skill = re.sub(
-                        r"[\s-]+", "_", requested_skill
-                    ).casefold()
-                    selected_match = next(
-                        (
-                            key
-                            for key, skill in loaded_skills.items()
-                            if re.sub(r"[\s-]+", "_", key).casefold()
-                            == normalized_skill
-                            or re.sub(r"[\s-]+", "_", skill.name).casefold()
-                            == normalized_skill
-                        ),
-                        None,
+                    from .commands import skills as _skills_command
+
+                    selected_skill_key, loaded_skills = _skills_command.handle_skills_command(
+                        user_input, loaded_skills, selected_skill_key, session_ui
                     )
-                    if selected_match is None:
-                        session_ui.print(
-                            f"[yellow][Skills][/yellow] Skill "
-                            f"{requested_skill!r} is not available. Use `/skills` "
-                            "to list loaded skills."
-                        )
-                    else:
-                        selected_skill_key = selected_match
-                        selected_name = loaded_skills[selected_match].name
-                        session_ui.print(
-                            f"[cyan][Skills][/cyan] {selected_name} selected "
-                            "for your next request."
-                        )
                     continue
                 if user_input.lower() == "/tasks":
-                    # Listing and resolving saved plans scans SQLite; keep it
-                    # off the event loop (J10, 13.8).
-                    approved_task_id = await asyncio.to_thread(
-                        _run_task_management,
-                        memory,
-                        session_id,
-                        skills_folder_input or None,
+                    from .commands import tasks as _tasks_command
+
+                    result = await _tasks_command.handle_tasks_command(
+                        memory=memory,
+                        session_id=session_id,
+                        skills_folder_input=skills_folder_input,
+                        loaded_skills=loaded_skills,
+                        session_ui=session_ui,
+                        console=console,
                     )
-                    loaded_skills = (
-                        load_skills_from_folder(skills_folder_input)
-                        if skills_folder_input
-                        else {}
-                    )
-                    _tool_context = get_tool_context()
-                    _tool_context.skill_directory = (
-                        os.path.abspath(os.path.expanduser(skills_folder_input))
-                        if skills_folder_input
-                        else None
-                    )
-                    _tool_context.skill_registry = loaded_skills
-                    set_tool_context(_tool_context)
-                    if approved_task_id:
-                        approved_task = memory.get_task(approved_task_id)
-                        if not (
-                            approved_task
-                            and approved_task["status"] == "active"
-                            and approved_task["approved_revision"]
-                            == approved_task["revision"]
-                            and approved_task["approved_digest"]
-                            == approved_task["digest"]
-                        ):
-                            session_ui.print(
-                                "[yellow][Task not started][/yellow] The task is no "
-                                "longer active with current approval; no execution "
-                                "was started. Review it with `/tasks`."
-                            )
-                            continue
-                        user_input = approved_task["goal"]
-                        session_ui.print(
-                            "[green][Task started][/green] Continuing with the "
-                            "approved plan automatically; no need to repeat the "
-                            "request. Enter `pause` via `/tasks` to stop it."
-                        )
-                    else:
+                    approved_task_id, loaded_skills, new_user_input = result
+                    if new_user_input:
+                        _pending_user_input = new_user_input
                         continue
+                    if approved_task_id is None:
+                        continue
+                    approved_task = memory.get_task(approved_task_id)
+                    if not (
+                        approved_task
+                        and approved_task["status"] == "active"
+                        and approved_task["approved_revision"]
+                        == approved_task["revision"]
+                        and approved_task["approved_digest"]
+                        == approved_task["digest"]
+                    ):
+                        session_ui.print(
+                            "[warning][Task not started][/warning] The task is no "
+                            "longer active with current approval; no execution "
+                            "was started. Review it with `/tasks`."
+                        )
+                        continue
+                    _pending_user_input = approved_task["goal"]
+                    session_ui.print(
+                        "[success][Task started][/success] Continuing with the "
+                        "approved plan automatically; no need to repeat the "
+                        "request. Enter `pause` via `/tasks` to stop it."
+                    )
+                    continue
                 if user_input.lower() == "/list_tools":
                     catalog = describe_tool_catalog()
                     unavailable_names = {
@@ -2842,43 +2849,38 @@ async def _run_agent_cli_session(
                     continue
                 _thinking_command = user_input.lower()
                 if _thinking_command in {"/thinking on", "/thinking off", "/think on", "/think off"}:
-                    requested = _thinking_command.split()
-                    thinking_enabled = requested[-1] == "on"
-                    if capabilities["thinking"] is not True:
-                        session_ui.print(
-                            f"[yellow]Model '{selected_model}' does not declare thinking support; "
-                            "the requested setting is not active.[/yellow]"
-                        )
-                    else:
-                        llm = _make_selected_local_chat_model(
-                            selected_local_runtime,
-                            selected_model,
-                            thinking_enabled=thinking_enabled,
+                    from .commands import think as _think_command
+
+                    thinking_enabled, new_llm, new_llm_with_tools = (
+                        _think_command.handle_think_toggle(
+                            command=_thinking_command,
+                            selected_model=selected_model,
+                            selected_local_runtime=selected_local_runtime,
                             thinking_effort=thinking_effort,
                             capabilities=capabilities,
+                            tools_list=tools_list,
+                            session_ui=session_ui,
+                            make_model=_make_selected_local_chat_model,
+                            bind_tools=_bind_tools,
                         )
-                        llm_with_tools = (
-                            _bind_tools(llm, tools_list)
-                            if capabilities["tools"] is not False
-                            else llm
-                        )
-                        session_ui.print(
-                            f"[cyan]Thinking: {'on' if thinking_enabled else 'off'}[/cyan]"
-                        )
+                    )
+                    if new_llm is not None:
+                        llm = new_llm
+                        llm_with_tools = new_llm_with_tools
                     continue
                 _effort_command = user_input.lower()
                 if _effort_command.startswith(("/effort", "/think-effort")):
                     parts = _effort_command.split()
                     if len(parts) != 2 or parts[1] not in {"low", "medium", "high"}:
                         session_ui.print(
-                            "[yellow]Usage: /effort low|medium|high[/yellow]"
+                            "[warning]Usage: /effort low|medium|high[/warning]"
                         )
                         continue
                     thinking_effort = parts[1]
                     if capabilities["thinking"] is not True:
                         session_ui.print(
-                            f"[yellow]Model '{selected_model}' does not declare thinking support; "
-                            "the effort setting is saved but inactive.[/yellow]"
+                            f"[warning]Model '{selected_model}' does not declare thinking support; "
+                            "the effort setting is saved but inactive.[/warning]"
                         )
                     else:
                         llm = _make_selected_local_chat_model(
@@ -2895,52 +2897,29 @@ async def _run_agent_cli_session(
                         )
                     continue
                 if user_input.lower() == "/think-status":
-                    effective_thinking = (
-                        thinking_enabled and capabilities["thinking"] is True
-                    )
-                    session_ui.print(
-                        f"[cyan]Model: {selected_model}; thinking: "
-                        f"{'on' if effective_thinking else 'off'}; requested: "
-                        f"{'on' if thinking_enabled else 'off'}; effort: {thinking_effort}; "
-                        f"supported: {capabilities['thinking']}[/cyan]"
+                    from .commands import think as _think_command
+
+                    _think_command.handle_think_status(
+                        selected_model=selected_model,
+                        thinking_enabled=thinking_enabled,
+                        thinking_effort=thinking_effort,
+                        capabilities=capabilities,
+                        session_ui=session_ui,
                     )
                     continue
                 if user_input.lower() == "/hardware-status":
-                    if (
-                        provider_type == "local"
-                        and selected_local_runtime is not None
-                        and selected_local_runtime.kind == "ollama"
-                    ):
-                        hardware_info = inspect_ollama_hardware(
-                            selected_local_runtime.base_url,
-                            HARDWARE_ACCELERATION_MODE,
-                            client_factory=lambda **kwargs: __import__("ollama").Client(
-                                **kwargs, **ollama_client_kwargs()
-                            ),
-                        )
-                        session_ui.print(
-                            "[bold green][Ollama Hardware Status][/bold green]\n"
-                            + format_hardware_status(hardware_info)
-                        )
-                    elif (
-                        provider_type == "local" and selected_local_runtime is not None
-                    ):
-                        session_ui.print(
-                            f"[cyan][Hardware Status][/cyan] "
-                            f"{selected_local_runtime.name} does not expose a "
-                            "standardized hardware-placement API. Check that "
-                            "runtime's own diagnostics for backend and device use."
-                        )
-                    else:
-                        session_ui.print(
-                            "[cyan][Hardware Status][/cyan] Select a local model "
-                            "to view runner-specific hardware diagnostics."
-                        )
+                    from .commands import think as _think_command
+
+                    _think_command.handle_hardware_status(
+                        provider_type=provider_type,
+                        selected_local_runtime=selected_local_runtime,
+                        session_ui=session_ui,
+                    )
                     continue
                 if user_input.lower() == "/summarize":
                     if session_summary_saved:
                         session_ui.print(
-                            "[cyan][Memory][/cyan] Nothing new since the last summary."
+                            "[info][Memory][/info] Nothing new since the last summary."
                         )
                     else:
                         session_summary_saved = await _summarize_and_save_session(
@@ -2956,7 +2935,7 @@ async def _run_agent_cli_session(
                     continue
                 if user_input.lower() == "/compact":
                     if not chat_history:
-                        session_ui.print("[cyan][Context][/cyan] Nothing to compact yet.")
+                        session_ui.print("[info][Context][/info] Nothing to compact yet.")
                         continue
                     chat_history, context_summary = await compact_history(
                         llm,
@@ -2966,12 +2945,12 @@ async def _run_agent_cli_session(
                         max_chars=CONTEXT_SUMMARY_CHARS,
                         source_token_limit=max(200, MAX_CONTEXT_TOKENS // 4),
                         notify=lambda text, sui=session_ui: sui.print(
-                            f"[cyan][Context][/cyan] {text}"
+                            f"[info][Context][/info] {text}"
                         ),
                         model_name=selected_model,
                     )
                     session_ui.print(
-                        "[green][Context][/green] Compacted into a working summary "
+                        "[success][Context][/success] Compacted into a working summary "
                         f"({len(context_summary)} chars); {len(chat_history)} message(s) kept verbatim."
                     )
                     continue
@@ -2985,7 +2964,7 @@ async def _run_agent_cli_session(
                         return
                     if session_summary_saved:
                         session_ui.print(
-                            "[cyan][Memory][/cyan] Session summary already saved; "
+                            "[info][Memory][/info] Session summary already saved; "
                             "no new prompts since."
                         )
                     else:
@@ -3001,14 +2980,18 @@ async def _run_agent_cli_session(
                     _print_session_statistics()
                     return
                 if user_input.lower() == "switch":
-                    session_ui.print("[cyan][Info] Returning to model selection...[/cyan]")
+                    session_ui.print("[info][Info] Returning to model selection...[/info]")
                     model_selection_failed = True
                     break
                 if not user_input:
                     continue
                 turn_permission_mode = permission_mode
                 planning_only = planning_mode_persistent
-                coding_task_requested = coding_mode_armed
+                _acs = _approved_coding_task_scope(memory)
+                coding_task_requested = (
+                    coding_mode_armed
+                    or _acs is not None
+                )
                 if planning_only:
                     active_task_id = get_tool_context().task_id
                     active_task = (
@@ -3036,8 +3019,8 @@ async def _run_agent_cli_session(
                             )
                         except Exception as exc:  # noqa: BLE001 - text planning is optional; report failure
                             session_ui.print(
-                                "[red]Text planning failed: "
-                                f"{type(exc).__name__}: {exc}[/red]"
+                                "[error]Text planning failed: "
+                                f"{type(exc).__name__}: {exc}[/error]"
                             )
                         continue
                     planner_names = {
@@ -3061,17 +3044,17 @@ async def _run_agent_cli_session(
                     ]
                     if not tools_list:
                         session_ui.print(
-                            "[yellow]Planner tools are unavailable. Select Local "
+                            "[warning]Planner tools are unavailable. Select Local "
                             "or explicitly enable local-context sharing for this "
-                            "Online session.[/yellow]"
+                            "Online session.[/warning]"
                         )
                         continue
                     try:
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; abort only this turn
                         session_ui.print(
-                            f"[red]Could not bind planner tools "
-                            f"({type(exc).__name__}); no task was planned.[/red]"
+                            f"[error]Could not bind planner tools "
+                            f"({type(exc).__name__}); no task was planned.[/error]"
                         )
                         tools_list = list(base_tools_list)
                         continue
@@ -3085,14 +3068,14 @@ async def _run_agent_cli_session(
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; continue without tools
                         session_ui.print(
-                            f"[yellow]Could not bind the session tools "
-                            f"({type(exc).__name__}); continuing without tool calls.[/yellow]"
+                            f"[warning]Could not bind the session tools "
+                            f"({type(exc).__name__}); continuing without tool calls.[/warning]"
                         )
                         llm_with_tools = llm
                 try:
                     user_input, attached_file_context = include_file_context(user_input)
                 except (OSError, ValueError) as exc:
-                    session_ui.print(f"[red][File context error] {exc}[/red]")
+                    session_ui.print(f"[error][File context error] {exc}[/error]")
                     continue
                 if pending_folder_context:
                     attached_file_context = "\n\n".join(
@@ -3114,7 +3097,7 @@ async def _run_agent_cli_session(
                     approved_coding_scope = _approved_coding_task_scope(memory)
                     if approved_coding_scope is None:
                         session_ui.print(
-                            "[yellow][Plan approval required][/yellow] Run /plan, "
+                            "[warning][Plan approval required][/warning] Run /plan, "
                             "save the coding checklist from the approved request, "
                             "review and approve it with /tasks (including the "
                             "source project scope), then run /code for the next "
@@ -3128,7 +3111,7 @@ async def _run_agent_cli_session(
                     turn_permission_mode = _coding_permission_mode(access_level)
                     if isolation_warning:
                         session_ui.print(
-                            "[red][Code task unavailable][/red] Isolated project "
+                            "[error][Code task unavailable][/error] Isolated project "
                             f"execution is disabled on this host: {isolation_warning}"
                         )
                         continue
@@ -3137,15 +3120,15 @@ async def _run_agent_cli_session(
                         and not online_selection["allow_tools"]
                     ):
                         session_ui.print(
-                            "[red]This online session has local tool access disabled. "
+                            "[error]This online session has local tool access disabled. "
                             "Select Local or explicitly enable tools in a new Online session "
-                            "to run a code task.[/red]"
+                            "to run a code task.[/error]"
                         )
                         continue
                     if capabilities["tools"] is False:
                         session_ui.print(
-                            "[red]The selected model cannot call tools, so it cannot "
-                            "safely execute this code task.[/red]"
+                            "[error]The selected model cannot call tools, so it cannot "
+                            "safely execute this code task.[/error]"
                         )
                         continue
                     source_path = None
@@ -3175,8 +3158,8 @@ async def _run_agent_cli_session(
                         )
                     except (ValueError, sqlite3.Error, OSError) as exc:
                         session_ui.print(
-                            "[red][Task journal error] No code workspace was "
-                            f"created because action intent could not be saved: {exc}[/red]"
+                            "[error][Task journal error] No code workspace was "
+                            f"created because action intent could not be saved: {exc}[/error]"
                         )
                         continue
                     try:
@@ -3195,14 +3178,24 @@ async def _run_agent_cli_session(
                             )
                         except (ValueError, sqlite3.Error, OSError) as journal_exc:
                             session_ui.print(
-                                "[red][Task journal error] Could not persist "
-                                f"workspace failure outcome: {journal_exc}[/red]"
+                                "[error][Task journal error] Could not persist "
+                                f"workspace failure outcome: {journal_exc}[/error]"
                             )
                         session_ui.print(
-                            "[red][Code workspace error] Creation failed; inspect "
-                            f"the isolated output location before retrying: {exc}[/red]"
+                            "[error][Code workspace error] Creation failed; inspect "
+                            f"the isolated output location before retrying: {exc}[/error]"
                         )
                         active_code_workspace = None
+                        _tool_context = get_tool_context()
+                        _tool_context.code_task = None
+                        set_tool_context(_tool_context)
+                        try:
+                            memory.set_task_status(
+                                _tool_context.task_id, "cancelled",
+                                owner_id=getattr(_tool_context, "runtime_owner_id", None),
+                            )
+                        except (ValueError, sqlite3.Error, OSError):
+                            pass
                     else:
                         workspace_digest = hashlib.sha256(
                             (
@@ -3219,15 +3212,15 @@ async def _run_agent_cli_session(
                             )
                         except (ValueError, sqlite3.Error, OSError) as exc:
                             session_ui.print(
-                                "[red][Task journal error] Workspace creation "
+                                "[error][Task journal error] Workspace creation "
                                 "returned, but its outcome could not be saved; "
-                                f"inspect it before retrying: {exc}[/red]"
+                                f"inspect it before retrying: {exc}[/error]"
                             )
                             active_code_workspace = None
                     if active_code_workspace is None:
                         session_ui.print(
-                            "[yellow]Code task cancelled. Code tools were not started. Inspect task "
-                            "actions and the isolated output path before retrying.[/yellow]"
+                            "[warning]Code task cancelled. Code tools were not started. Inspect task "
+                            "actions and the isolated output path before retrying.[/warning]"
                         )
                         continue
                     SandboxManager.set_root(str(active_code_workspace.root))
@@ -3253,8 +3246,8 @@ async def _run_agent_cli_session(
                         llm_with_tools = _bind_tools(llm, tools_list)
                     except Exception as exc:  # noqa: BLE001 - bind_tools errors depend on the model; abort the code task
                         session_ui.print(
-                            f"[red]Could not bind the code-task tools ({type(exc).__name__}); "
-                            "no code was written.[/red]"
+                            f"[error]Could not bind the code-task tools ({type(exc).__name__}); "
+                            "no code was written.[/error]"
                         )
                         cleanup_code_task(finalize=False)
                         continue
@@ -3273,7 +3266,7 @@ async def _run_agent_cli_session(
                         "run_project_unit_tests, and report the missing Git history."
                     )
                     session_ui.print(
-                        f"[bold cyan][Code Task][/bold cyan] Workspace: "
+                        f"[bold info][Code Task][/bold info] Workspace: "
                         f"{active_code_workspace.root} | "
                         f"Access level: {access_level}\n{git_policy}"
                     )
@@ -3281,7 +3274,7 @@ async def _run_agent_cli_session(
                 if selected_skill_key:
                     if not include_private_context:
                         session_ui.print(
-                            "[yellow][Skills][/yellow] The selected skill was not "
+                            "[warning][Skills][/warning] The selected skill was not "
                             "sent because this session does not permit private "
                             "local context sharing."
                         )
@@ -3289,7 +3282,7 @@ async def _run_agent_cli_session(
                         active_skill = loaded_skills.get(selected_skill_key)
                         if active_skill is None:
                             session_ui.print(
-                                "[yellow][Skills][/yellow] The selected skill is "
+                                "[warning][Skills][/warning] The selected skill is "
                                 "no longer available; use `/skills` to choose "
                                 "another one."
                             )
@@ -3301,6 +3294,8 @@ async def _run_agent_cli_session(
                         else None
                     )
                     if skill_embedder is not None:
+                        from skills import match_skill_by_relevancy
+
                         active_skill = await asyncio.to_thread(
                             match_skill_by_relevancy,
                             user_input,
@@ -3308,6 +3303,8 @@ async def _run_agent_cli_session(
                             skill_embedder,
                         )
                     else:
+                        from skills import match_skill_by_relevancy
+
                         active_skill = match_skill_by_relevancy(
                             user_input, loaded_skills
                         )
@@ -3413,12 +3410,12 @@ async def _run_agent_cli_session(
                         current_signature = knowledge_base_signature(docs_input)
                         if current_signature != rag_signature:
                             session_ui.print(
-                                "[cyan][RAG][/cyan] Knowledge-base changes detected; "
+                                "[info][RAG][/info] Knowledge-base changes detected; "
                                 "updating the index..."
                             )
                             refresh_started = time.monotonic()
                             with console.status(
-                                "[bold cyan]Refreshing local knowledge index...[/bold cyan]"
+                                "[bold info]Refreshing local knowledge index...[/bold info]"
                             ):
                                 refreshed = await asyncio.to_thread(
                                     initialize_knowledge_base,
@@ -3437,19 +3434,19 @@ async def _run_agent_cli_session(
                             if refreshed is not None:
                                 vectorstore = refreshed
                                 rag_signature = current_signature
-                                session_ui.print("[green][RAG][/green] Index updated.")
+                                session_ui.print("[success][RAG][/success] Index updated.")
                             else:
                                 session_ui.print(
-                                    "[yellow][RAG] Update failed; keeping the "
-                                    "previous index.[/yellow]"
+                                    "[warning][RAG] Update failed; keeping the "
+                                    "previous index.[/warning]"
                                 )
                     except Exception as exc:  # noqa: BLE001 - reindex failures come from Chroma/embeddings; keep the old index
                         reference_id = uuid.uuid4().hex[:8]
                         session_ui.print(
-                            f"[yellow][RAG] Auto-update skipped "
+                            f"[warning][RAG] Auto-update skipped "
                             f"({type(exc).__name__}; reference {reference_id}). "
                             "Check the configured documents path and retry "
-                            "through `/maintenance` → `rag reindex`.[/yellow]"
+                            "through `/maintenance` → `rag reindex`.[/warning]"
                         )
                         log_event(
                             RUN_LOGGER,
@@ -3463,7 +3460,7 @@ async def _run_agent_cli_session(
                     rag_search_started = time.monotonic()
                     try:
                         with console.status(
-                            "[bold cyan]Searching local knowledge...[/bold cyan]"
+                            "[bold info]Searching local knowledge...[/bold info]"
                         ):
                             relevant_docs = await _retrieve_rag_documents(
                                 vectorstore,
@@ -3487,14 +3484,14 @@ async def _run_agent_cli_session(
                                 for d in relevant_docs
                             )
                             session_ui.print(
-                                f"[cyan][RAG State][/cyan] Retrieved {len(relevant_docs)} document/episodic chunks."
+                                f"[info][RAG State][/info] Retrieved {len(relevant_docs)} document/episodic chunks."
                             )
                         elif RAG_DOCUMENTS_ONLY:
                             context_text = "No relevant documents were found. Answer that the information is not in the provided documents."
                     except Exception as exc:  # noqa: BLE001 - retrieval failures come from Chroma/embeddings; use no context
                         reference_id = uuid.uuid4().hex[:8]
                         session_ui.print(
-                            "[yellow][RAG][/yellow] Local search failed; "
+                            "[warning][RAG][/warning] Local search failed; "
                             "continuing without retrieved documents "
                             f"(reference {reference_id}). Check the local index "
                             "and configured embedding runtime."
@@ -3694,18 +3691,20 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     CONTEXT_COMPACTION_THRESHOLD,
                     MAX_HISTORY_MESSAGES,
                 ):
-                    chat_history, context_summary = await compact_history(
-                        llm,
-                        chat_history,
-                        context_summary,
-                        keep_recent=CONTEXT_KEEP_RECENT_MESSAGES,
-                        max_chars=CONTEXT_SUMMARY_CHARS,
-                        source_token_limit=max(200, prompt_budget // 2),
-                        notify=lambda text, sui=session_ui: sui.print(
-                            f"[cyan][Context][/cyan] {text}"
-                        ),
-                        model_name=selected_model,
-                    )
+                    try:
+                        chat_history, context_summary = await compact_history(
+                            llm, chat_history, context_summary,
+                            keep_recent=CONTEXT_KEEP_RECENT_MESSAGES,
+                            max_chars=CONTEXT_SUMMARY_CHARS,
+                            source_token_limit=max(200, prompt_budget // 2),
+                            notify=lambda text, sui=session_ui: sui.print(
+                                f"[info][Context][/info] {text}"
+                            ),
+                            model_name=selected_model,
+                        )
+                    except (ValueError, RuntimeError, OSError) as exc:
+                            console.print(f"[warning][Context] Compaction failed ({type(exc).__name__}); trimming recent history.[/warning]")
+                            chat_history = chat_history[-MAX_HISTORY_MESSAGES:]
                 summary_message = summary_system_message(context_summary)
                 if summary_message is not None:
                     system_prompts.append(summary_message)
@@ -3716,9 +3715,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     )
                 if prompt_budget < 1:
                     console.print(
-                        "[red]The system instructions exceed this model's configured "
+                        "[error]The system instructions exceed this model's configured "
                         "context window. Reduce the active skill/system prompt or "
-                        "increase agent.max_context_tokens.[/red]"
+                        "increase agent.max_context_tokens.[/error]"
                     )
                     continue
                 enriched_input = _build_bounded_user_input(
@@ -3816,15 +3815,15 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         ):
                             plan_text = str(response.content).strip()
                             if plan_text:
-                                session_ui.print_markup(f"[cyan][Plan][/cyan] {plan_text}")
+                                session_ui.print_markup(f"[info][Plan][/info] {plan_text}")
                         iteration_label = (
                             f"{iteration} of {tool_iteration_limit}"  # noqa: B023
                             if tool_iteration_limit is not None  # noqa: B023
                             else str(iteration)
                         )
                         session_ui.print_markup(
-                            f"[cyan][Agent Loop] Plan/act/verify step "
-                            f"{iteration_label}...[/cyan]"
+                            f"[info][Agent Loop] Plan/act/verify step "
+                            f"{iteration_label}...[/info]"
                         )
                         for tool_call in response.tool_calls:
                             _display_tool_request(tool_call)
@@ -3899,7 +3898,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             threshold=CONTEXT_COMPACTION_THRESHOLD,
                             max_chars=CONTEXT_SUMMARY_CHARS,
                             notify=lambda text, sui=session_ui: sui.print(
-                                f"[cyan][Context][/cyan] {text}"
+                                f"[info][Context][/info] {text}"
                             ),
                             model_name=selected_model,  # noqa: B023
                         )
@@ -3977,7 +3976,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         and deadline > time.monotonic()  # noqa: B023
                     ):
                         session_ui.print_markup(
-                            "[cyan][Context][/cyan] The model gave no answer after the tool "
+                            "[info][Context][/info] The model gave no answer after the tool "
                             "results; asking it once to answer from them..."
                         )
                         response = await _invoke_with_status(
@@ -4003,12 +4002,19 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 )
                 session_ui.set_context(*usage)
                 session_ui.turn_started(user_input)
+                with contextlib.suppress(Exception):  # noqa: BLE001
+                    reset_internet_check_cache()
+                with contextlib.suppress(Exception):  # noqa: BLE001
+                    reset_internet_check_for_turn()
                 try:
                     response = await _run_agent_turn(response)
                 finally:
                     f_integration.finish_turn(_f_state)
                     session_ui.set_generation(getattr(response, "generation_stats", None))
+                if SHOW_TURN_STATS:
                     session_ui.turn_finished()
+                else:
+                    session_ui._footer.turn_finished()
                 content = response.content
                 full_output_content = (
                     _visible_chunk_text(content)
@@ -4025,17 +4031,17 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     response, "tool_calls", None
                 ):
                     session_ui.print_markup(
-                        "[yellow]The model returned no visible response text.[/yellow]"
+                        "[warning]The model returned no visible response text.[/warning]"
                     )
                 if retrieved_citations:
-                    session_ui.print_markup("[bold cyan][Retrieved Sources][/bold cyan]")
+                    session_ui.print_markup("[bold info][Retrieved Sources][/bold info]")
                     for citation in retrieved_citations:
                         session_ui.print_markup(f"  - {citation}")
                 # Per-turn summary is emitted by session_ui.turn_finished() above.
                 if active_code_workspace is not None:
                     verification = cleanup_code_task(finalize=True)
                     session_ui.print_markup(
-                        f"[cyan][Code Task Verification][/cyan] {verification}"
+                        f"[info][Code Task Verification][/info] {verification}"
                     )
                     full_output_content += (
                         f"\n\n[Code task verification]\n{verification}"
@@ -4048,20 +4054,24 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _tool_context.turn_id = None
                 set_tool_context(_tool_context)
                 chat_history.append(HumanMessage(content=user_input))
-                chat_history.append(AIMessage(content=full_output_content))
+                stored_output = (
+                    full_output_content[:MAX_CONTEXT_TOKENS * 4] + "\n[truncated for memory]"
+                    if len(full_output_content) > MAX_CONTEXT_TOKENS * 4
+                    else full_output_content
+                )
+                chat_history.append(AIMessage(content=stored_output))
                 if non_interactive:
                     _LAST_HEADLESS_RESPONSE = full_output_content
                 session_summary_saved = False
                 _SESSION_STATS.turns += 1
-                if CONTEXT_COMPACTION_THRESHOLD <= 0:
-                    chat_history = chat_history[-MAX_HISTORY_MESSAGES:]
+                chat_history = chat_history[-MAX_HISTORY_MESSAGES:]
         except (KeyboardInterrupt, asyncio.CancelledError):
             cleanup_code_task(finalize=False)
             _acknowledge_interrupt()
             if non_interactive:
                 return
             console.print(
-                "[yellow]Turn interrupted; session kept. Press Ctrl+C twice to exit.[/yellow]"
+                "[warning]Turn interrupted; session kept. Press Ctrl+C twice to exit.[/warning]"
             )
             continue
         except RuntimeError as rte:
@@ -4075,9 +4085,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 error_type=type(rte).__name__,
                 exc_info=True,
             )
-            console.print(f"\n[red][Exception] {rte!s}[/red]")
+            console.print(f"\n[error][Exception] {rte!s}[/error]")
             console.print(
-                "[red][Action Required] Review the error and local model/tool configuration.[/red]\n"
+                "[error][Action Required] Review the error and local model/tool configuration.[/error]\n"
             )
             continue
         except (ValueError, OSError) as ex:
@@ -4092,14 +4102,12 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 exc_info=True,
             )
             console.print(
-                f"\n[red][Exception] Unexpected runtime error: {ex!s}[/red]\n"
+                f"\n[error][Exception] Unexpected runtime error: {ex!s}[/error]\n"
             )
             continue
         if model_selection_failed:
             continue
         break
-
-
 async def run_agent_cli_async(
     *,
     verbose_startup: bool = False,
@@ -4152,8 +4160,8 @@ async def run_agent_cli_async(
                             )
                     except (ValueError, sqlite3.Error, OSError) as exc:
                         console.print(
-                            "[yellow][Shutdown warning] Could not persist the "
-                            f"task interruption: {exc}[/yellow]"
+                            "[warning][Shutdown warning] Could not persist the "
+                            f"task interruption: {exc}[/warning]"
                         )
                 _ACTIVE_MEMORY.close()
             except Exception as exc:  # noqa: BLE001 - shutdown must not raise while closing memory
@@ -4165,7 +4173,7 @@ async def run_agent_cli_async(
                     exc_info=True,
                 )
                 console.print(
-                    f"[yellow][Shutdown warning] Could not close SQLite memory: {exc}[/yellow]"
+                    f"[warning][Shutdown warning] Could not close SQLite memory: {exc}[/warning]"
                 )
             finally:
                 _ACTIVE_MEMORY = None
@@ -4245,7 +4253,7 @@ _LAZY_INTERACTIVE_NAMES = {
 }
 _LAZY_MODEL_SELECTION_NAMES = {
     "_discover_available_local_runtimes", "_effective_context_window",
-    "_make_selected_local_chat_model", "inspect_model_capabilities",
+    "_make_selected_local_chat_model",
     "inspect_openai_compatible_model_capabilities", "select_online_model",
 }
 _LAZY_TASK_COMMAND_NAMES = set()
@@ -4255,8 +4263,6 @@ _LAZY_TOOL_DISPLAY_NAMES = {
     "_redact_sensitive_values", "_redact_tool_arguments", "_tool_log_redactions",
     "_tool_result_is_error",
 }
-
-
 def __getattr__(name: str):
     if name in _LAZY_TOOL_NAMES:
         import tools as _tools
@@ -4266,18 +4272,15 @@ def __getattr__(name: str):
     if name in _LAZY_MEDIA_NAMES:
         from tools import media as _media
         attr = getattr(_media, name)
-        globals()[name] = attr
-        return attr
+        globals()[name] = attr; return attr
     if name == "_format_interactive_help":
         from . import interactive as _interactive
         attr = _interactive.format_help
-        globals()[name] = attr
-        return attr
+        globals()[name] = attr; return attr
     if name in _LAZY_INTERACTIVE_NAMES:
         from . import interactive as _interactive
         attr = getattr(_interactive, name)
-        globals()[name] = attr
-        return attr
+        globals()[name] = attr; return attr
     if name in _LAZY_MODEL_SELECTION_NAMES:
         from . import model_selection as _model_selection
         attr = getattr(_model_selection, name)

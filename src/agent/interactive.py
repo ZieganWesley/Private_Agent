@@ -25,6 +25,7 @@ SLASH_COMMANDS = {
     "/commands": "List all available slash commands.",
     "/doctor": "Run dependency, environment and machine-resource diagnostics.",
     "/expand": "Show the full output of the most recent tool call.",
+    "/last": "Show the full output of the most recent tool call (/last [N]).",
     "/list_tools": "List available tools, descriptions, and permission boundaries.",
     "/maintenance": (
         "Review episodes, manage user-confirmed learning, and maintain SQLite/RAG."
@@ -87,7 +88,7 @@ _FOLDER_CONTEXT_EXTENSIONS = frozenset(
 )
 
 
-def format_help() -> str:
+def format_help(grouped: bool = True) -> str:
     groups = {
         "Chat": [
             "/plan",
@@ -108,7 +109,20 @@ def format_help() -> str:
         "Model": ["/thinking", "/effort", "/hardware-status", "switch"],
         "Session": ["exit", "switch"],
     }
-    lines = ["[bold cyan]Commands[/bold cyan]"]
+    lines = ["[bold info]Commands[/bold info]"]
+    if not grouped:
+        for command in list(SLASH_COMMANDS) + list(SESSION_COMMANDS):
+            description = SLASH_COMMANDS.get(command) or SESSION_COMMANDS.get(command)
+            lines.append(f"  [info]{command}[/info] — {description}")
+        lines.extend(
+            [
+                "  [info]@<workspace-relative-path>[/info] — Include a UTF-8 text file "
+                "in this request (for example: @src/app.py explain this file).",
+                "  [info]/add <workspace-relative-folder>[/info] — Include supported "
+                "UTF-8 text files from a folder in the next request only.",
+            ]
+        )
+        return "\n".join(lines)
     printed = set()
     for group_name, command_names in groups.items():
         group_lines = []
@@ -117,7 +131,7 @@ def format_help() -> str:
             if description is None or command in printed:
                 continue
             printed.add(command)
-            group_lines.append(f"  [cyan]{command}[/cyan] — {description}")
+            group_lines.append(f"  [info]{command}[/info] — {description}")
         if group_lines:
             lines.append(f"[bold]{group_name}[/bold]")
             lines.extend(group_lines)
@@ -131,12 +145,12 @@ def format_help() -> str:
         lines.append("[bold]Other[/bold]")
         for command in leftover:
             description = SLASH_COMMANDS.get(command) or SESSION_COMMANDS.get(command)
-            lines.append(f"  [cyan]{command}[/cyan] — {description}")
+            lines.append(f"  [info]{command}[/info] — {description}")
     lines.extend(
         [
-            "  [cyan]@<workspace-relative-path>[/cyan] — Include a UTF-8 text file "
+            "  [info]@<workspace-relative-path>[/info] — Include a UTF-8 text file "
             "in this request (for example: @src/app.py explain this file).",
-            "  [cyan]/add <workspace-relative-folder>[/cyan] — Include supported "
+            "  [info]/add <workspace-relative-folder>[/info] — Include supported "
             "UTF-8 text files from a folder in the next request only.",
             "  File context is read-only and limited to the workspace and configured "
             f"{MAX_READ_FILE_BYTES}-byte total limit. `/context` reviews queued "
@@ -531,11 +545,11 @@ def handle_session_command(
 ):
     command = (user_input or "").lower()
     if command == "/new":
-        console.print("[cyan][Command][/cyan] Started a new conversation.")
+        console.print("[info][Command][/info] Started a new conversation.")
         return True, True, user_input, [], "", last_user_request
     if command == "/retry":
         if last_user_request:
-            console.print("[cyan][Command][/cyan] Retrying previous request.")
+            console.print("[info][Command][/info] Retrying previous request.")
             return (
                 True,
                 False,
@@ -544,16 +558,16 @@ def handle_session_command(
                 context_summary,
                 last_user_request,
             )
-        console.print("[cyan][Command][/cyan] No previous request to retry.")
+        console.print("[info][Command][/info] No previous request to retry.")
         return True, True, user_input, chat_history, context_summary, last_user_request
     if command.startswith("/export"):
         try:
             saved = export_conversation(
                 os.path.join(str(sandbox_root), "conversation_export.md"), chat_history
             )
-            console.print(f"[cyan][Command][/cyan] Exported conversation to {saved}")
+            console.print(f"[info][Command][/info] Exported conversation to {saved}")
         except (OSError, ValueError) as exc:
-            console.print(f"[red][Command][/red] Export failed: {exc}")
+            console.print(f"[error][Command][/error] Export failed: {exc}")
         return True, True, user_input, chat_history, context_summary, last_user_request
     return False, False, user_input, chat_history, context_summary, last_user_request
 

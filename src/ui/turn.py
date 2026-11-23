@@ -51,7 +51,10 @@ class TurnReport:
         gen = self.generation
         tokens = gen.output_tokens if gen is not None and gen.output_tokens else 0
         model = self.model if self.model is not None else "unknown"
-        return f"{TURN_LABEL} {model} | {tokens} tokens | {elapsed:.2f}s"
+        speed = ""
+        if gen is not None and getattr(gen, "tokens_per_second", 0.0):
+            speed = f" | {gen.tokens_per_second:.1f} tok/s"
+        return f"{TURN_LABEL} {model} | {tokens} tokens | {elapsed:.2f}s{speed}"
 
     def __str__(self) -> str:
         return self.summary_line()

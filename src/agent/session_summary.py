@@ -98,18 +98,18 @@ async def _summarize_and_save_session(
     """
     if not chat_history:
         console_obj.print(
-            "[cyan][Memory][/cyan] No chat history was available "
+            "[info][Memory][/info] No chat history was available "
             "to summarize; slash commands such as /maintenance "
             "are not stored as episodic memories."
         )
         return False
     console_obj.print(
-        f"\n[cyan][Info] Summarizing session {reason} "
-        "(press Ctrl+C again to skip)...[/cyan]"
+        f"\n[info][Info] Summarizing session {reason} "
+        "(press Ctrl+C again to skip)...[/info]"
     )
     summary_started = time.monotonic()
     try:
-        console_obj.print("[cyan][Summary 1/3][/cyan] Preparing session context...")
+        console_obj.print("[info][Summary 1/3][/info] Preparing session context...")
         summary_schema = memory.get_table_schema("chat_history")
         summary_limit = MAX_SUMMARY_CHARS
         summary_prompt = (
@@ -145,7 +145,7 @@ async def _summarize_and_save_session(
             + [HumanMessage(content=summary_prompt)]
         )
         console_obj.print(
-            "[cyan][Summary 2/3][/cyan] Model is summarizing the session..."
+            "[info][Summary 2/3][/info] Model is summarizing the session..."
         )
         with StatusIndicator(
             summarizing_message(model_name, "the session"),
@@ -186,20 +186,20 @@ async def _summarize_and_save_session(
                     time.monotonic() - call_started,
                 )
                 summary_text = str(summary_res.content).strip()
-        console_obj.print("[cyan][Summary 3/3][/cyan] Saving summary to SQLite...")
+        console_obj.print("[info][Summary 3/3][/info] Saving summary to SQLite...")
         memory.save_summary(session_id, summary_text)
         elapsed = time.monotonic() - summary_started
         _SESSION_STATS.summary_seconds += elapsed
         _SESSION_STATS.summary_tokens += _token_count(summary_text)
         _SESSION_STATS.summary_saved = True
         console_obj.print(
-            f"[green][Summary][/green] Saved to SQLite memory "
+            f"[success][Summary][/success] Saved to SQLite memory "
             f"({len(summary_text)} chars, ~{_token_count(summary_text)} tokens, "
             f"{format_duration(elapsed)})."
         )
         return True
     except (KeyboardInterrupt, asyncio.CancelledError):
-        console_obj.print("[yellow][Summary] Skipped; no summary was saved.[/yellow]")
+        console_obj.print("[warning][Summary] Skipped; no summary was saved.[/warning]")
     except Exception as exc:  # noqa: BLE001 - summary mixes model/transport/SQLite failures
         log_event(
             RUN_LOGGER,
@@ -212,8 +212,8 @@ async def _summarize_and_save_session(
         )
         error_detail = type(exc).__name__ if provider_type == "online" else str(exc)
         console_obj.print(
-            f"[yellow][Memory warning] Could not summarize session: "
-            f"{error_detail}[/yellow]"
+            f"[warning][Memory warning] Could not summarize session: "
+            f"{error_detail}[/warning]"
         )
     _SESSION_STATS.summary_seconds += time.monotonic() - summary_started
     return False
@@ -228,4 +228,4 @@ def _acknowledge_interrupt() -> None:
     if task is not None:
         while task.cancelling():
             task.uncancel()
-    console.print("\n[yellow][Info] Ctrl+C received; ending session.[/yellow]")
+    console.print("\n[warning][Info] Ctrl+C received; ending session.[/warning]")
