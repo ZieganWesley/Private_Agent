@@ -233,8 +233,13 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
                 normalized["name"] = "OpenAI-compatible"
         configured_entries.append(normalized)
 
+    ollama_base_url = (
+        model_config.get("ollama_base_url")
+        if isinstance(model_config, dict)
+        else None
+    )
     runtimes = discover_local_runtimes(
-        [],
+        ollama_base_url,
         configured_entries,
         client_factory=public_only_sync_client,
         allow_remote=allow_remote,
