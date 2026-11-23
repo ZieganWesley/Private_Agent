@@ -15,6 +15,7 @@ local RAG, skills, and persistent memory.
 - [Testing](docs/TESTING.md)
 - [Performance](docs/PERFORMANCE.md)
 - [UI & Accessibility](docs/UI.md)
+- [Audit](docs/AUDIT.md)
 - [Profiling Notes](docs/profiling.md)
 - [UI Consistency](docs/ui-consistency.md)
 
