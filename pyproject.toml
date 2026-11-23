@@ -80,7 +80,7 @@ build-backend = "setuptools.build_meta"
 pythonpath = ["src", "."]
 
 [tool.setuptools]
-py-modules = ["cli", "__main__"]
+py-modules = ["cli", "__main__", "platform_support"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
