@@ -11,6 +11,7 @@
 - **Medium** Filesystem git inspection uses bounded subprocess with timeout (`src/tools/filesystem.py`).
 - **Low** No path-traversal bypass found in audited filesystem helpers; workspace boundaries are enforced.
 - **Low** Secrets are not stored in repository; environment variables are used.
+- **Low** Platform-specific package-manager mappings in `src/platform_support.py` are unavoidable and derived from `/etc/os-release`; they remain distro-aware by design.
 
 ## UI / Accessibility
 - **Medium** Accessible mode supported via `PRIVATE_AGENT_ACCESSIBLE=1` and `NO_COLOR=1`.
