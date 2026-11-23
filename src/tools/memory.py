@@ -1,5 +1,6 @@
 """Tools for reading and deleting SQLite conversation history."""
 
+import pathlib
 import sqlite3
 
 from langchain_core.tools import tool
@@ -20,10 +21,13 @@ def read_chat_history_from_sqlite(limit: int = DEFAULT_HISTORY_READ_LIMIT) -> st
     """Read recent conversation entries from persistent SQLite memory."""
     limit = max(1, min(int(limit), 500))
     try:
+        db_path = get_tool_context().db_path
+        if db_path not in (None, "", ":memory:"):
+            pathlib.Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         with (
             _sqlite_lock,
             sqlite3.connect(
-                get_tool_context().db_path,
+                db_path,
                 check_same_thread=False,
             ) as conn,
         ):
@@ -40,7 +44,7 @@ def read_chat_history_from_sqlite(limit: int = DEFAULT_HISTORY_READ_LIMIT) -> st
             f"[{timestamp}] Session: {session_id} | {role}: {content}"
             for session_id, role, content, timestamp in reversed(rows)
         )
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, sqlite3.Error) as exc:
         return f"Error reading SQLite history: {exc}"
 
 
@@ -48,10 +52,13 @@ def read_chat_history_from_sqlite(limit: int = DEFAULT_HISTORY_READ_LIMIT) -> st
 def delete_chat_history_from_sqlite(session_id: str | None = None) -> str:
     """Delete stored SQLite chat history for one session or all sessions."""
     try:
+        db_path = get_tool_context().db_path
+        if db_path not in (None, "", ":memory:"):
+            pathlib.Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         with (
             _sqlite_lock,
             sqlite3.connect(
-                get_tool_context().db_path,
+                db_path,
                 check_same_thread=False,
             ) as conn,
         ):
@@ -70,7 +77,7 @@ def delete_chat_history_from_sqlite(session_id: str | None = None) -> str:
             return (
                 "Success: Wiped all chat history rows from SQLite persistent database."
             )
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, sqlite3.Error) as exc:
         return f"Error deleting SQLite history: {exc}"
 
 
@@ -82,10 +89,13 @@ def search_chat_history_in_sqlite(
 ) -> str:
     """Search bounded local conversation history and summaries; results include reviewable entry IDs."""
     try:
+        db_path = get_tool_context().db_path
+        if db_path not in (None, "", ":memory:"):
+            pathlib.Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         with (
             _sqlite_lock,
             sqlite3.connect(
-                get_tool_context().db_path,
+                db_path,
                 check_same_thread=False,
             ) as conn,
         ):
@@ -110,7 +120,7 @@ def search_chat_history_in_sqlite(
             f"{str(content)[:1200]}"
             for entry_id, row_session_id, role, timestamp, content in rows
         )
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, sqlite3.Error) as exc:
         return f"Error searching SQLite history: {exc}"
 
 
@@ -118,10 +128,13 @@ def search_chat_history_in_sqlite(
 def delete_chat_history_entry_from_sqlite(entry_id: int, session_id: str) -> str:
     """Delete one locally stored conversation entry identified by search results."""
     try:
+        db_path = get_tool_context().db_path
+        if db_path not in (None, "", ":memory:"):
+            pathlib.Path(db_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
         with (
             _sqlite_lock,
             sqlite3.connect(
-                get_tool_context().db_path,
+                db_path,
                 check_same_thread=False,
             ) as conn,
         ):
@@ -135,5 +148,5 @@ def delete_chat_history_entry_from_sqlite(entry_id: int, session_id: str) -> str
         return (
             "No matching SQLite history entry was deleted; verify its ID and session."
         )
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, sqlite3.Error) as exc:
         return f"Error deleting SQLite history entry: {exc}"

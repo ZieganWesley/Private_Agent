@@ -137,12 +137,12 @@ def configured_float(
 
 
 DEFAULT_PATHS: dict[str, str] = {
-    "database": "~/.local_ai_memory.db",
+    "database": "~/.config/private_agent/memory/private_agent.db",
     "workspace": ".",
     "code_output": "~/.config/private_agent/projects",
-    "skills": "~/.config/private_agent/resources/skills",
+    "skills": "~/.config/private_agent/skills",
     "rag_documents": "~/.config/private_agent/rag/",
-    "rag_index": "~/.config/private_agent/rag_index",
+    "rag_index": "~/.config/private_agent/rag/index",
 }
 
 
@@ -155,7 +155,11 @@ def resolve_config_values(
     default_paths = DEFAULT_PATHS if default_paths is None else default_paths
 
     DEFAULT_DB_PATH = os.path.expanduser(
-        str(config.get("default_db_path", "~/.local_ai_memory.db"))
+        str(
+            config.get(
+                "default_db_path", "~/.config/private_agent/memory/private_agent.db"
+            )
+        )
     )
     WORKSPACE_ROOT_DEFAULT = str(config.get("workspace_root", "."))
     CODE_OUTPUT_ROOT = str(
@@ -417,11 +421,15 @@ def resolve_config_values(
     if AGENT_PERMISSION_MODE not in {"manual", "auto", "full"}:
         AGENT_PERMISSION_MODE = "auto"
 
-    _debug_log_enabled = config.get("DEBUG_LOG_ENABLED", 0)
-    if isinstance(_debug_log_enabled, str):
-        DEBUG_LOG_ENABLED = _debug_log_enabled.strip() == "1"
+    _env_debug = os.environ.get("PRIVATE_AGENT_DEBUG", "")
+    if _env_debug.strip().lower() in {"1", "true", "yes", "on"}:
+        DEBUG_LOG_ENABLED = True
     else:
-        DEBUG_LOG_ENABLED = _debug_log_enabled == 1 or _debug_log_enabled is True
+        _debug_log_enabled = config.get("DEBUG_LOG_ENABLED", 0)
+        if isinstance(_debug_log_enabled, str):
+            DEBUG_LOG_ENABLED = _debug_log_enabled.strip() == "1"
+        else:
+            DEBUG_LOG_ENABLED = _debug_log_enabled == 1 or _debug_log_enabled is True
 
     DEBUG_LOG_LEVEL = (
         str(config_section(config, "logging").get("level", "INFO")).strip().upper()

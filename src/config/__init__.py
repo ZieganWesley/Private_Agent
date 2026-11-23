@@ -47,12 +47,12 @@ CONFIG_FILE_PATH = resolve_config_path()
 
 DEFAULT_CONFIG = {
     "paths": {
-        "database": "~/.local_ai_memory.db",
+        "database": "~/.config/private_agent/memory/private_agent.db",
         "workspace": ".",
         "code_output": "~/.config/private_agent/projects",
-        "skills": "~/.config/private_agent/resources/skills",
+        "skills": "~/.config/private_agent/skills",
         "rag_documents": "~/.config/private_agent/rag/",
-        "rag_index": "~/.config/private_agent/rag_index",
+        "rag_index": "~/.config/private_agent/rag/index",
     },
     "permissions": {
         "allow": [],
@@ -231,9 +231,21 @@ def _merge_config(config: dict) -> dict:
         # Flat legacy keys and unknown scalar settings are ignored.
     if merged["paths"].get("rag_documents") is None:
         merged["paths"]["rag_documents"] = DEFAULT_CONFIG["paths"]["rag_documents"]
-    if merged["paths"].get("skills") == "resources/skills":
+    if merged["paths"].get("database") in {None, "", "~/.local_ai_memory.db"}:
+        merged["paths"]["database"] = DEFAULT_CONFIG["paths"]["database"]
+    if merged["paths"].get("skills") in {
+        None,
+        "",
+        "resources/skills",
+        "~/.config/private_agent/resources/skills",
+    }:
         merged["paths"]["skills"] = DEFAULT_CONFIG["paths"]["skills"]
-    if merged["paths"].get("rag_index") == "./.local_ai_chroma_db":
+    if merged["paths"].get("rag_index") in {
+        None,
+        "",
+        "./.local_ai_chroma_db",
+        "~/.config/private_agent/rag_index",
+    }:
         merged["paths"]["rag_index"] = DEFAULT_CONFIG["paths"]["rag_index"]
     if not isinstance(merged["agent"].get("system_prompt"), str) or not (
         merged["agent"]["system_prompt"].strip()

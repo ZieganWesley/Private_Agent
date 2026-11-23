@@ -59,8 +59,8 @@ def test_config_creates_private_default_file(tmp_path, monkeypatch):
 
     assert settings["paths"] == config.DEFAULT_CONFIG["paths"]
     assert settings["paths"]["rag_documents"] == "~/.config/private_agent/rag/"
-    assert settings["paths"]["skills"] == "~/.config/private_agent/resources/skills"
-    assert settings["paths"]["rag_index"] == "~/.config/private_agent/rag_index"
+    assert settings["paths"]["skills"] == "~/.config/private_agent/skills"
+    assert settings["paths"]["rag_index"] == "~/.config/private_agent/rag/index"
     assert settings["agent"] == config.DEFAULT_CONFIG["agent"]
     assert settings["agent"]["streaming_output"] is True
     assert settings["agent"]["visible_reasoning"] is False
@@ -170,10 +170,10 @@ def test_merge_config_migrates_old_default_rag_and_skills_paths():
     )
 
     assert merged["paths"] == {
-        "skills": "~/.config/private_agent/resources/skills",
+        "skills": "~/.config/private_agent/skills",
         "rag_documents": "~/.config/private_agent/rag/",
-        "rag_index": "~/.config/private_agent/rag_index",
-        "database": "~/.local_ai_memory.db",
+        "rag_index": "~/.config/private_agent/rag/index",
+        "database": "~/.config/private_agent/memory/private_agent.db",
         "workspace": ".",
         "code_output": "~/.config/private_agent/projects",
     }

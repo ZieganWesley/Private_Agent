@@ -184,6 +184,12 @@ def main():
         action="store_true",
         help="Run the manual UI self-check and exit (remove before production).",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable a redacted per-session JSONL debug log under "
+        "~/.config/private_agent/logs for sharing with developers.",
+    )
     args = parser.parse_args()
     if args.config:
         os.environ["PRIVATE_AGENT_CONFIG"] = args.config
@@ -201,6 +207,8 @@ def main():
         os.environ["PRIVATE_AGENT_RAG"] = args.rag
     if args.sandbox_network:
         os.environ["PRIVATE_AGENT_SANDBOX_NETWORK"] = "1"
+    if args.debug:
+        os.environ["PRIVATE_AGENT_DEBUG"] = "1"
     if args.list_sessions:
         raise SystemExit(list_saved_sessions())
     if args.doctor:
