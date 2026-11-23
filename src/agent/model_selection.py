@@ -234,9 +234,7 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
         configured_entries.append(normalized)
 
     ollama_base_url = (
-        model_config.get("ollama_base_url")
-        if isinstance(model_config, dict)
-        else None
+        model_config.get("ollama_base_url") if isinstance(model_config, dict) else None
     )
     runtimes = discover_local_runtimes(
         ollama_base_url,
