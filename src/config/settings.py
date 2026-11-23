@@ -12,7 +12,9 @@ from typing import Any
 from hardware import normalize_acceleration_mode
 
 DEFAULT_SYSTEM_PROMPT_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent / "resources" / "default_system_prompt.md"
+    pathlib.Path(__file__).resolve().parent.parent
+    / "resources"
+    / "default_system_prompt.md"
 )
 try:
     DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT_PATH.read_text(
@@ -156,7 +158,9 @@ def resolve_config_values(
         str(config.get("default_db_path", "~/.local_ai_memory.db"))
     )
     WORKSPACE_ROOT_DEFAULT = str(config.get("workspace_root", "."))
-    CODE_OUTPUT_ROOT = str(config.get("code_output_root", "~/.config/private_agent/projects"))
+    CODE_OUTPUT_ROOT = str(
+        config.get("code_output_root", "~/.config/private_agent/projects")
+    )
     SKILLS_FOLDER_DEFAULT = configured_path(
         config_section(config, "paths").get("skills"),
         default_paths["skills"],
@@ -227,29 +231,32 @@ def resolve_config_values(
     VISIBLE_REASONING = configured_bool(config, "agent", "visible_reasoning", False)
     VERBOSE_TIMINGS = configured_bool(config, "agent", "verbose_timings", False)
     STATUS_BAR = configured_bool(config, "agent", "status_bar", True)
-    SHOW_WELCOME_SCREEN = configured_bool(config, "ui", "show_welcome_screen", True) or configured_bool(
-        config, "agent", "show_welcome_screen", True
-    ) or configured_bool(config, "ui", "welcome_screen", True) or configured_bool(
-        config, "agent", "welcome_screen", True
+    SHOW_WELCOME_SCREEN = (
+        configured_bool(config, "ui", "show_welcome_screen", True)
+        or configured_bool(config, "agent", "show_welcome_screen", True)
+        or configured_bool(config, "ui", "welcome_screen", True)
+        or configured_bool(config, "agent", "welcome_screen", True)
     )
-    INFORMATIVE_PROMPT = configured_bool(config, "ui", "informative_prompt", True) or configured_bool(
-        config, "agent", "informative_prompt", True
+    INFORMATIVE_PROMPT = configured_bool(
+        config, "ui", "informative_prompt", True
+    ) or configured_bool(config, "agent", "informative_prompt", True)
+    SHOW_TURN_DIVIDER = (
+        configured_bool(config, "ui", "show_turn_divider", True)
+        or configured_bool(config, "agent", "show_turn_divider", True)
+        or configured_bool(config, "ui", "turn_divider", True)
+        or configured_bool(config, "agent", "turn_divider", True)
     )
-    SHOW_TURN_DIVIDER = configured_bool(config, "ui", "show_turn_divider", True) or configured_bool(
-        config, "agent", "show_turn_divider", True
-    ) or configured_bool(config, "ui", "turn_divider", True) or configured_bool(
-        config, "agent", "turn_divider", True
+    SHOW_TURN_STATS = (
+        configured_bool(config, "ui", "show_turn_stats", True)
+        or configured_bool(config, "agent", "show_turn_stats", True)
+        or configured_bool(config, "ui", "turn_stats", True)
+        or configured_bool(config, "agent", "turn_stats", True)
+        or configured_bool(config, "ui", "per_turn_tokens", True)
+        or configured_bool(config, "agent", "per_turn_tokens", True)
     )
-    SHOW_TURN_STATS = configured_bool(config, "ui", "show_turn_stats", True) or configured_bool(
-        config, "agent", "show_turn_stats", True
-    ) or configured_bool(config, "ui", "turn_stats", True) or configured_bool(
-        config, "agent", "turn_stats", True
-    ) or configured_bool(config, "ui", "per_turn_tokens", True) or configured_bool(
-        config, "agent", "per_turn_tokens", True
-    )
-    GROUPED_HELP = configured_bool(config, "ui", "grouped_help", True) or configured_bool(
-        config, "agent", "grouped_help", True
-    )
+    GROUPED_HELP = configured_bool(
+        config, "ui", "grouped_help", True
+    ) or configured_bool(config, "agent", "grouped_help", True)
     _configured_system_prompt = config_section(config, "agent").get("system_prompt")
     PROJECT_INSTRUCTIONS_FILE = config_section(config, "agent").get(
         "project_instructions_file", "AGENTS.md"

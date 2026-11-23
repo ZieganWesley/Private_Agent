@@ -142,18 +142,16 @@ def offer_provider_start(
                 continue
             if wanted_names is not None and name.lower() not in wanted_names:
                 continue
-            console.print(
-                f"[warning]{name} is installed but not running.[/warning]"
-            )
+            console.print(f"[warning]{name} is installed but not running.[/warning]")
             start_hint = getattr(idle, "start_hint", "") or getattr(
                 idle.preset, "start_hint", ""
             )
             if start_hint:
                 console.print(f"  Start it with: {start_hint}")
             try:
-                answer = input_fn(
-                    f"[info]Start {name} now? [y/N]: [/info]"
-                ).strip().lower()
+                answer = (
+                    input_fn(f"[info]Start {name} now? [y/N]: [/info]").strip().lower()
+                )
             except (EOFError, KeyboardInterrupt):
                 continue
             if answer not in {"y", "yes"}:
@@ -173,9 +171,7 @@ def offer_provider_start(
 
                 found = _match_runtime(name, current)
                 if found is not None:
-                    console.print(
-                        f"[success]{name} is running again.[/success]"
-                    )
+                    console.print(f"[success]{name} is running again.[/success]")
                     if matched is None:
                         matched = found
                     current_runtimes = list(current)
@@ -245,6 +241,7 @@ def offer_provider_start(
         "continuing without it."
     )
     return refresh(), None
+
 
 def persist_provider_choice(
     *,

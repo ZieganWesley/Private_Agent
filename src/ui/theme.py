@@ -37,8 +37,6 @@ MESSAGE_SYMBOLS: dict[str, str] = {
 THEME_NAME = "private_agent"
 
 THEME = Theme(
-    {
-        level: colour for level, (colour, _symbol) in MESSAGE_LEVELS.items()
-    },
+    {level: colour for level, (colour, _symbol) in MESSAGE_LEVELS.items()},
     inherit=True,
 )

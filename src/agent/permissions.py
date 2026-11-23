@@ -108,10 +108,14 @@ def select_coding_access_level(
         try:
             choice = int(selection) if selection else 4
         except ValueError:
-            console.print("[warning]Invalid choice; using isolated workspace.[/warning]")
+            console.print(
+                "[warning]Invalid choice; using isolated workspace.[/warning]"
+            )
             choice = 4
         if not 1 <= choice <= len(choices):
-            console.print("[warning]Invalid choice; using isolated workspace.[/warning]")
+            console.print(
+                "[warning]Invalid choice; using isolated workspace.[/warning]"
+            )
             choice = 4
     return choices[choice - 1][0]
 
@@ -137,7 +141,9 @@ def coding_allows_command_network(access_level: str) -> bool:
 
 def _permission_rule_for_tool(name: str, safe_args: Any) -> str:
     """Build a permission rule that matches this tool call."""
-    target = _permission_rule_target(name, safe_args if isinstance(safe_args, dict) else {})
+    target = _permission_rule_target(
+        name, safe_args if isinstance(safe_args, dict) else {}
+    )
     target = target.strip()
     if target:
         return f"{name}({target})"
@@ -153,7 +159,11 @@ def _approval_diff(name: str, safe_args: Any) -> str | None:
         None,
     )
     new_key = next(
-        (key for key in ("new_text", "new_string", "after", "content") if key in safe_args),
+        (
+            key
+            for key in ("new_text", "new_string", "after", "content")
+            if key in safe_args
+        ),
         None,
     )
     if old_key is None or new_key is None:
@@ -192,7 +202,9 @@ def add_project_permission_rule(rule: str, workspace_root: Any = None) -> bool:
         paths = discover_project_config_paths(workspace_root)
         path = next((item for item in paths if item.is_file()), None)
         if path is None:
-            path = paths[0] if paths else Path.cwd() / ".private_agent" / "settings.json"
+            path = (
+                paths[0] if paths else Path.cwd() / ".private_agent" / "settings.json"
+            )
         existing: dict[str, Any] = {}
         if path.is_file():
             try:
@@ -244,7 +256,10 @@ def prompt_tool_approval(
     """
     session_callback = on_always_allow_session or on_always_allow
     if on_always_allow_project is None:
-        on_always_allow_project = lambda rule: add_project_permission_rule(rule)
+
+        def on_always_allow_project(rule):
+            add_project_permission_rule(rule)
+
     rule = _permission_rule_for_tool(name, safe_args)
 
     console.print("[bold info][Tool Approval][/bold info]")
@@ -281,9 +296,7 @@ def prompt_tool_approval(
             with contextlib.suppress(Exception):
                 session_callback(name)
         return True
-    if approval in {"y", "yes", "run"}:
-        return True
-    return False
+    return approval in {"y", "yes", "run"}
 
 
 def select_permission_mode(

@@ -246,7 +246,9 @@ def create_robust_local_chat_model(
             if model_name == primary_model_name and not retryable:
                 break
     if last_error:
-        console.print(f"[error][Model error] No usable local model: {last_error}[/error]")
+        console.print(
+            f"[error][Model error] No usable local model: {last_error}[/error]"
+        )
     return None
 
 
@@ -439,7 +441,9 @@ def select_online_model(
         else get_api_key("API key (input hidden; used for this session only): ").strip()
     )
     if not api_key:
-        console.print("[error]No API key entered; returning to model selection.[/error]")
+        console.print(
+            "[error]No API key entered; returning to model selection.[/error]"
+        )
         return None
 
     model_choices: list[str] = []

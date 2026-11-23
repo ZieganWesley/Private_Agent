@@ -969,9 +969,7 @@ async def test_offline_research_can_continue_with_incomplete_data():
     from agent import runtime as agent
 
     with (
-        patch(
-            "agent.runtime.has_internet_connection", return_value=False
-        ),
+        patch("agent.runtime.has_internet_connection", return_value=False),
         patch("agent.runtime.sys.stdin", MagicMock(isatty=lambda: True)),
         patch.object(agent.console, "input", return_value="c"),
     ):
@@ -1373,7 +1371,6 @@ async def test_tool_result_and_failure_are_returned_to_agent(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_model_invocation_streams_and_aggregates_text(monkeypatch):
-    import agent.runtime as agent
 
     class StreamingModel:
         async def astream(self, messages):
@@ -1408,8 +1405,7 @@ async def test_model_invocation_streams_and_aggregates_text(monkeypatch):
     assert isinstance(response, AIMessageChunk)
     assert response.content == "first second"
     assert any(
-        getattr(renderable, "markup", "") == "first "
-        for renderable in renderables
+        getattr(renderable, "markup", "") == "first " for renderable in renderables
     )
     assert any(
         getattr(renderable, "markup", "") == "first second"
@@ -1961,7 +1957,9 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
         },
     )
     monkeypatch.setattr(
-        model_selection, "_make_local_openai_compatible_chat_model", lambda *args, **kwargs: mock_model
+        model_selection,
+        "_make_local_openai_compatible_chat_model",
+        lambda *args, **kwargs: mock_model,
     )
     monkeypatch.setattr(agent, "initialize_knowledge_base", lambda path, **kwargs: None)
     monkeypatch.setattr(agent, "load_skills_from_folder", lambda path: {})
@@ -2955,7 +2953,9 @@ async def test_repeated_cli_runs_remove_mcp_tools_and_sandboxes(
     monkeypatch.setattr(agent, "load_configured_mcp_tools", load_server)
     prompt_calls = []
 
-    async def prompt(_console, _root, prompt_message, skills=None, history=None, bottom_toolbar=None):
+    async def prompt(
+        _console, _root, prompt_message, skills=None, history=None, bottom_toolbar=None
+    ):
         prompt_calls.append(prompt_message)
         return "exit"
 
@@ -3074,8 +3074,14 @@ async def test_local_tool_incompatibility_fallback_preserves_task_context_and_po
     def make_fallback_model(base_url, name, **kwargs):
         return IncompatiblePrimary() if name == "primary-model" else fallback
 
-    monkeypatch.setattr(provider_fallback, "_make_local_openai_compatible_chat_model", make_fallback_model)
-    monkeypatch.setattr(model_selection, "_make_local_openai_compatible_chat_model", make_fallback_model)
+    monkeypatch.setattr(
+        provider_fallback,
+        "_make_local_openai_compatible_chat_model",
+        make_fallback_model,
+    )
+    monkeypatch.setattr(
+        model_selection, "_make_local_openai_compatible_chat_model", make_fallback_model
+    )
     monkeypatch.setattr(
         agent,
         "prompt_user_input",
@@ -3154,12 +3160,16 @@ async def test_local_runtime_does_not_fallback_on_unrecognized_request_failure(
     monkeypatch.setattr(
         provider_fallback,
         "_make_local_openai_compatible_chat_model",
-        lambda base_url, name, **kwargs: primary if name == "primary-model" else Fallback(),
+        lambda base_url, name, **kwargs: (
+            primary if name == "primary-model" else Fallback()
+        ),
     )
     monkeypatch.setattr(
         model_selection,
         "_make_local_openai_compatible_chat_model",
-        lambda base_url, name, **kwargs: primary if name == "primary-model" else Fallback(),
+        lambda base_url, name, **kwargs: (
+            primary if name == "primary-model" else Fallback()
+        ),
     )
     monkeypatch.setattr(
         agent,
@@ -3665,7 +3675,6 @@ async def test_online_selection_does_not_probe_local_hardware(
     inputs.side_effect = ["", "", "", "2"]
 
     await run_agent_cli_async()
-
 
 
 @pytest.mark.asyncio
@@ -5410,7 +5419,9 @@ async def test_resumed_session_reuses_the_recorded_provider_without_prompts(
     assert session_id is not None
     memory.record_session_provider(
         session_id,
-        ProviderRecord("ollama", "Ollama", model_selection.OLLAMA_BASE_URL, "local-model"),
+        ProviderRecord(
+            "ollama", "Ollama", model_selection.OLLAMA_BASE_URL, "local-model"
+        ),
     )
     memory.close()
 
@@ -5545,7 +5556,9 @@ async def test_last_command_prints_full_tool_result(scripted_local_cli, monkeypa
 
 
 @pytest.mark.asyncio
-async def test_expand_command_with_no_result_prints_message(scripted_local_cli, monkeypatch):
+async def test_expand_command_with_no_result_prints_message(
+    scripted_local_cli, monkeypatch
+):
     from tests.integration.test_agent_runtime import _capture_rendered_text
 
     agent, model, inputs, workspace, database_path = scripted_local_cli

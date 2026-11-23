@@ -63,9 +63,13 @@ def _load_language(suffix: str):
         return None
     try:
         if suffix == ".tsx":
-            factory = getattr(module, "language_tsx", None) or getattr(module, "language", None)
+            factory = getattr(module, "language_tsx", None) or getattr(
+                module, "language", None
+            )
         elif suffix == ".ts":
-            factory = getattr(module, "language_typescript", None) or getattr(module, "language", None)
+            factory = getattr(module, "language_typescript", None) or getattr(
+                module, "language", None
+            )
         else:
             factory = getattr(module, "language", None)
         if factory is None:
@@ -118,12 +122,18 @@ class RepositoryIndex:
     def __init__(self, db_path: str | None = None, root_path: str | None = None):
         if db_path is None:
             if root_path is not None:
-                db_path = str(Path(root_path).expanduser().resolve() / ".private_agent" / "repo_index.db")
+                db_path = str(
+                    Path(root_path).expanduser().resolve()
+                    / ".private_agent"
+                    / "repo_index.db"
+                )
             else:
                 db_path = str(Path.cwd() / ".private_agent" / "repo_index.db")
         self.db_path = str(Path(db_path).expanduser())
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        self.root_path = str(Path(root_path).expanduser().resolve()) if root_path else None
+        self.root_path = (
+            str(Path(root_path).expanduser().resolve()) if root_path else None
+        )
         self._lock = threading.Lock()
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0)
         self.conn.execute("PRAGMA foreign_keys = ON")
@@ -219,13 +229,23 @@ class RepositoryIndex:
                     (kind,),
                 )
             else:
-                cur.execute("SELECT id, source, target, kind, file_path FROM graph_edges")
+                cur.execute(
+                    "SELECT id, source, target, kind, file_path FROM graph_edges"
+                )
             return [
-                {"id": row[0], "source": row[1], "target": row[2], "kind": row[3], "file": row[4]}
+                {
+                    "id": row[0],
+                    "source": row[1],
+                    "target": row[2],
+                    "kind": row[3],
+                    "file": row[4],
+                }
                 for row in cur.fetchall()
             ]
 
-    def graph_neighbors(self, node: str, direction: str = "both") -> list[dict[str, Any]]:
+    def graph_neighbors(
+        self, node: str, direction: str = "both"
+    ) -> list[dict[str, Any]]:
         """Return edges incident to a graph node."""
         with self._lock:
             cur = self.conn.cursor()
@@ -236,7 +256,13 @@ class RepositoryIndex:
                     (node,),
                 )
                 rows.extend(
-                    {"source": r[0], "target": r[1], "kind": r[2], "file": r[3], "direction": "out"}
+                    {
+                        "source": r[0],
+                        "target": r[1],
+                        "kind": r[2],
+                        "file": r[3],
+                        "direction": "out",
+                    }
                     for r in cur.fetchall()
                 )
             if direction in {"in", "both"}:
@@ -245,7 +271,13 @@ class RepositoryIndex:
                     (node,),
                 )
                 rows.extend(
-                    {"source": r[0], "target": r[1], "kind": r[2], "file": r[3], "direction": "in"}
+                    {
+                        "source": r[0],
+                        "target": r[1],
+                        "kind": r[2],
+                        "file": r[3],
+                        "direction": "in",
+                    }
                     for r in cur.fetchall()
                 )
             return rows
@@ -283,7 +315,9 @@ class RepositoryIndex:
             depth += 1
         return impacted
 
-    def path_between(self, source: str, target: str, max_depth: int = 8) -> list[str] | None:
+    def path_between(
+        self, source: str, target: str, max_depth: int = 8
+    ) -> list[str] | None:
         """Find a shortest path between two graph nodes."""
         if source == target:
             return [source]
@@ -314,7 +348,7 @@ class RepositoryIndex:
         """Render the repository graph as Mermaid."""
         lines = ["graph TD"]
         for node in self.graph_nodes():
-            safe = node["name"].replace("\"", "'")
+            safe = node["name"].replace('"', "'")
             lines.append(f'  N{node["id"]}["{safe}"]')
         for edge in self.graph_edges():
             # Mermaid needs node identifiers; use names as stable labels.
@@ -323,6 +357,7 @@ class RepositoryIndex:
 
     def close(self) -> None:
         import contextlib
+
         with contextlib.suppress(Exception):
             self.conn.close()
 
@@ -339,7 +374,9 @@ class RepositoryIndex:
             cur.execute("SELECT id FROM repositories WHERE root=?", (str(root),))
             return int(cur.fetchone()[0])
 
-    def index_repository(self, root: str | Path = ".", incremental: bool = True) -> dict[str, Any]:
+    def index_repository(
+        self, root: str | Path = ".", incremental: bool = True
+    ) -> dict[str, Any]:
         root = Path(root).expanduser().resolve()
         repo_id = self._repository_id(root)
         files_indexed = 0
@@ -372,22 +409,40 @@ class RepositoryIndex:
                     cur.execute("DELETE FROM edges WHERE file_id=?", (file_id,))
                     cur.execute(
                         "UPDATE files SET language=?, hash=?, mtime=?, indexed_at=? WHERE id=?",
-                        (_LANGUAGE_MODULES[suffix][1], file_hash, mtime, time.time(), file_id),
+                        (
+                            _LANGUAGE_MODULES[suffix][1],
+                            file_hash,
+                            mtime,
+                            time.time(),
+                            file_id,
+                        ),
                     )
                 else:
                     cur.execute(
                         "INSERT INTO files(repository_id, path, language, hash, mtime, indexed_at) VALUES(?,?,?,?,?,?)",
-                        (repo_id, rel, _LANGUAGE_MODULES[suffix][1], file_hash, mtime, time.time()),
+                        (
+                            repo_id,
+                            rel,
+                            _LANGUAGE_MODULES[suffix][1],
+                            file_hash,
+                            mtime,
+                            time.time(),
+                        ),
                     )
                     file_id = cur.lastrowid
                 self.conn.commit()
             else:
                 with self._lock:
                     cur = self.conn.cursor()
-                    cur.execute("SELECT id FROM files WHERE repository_id=? AND path=?", (repo_id, rel))
+                    cur.execute(
+                        "SELECT id FROM files WHERE repository_id=? AND path=?",
+                        (repo_id, rel),
+                    )
                     old_row = cur.fetchone()
                     if old_row:
-                        cur.execute("DELETE FROM symbols WHERE file_id=?", (old_row[0],))
+                        cur.execute(
+                            "DELETE FROM symbols WHERE file_id=?", (old_row[0],)
+                        )
                         cur.execute("DELETE FROM edges WHERE file_id=?", (old_row[0],))
                     cur.execute(
                         "DELETE FROM files WHERE repository_id=? AND path=?",
@@ -395,7 +450,14 @@ class RepositoryIndex:
                     )
                     cur.execute(
                         "INSERT INTO files(repository_id, path, language, hash, mtime, indexed_at) VALUES(?,?,?,?,?,?)",
-                        (repo_id, rel, _LANGUAGE_MODULES[suffix][1], file_hash, mtime, time.time()),
+                        (
+                            repo_id,
+                            rel,
+                            _LANGUAGE_MODULES[suffix][1],
+                            file_hash,
+                            mtime,
+                            time.time(),
+                        ),
                     )
                     file_id = cur.lastrowid
                     self.conn.commit()
@@ -403,13 +465,23 @@ class RepositoryIndex:
         parsed = self._parse_files_parallel(
             [(path, rel, suffix) for path, rel, suffix, _ in pending]
         )
-        for (_path, _rel, _suffix, file_id), (syms, edges) in zip(pending, parsed, strict=False):
+        for (_path, _rel, _suffix, file_id), (syms, edges) in zip(
+            pending, parsed, strict=False
+        ):
             with self._lock:
                 cur = self.conn.cursor()
                 for sym in syms:
                     cur.execute(
                         "INSERT INTO symbols(file_id, name, kind, start_line, end_line, signature, parent) VALUES(?,?,?,?,?,?,?)",
-                        (file_id, sym.name, sym.kind, sym.start_line, sym.end_line, sym.signature, sym.parent),
+                        (
+                            file_id,
+                            sym.name,
+                            sym.kind,
+                            sym.start_line,
+                            sym.end_line,
+                            sym.signature,
+                            sym.parent,
+                        ),
                     )
                     symbols_indexed += 1
                 for edge in edges:
@@ -433,7 +505,9 @@ class RepositoryIndex:
     def _iter_files(self, root: Path) -> Iterable[Path]:
         ignore_dirs = {".git", "node_modules", ".venv", "__pycache__", "dist", "build"}
         for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in ignore_dirs and not d.startswith(".")]
+            dirnames[:] = [
+                d for d in dirnames if d not in ignore_dirs and not d.startswith(".")
+            ]
             for name in filenames:
                 yield Path(dirpath) / name
 
@@ -487,7 +561,9 @@ class RepositoryIndex:
                     )
             self.conn.commit()
 
-    def _parse_file(self, path: Path, rel: str, suffix: str) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
+    def _parse_file(
+        self, path: Path, rel: str, suffix: str
+    ) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
         return _parse_file_impl(path, rel, suffix)
 
     def _parse_files_parallel(
@@ -497,15 +573,23 @@ class RepositoryIndex:
             return []
         cpu_count = os.cpu_count() or 1
         if len(pending) < 8 or cpu_count < 2:
-            return [_parse_file_impl(path, rel, suffix) for path, rel, suffix in pending]
+            return [
+                _parse_file_impl(path, rel, suffix) for path, rel, suffix in pending
+            ]
         payloads = [(str(path), rel, suffix) for path, rel, suffix in pending]
         chunk_size = max(1, len(payloads) // (cpu_count * 4))
         try:
-            with ProcessPoolExecutor(max_workers=min(len(payloads), cpu_count)) as executor:
-                results = list(executor.map(_parse_worker, payloads, chunksize=chunk_size))
+            with ProcessPoolExecutor(
+                max_workers=min(len(payloads), cpu_count)
+            ) as executor:
+                results = list(
+                    executor.map(_parse_worker, payloads, chunksize=chunk_size)
+                )
             return results
         except Exception:  # noqa: BLE001 - fall back to in-process parsing
-            return [_parse_file_impl(path, rel, suffix) for path, rel, suffix in pending]
+            return [
+                _parse_file_impl(path, rel, suffix) for path, rel, suffix in pending
+            ]
 
     # Query helpers
     def find_symbols(self, name: str, kind: str | None = None) -> list[dict[str, Any]]:
@@ -521,7 +605,15 @@ class RepositoryIndex:
                 (name,),
             )
         return [
-            {"id": r[0], "name": r[1], "kind": r[2], "file": r[3], "start_line": r[4], "end_line": r[5], "parent": r[6]}
+            {
+                "id": r[0],
+                "name": r[1],
+                "kind": r[2],
+                "file": r[3],
+                "start_line": r[4],
+                "end_line": r[5],
+                "parent": r[6],
+            }
             for r in cur.fetchall()
         ]
 
@@ -567,10 +659,12 @@ class RepositoryIndex:
                 frontier.append((c["target"], d + 1))
         return result
 
+
 def _extract_identifiers(text: str) -> list[str]:
     import re
 
     return re.findall(r"\b[A-Za-z_][A-Za-z0-9_]*\b", text)
+
 
 def _import_target(node_type: str, text: str) -> str:
     import re
@@ -596,7 +690,10 @@ def _import_target(node_type: str, text: str) -> str:
         return m.group(1)
     return ""
 
-def _parse_file_impl(path: Path, rel: str, suffix: str) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
+
+def _parse_file_impl(
+    path: Path, rel: str, suffix: str
+) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
     language = _load_language(suffix)
     if language is None or Parser is None:
         return [], []
@@ -611,7 +708,15 @@ def _parse_file_impl(path: Path, rel: str, suffix: str) -> tuple[list[Symbol], l
     _walk(tree.root_node, source, "", symbols, edges, rel)
     return symbols, edges
 
-def _walk(node, source: bytes, parent: str, symbols: list[Symbol], edges: list[tuple[str, str, str]], rel: str) -> None:
+
+def _walk(
+    node,
+    source: bytes,
+    parent: str,
+    symbols: list[Symbol],
+    edges: list[tuple[str, str, str]],
+    rel: str,
+) -> None:
     ntype = node.type
     name = ""
     kind = ""
@@ -619,13 +724,21 @@ def _walk(node, source: bytes, parent: str, symbols: list[Symbol], edges: list[t
     if ntype in _SYMBOL_NODE_TYPES:
         name_node = node.child_by_field_name("name")
         if name_node is not None:
-            name = source[name_node.start_byte:name_node.end_byte].decode("utf-8", "replace")
-        kind = ntype.replace("_declaration", "").replace("_definition", "").replace("_item", "")
+            name = source[name_node.start_byte : name_node.end_byte].decode(
+                "utf-8", "replace"
+            )
+        kind = (
+            ntype.replace("_declaration", "")
+            .replace("_definition", "")
+            .replace("_item", "")
+        )
         if name:
             signature = ""
             for child in node.children:
                 if "parameters" in child.type or "parameter" in child.type:
-                    signature = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
+                    signature = source[child.start_byte : child.end_byte].decode(
+                        "utf-8", "replace"
+                    )
                     break
             symbols.append(
                 Symbol(
@@ -641,23 +754,34 @@ def _walk(node, source: bytes, parent: str, symbols: list[Symbol], edges: list[t
             # inheritance edges for classes
             if "class" in kind:
                 for child in node.children:
-                    if "heritage" in child.type or "superclass" in child.type or "bases" in child.type or "argument_list" in child.type:
-                        text = source[child.start_byte:child.end_byte].decode("utf-8", "replace")
+                    if (
+                        "heritage" in child.type
+                        or "superclass" in child.type
+                        or "bases" in child.type
+                        or "argument_list" in child.type
+                    ):
+                        text = source[child.start_byte : child.end_byte].decode(
+                            "utf-8", "replace"
+                        )
                         for base in _extract_identifiers(text):
                             if base and base != name:
                                 edges.append((name, base, "inherits"))
             current_parent = name or parent
     # calls
     if ntype in _CALL_NODE_TYPES:
-        func_node = node.child_by_field_name("function") or node.child_by_field_name("callee")
+        func_node = node.child_by_field_name("function") or node.child_by_field_name(
+            "callee"
+        )
         if func_node is not None:
-            callee = source[func_node.start_byte:func_node.end_byte].decode("utf-8", "replace")
+            callee = source[func_node.start_byte : func_node.end_byte].decode(
+                "utf-8", "replace"
+            )
             callee = callee.split(".")[-1].split("(")[0].strip()
             if callee and callee.isidentifier():
                 edges.append((current_parent or "<module>", callee, "calls"))
     # imports
     if "import" in ntype:
-        text = source[node.start_byte:node.end_byte].decode("utf-8", "replace")
+        text = source[node.start_byte : node.end_byte].decode("utf-8", "replace")
         target = _import_target(ntype, text)
         if target:
             edges.append((current_parent or "<module>", target, "imports"))
@@ -665,8 +789,9 @@ def _walk(node, source: bytes, parent: str, symbols: list[Symbol], edges: list[t
         _walk(child, source, current_parent, symbols, edges, rel)
 
 
-
-def _parse_worker(payload: tuple[str, str, str]) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
+def _parse_worker(
+    payload: tuple[str, str, str],
+) -> tuple[list[Symbol], list[tuple[str, str, str]]]:
     path_str, rel, suffix = payload
     return _parse_file_impl(Path(path_str), rel, suffix)
 

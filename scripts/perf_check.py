@@ -154,8 +154,7 @@ def _fixed_corpus(root: pathlib.Path) -> list[pathlib.Path]:
             f"## Section {section}\n\n"
             f"Paragraph {section} of document {index} explains the fixed "
             "corpus used by the performance check in plain prose so chunking "
-            "work is stable between runs and machines. "
-            * 3
+            "work is stable between runs and machines. " * 3
             for section in range(CORPUS_SECTIONS)
         )
         path = root / f"doc-{index:03d}.md"

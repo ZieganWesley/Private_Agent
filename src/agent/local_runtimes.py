@@ -98,9 +98,7 @@ def _probe_endpoint(
                 if any(marker in model.lower() for marker in embedding_markers)
             )
             models = tuple(
-                model
-                for model in all_models
-                if model not in embedding_models
+                model for model in all_models if model not in embedding_models
             )
             return LocalRuntime(
                 name, kind, base_url.rstrip("/"), models, embedding_models

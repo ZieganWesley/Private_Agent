@@ -12,7 +12,11 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    if name in {"initialize_knowledge_base", "knowledge_base_signature", "reset_knowledge_base"}:
+    if name in {
+        "initialize_knowledge_base",
+        "knowledge_base_signature",
+        "reset_knowledge_base",
+    }:
         from . import indexing
 
         return getattr(indexing, name)

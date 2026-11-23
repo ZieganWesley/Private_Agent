@@ -9,7 +9,9 @@ def _index(root_path: str = ".", db_path: str | None = None) -> RepositoryIndex:
     return RepositoryIndex(db_path=db_path, root_path=root_path)
 
 
-def find_symbol(name: str, root_path: str = ".", db_path: str | None = None, kind: str | None = None):
+def find_symbol(
+    name: str, root_path: str = ".", db_path: str | None = None, kind: str | None = None
+):
     index = _index(root_path, db_path)
     try:
         index.index_repository(root_path, incremental=True)
@@ -59,7 +61,9 @@ def find_dependencies(target: str, root_path: str = ".", db_path: str | None = N
         index.close()
 
 
-def trace_execution_flow(entry: str, root_path: str = ".", db_path: str | None = None, depth: int = 3):
+def trace_execution_flow(
+    entry: str, root_path: str = ".", db_path: str | None = None, depth: int = 3
+):
     index = _index(root_path, db_path)
     try:
         index.index_repository(root_path, incremental=True)

@@ -285,4 +285,6 @@ def test_status_line_includes_model_context_and_permission():
 
 def test_status_line_handles_missing_context():
     line = status.status_line("local", 0, 0, "auto")
-    assert line == "model=local | context=0.0% | permission=auto | background_processes=0"
+    assert (
+        line == "model=local | context=0.0% | permission=auto | background_processes=0"
+    )

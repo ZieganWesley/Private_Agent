@@ -19,7 +19,9 @@ _MAX_SOURCE_TOKENS = 6000
 
 def message_text(message: Any) -> str:
     if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("message_text called with message type: %s", type(message).__name__)
+        logger.debug(
+            "message_text called with message type: %s", type(message).__name__
+        )
     content = getattr(message, "content", "")
     if isinstance(content, list):
         return "".join(
@@ -56,7 +58,9 @@ async def _summarize(
     model_name: str = "model",
 ) -> str:
     if logger.isEnabledFor(logging.DEBUG):
-        logger.debug("_summarize called with purpose=%s, model_name=%s", purpose, model_name)
+        logger.debug(
+            "_summarize called with purpose=%s, model_name=%s", purpose, model_name
+        )
     prompt = (
         f"Condense the following {purpose} into a compact working summary of at most "
         f"{max_chars} characters. Keep the user's goals, decisions, facts, file names, "

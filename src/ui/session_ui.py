@@ -82,7 +82,9 @@ class SessionUI:
             self._context_max = 0
         self._footer.update(self._current_state())
 
-    def ribbon_text(self, *, width: int | None = None, accessible: bool | None = None) -> str:
+    def ribbon_text(
+        self, *, width: int | None = None, accessible: bool | None = None
+    ) -> str:
         """Return the full status ribbon for use as a prompt toolbar.
 
         Width-aware segment dropping keeps it usable on narrow terminals.
@@ -102,9 +104,7 @@ class SessionUI:
                 width = shutil.get_terminal_size().columns
             except (OSError, ValueError):
                 width = 80
-        return status_ribbon(
-            self._current_state(), width=width, accessible=accessible
-        )
+        return status_ribbon(self._current_state(), width=width, accessible=accessible)
 
     def turn_started(self, user_input: str = "") -> TurnReport:
         self._turn_start = time.monotonic()
@@ -117,7 +117,9 @@ class SessionUI:
         self._generation = stats
         if stats is not None:
             with contextlib.suppress(Exception):
-                self._output_tokens = getattr(stats, "output_tokens", self._output_tokens)
+                self._output_tokens = getattr(
+                    stats, "output_tokens", self._output_tokens
+                )
 
     def turn_finished(self, report: TurnReport | None = None) -> None:
         if report is not None and getattr(report, "start_time", None) is not None:
@@ -127,7 +129,9 @@ class SessionUI:
         else:
             start = time.monotonic()
         if report is None:
-            report = TurnReport(start_time=start, model=self._model, generation=self._generation)
+            report = TurnReport(
+                start_time=start, model=self._model, generation=self._generation
+            )
         else:
             if getattr(report, "generation", None) is None:
                 report.generation = self._generation

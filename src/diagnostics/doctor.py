@@ -9,14 +9,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from rich.console import Console
+from rich.table import Table
+
 from platform_support import (
     detect_distribution,
     detect_platform,
     format_install_command,
     system_dependency_status,
 )
-from rich.console import Console
-from rich.table import Table
 
 console = Console()
 
@@ -115,9 +116,7 @@ def ollama_configuration_summary() -> tuple[list[str], bool]:
     except Exception:  # noqa: BLE001 - doctor must not fail on config errors
         return [], False
     endpoints = [
-        str(url).strip()
-        for url in (OLLAMA_BASE_URLS or [])
-        if str(url).strip()
+        str(url).strip() for url in (OLLAMA_BASE_URLS or []) if str(url).strip()
     ]
     allow_remote = False
     if isinstance(APP_CONFIG, dict):
@@ -161,7 +160,9 @@ def run_doctor() -> int:
     platform_table.add_column("Value")
     platform_table.add_row("Platform", platform_info.name)
     platform_table.add_row("Machine", platform_info.machine or "unknown")
-    platform_table.add_row("Features", ", ".join(platform_info.available_features) or "none")
+    platform_table.add_row(
+        "Features", ", ".join(platform_info.available_features) or "none"
+    )
     console.print(platform_table)
     console.print(
         "[info]Distribution:[/info] "
@@ -197,12 +198,12 @@ def run_doctor() -> int:
     console.print(system_table)
     fix_command = system_dependency_fix_command()
     if fix_command:
-        console.print("[warning]Missing system dependencies. Install them with:[/warning]")
+        console.print(
+            "[warning]Missing system dependencies. Install them with:[/warning]"
+        )
         console.print(f"  {fix_command}", markup=False)
     if deps["required"]:
-        console.print(
-            "[warning]Install required Python dependencies with:[/warning]"
-        )
+        console.print("[warning]Install required Python dependencies with:[/warning]")
         console.print('  python -m pip install -e ".[dev]"', markup=False)
     media_missing = [
         item

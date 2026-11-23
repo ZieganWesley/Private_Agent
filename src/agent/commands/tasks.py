@@ -11,10 +11,11 @@ async def handle_tasks_command(
     console,
 ):
     """Run task management and return (approved_task_id, loaded_skills)."""
-    from agent.runtime import _run_task_management
-    from tools import get_tool_context, set_tool_context
-    from skills.loader import load_skills_from_folder
     import os
+
+    from agent.runtime import _run_task_management
+    from skills.loader import load_skills_from_folder
+    from tools import get_tool_context, set_tool_context
 
     approved_task_id = await __import__("asyncio").to_thread(
         _run_task_management,
@@ -23,9 +24,7 @@ async def handle_tasks_command(
         skills_folder_input or None,
     )
     loaded_skills = (
-        load_skills_from_folder(skills_folder_input)
-        if skills_folder_input
-        else {}
+        load_skills_from_folder(skills_folder_input) if skills_folder_input else {}
     )
     _tool_context = get_tool_context()
     _tool_context.skill_directory = (

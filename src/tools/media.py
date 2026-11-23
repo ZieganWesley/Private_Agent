@@ -106,9 +106,7 @@ def list_microphone_devices() -> str:
             if device["max_input_channels"] > 0
         ]
         return (
-            "\n".join(available)
-            if available
-            else _media_access_message("Microphone")
+            "\n".join(available) if available else _media_access_message("Microphone")
         )
     except OSError as exc:
         return f"Could not list microphone devices ({type(exc).__name__}): {exc}"

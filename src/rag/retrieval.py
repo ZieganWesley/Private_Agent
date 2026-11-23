@@ -8,7 +8,7 @@ import threading
 from langchain_core.documents import Document
 
 from config import RAG_RELEVANCE_THRESHOLD, RAG_SIMILARITY_RESULTS
-from ui.console import console
+from ui.console import console  # noqa: F401 (shared console)
 
 _RRF_K = 60
 # Above this many chunks, SQLite FTS5 ranks keyword matches with an index
@@ -132,7 +132,9 @@ class HybridRAGRetriever:
         if _rank_bm25_available:
             try:
                 if documents:
-                    tokenized_corpus = [_tokenize(doc.page_content) for doc in documents]
+                    tokenized_corpus = [
+                        _tokenize(doc.page_content) for doc in documents
+                    ]
                     if any(tokenized_corpus):
                         self.bm25 = BM25Okapi(tokenized_corpus)
                         self.keyword_backend = "bm25"
@@ -144,16 +146,13 @@ class HybridRAGRetriever:
             # standard library's SQLite usually provides FTS5.
             self.keyword_backend = "fts5"
 
-
     def _active_keyword_backend(self) -> str | None:
         """Infer BM25 when a caller built the retriever without ``__init__``."""
         if self.keyword_backend:
             return self.keyword_backend
         return "bm25" if self.bm25 else None
 
-    def _keyword_results(
-        self, query_tokens: list[str], k: int
-    ) -> list[Document]:
+    def _keyword_results(self, query_tokens: list[str], k: int) -> list[Document]:
         """Return the best keyword matches from FTS5 or BM25."""
         if self._active_keyword_backend() == "fts5":
             if self._fts5 is None:
@@ -167,9 +166,7 @@ class HybridRAGRetriever:
             enumerate(bm25_scores),
             key=lambda item: (-item[1], item[0]),
         )
-        return [
-            self.documents[index] for index, score in top_scored_docs if score > 0
-        ]
+        return [self.documents[index] for index, score in top_scored_docs if score > 0]
 
     def _rerank(self, query: str, documents: list[Document]) -> list[Document]:
         """Re-rank documents by embedding similarity when an embedder is available."""

@@ -276,9 +276,7 @@ def test_rag_guided_recovery_preserves_corrupt_index(tmp_path, monkeypatch):
     index.mkdir()
     (index / ".index_state.json").write_text("{bad", encoding="utf-8")
     (index / "chroma.sqlite3").write_text("preserve", encoding="utf-8")
-    monkeypatch.setattr(
-        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
-    )
+    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
     vectorstore = MagicMock()
     monkeypatch.setattr("rag.indexing.Chroma", MagicMock())
     monkeypatch.setattr(
@@ -309,9 +307,7 @@ def test_rag_limits_file_size_and_keeps_state_write_atomic(tmp_path, monkeypatch
         def __init__(self, **kwargs):
             pass
 
-    monkeypatch.setattr(
-        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
-    )
+    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
     monkeypatch.setattr("rag.indexing.Chroma", EmptyVectorStore)
     retriever = initialize_knowledge_base(str(docs), index_path=str(index))
     assert retriever is not None
@@ -321,9 +317,7 @@ def test_rag_limits_file_size_and_keeps_state_write_atomic(tmp_path, monkeypatch
     original_state = '{"unchanged": {"mtime_ns": 1, "size": 1}}'
     state_path.write_text(original_state, encoding="utf-8")
     with (
-        patch(
-            "rag.indexing.os.replace", side_effect=OSError("disk error")
-        ),
+        patch("rag.indexing.os.replace", side_effect=OSError("disk error")),
         pytest.raises(OSError, match="disk error"),
     ):
         _write_index_state_atomic(state_path, {"new": {"mtime_ns": 2, "size": 2}})
@@ -354,9 +348,7 @@ def test_rag_vector_failure_does_not_advance_index_state(tmp_path, monkeypatch):
         def add_documents(self, documents, ids):
             raise RuntimeError("embedding write failed")
 
-    monkeypatch.setattr(
-        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
-    )
+    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
     monkeypatch.setattr("rag.indexing.Chroma", FailingVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is None
     assert _read_index_state(state_path) == old_state
@@ -580,9 +572,7 @@ def test_rag_enforces_corpus_byte_limit(tmp_path, monkeypatch):
             cls.sources = {doc.metadata["source"] for doc in documents}
             return cls()
 
-    monkeypatch.setattr(
-        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
-    )
+    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
     monkeypatch.setattr("rag.indexing.Chroma", RecordingVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is not None
     assert RecordingVectorStore.sources == {str(first.resolve())}
@@ -612,9 +602,7 @@ def test_rag_enforces_pdf_page_and_document_chunk_limits(tmp_path, monkeypatch):
         def get(self, where):
             return {"ids": []}
 
-    monkeypatch.setattr(
-        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
-    )
+    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
     monkeypatch.setattr("rag.indexing.Chroma", EmptyVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is not None
     assert _read_index_state(index / ".index_state.json") == {}
@@ -700,9 +688,7 @@ def _capture_indexing(monkeypatch):
             captured.extend(docs)
             return MagicMock()
 
-    monkeypatch.setattr(
-        "rag.indexing.OllamaEmbeddings", lambda **kwargs: object()
-    )
+    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
     monkeypatch.setattr("rag.indexing.Chroma", RecordingStore)
     return captured
 
@@ -1013,7 +999,10 @@ def test_hybrid_retriever_uses_fts5_when_rank_bm25_missing(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "rank_bm25", None)
     documents = [
-        Document(page_content=f"chunk {index} topic{index}", metadata={"source": f"d{index}.md"})
+        Document(
+            page_content=f"chunk {index} topic{index}",
+            metadata={"source": f"d{index}.md"},
+        )
         for index in range(5)
     ]
     retriever = HybridRAGRetriever(None, documents)

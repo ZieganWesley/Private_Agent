@@ -80,8 +80,12 @@ def test_query_helpers_return_results():
         assert isinstance(find_references("bar", root_path=str(root), db_path=db), list)
         assert isinstance(find_callers("bar", root_path=str(root), db_path=db), list)
         assert isinstance(find_callees("foo", root_path=str(root), db_path=db), list)
-        assert isinstance(find_dependencies("src/a.py", root_path=str(root), db_path=db), list)
-        assert isinstance(trace_execution_flow("foo", root_path=str(root), db_path=db), list)
+        assert isinstance(
+            find_dependencies("src/a.py", root_path=str(root), db_path=db), list
+        )
+        assert isinstance(
+            trace_execution_flow("foo", root_path=str(root), db_path=db), list
+        )
 
 
 def test_repository_map_contains_symbols():
@@ -154,9 +158,7 @@ def test_parallel_parse_preserves_order():
         db = str(root / "index.db")
         index = RepositoryIndex(db_path=db, root_path=str(root))
         try:
-            pending = [
-                (root / f"f{i}.py", f"f{i}.py", ".py") for i in range(8)
-            ]
+            pending = [(root / f"f{i}.py", f"f{i}.py", ".py") for i in range(8)]
             results = index._parse_files_parallel(pending)
             assert len(results) == 8
             for i, (syms, _edges) in enumerate(results):
@@ -178,9 +180,7 @@ def test_parallel_parse_falls_back_to_in_process(monkeypatch):
         def __exit__(self, *args):
             return False
 
-    monkeypatch.setattr(
-        indexer_module, "ProcessPoolExecutor", _BrokenExecutor
-    )
+    monkeypatch.setattr(indexer_module, "ProcessPoolExecutor", _BrokenExecutor)
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         for i in range(8):
@@ -190,9 +190,7 @@ def test_parallel_parse_falls_back_to_in_process(monkeypatch):
         db = str(root / "index.db")
         index = RepositoryIndex(db_path=db, root_path=str(root))
         try:
-            pending = [
-                (root / f"g{i}.py", f"g{i}.py", ".py") for i in range(8)
-            ]
+            pending = [(root / f"g{i}.py", f"g{i}.py", ".py") for i in range(8)]
             results = index._parse_files_parallel(pending)
             assert len(results) == 8
             for i, (syms, _edges) in enumerate(results):
@@ -234,7 +232,9 @@ def test_parser_extracts_javascript_symbols_imports_and_inheritance():
             assert stats["files_indexed"] >= 1
             assert index.find_symbols("greet")[0]["kind"] == "function"
             assert index.find_symbols("Child")[0]["kind"] == "class"
-            assert any(dep["target"] == "mod" for dep in index.dependencies_of("app.js"))
+            assert any(
+                dep["target"] == "mod" for dep in index.dependencies_of("app.js")
+            )
             assert any(
                 ref["source"] == "Child" and ref["kind"] == "inherits"
                 for ref in index.find_references("Parent")

@@ -13,8 +13,7 @@ def _documents(count: int) -> list[Document]:
     return [
         Document(
             page_content=(
-                f"chunk number {index} about topic{index % 97} "
-                f"and keyword{index % 13}"
+                f"chunk number {index} about topic{index % 97} and keyword{index % 13}"
             ),
             metadata={"source": f"doc-{index}.md", "chunk": index},
         )

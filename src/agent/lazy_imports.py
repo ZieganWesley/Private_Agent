@@ -110,10 +110,19 @@ _LAZY_SPECS: dict[str, tuple[str, str]] = {
     "include_folder_context": ("agent.interactive", "include_folder_context"),
     "load_custom_slash_commands": ("agent.interactive", "load_custom_slash_commands"),
     "prompt_user_input": ("agent.interactive", "prompt_user_input"),
-    "_discover_available_local_runtimes": ("agent.model_selection", "_discover_available_local_runtimes"),
+    "_discover_available_local_runtimes": (
+        "agent.model_selection",
+        "_discover_available_local_runtimes",
+    ),
     "_effective_context_window": ("agent.model_selection", "_effective_context_window"),
-    "_make_selected_local_chat_model": ("agent.model_selection", "_make_selected_local_chat_model"),
-    "inspect_openai_compatible_model_capabilities": ("agent.model_selection", "inspect_openai_compatible_model_capabilities"),
+    "_make_selected_local_chat_model": (
+        "agent.model_selection",
+        "_make_selected_local_chat_model",
+    ),
+    "inspect_openai_compatible_model_capabilities": (
+        "agent.model_selection",
+        "inspect_openai_compatible_model_capabilities",
+    ),
     "select_online_model": ("agent.model_selection", "select_online_model"),
     "_display_tool_error": ("agent.tool_display", "_display_tool_error"),
     "_display_tool_request": ("agent.tool_display", "_display_tool_request"),
@@ -123,7 +132,10 @@ _LAZY_SPECS: dict[str, tuple[str, str]] = {
     "_redact_tool_arguments": ("agent.tool_display", "_redact_tool_arguments"),
     "_tool_log_redactions": ("agent.tool_display", "_tool_log_redactions"),
     "_tool_result_is_error": ("agent.tool_display", "_tool_result_is_error"),
-    "_append_captured_images_from_tool_results": ("agent.tool_display", "_append_captured_images_from_tool_results"),
+    "_append_captured_images_from_tool_results": (
+        "agent.tool_display",
+        "_append_captured_images_from_tool_results",
+    ),
     "CodeTaskWorkspace": ("code_tasks", "CodeTaskWorkspace"),
     "checkpoint_code_task": ("code_tasks", "checkpoint_code_task"),
     "finalize_code_task": ("code_tasks", "finalize_code_task"),
@@ -132,8 +144,6 @@ _LAZY_SPECS: dict[str, tuple[str, str]] = {
     "match_skill_by_relevancy": ("skills", "match_skill_by_relevancy"),
     "_record_code_task_validation": ("agent.learning", "_record_code_task_validation"),
 }
-
-
 
 
 class _LazyModule:
@@ -149,12 +159,6 @@ class _LazyModule:
     def __getattr__(self, item: str):
         return getattr(self._load(), item)
 
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name in self.__slots__:
-            object.__setattr__(self, name, value)
-        else:
-            setattr(self._load(), name, value)
-
     def __setattr__(self, key: str, value: Any) -> None:
         if key.startswith("_"):
             super().__setattr__(key, value)
@@ -166,6 +170,7 @@ class _LazyModule:
 
     def __repr__(self) -> str:
         return repr(self._load())
+
 
 def install_lazy_globals(namespace: dict) -> None:
     for name, (module, attr) in _LAZY_SPECS.items():

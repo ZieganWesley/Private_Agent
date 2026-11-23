@@ -1,7 +1,4 @@
-import os
 import platform
-
-import pytest
 
 from platform_support import (
     PlatformInfo,
@@ -48,7 +45,10 @@ def test_wsl_detected_from_environment(monkeypatch):
     monkeypatch.setattr(platform, "system", lambda: "Linux")
     monkeypatch.setattr(platform, "machine", lambda: "x86_64")
 
-    assert is_wsl(proc_version_path="/no/such/file", environ={"WSL_DISTRO_NAME": "Ubuntu"}) is True
+    assert (
+        is_wsl(proc_version_path="/no/such/file", environ={"WSL_DISTRO_NAME": "Ubuntu"})
+        is True
+    )
 
 
 def test_termux_detected_from_environment(monkeypatch):
@@ -57,7 +57,10 @@ def test_termux_detected_from_environment(monkeypatch):
 
     info = detect_platform(
         proc_version_path="/no/such/file",
-        environ={"TERMUX_VERSION": "0.118.0", "PREFIX": "/data/data/com.termux/files/usr"},
+        environ={
+            "TERMUX_VERSION": "0.118.0",
+            "PREFIX": "/data/data/com.termux/files/usr",
+        },
     )
 
     assert info.is_termux is True
@@ -69,10 +72,13 @@ def test_termux_detected_from_path(monkeypatch):
     monkeypatch.setattr(platform, "system", lambda: "Linux")
     monkeypatch.setattr(platform, "machine", lambda: "aarch64")
 
-    assert is_termux(
-        environ={},
-        path_exists=lambda path: path == "/data/data/com.termux",
-    ) is True
+    assert (
+        is_termux(
+            environ={},
+            path_exists=lambda path: path == "/data/data/com.termux",
+        )
+        is True
+    )
 
 
 def test_macos_detection(monkeypatch):
@@ -114,6 +120,7 @@ def test_platform_name_helper(monkeypatch):
     monkeypatch.setattr(platform, "system", lambda: "Linux")
     monkeypatch.setattr(platform, "machine", lambda: "x86_64")
 
-    assert platform_name(
-        detect_platform(proc_version_path="/no/such/file", environ={})
-    ) == "Linux"
+    assert (
+        platform_name(detect_platform(proc_version_path="/no/such/file", environ={}))
+        == "Linux"
+    )

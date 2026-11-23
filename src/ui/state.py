@@ -104,7 +104,9 @@ class StatusState:
     def percent(self) -> float:
         return context_percent(self.context_tokens, self.context_maximum)
 
-    def segments(self, *, width: int | None = None, accessible: bool = False) -> list[str]:
+    def segments(
+        self, *, width: int | None = None, accessible: bool = False
+    ) -> list[str]:
         """Build the ribbon segments, dropping trailing ones if ``width`` is given."""
         model_name = "" if self.model is None else str(self.model)
         segs: list[str] = [
@@ -113,7 +115,9 @@ class StatusState:
             f"permission={self.permission_mode}",
         ]
         if accessible and self.context_maximum:
-            _used, limit, _fraction = _context_use(self.context_tokens, self.context_maximum)
+            _used, limit, _fraction = _context_use(
+                self.context_tokens, self.context_maximum
+            )
             if limit > 0:
                 segs.append(f"{_used}/{limit} ({self.percent():.0f}%)")
         if self.output_tokens is not None:

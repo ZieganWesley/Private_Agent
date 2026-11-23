@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import platform
 
 from platform_support import (
@@ -26,8 +24,12 @@ def test_detect_distribution_from_os_release(tmp_path):
 
 def test_detect_distribution_fedora_uses_dnf(tmp_path, monkeypatch):
     os_release = tmp_path / "os-release"
-    os_release.write_text('ID=fedora\nNAME="Fedora"\nVERSION_ID="40"\n', encoding="utf-8")
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/dnf" if name == "dnf" else None)
+    os_release.write_text(
+        'ID=fedora\nNAME="Fedora"\nVERSION_ID="40"\n', encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "shutil.which", lambda name: "/usr/bin/dnf" if name == "dnf" else None
+    )
 
     info = detect_distribution(os_release_path=os_release)
 
@@ -51,7 +53,9 @@ def test_format_install_command_for_common_managers():
 
 def test_system_dependency_status_reports_tool_availability(monkeypatch):
     monkeypatch.setattr(platform, "system", lambda: "Linux")
-    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/prlimit" if name == "prlimit" else None)
+    monkeypatch.setattr(
+        "shutil.which", lambda name: "/usr/bin/prlimit" if name == "prlimit" else None
+    )
 
     statuses = system_dependency_status()
 

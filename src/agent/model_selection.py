@@ -222,7 +222,10 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
         if not isinstance(entry, dict):
             continue
         normalized = dict(entry)
-        if not (isinstance(normalized.get("name"), str) and str(normalized.get("name")).strip()):
+        if not (
+            isinstance(normalized.get("name"), str)
+            and str(normalized.get("name")).strip()
+        ):
             provider = normalized.get("provider")
             if isinstance(provider, str) and provider.strip():
                 normalized["name"] = provider.strip()
@@ -298,7 +301,9 @@ def fetch_local_chat_models() -> list[str]:
     try:
         runtimes = _discover_available_local_runtimes()
     except (ValueError, OSError) as e:  # noqa: BLE001 - discovery boundary
-        console.print(f"[error][Warning] Could not discover local runtimes: {e}[/error]")
+        console.print(
+            f"[error][Warning] Could not discover local runtimes: {e}[/error]"
+        )
         return []
     chat_models: list[str] = []
     seen: set[str] = set()

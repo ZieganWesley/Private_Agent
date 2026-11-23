@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import socket
-import subprocess
 import sys
 import threading
 import time
@@ -125,9 +124,7 @@ def _getaddrinfo_with_timeout(host: str, port: int, timeout: float):
 
     def _resolve() -> None:
         try:
-            result["records"] = socket.getaddrinfo(
-                host, port, 0, socket.SOCK_STREAM
-            )
+            result["records"] = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
         except BaseException as exc:  # noqa: BLE001 - re-raised below with context
             error["exception"] = exc
 

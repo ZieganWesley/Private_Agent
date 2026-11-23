@@ -7,9 +7,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 import code_tasks
+import tools.shell as shell
 from sandbox import SandboxManager
 from tools import approved_tool_invocation, get_tool_context
-import tools.shell as shell
 
 
 class _NetworkHandler(BaseHTTPRequestHandler):

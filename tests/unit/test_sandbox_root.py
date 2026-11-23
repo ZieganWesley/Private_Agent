@@ -164,7 +164,9 @@ def test_sandbox_network_config_key_and_permissions_alias():
         is True
     )
     assert (
-        Settings.from_config({"sandbox": {"network": "not-a-bool"}}).sandbox_network_default
+        Settings.from_config(
+            {"sandbox": {"network": "not-a-bool"}}
+        ).sandbox_network_default
         is False
     )
 
@@ -177,10 +179,26 @@ def test_startup_network_permission_resolution(monkeypatch):
 
     assert _apply_sandbox_network_permission(False, {}) is False
     assert _apply_sandbox_network_permission(True, {}) is True
-    assert _apply_sandbox_network_permission(True, {"PRIVATE_AGENT_SANDBOX_NETWORK": "false"}) is False
-    assert _apply_sandbox_network_permission(False, {"PRIVATE_AGENT_SANDBOX_NETWORK": "1"}) is True
-    assert _apply_sandbox_network_permission(True, {"PRIVATE_AGENT_SANDBOX_NETWORK": ""}) is False
-    assert _apply_sandbox_network_permission(False, {"PRIVATE_AGENT_SANDBOX_NETWORK": "garbage"}) is False
+    assert (
+        _apply_sandbox_network_permission(
+            True, {"PRIVATE_AGENT_SANDBOX_NETWORK": "false"}
+        )
+        is False
+    )
+    assert (
+        _apply_sandbox_network_permission(False, {"PRIVATE_AGENT_SANDBOX_NETWORK": "1"})
+        is True
+    )
+    assert (
+        _apply_sandbox_network_permission(True, {"PRIVATE_AGENT_SANDBOX_NETWORK": ""})
+        is False
+    )
+    assert (
+        _apply_sandbox_network_permission(
+            False, {"PRIVATE_AGENT_SANDBOX_NETWORK": "garbage"}
+        )
+        is False
+    )
     assert _apply_sandbox_network_permission(object(), {}) is False
     assert SandboxManager.is_network_allowed() is False
 
@@ -205,9 +223,7 @@ def test_cli_sandbox_network_flag_reaches_startup_resolution(monkeypatch):
     monkeypatch.setattr(
         runtime,
         "run_agent_cli",
-        lambda **kwargs: received.append(
-            runtime._apply_sandbox_network_permission()
-        ),
+        lambda **kwargs: received.append(runtime._apply_sandbox_network_permission()),
     )
 
     cli.main()

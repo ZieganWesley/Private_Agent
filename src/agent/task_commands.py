@@ -298,7 +298,9 @@ def _run_task_management(
     def show_tasks() -> None:
         tasks = memory.list_tasks()
         if not tasks:
-            console.print("[warning]No saved task plans are stored in SQLite.[/warning]")
+            console.print(
+                "[warning]No saved task plans are stored in SQLite.[/warning]"
+            )
             return
         table = Table(title="Saved task plans", box=None, expand=True)
         table.add_column("ID", style="cyan", no_wrap=True)
@@ -797,7 +799,9 @@ def _run_task_management(
                     _tool_context.task_session_id = session_id
                     _tool_context.task_id = None
                     set_tool_context(_tool_context)
-                console.print(f"[success]Task status saved as {target_status}.[/success]")
+                console.print(
+                    f"[success]Task status saved as {target_status}.[/success]"
+                )
             elif action == "verify":
                 if len(parts) != 4:
                     console.print(
@@ -887,7 +891,9 @@ def _run_task_management(
                     resolution,
                     owner_id=get_tool_context().runtime_owner_id,
                 )
-                console.print("[success]Action reconciliation saved in SQLite.[/success]")
+                console.print(
+                    "[success]Action reconciliation saved in SQLite.[/success]"
+                )
             elif action == "complete":
                 confirmation = console.input(
                     "Mark task complete only if every step is verified. Type COMPLETE: "
@@ -986,7 +992,9 @@ def _run_task_management(
                     for failure in failed_skill_deletions:
                         console.print(f"- {failure}")
         except (ValueError, sqlite3.Error, OSError) as exc:
-            console.print(f"[error][Task state error] {type(exc).__name__}: {exc}[/error]")
+            console.print(
+                f"[error][Task state error] {type(exc).__name__}: {exc}[/error]"
+            )
     return approved_for_execution_id
 
 

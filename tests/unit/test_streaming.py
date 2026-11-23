@@ -306,7 +306,5 @@ async def test_streamed_text_is_printed_only_after_the_spinner_stops(monkeypatch
     )
 
     assert created_live
-    assert all(
-        not live.started_while_spinner_active for live in created_live
-    )
+    assert all(not live.started_while_spinner_active for live in created_live)
     assert indicator.stops == 1

@@ -5,7 +5,6 @@ import json
 import logging
 import secrets
 import time
-import uuid
 
 from config import (
     MAX_RESUME_STATE_CHARS,

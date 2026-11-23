@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import pathlib
-import platform
 import re
 import sqlite3
 import sys
@@ -31,7 +30,6 @@ from ui.chat_ui import ChatTranscript
 from platform_support import (
     detect_platform,
     is_windows_mount_path,
-    is_wsl,
 )
 
 from config import (
@@ -70,7 +68,6 @@ from config import (
     REGISTERED_SKILL_RETENTION_DAYS,
     SKILLS_FOLDER_DEFAULT,
     GROUPED_HELP,
-    INFORMATIVE_PROMPT,
     SHOW_TURN_DIVIDER,
     SHOW_TURN_STATS,
     SHOW_WELCOME_SCREEN,
@@ -114,7 +111,6 @@ from .memory_context import (
     _is_coding_guidance_request,
     _prune_memory_retention,
     _retrieve_rag_documents,
-    _run_memory_maintenance,
 )
 from .permissions import (
     authorize_network_research as _authorize_network_research,
@@ -188,13 +184,13 @@ from .streaming import (
 from .task_commands import (
     _approved_coding_task_scope,
     _planning_search_citations,
-    _run_task_management,
 )
 from .task_lease import (
     TASK_LEASE_SECONDS,
     _maintain_task_lease,
 )
 from .undo import undo_last_turn
+
 _ALWAYS_ALLOWED_TOOLS: set[str] = set()
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _ACTIVE_RAG_TASK: Any | None = None
@@ -203,13 +199,17 @@ _ACTIVE_RAG_TASK: Any | None = None
 def initialize_knowledge_base(*args: Any, **kwargs: Any) -> Any:
     """Lazy wrapper so importing this module does not pull in Chroma."""
     from rag import initialize_knowledge_base as _initialize
+
     return _initialize(*args, **kwargs)
 
 
 def knowledge_base_signature(*args: Any, **kwargs: Any) -> Any:
     """Lazy wrapper so importing this module does not pull in Chroma."""
     from rag import knowledge_base_signature as _signature
+
     return _signature(*args, **kwargs)
+
+
 _LAST_HEADLESS_RESPONSE: str = ""
 _TASK_LEASE_HEARTBEAT: asyncio.Task | None = None
 OS_ISOLATED_TOOL_NAMES = frozenset(
@@ -1193,7 +1193,9 @@ def _apply_sandbox_network_permission(
     environ=None,
 ) -> bool:
     """Apply the sandbox network policy during startup, failing closed."""
-    default = SANDBOX_NETWORK_DEFAULT if configured_default is None else configured_default
+    default = (
+        SANDBOX_NETWORK_DEFAULT if configured_default is None else configured_default
+    )
     environment = os.environ if environ is None else environ
     try:
         if "PRIVATE_AGENT_SANDBOX_NETWORK" in environment:
@@ -1254,7 +1256,8 @@ async def _build_session_setup(
             if folder is not None:
                 discovered.append(f"{label}: {folder}")
         console.print(
-            "[success][Project folders][/success] Auto-detected " + " | ".join(discovered)
+            "[success][Project folders][/success] Auto-detected "
+            + " | ".join(discovered)
         )
     local_runtimes = _discover_available_local_runtimes()
     log_event(
@@ -1296,6 +1299,7 @@ async def _build_session_setup(
             f"Skills: [info]{skills_folder_default or 'not configured'}[/info]"
         )
     import code_tasks as code_tasks_module
+
     isolation_warning = code_tasks_module.isolation_unavailable_reason()
     if verbose_startup:
         if isolation_warning:
@@ -1428,9 +1432,7 @@ async def _build_session_setup(
     flagged_workspace = requested_workspace()
     if flagged_workspace:
         workspace_input = flagged_workspace
-        console.print(
-            f"[success][Workspace flag][/success] Using {workspace_input}."
-        )
+        console.print(f"[success][Workspace flag][/success] Using {workspace_input}.")
     elif project_resources.workspace is not None:
         workspace_input = str(project_resources.workspace)
         if is_windows_mount_path(workspace_input):
@@ -1497,15 +1499,18 @@ async def _build_session_setup(
             "filesystem path."
         )
     import config as _rag_config
+
     rag_embedding_provider = _rag_config.EMBEDDING_PROVIDER
     rag_embedding_model = _rag_config.EMBEDDING_MODEL
     rag_embedding_base_url = _rag_config.EMBEDDING_BASE_URL
     ollama_runtimes = [
-        runtime for runtime in local_runtimes
+        runtime
+        for runtime in local_runtimes
         if getattr(runtime, "kind", "") == "ollama"
     ]
     openai_runtimes = [
-        runtime for runtime in local_runtimes
+        runtime
+        for runtime in local_runtimes
         if getattr(runtime, "kind", "") == "openai-compatible"
     ]
     if rag_embedding_provider == "ollama":
@@ -1542,6 +1547,7 @@ async def _build_session_setup(
                     "[warning][RAG][/warning] No embedding-capable runtime is "
                     "available; continuing without local RAG."
                 )
+
     def _initialize_knowledge_base_with_embeddings(
         docs_path,
         *,
@@ -1556,6 +1562,7 @@ async def _build_session_setup(
             embedding_model=rag_embedding_model,
             embedding_base_url=rag_embedding_base_url,
         )
+
     # Start RAG indexing (background when no existing index needs an
     # interactive rebuild) so provider selection is not blocked by it
     global _ACTIVE_RAG_TASK
@@ -1777,6 +1784,7 @@ async def _choose_provider(
         requested_model,
         requested_provider,
     )
+
     last_used = load_last_provider() or {}
     idle_providers = installed_but_idle(local_runtimes)
     for idle in idle_providers:
@@ -1784,8 +1792,20 @@ async def _choose_provider(
             f"  [warning]–[/warning] {idle.preset.name} is installed but not running "
             f"— {idle.start_hint}"
         )
-    if (resumed_record := provider_record_for_resume(memory, session_id)) is None and interactive and idle_providers:
-        local_runtimes[:], _ = _offer_provider_start(console=console, record=None, idle_providers=idle_providers, runtimes=local_runtimes, refresh=_discover_available_local_runtimes, input_fn=_input, interactive=interactive)
+    if (
+        (resumed_record := provider_record_for_resume(memory, session_id)) is None
+        and interactive
+        and idle_providers
+    ):
+        local_runtimes[:], _ = _offer_provider_start(
+            console=console,
+            record=None,
+            idle_providers=idle_providers,
+            runtimes=local_runtimes,
+            refresh=_discover_available_local_runtimes,
+            input_fn=_input,
+            interactive=interactive,
+        )
     resumed_runtime = None
     if resumed_record is not None:
         resumed_runtime = match_runtime(
@@ -1842,10 +1862,18 @@ async def _choose_provider(
             default_choice = str(_index)
             break
     last_choice = online_options[-1][0]
-    _arrow_choices: list[tuple[str, str]] = [
-        (str(_i), f"Local ({_rt.name}) — {len(_rt.models)} model(s)" + (" (last used)" if last_used.get("display_name") == _rt.name else ""))
-        for _i, _rt in enumerate(local_runtimes, 1)
-    ] + [(str(_cn), _label) for _cn, _label, _ in online_options] + [("0", "Exit")]
+    _arrow_choices: list[tuple[str, str]] = (
+        [
+            (
+                str(_i),
+                f"Local ({_rt.name}) — {len(_rt.models)} model(s)"
+                + (" (last used)" if last_used.get("display_name") == _rt.name else ""),
+            )
+            for _i, _rt in enumerate(local_runtimes, 1)
+        ]
+        + [(str(_cn), _label) for _cn, _label, _ in online_options]
+        + [("0", "Exit")]
+    )
     flagged_provider = requested_provider()
     flagged_runtime = match_runtime(flagged_provider, local_runtimes)
     if flagged_provider and flagged_runtime is None:
@@ -1879,12 +1907,19 @@ async def _choose_provider(
                 f"[warning][Resume][/warning] {resumed_runtime.name} is running but "
                 "advertises no chat models."
             )
-    elif len(local_runtimes) == 1 and not always_ask_provider(APP_CONFIG) and auto_select_single_provider(APP_CONFIG):
+    elif (
+        len(local_runtimes) == 1
+        and not always_ask_provider(APP_CONFIG)
+        and auto_select_single_provider(APP_CONFIG)
+    ):
         provider_choice = "1"
-        console.print(f"[success][Local runtime][/success] Using {local_runtimes[0].name} (only reachable local provider).")
+        console.print(
+            f"[success][Local runtime][/success] Using {local_runtimes[0].name} (only reachable local provider)."
+        )
     else:
         try:
             from .interactive import arrow_select as _arrow_select
+
             _chosen = _arrow_select(
                 "Choose provider:", _arrow_choices, default=default_choice
             )
@@ -2012,6 +2047,7 @@ async def _choose_provider(
             preselected_model = requested_exact
         try:
             from .interactive import arrow_select as _arrow_select
+
             _model_choice = (
                 None
                 if preselected_model is not None
@@ -2083,7 +2119,9 @@ async def _choose_provider(
                     f"using compatible local model {tool_capable_model} for agent tasks.[/warning]"
                 )
                 selected_model = tool_capable_model
-                capabilities = inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
+                capabilities = inspect_openai_compatible_model_capabilities(
+                    local_runtime, selected_model
+                )
         try:
             llm = _make_selected_local_chat_model(
                 local_runtime,
@@ -2147,7 +2185,9 @@ async def _choose_provider(
                         f"[warning][Model fallback] Switching to tool-capable model {fallback_model}.[/warning]"
                     )
                     selected_model = fallback_model
-                    capabilities = inspect_openai_compatible_model_capabilities(local_runtime, selected_model)
+                    capabilities = inspect_openai_compatible_model_capabilities(
+                        local_runtime, selected_model
+                    )
                     llm = _make_selected_local_chat_model(
                         local_runtime,
                         selected_model,
@@ -2374,7 +2414,7 @@ async def _run_agent_cli_session(
             preference=provider_preference,
             memory=memory,
             local_runtimes=local_runtimes,
-                isolation_warning=isolation_warning,
+            isolation_warning=isolation_warning,
             thinking_enabled=thinking_enabled,
             thinking_effort=thinking_effort,
             permission_mode=permission_mode,
@@ -2430,6 +2470,7 @@ async def _run_agent_cli_session(
         llm_with_tools = selection.llm_with_tools
         tools_list = selection.tools_list
         from .subagent_runner import make_subagent_runner
+
         _tool_context = get_tool_context()
         _tool_context.subagent_runner = make_subagent_runner(llm)
         set_tool_context(_tool_context)
@@ -2462,6 +2503,7 @@ async def _run_agent_cli_session(
                 context_summary = ""
                 startup_memory_context = ""
                 session_summary_saved = False
+
         # see the current llm/capabilities after a mid-session model switch, so its
         # late binding of loop-assigned names (B023) is intentional.
         def cleanup_code_task(*, finalize: bool) -> str | None:
@@ -2503,6 +2545,7 @@ async def _run_agent_cli_session(
                     llm_with_tools = llm  # noqa: B023
             active_code_workspace = None
             return result
+
         session_ui = SessionUI(
             console=console,
             status_bar=STATUS_BAR,
@@ -2596,6 +2639,7 @@ async def _run_agent_cli_session(
                     continue
                 if user_input.lower() == "/doctor":
                     from diagnostics.doctor import doctor_interactive
+
                     doctor_interactive()
                     continue
                 if user_input.lower() == "/context":
@@ -2629,7 +2673,9 @@ async def _run_agent_cli_session(
                     pending_folder_context = ""
                     pending_folder_context_files = ()
                     pending_folder_context_bytes = 0
-                    session_ui.print("[success][Context][/success] Queued context cleared.")
+                    session_ui.print(
+                        "[success][Context][/success] Queued context cleared."
+                    )
                     continue
                 if user_input.lower().startswith("/context "):
                     session_ui.print(
@@ -2695,8 +2741,10 @@ async def _run_agent_cli_session(
                         )
                     continue
                 lowered_input = user_input.strip().lower()
-                if lowered_input == "/expand" or lowered_input == "/last" or lowered_input.startswith(
-                    "/last "
+                if (
+                    lowered_input == "/expand"
+                    or lowered_input == "/last"
+                    or lowered_input.startswith("/last ")
                 ):
                     from . import tool_display as _tool_display
 
@@ -2787,8 +2835,10 @@ async def _run_agent_cli_session(
                 ):
                     from .commands import skills as _skills_command
 
-                    selected_skill_key, loaded_skills = _skills_command.handle_skills_command(
-                        user_input, loaded_skills, selected_skill_key, session_ui
+                    selected_skill_key, loaded_skills = (
+                        _skills_command.handle_skills_command(
+                            user_input, loaded_skills, selected_skill_key, session_ui
+                        )
                     )
                     continue
                 if user_input.lower() == "/tasks":
@@ -2814,8 +2864,7 @@ async def _run_agent_cli_session(
                         and approved_task["status"] == "active"
                         and approved_task["approved_revision"]
                         == approved_task["revision"]
-                        and approved_task["approved_digest"]
-                        == approved_task["digest"]
+                        and approved_task["approved_digest"] == approved_task["digest"]
                     ):
                         session_ui.print(
                             "[warning][Task not started][/warning] The task is no "
@@ -2848,7 +2897,12 @@ async def _run_agent_cli_session(
                     )
                     continue
                 _thinking_command = user_input.lower()
-                if _thinking_command in {"/thinking on", "/thinking off", "/think on", "/think off"}:
+                if _thinking_command in {
+                    "/thinking on",
+                    "/thinking off",
+                    "/think on",
+                    "/think off",
+                }:
                     from .commands import think as _think_command
 
                     thinking_enabled, new_llm, new_llm_with_tools = (
@@ -2935,7 +2989,9 @@ async def _run_agent_cli_session(
                     continue
                 if user_input.lower() == "/compact":
                     if not chat_history:
-                        session_ui.print("[info][Context][/info] Nothing to compact yet.")
+                        session_ui.print(
+                            "[info][Context][/info] Nothing to compact yet."
+                        )
                         continue
                     chat_history, context_summary = await compact_history(
                         llm,
@@ -2980,7 +3036,9 @@ async def _run_agent_cli_session(
                     _print_session_statistics()
                     return
                 if user_input.lower() == "switch":
-                    session_ui.print("[info][Info] Returning to model selection...[/info]")
+                    session_ui.print(
+                        "[info][Info] Returning to model selection...[/info]"
+                    )
                     model_selection_failed = True
                     break
                 if not user_input:
@@ -2988,10 +3046,7 @@ async def _run_agent_cli_session(
                 turn_permission_mode = permission_mode
                 planning_only = planning_mode_persistent
                 _acs = _approved_coding_task_scope(memory)
-                coding_task_requested = (
-                    coding_mode_armed
-                    or _acs is not None
-                )
+                coding_task_requested = coding_mode_armed or _acs is not None
                 if planning_only:
                     active_task_id = get_tool_context().task_id
                     active_task = (
@@ -3014,6 +3069,7 @@ async def _run_agent_cli_session(
                     if capabilities["tools"] is False:
                         try:
                             from .text_planning import create_text_plan
+
                             create_text_plan(
                                 memory, session_id, user_input, llm, console
                             )
@@ -3189,13 +3245,14 @@ async def _run_agent_cli_session(
                         _tool_context = get_tool_context()
                         _tool_context.code_task = None
                         set_tool_context(_tool_context)
-                        try:
+                        with contextlib.suppress(ValueError, sqlite3.Error, OSError):
                             memory.set_task_status(
-                                _tool_context.task_id, "cancelled",
-                                owner_id=getattr(_tool_context, "runtime_owner_id", None),
+                                _tool_context.task_id,
+                                "cancelled",
+                                owner_id=getattr(
+                                    _tool_context, "runtime_owner_id", None
+                                ),
                             )
-                        except (ValueError, sqlite3.Error, OSError):
-                            pass
                     else:
                         workspace_digest = hashlib.sha256(
                             (
@@ -3434,7 +3491,9 @@ async def _run_agent_cli_session(
                             if refreshed is not None:
                                 vectorstore = refreshed
                                 rag_signature = current_signature
-                                session_ui.print("[success][RAG][/success] Index updated.")
+                                session_ui.print(
+                                    "[success][RAG][/success] Index updated."
+                                )
                             else:
                                 session_ui.print(
                                     "[warning][RAG] Update failed; keeping the "
@@ -3576,6 +3635,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             if isinstance(value, (list, tuple)):
                                 return ", ".join(str(item) for item in value)
                             return str(value or "")
+
                         active_task_instruction = (
                             "Current user-approved SQLite task plan (reference, "
                             "not authorization beyond its recorded scope): "
@@ -3693,7 +3753,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 ):
                     try:
                         chat_history, context_summary = await compact_history(
-                            llm, chat_history, context_summary,
+                            llm,
+                            chat_history,
+                            context_summary,
                             keep_recent=CONTEXT_KEEP_RECENT_MESSAGES,
                             max_chars=CONTEXT_SUMMARY_CHARS,
                             source_token_limit=max(200, prompt_budget // 2),
@@ -3703,8 +3765,10 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             model_name=selected_model,
                         )
                     except (ValueError, RuntimeError, OSError) as exc:
-                            console.print(f"[warning][Context] Compaction failed ({type(exc).__name__}); trimming recent history.[/warning]")
-                            chat_history = chat_history[-MAX_HISTORY_MESSAGES:]
+                        console.print(
+                            f"[warning][Context] Compaction failed ({type(exc).__name__}); trimming recent history.[/warning]"
+                        )
+                        chat_history = chat_history[-MAX_HISTORY_MESSAGES:]
                 summary_message = summary_system_message(context_summary)
                 if summary_message is not None:
                     system_prompts.append(summary_message)
@@ -3791,12 +3855,17 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         discover=_discover_available_local_runtimes,
                         first_local_turn=not _local_model_has_answered,
                     )
-                    _local_model_has_answered = _local_model_has_answered or provider_type == "local"
+                    _local_model_has_answered = (
+                        _local_model_has_answered or provider_type == "local"
+                    )
                     if selected_local_runtime is not None:
                         available_models = list(
                             selected_local_runtime.models or available_models
                         )
-                async def _run_agent_turn(response, session_ui=session_ui) -> Any:
+
+                async def _run_agent_turn(
+                    response, session_ui=session_ui, _f_state=_f_state
+                ) -> Any:
                     nonlocal tools_list, llm_with_tools
                     iteration = 0
                     tool_call_count = 0
@@ -3815,7 +3884,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         ):
                             plan_text = str(response.content).strip()
                             if plan_text:
-                                session_ui.print_markup(f"[info][Plan][/info] {plan_text}")
+                                session_ui.print_markup(
+                                    f"[info][Plan][/info] {plan_text}"
+                                )
                         iteration_label = (
                             f"{iteration} of {tool_iteration_limit}"  # noqa: B023
                             if tool_iteration_limit is not None  # noqa: B023
@@ -3905,7 +3976,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         usage = (messages_tokens(messages), context_stats["max"])  # noqa: B023
                         _plan_summary = f_integration.get_plan_summary(_f_state)  # noqa: B023
                         # Only inject real (non-synthetic) plans into the model context.
-                        if _plan_summary and not f_integration.is_synthetic_plan(_f_state):  # noqa: B023
+                        if _plan_summary and not f_integration.is_synthetic_plan(
+                            _f_state
+                        ):  # noqa: B023
                             messages.append(  # noqa: B023
                                 SystemMessage(content=f"[Task plan]\n{_plan_summary}")
                             )
@@ -3916,7 +3989,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 deadline,  # noqa: B023
                                 model_name=selected_model,  # noqa: B023
                                 status_message="Processing tool outputs...",
-                                local_model=provider_type == "local", first_local_turn=False,  # noqa: B023
+                                local_model=provider_type == "local",  # noqa: B023
+                                first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                                 context_usage=usage,
                             )
@@ -3966,7 +4040,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 deadline,  # noqa: B023
                                 model_name=selected_model,  # noqa: B023
                                 status_message="Finalizing response...",
-                                local_model=provider_type == "local", first_local_turn=False,  # noqa: B023
+                                local_model=provider_type == "local",  # noqa: B023
+                                first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                             )
                     if (
@@ -3991,10 +4066,12 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             deadline,  # noqa: B023
                             model_name=selected_model,  # noqa: B023
                             status_message="Finalizing response...",
-                            local_model=provider_type == "local", first_local_turn=False,  # noqa: B023
+                            local_model=provider_type == "local",  # noqa: B023
+                            first_local_turn=False,  # noqa: B023
                             thinking_enabled=thinking_enabled,  # noqa: B023
                         )
                     return response
+
                 session_ui.bind(
                     model=selected_model,
                     permission=turn_permission_mode,
@@ -4010,7 +4087,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     response = await _run_agent_turn(response)
                 finally:
                     f_integration.finish_turn(_f_state)
-                    session_ui.set_generation(getattr(response, "generation_stats", None))
+                    session_ui.set_generation(
+                        getattr(response, "generation_stats", None)
+                    )
                 if SHOW_TURN_STATS:
                     session_ui.turn_finished()
                 else:
@@ -4022,9 +4101,13 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     else str(content or "")
                 )
                 if not isinstance(response, AIMessageChunk):
-                    chat_transcript.add_message("assistant", full_output_content, echo=False)
+                    chat_transcript.add_message(
+                        "assistant", full_output_content, echo=False
+                    )
                     for i in range(0, len(full_output_content), 120):
-                        chat_transcript.stream_chunk("assistant", full_output_content[i:i + 120])
+                        chat_transcript.stream_chunk(
+                            "assistant", full_output_content[i : i + 120]
+                        )
                     if full_output_content:
                         chat_transcript.stream_chunk("assistant", "\n")
                 elif not full_output_content and not getattr(
@@ -4034,7 +4117,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         "[warning]The model returned no visible response text.[/warning]"
                     )
                 if retrieved_citations:
-                    session_ui.print_markup("[bold info][Retrieved Sources][/bold info]")
+                    session_ui.print_markup(
+                        "[bold info][Retrieved Sources][/bold info]"
+                    )
                     for citation in retrieved_citations:
                         session_ui.print_markup(f"  - {citation}")
                 # Per-turn summary is emitted by session_ui.turn_finished() above.
@@ -4055,7 +4140,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 set_tool_context(_tool_context)
                 chat_history.append(HumanMessage(content=user_input))
                 stored_output = (
-                    full_output_content[:MAX_CONTEXT_TOKENS * 4] + "\n[truncated for memory]"
+                    full_output_content[: MAX_CONTEXT_TOKENS * 4]
+                    + "\n[truncated for memory]"
                     if len(full_output_content) > MAX_CONTEXT_TOKENS * 4
                     else full_output_content
                 )
@@ -4108,6 +4194,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
         if model_selection_failed:
             continue
         break
+
+
 async def run_agent_cli_async(
     *,
     verbose_startup: bool = False,
@@ -4226,75 +4314,108 @@ def run_agent_cli(
             input_provider=input_provider,
         )
     )
+
+
 _LAZY_TOOL_NAMES = {
-'AVAILABLE_TOOLS',
-'LOCAL_MEDIA_TOOL_NAMES',
-'LOCAL_ONLY_NETWORK_TOOL_NAMES',
-'MCP_TOOL_NAMES',
-'MCP_TOOL_SOURCES',
-'MCP_TOOL_TRANSPORTS',
-'NETWORK_TOOL_NAMES',
-'approved_tool_invocation',
-'clear_schema_reads',
-'close_mcp_sandbox_dirs',
-'close_outbound_http_clients',
-'describe_tool_catalog',
-'get_tool_context',
-'has_internet_connection',
-'load_configured_mcp_tools',
-'ollama_client_kwargs',
-'set_tool_context',
-'approve_local_capture'
+    "AVAILABLE_TOOLS",
+    "LOCAL_MEDIA_TOOL_NAMES",
+    "LOCAL_ONLY_NETWORK_TOOL_NAMES",
+    "MCP_TOOL_NAMES",
+    "MCP_TOOL_SOURCES",
+    "MCP_TOOL_TRANSPORTS",
+    "NETWORK_TOOL_NAMES",
+    "approved_tool_invocation",
+    "clear_schema_reads",
+    "close_mcp_sandbox_dirs",
+    "close_outbound_http_clients",
+    "describe_tool_catalog",
+    "get_tool_context",
+    "has_internet_connection",
+    "load_configured_mcp_tools",
+    "ollama_client_kwargs",
+    "set_tool_context",
+    "approve_local_capture",
 }
 _LAZY_MEDIA_NAMES = {"approve_local_capture", "clear_captured_images"}
 _LAZY_INTERACTIVE_NAMES = {
-    "_format_interactive_help", "handle_session_command", "include_file_context",
-    "include_folder_context", "load_custom_slash_commands", "prompt_user_input",
+    "_format_interactive_help",
+    "handle_session_command",
+    "include_file_context",
+    "include_folder_context",
+    "load_custom_slash_commands",
+    "prompt_user_input",
 }
 _LAZY_MODEL_SELECTION_NAMES = {
-    "_discover_available_local_runtimes", "_effective_context_window",
+    "_discover_available_local_runtimes",
+    "_effective_context_window",
     "_make_selected_local_chat_model",
-    "inspect_openai_compatible_model_capabilities", "select_online_model",
+    "inspect_openai_compatible_model_capabilities",
+    "select_online_model",
 }
-_LAZY_TASK_COMMAND_NAMES = set()
+_LAZY_TASK_COMMAND_NAMES = {"_run_task_management"}
 _LAZY_TOOL_DISPLAY_NAMES = {
-    "_append_captured_images_from_tool_results", "_display_tool_error",
-    "_display_tool_request", "_display_tool_result", "_local_image_input_error",
-    "_redact_sensitive_values", "_redact_tool_arguments", "_tool_log_redactions",
+    "_append_captured_images_from_tool_results",
+    "_display_tool_error",
+    "_display_tool_request",
+    "_display_tool_result",
+    "_local_image_input_error",
+    "_redact_sensitive_values",
+    "_redact_tool_arguments",
+    "_tool_log_redactions",
     "_tool_result_is_error",
 }
+
+
 def __getattr__(name: str):
     if name in _LAZY_TOOL_NAMES:
         import tools as _tools
+
         attr = getattr(_tools, name)
         globals()[name] = attr
         return attr
     if name in _LAZY_MEDIA_NAMES:
         from tools import media as _media
+
         attr = getattr(_media, name)
-        globals()[name] = attr; return attr
+        globals()[name] = attr
+        return attr
     if name == "_format_interactive_help":
         from . import interactive as _interactive
+
         attr = _interactive.format_help
-        globals()[name] = attr; return attr
+        globals()[name] = attr
+        return attr
     if name in _LAZY_INTERACTIVE_NAMES:
         from . import interactive as _interactive
+
         attr = getattr(_interactive, name)
-        globals()[name] = attr; return attr
+        globals()[name] = attr
+        return attr
     if name in _LAZY_MODEL_SELECTION_NAMES:
         from . import model_selection as _model_selection
+
         attr = getattr(_model_selection, name)
         globals()[name] = attr
         return attr
     if name in _LAZY_TASK_COMMAND_NAMES:
         from . import task_commands as _task_commands
+
         attr = getattr(_task_commands, name)
         globals()[name] = attr
         return attr
     if name in _LAZY_TOOL_DISPLAY_NAMES:
         from . import tool_display as _tool_display
+
         attr = getattr(_tool_display, name)
         globals()[name] = attr
         return attr
+    if name == "_run_memory_maintenance":
+        from . import memory_context as _memory_context
+
+        attr = _memory_context._run_memory_maintenance
+        globals()[name] = attr
+        return attr
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 install_lazy_globals(globals())

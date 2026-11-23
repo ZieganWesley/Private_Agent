@@ -208,6 +208,7 @@ DEFAULT_CONFIG = {
     },
 }
 
+
 def _merge_config(config: dict) -> dict:
     """Merge categorized settings into a normalized configuration."""
     merged = {section: values.copy() for section, values in DEFAULT_CONFIG.items()}

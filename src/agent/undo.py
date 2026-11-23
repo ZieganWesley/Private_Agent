@@ -51,7 +51,9 @@ def _format_undone(result: snapshots.UndoResult, deleted_messages: int) -> str:
         parts.append(f"[success]Restored {len(result.restored)} file(s):[/success]")
         parts.extend(_path_line(path) for path in result.restored)
     if result.deleted:
-        parts.append(f"[success]Removed {len(result.deleted)} created file(s):[/success]")
+        parts.append(
+            f"[success]Removed {len(result.deleted)} created file(s):[/success]"
+        )
         parts.extend(_path_line(path) for path in result.deleted)
     if not result.restored and not result.deleted:
         parts.append(

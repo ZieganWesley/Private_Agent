@@ -90,11 +90,7 @@ def _lmstudio_installed() -> bool:
 
 
 def _llamacpp_installed() -> bool:
-    return (
-        _which("llama-server")
-        or _which("llama-cli")
-        or _which("llama")
-    )
+    return _which("llama-server") or _which("llama-cli") or _which("llama")
 
 
 def _vllm_installed() -> bool:
@@ -315,7 +311,10 @@ class OllamaAdapter:
             return OllamaEmbeddings(model=model, base_url=base_url)
         except Exception as exc:  # noqa: BLE001 - optional dependency boundary
             log_event(
-                RUN_LOGGER, "provider.embeddings_failed", level=logging.DEBUG, error=str(exc)
+                RUN_LOGGER,
+                "provider.embeddings_failed",
+                level=logging.DEBUG,
+                error=str(exc),
             )
             return None
 
@@ -438,7 +437,10 @@ class OpenAICompatibleAdapter:
             )
         except Exception as exc:  # noqa: BLE001 - optional dependency boundary
             log_event(
-                RUN_LOGGER, "provider.embeddings_failed", level=logging.DEBUG, error=str(exc)
+                RUN_LOGGER,
+                "provider.embeddings_failed",
+                level=logging.DEBUG,
+                error=str(exc),
             )
             return None
 

@@ -28,8 +28,9 @@ should import from `ui`.
 per session in `agent/runtime.py` and bound before the main loop:
 
 ```python
-session_ui = SessionUI(console=console, status_bar=STATUS_BAR,
-                      verbose_timings=VERBOSE_TIMINGS)
+session_ui = SessionUI(
+    console=console, status_bar=STATUS_BAR, verbose_timings=VERBOSE_TIMINGS
+)
 session_ui.bind(model=selected_model, permission=permission_mode)
 ```
 

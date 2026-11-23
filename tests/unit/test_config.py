@@ -43,7 +43,10 @@ def test_debug_log_is_created_with_owner_only_permissions(tmp_path, monkeypatch)
 def test_config_uses_per_user_home_path():
     import config
 
-    assert pathlib.Path.home() / ".config" / "private_agent" / "conf" == config.CONFIG_FILE_PATH
+    assert (
+        pathlib.Path.home() / ".config" / "private_agent" / "conf"
+        == config.CONFIG_FILE_PATH
+    )
 
 
 def test_config_creates_private_default_file(tmp_path, monkeypatch):
@@ -237,9 +240,7 @@ def test_visible_reasoning_configuration_defaults_off_and_ignores_legacy_name():
     )
 
 
-def test_loading_legacy_config_does_not_migrate_flat_keys(
-    tmp_path, monkeypatch
-):
+def test_loading_legacy_config_does_not_migrate_flat_keys(tmp_path, monkeypatch):
     config_path = tmp_path / ".conf"
     config_path.write_text(
         json.dumps(

@@ -44,7 +44,9 @@ def test_narrow_width_keeps_essential_segments():
 
 def test_accessible_mode_renders_text_gauge(monkeypatch):
     monkeypatch.setenv("PRIVATE_AGENT_ACCESSIBLE", "1")
-    state = StatusState(model="m", context_tokens=3, context_maximum=10, permission_mode="auto")
+    state = StatusState(
+        model="m", context_tokens=3, context_maximum=10, permission_mode="auto"
+    )
     ribbon = status_ribbon(state, accessible=True)
     assert "3/10 (30%)" in ribbon
     assert "\u25b0" not in ribbon
@@ -63,6 +65,8 @@ def test_spinner_render_includes_phase_when_accessible(monkeypatch):
 
 
 def test_segments_never_drop_below_three():
-    state = StatusState(model="m", context_tokens=1, context_maximum=2, permission_mode="x")
+    state = StatusState(
+        model="m", context_tokens=1, context_maximum=2, permission_mode="x"
+    )
     for width in (1, 5, 10, 20):
         assert len(state.segments(width=width)) >= 3

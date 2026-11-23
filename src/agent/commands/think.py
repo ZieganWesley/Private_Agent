@@ -30,13 +30,9 @@ def handle_think_toggle(
         capabilities=capabilities,
     )
     llm_with_tools = (
-        bind_tools(llm, tools_list)
-        if capabilities.get("tools") is not False
-        else llm
+        bind_tools(llm, tools_list) if capabilities.get("tools") is not False else llm
     )
-    session_ui.print(
-        f"[info]Thinking: {'on' if thinking_enabled else 'off'}[/info]"
-    )
+    session_ui.print(f"[info]Thinking: {'on' if thinking_enabled else 'off'}[/info]")
     return thinking_enabled, llm, llm_with_tools
 
 

@@ -1,5 +1,5 @@
 import os
-import platform
+import platform  # noqa: F401 (used by tests)
 import re
 import shutil
 import subprocess

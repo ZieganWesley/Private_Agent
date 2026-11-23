@@ -538,7 +538,9 @@ def _offer_skill_capture(
     ).strip()
     if rating not in {"0", "1", "2", "3", "4", "5"}:
         if rating:
-            console.print("[warning]Invalid rating; no feedback was recorded.[/warning]")
+            console.print(
+                "[warning]Invalid rating; no feedback was recorded.[/warning]"
+            )
         return
     try:
         memory.rate_completed_task(task["task_id"], int(rating))
@@ -607,7 +609,9 @@ def _offer_skill_capture(
             skill_path.unlink(missing_ok=True)
             raise
     except (OSError, ValueError, sqlite3.Error) as exc:
-        console.print(f"[error][Skill capture error] {type(exc).__name__}: {exc}[/error]")
+        console.print(
+            f"[error][Skill capture error] {type(exc).__name__}: {exc}[/error]"
+        )
         return
     console.print(
         f"[success]Skill saved and linked to this session: {skill_path}[/success]"

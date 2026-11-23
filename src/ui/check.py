@@ -54,7 +54,9 @@ def run_ui_check(console: Any = None) -> int:
 
     def accessible() -> None:
         os.environ[ACCESSIBLE_ENV] = "1"
-        state = StatusState(model="m", context_tokens=3, context_maximum=10, permission_mode="auto")
+        state = StatusState(
+            model="m", context_tokens=3, context_maximum=10, permission_mode="auto"
+        )
         target.print(status_ribbon(state, accessible=True))
         indicator = StatusIndicator("Waiting", phase="thinking", console=target)
         rendered = indicator._render()
@@ -95,7 +97,9 @@ def run_ui_check(console: Any = None) -> int:
         for failure in failures:
             target.print(f"  - {failure}")
         return 1
-    target.print("[success][UI check] All UI components rendered successfully.[/success]")
+    target.print(
+        "[success][UI check] All UI components rendered successfully.[/success]"
+    )
     return 0
 
 

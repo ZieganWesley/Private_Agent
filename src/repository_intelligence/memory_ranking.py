@@ -43,7 +43,9 @@ def _recency_score(created_at: Any) -> float:
         return 0.5
 
 
-def rank_memories(memories: list[dict[str, Any]], query: str = "") -> list[dict[str, Any]]:
+def rank_memories(
+    memories: list[dict[str, Any]], query: str = ""
+) -> list[dict[str, Any]]:
     query_terms = {t for t in (query or "").lower().split() if t}
     ranked = []
     for m in memories:

@@ -181,7 +181,11 @@ async def _invoke_with_budget(
     if _supports_async_streaming(model) and stream_method is not None:
         _loading_phase = local_model and first_local_turn
         indicator = StatusIndicator(
-            (waiting_message(model_name, local_model=True) if _loading_phase else processing_message(model_name))
+            (
+                waiting_message(model_name, local_model=True)
+                if _loading_phase
+                else processing_message(model_name)
+            )
             if local_model
             else processing_message(model_name),
             phase=(LOADING if _loading_phase else PROCESSING),
@@ -370,7 +374,11 @@ async def _invoke_with_budget(
             _stats = _display_generation_rate(
                 aggregate, elapsed, first_token_at=first_token_at, started=started
             )
-            if local_model and first_token_at is not None and (first_token_at - started) > 2.0:
+            if (
+                local_model
+                and first_token_at is not None
+                and (first_token_at - started) > 2.0
+            ):
                 _SESSION_STATS.suspected_cold_loads += 1
             if aggregate is not None and _stats is not None:
                 with contextlib.suppress(AttributeError, TypeError):

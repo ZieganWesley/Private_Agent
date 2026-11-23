@@ -111,7 +111,9 @@ def embedding_signature(
     embedding_base_url: str | None = None,
 ) -> str:
     """Identify the embedder that produced an index (provider, model, endpoint)."""
-    provider = embedding_provider if embedding_provider is not None else EMBEDDING_PROVIDER
+    provider = (
+        embedding_provider if embedding_provider is not None else EMBEDDING_PROVIDER
+    )
     model = embedding_model if embedding_model is not None else EMBEDDING_MODEL
     base_url = (
         embedding_base_url if embedding_base_url is not None else EMBEDDING_BASE_URL
@@ -342,6 +344,7 @@ def _ensure_rag_dependencies():
     if OllamaEmbeddings is None:
         try:
             from langchain_ollama import OllamaEmbeddings as _OllamaEmbeddings
+
             OllamaEmbeddings = _OllamaEmbeddings
         except Exception:  # noqa: BLE001 - optional dependency
             OllamaEmbeddings = None

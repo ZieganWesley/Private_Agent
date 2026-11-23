@@ -393,7 +393,9 @@ def test_initial_phase_offers_installed_but_idle_runtimes():
 
     assert matched is restarted
     assert result == [restarted]
-    assert any("is installed but not running" in message for message in console.messages)
+    assert any(
+        "is installed but not running" in message for message in console.messages
+    )
 
 
 def _openai_idle(name="LM Studio", start_hint="start LM Studio"):
@@ -432,7 +434,9 @@ def test_initial_phase_declines_without_starting():
     assert result == runtimes
     assert matched is None
     assert started == []
-    assert any("is installed but not running" in message for message in console.messages)
+    assert any(
+        "is installed but not running" in message for message in console.messages
+    )
 
 
 def test_initial_phase_reports_failed_launch():
@@ -453,7 +457,10 @@ def test_initial_phase_reports_failed_launch():
 
     assert result == []
     assert matched is None
-    assert any("Could not start LM Studio automatically" in message for message in console.messages)
+    assert any(
+        "Could not start LM Studio automatically" in message
+        for message in console.messages
+    )
 
 
 def test_initial_phase_restarts_after_consent():

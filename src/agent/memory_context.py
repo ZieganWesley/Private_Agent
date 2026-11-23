@@ -792,7 +792,9 @@ async def _initialize_rag_for_docs(
     if existing_index.exists():
         rag_init_started = time.monotonic()
         try:
-            with console.status("[bold info]Indexing local knowledge base...[/bold info]"):
+            with console.status(
+                "[bold info]Indexing local knowledge base...[/bold info]"
+            ):
                 vectorstore = await asyncio.to_thread(
                     initialize_knowledge_base_fn,
                     docs_input,
@@ -826,7 +828,9 @@ async def _initialize_rag_for_docs(
         )
         return vectorstore, is_rag_active, rag_signature, None, rag_last_check
 
-    console.print("[info][RAG][/info] Indexing local knowledge base in the background...")
+    console.print(
+        "[info][RAG][/info] Indexing local knowledge base in the background..."
+    )
 
     async def _background_rag_init():
         try:

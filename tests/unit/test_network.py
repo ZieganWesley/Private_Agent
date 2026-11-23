@@ -594,9 +594,7 @@ def test_failed_download_preserves_existing_destination(temp_workspace, monkeypa
     def fail_fetch(*args, **kwargs):
         raise OSError("network dropped")
 
-    monkeypatch.setattr(
-        "tools.web._get_limited_response_sync", fail_fetch
-    )
+    monkeypatch.setattr("tools.web._get_limited_response_sync", fail_fetch)
     result = download_web_file.invoke(
         {
             "url": "https://public.example.test/file.txt",
@@ -786,9 +784,7 @@ async def test_network_tool_call_requires_runtime_authorization():
     with (
         patch("agent.runtime.ENABLE_WEB_RESEARCH", True),
         patch("agent.runtime.WEB_RESEARCH_CONSENT", "ask"),
-        patch(
-            "agent.runtime.AVAILABLE_TOOLS", {"web_search": MagicMock()}
-        ) as tools,
+        patch("agent.runtime.AVAILABLE_TOOLS", {"web_search": MagicMock()}) as tools,
     ):
         result = await execute_tool_call(
             {"name": "web_search", "args": {"query": "private query"}, "id": "call-1"}
@@ -915,9 +911,7 @@ def test_duckduckgo_search_uses_bounded_pinned_http_client(monkeypatch):
             assert params == {"q": "private agent"}
             return FakeResponse()
 
-    monkeypatch.setattr(
-        "tools.network.validate_outbound_url", lambda url: url
-    )
+    monkeypatch.setattr("tools.network.validate_outbound_url", lambda url: url)
     result = _search_duckduckgo(
         "private agent",
         client_factory=lambda **kwargs: FakeClient(),

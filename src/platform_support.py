@@ -12,9 +12,9 @@ import os
 import platform
 import shutil
 import sys
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,9 @@ def is_termux(
     prefix = environ.get("PREFIX", "")
     if "com.termux" in prefix:
         return True
-    checker = path_exists if path_exists is not None else lambda path: Path(path).exists()
+    checker = (
+        path_exists if path_exists is not None else lambda path: Path(path).exists()
+    )
     try:
         return bool(checker("/data/data/com.termux"))
     except OSError:
@@ -250,9 +252,7 @@ def detect_distribution(
     )
 
 
-def format_install_command(
-    packages: Iterable[str], package_manager: str
-) -> str:
+def format_install_command(packages: Iterable[str], package_manager: str) -> str:
     """Return an install command for ``packages`` on ``package_manager``."""
     package_list = " ".join(dict.fromkeys(packages))
     if not package_list:

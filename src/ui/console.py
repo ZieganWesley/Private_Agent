@@ -7,7 +7,7 @@ from typing import Any
 from rich.console import Console
 from rich.theme import Theme
 
-from .theme import MESSAGE_LEVELS, MESSAGE_SYMBOLS, THEME, THEME_NAME
+from .theme import MESSAGE_SYMBOLS, THEME
 
 
 class ThemedConsole(Console):

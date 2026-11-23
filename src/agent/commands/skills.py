@@ -5,7 +5,7 @@ def handle_skills_command(user_input, loaded_skills, selected_skill_key, session
     """Handle /skills and return (selected_skill_key, loaded_skills)."""
     import re
 
-    requested_skill = user_input[len("/skills"):].strip()
+    requested_skill = user_input[len("/skills") :].strip()
     if not requested_skill:
         if not loaded_skills:
             session_ui.print(
@@ -56,7 +56,6 @@ def handle_skills_command(user_input, loaded_skills, selected_skill_key, session
     selected_skill_key = selected_match
     selected_name = loaded_skills[selected_match].name
     session_ui.print(
-        f"[info][Skills][/info] {selected_name} selected "
-        "for your next request."
+        f"[info][Skills][/info] {selected_name} selected for your next request."
     )
     return selected_skill_key, loaded_skills

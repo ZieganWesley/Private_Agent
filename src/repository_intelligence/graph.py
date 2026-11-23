@@ -24,7 +24,9 @@ def build_repository_graph(root_path: str = ".", db_path: str | None = None) -> 
         index.close()
 
 
-def graph_nodes(kind: str | None = None, root_path: str = ".", db_path: str | None = None):
+def graph_nodes(
+    kind: str | None = None, root_path: str = ".", db_path: str | None = None
+):
     index = _index(root_path, db_path)
     try:
         index.index_repository(root_path, incremental=True)
@@ -33,7 +35,9 @@ def graph_nodes(kind: str | None = None, root_path: str = ".", db_path: str | No
         index.close()
 
 
-def graph_edges(kind: str | None = None, root_path: str = ".", db_path: str | None = None):
+def graph_edges(
+    kind: str | None = None, root_path: str = ".", db_path: str | None = None
+):
     index = _index(root_path, db_path)
     try:
         index.index_repository(root_path, incremental=True)
@@ -42,7 +46,9 @@ def graph_edges(kind: str | None = None, root_path: str = ".", db_path: str | No
         index.close()
 
 
-def graph_neighbors(node: str, direction: str = "both", root_path: str = ".", db_path: str | None = None):
+def graph_neighbors(
+    node: str, direction: str = "both", root_path: str = ".", db_path: str | None = None
+):
     index = _index(root_path, db_path)
     try:
         index.index_repository(root_path, incremental=True)
@@ -51,7 +57,9 @@ def graph_neighbors(node: str, direction: str = "both", root_path: str = ".", db
         index.close()
 
 
-def impact_analysis(target: str, max_depth: int = 5, root_path: str = ".", db_path: str | None = None):
+def impact_analysis(
+    target: str, max_depth: int = 5, root_path: str = ".", db_path: str | None = None
+):
     index = _index(root_path, db_path)
     try:
         index.index_repository(root_path, incremental=True)
@@ -60,7 +68,13 @@ def impact_analysis(target: str, max_depth: int = 5, root_path: str = ".", db_pa
         index.close()
 
 
-def trace_path(source: str, target: str, max_depth: int = 8, root_path: str = ".", db_path: str | None = None):
+def trace_path(
+    source: str,
+    target: str,
+    max_depth: int = 8,
+    root_path: str = ".",
+    db_path: str | None = None,
+):
     index = _index(root_path, db_path)
     try:
         index.index_repository(root_path, incremental=True)

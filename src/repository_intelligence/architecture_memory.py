@@ -43,10 +43,19 @@ class ArchitectureMemory:
 
     def close(self) -> None:
         import contextlib
+
         with contextlib.suppress(Exception):
             self.conn.close()
 
-    def record_decision(self, root: str = ".", title: str = "", decision: str = "", tradeoffs: str = "", rejected: str = "", constraints: str = "") -> int:
+    def record_decision(
+        self,
+        root: str = ".",
+        title: str = "",
+        decision: str = "",
+        tradeoffs: str = "",
+        rejected: str = "",
+        constraints: str = "",
+    ) -> int:
         cur = self.conn.cursor()
         cur.execute(
             "INSERT INTO architecture_decisions(root,title,decision,tradeoffs,rejected,constraints,created_at) VALUES(?,?,?,?,?,?,?)",
@@ -55,7 +64,9 @@ class ArchitectureMemory:
         self.conn.commit()
         return int(cur.lastrowid)
 
-    def record_fact(self, root: str = ".", kind: str = "architecture", content: str = "") -> int:
+    def record_fact(
+        self, root: str = ".", kind: str = "architecture", content: str = ""
+    ) -> int:
         cur = self.conn.cursor()
         cur.execute(
             "INSERT INTO architecture_facts(root,kind,content,created_at) VALUES(?,?,?,?)",
@@ -73,11 +84,30 @@ class ArchitectureMemory:
             (root, q, q),
         )
         for r in cur.fetchall():
-            results.append({"type": "decision", "id": r[0], "title": r[1], "decision": r[2], "tradeoffs": r[3], "rejected": r[4], "constraints": r[5], "created_at": r[6]})
+            results.append(
+                {
+                    "type": "decision",
+                    "id": r[0],
+                    "title": r[1],
+                    "decision": r[2],
+                    "tradeoffs": r[3],
+                    "rejected": r[4],
+                    "constraints": r[5],
+                    "created_at": r[6],
+                }
+            )
         cur.execute(
             "SELECT id,kind,content,created_at FROM architecture_facts WHERE root=? AND content LIKE ?",
             (root, q),
         )
         for r in cur.fetchall():
-            results.append({"type": "fact", "id": r[0], "kind": r[1], "content": r[2], "created_at": r[3]})
+            results.append(
+                {
+                    "type": "fact",
+                    "id": r[0],
+                    "kind": r[1],
+                    "content": r[2],
+                    "created_at": r[3],
+                }
+            )
         return results

@@ -45,7 +45,9 @@ def find_symbol_tool(name: str, root_path: str = ".") -> str:
     results = find_symbol(name, root_path=root_path)
     if not results:
         return f"No symbol named {name!r} found."
-    lines = [f"{r['kind']} {r['name']} in {r['file']}:{r['start_line']}" for r in results]
+    lines = [
+        f"{r['kind']} {r['name']} in {r['file']}:{r['start_line']}" for r in results
+    ]
     return "\n".join(lines)
 
 
@@ -55,7 +57,9 @@ def find_definition_tool(name: str, root_path: str = ".") -> str:
     result = find_definition(name, root_path=root_path)
     if not result:
         return f"No definition for {name!r} found."
-    return f"{result['kind']} {result['name']} in {result['file']}:{result['start_line']}"
+    return (
+        f"{result['kind']} {result['name']} in {result['file']}:{result['start_line']}"
+    )
 
 
 @tool
@@ -64,7 +68,9 @@ def find_references_tool(name: str, root_path: str = ".") -> str:
     results = find_references(name, root_path=root_path)
     if not results:
         return f"No references to {name!r} found."
-    return "\n".join(f"{r['kind']} in {r['file']} (from {r['source']})" for r in results)
+    return "\n".join(
+        f"{r['kind']} in {r['file']} (from {r['source']})" for r in results
+    )
 
 
 @tool
@@ -125,7 +131,9 @@ def trace_impact_tool(target: str, root_path: str = ".") -> str:
 
 
 @tool
-def trace_architectural_path_tool(source: str, target: str, root_path: str = ".") -> str:
+def trace_architectural_path_tool(
+    source: str, target: str, root_path: str = "."
+) -> str:
     """Trace a path between two repository graph nodes."""
     path = trace_path(source, target, root_path=root_path)
     if not path:

@@ -88,7 +88,9 @@ async def _recover_on_another_provider(
     runtime, model, capabilities = candidate
     ask = input_fn or console.input
     try:
-        answer = ask(f"[info]Retry this turn on {runtime.name} · {model}? [y/N]: [/info]")
+        answer = ask(
+            f"[info]Retry this turn on {runtime.name} · {model}? [y/N]: [/info]"
+        )
     except (EOFError, KeyboardInterrupt):
         return None
     if str(answer).strip().lower() not in {"y", "yes"}:
@@ -191,7 +193,10 @@ async def _invoke_initial_model_with_fallback(
                     candidate
                     for candidate in available_models
                     if candidate != selected_model
-                    and inspect_openai_compatible_model_capabilities(selected_local_runtime, candidate)["tools"] is True
+                    and inspect_openai_compatible_model_capabilities(
+                        selected_local_runtime, candidate
+                    )["tools"]
+                    is True
                 ),
                 None,
             )
@@ -231,7 +236,9 @@ async def _invoke_initial_model_with_fallback(
             f"retrying with {fallback_model}.[/warning]"
         )
         selected_model = fallback_model
-        capabilities = inspect_openai_compatible_model_capabilities(selected_local_runtime, selected_model)
+        capabilities = inspect_openai_compatible_model_capabilities(
+            selected_local_runtime, selected_model
+        )
         llm = _make_local_openai_compatible_chat_model(
             selected_local_runtime.base_url,
             selected_model,

@@ -44,7 +44,9 @@ def list_saved_sessions(limit: int = 20) -> int:
         memory = PersistentMemory()
         sessions = memory.list_sessions_with_metadata(limit=limit)
     except (ValueError, sqlite3.Error, OSError) as exc:
-        console.print(f"[error][Session list] Could not read saved sessions: {exc}[/error]")
+        console.print(
+            f"[error][Session list] Could not read saved sessions: {exc}[/error]"
+        )
         return 1
     finally:
         if memory is not None:

@@ -34,10 +34,17 @@ class AgentMetrics:
 
     def close(self) -> None:
         import contextlib
+
         with contextlib.suppress(Exception):
             self.conn.close()
 
-    def record(self, kind: str, name: str, value: float = 1.0, labels: dict[str, Any] | None = None) -> None:
+    def record(
+        self,
+        kind: str,
+        name: str,
+        value: float = 1.0,
+        labels: dict[str, Any] | None = None,
+    ) -> None:
         import json
 
         self.conn.execute(
@@ -48,16 +55,22 @@ class AgentMetrics:
 
     def summary(self) -> dict[str, Any]:
         cur = self.conn.cursor()
-        cur.execute("SELECT kind, name, COUNT(*), SUM(value) FROM metric_events GROUP BY kind, name")
+        cur.execute(
+            "SELECT kind, name, COUNT(*), SUM(value) FROM metric_events GROUP BY kind, name"
+        )
         rows = cur.fetchall()
-        items = [{"kind": r[0], "name": r[1], "count": r[2], "total": r[3]} for r in rows]
+        items = [
+            {"kind": r[0], "name": r[1], "count": r[2], "total": r[3]} for r in rows
+        ]
         return {"metrics": items, "total_events": sum(r[2] for r in rows)}
 
     def health_report(self) -> str:
         s = self.summary()
         lines = ["# Agent health report", ""]
         for m in s["metrics"]:
-            lines.append(f"- {m['kind']}/{m['name']}: count={m['count']} total={m['total']}")
+            lines.append(
+                f"- {m['kind']}/{m['name']}: count={m['count']} total={m['total']}"
+            )
         if not s["metrics"]:
             lines.append("No metrics recorded yet.")
         return "\n".join(lines)
