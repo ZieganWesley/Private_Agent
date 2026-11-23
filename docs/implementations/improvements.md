@@ -104,127 +104,9 @@ class for each table.
 **Standard practice:** a typed settings object (for example, a pydantic
 model), loaded once at startup and passed to the code that needs it.
 
-### A3. Test-only logic inside production code
-
-**Fixed.** `sys_modules_safe()` and its `"pytest" in sys.modules` check were
-removed in step 2.3 (commit `aa8e9fb`), so behaviour no longer depends on the
-test runner: a malformed config file always warns, and the test asserts that
-warning with `pytest.warns`.
-
-Re-verified on 2026-11-18 against `main` at `5b64e1b`: no production module
-branches on the test runner. There are no `sys.modules` checks,
-`PYTEST_CURRENT_TEST` reads or test-only flags under `src/`.
-A guard test
-(`tests/unit/test_source_hygiene.py::test_production_sources_never_branch_on_the_test_runner`)
-fails if one is reintroduced.
-
-### A4. The test environment is not standard
-
-**Fixed.** `pytest` installs from the `dev` extras, the pytest `pythonpath` is
-`["src", "."]`, `.vscode/settings.json` enables pytest, and tests that need a
-missing prerequisite (`bwrap`, `prlimit`, media libraries) now skip instead of
-failing (`pytest.mark.skipif` / `pytest.importorskip`). All eight failures from
-the review are gone.
-
-Re-verified on 2026-11-18 against `main` at `5b64e1b`: `pytest -q` reports
-805 passed and 12 skipped (the additional 11 tests are the A3 source-hygiene
-guard). No production module branches on the test runner. The one failure
-recorded at review time, `tests/integration/test_agent_runtime.py::test_runtime_summarizes_full_context_instead_of_dropping_it`,
-was traced and fixed in step 1.3.
-
-Still verified green: `ruff check .` and `ruff format --check .` both pass.
-### A5. Lint, format and typing are not enforced
-
-**Completed.** The repo now has a `[tool.ruff]` config (`E`, `F`, `W`, `I`,
-`B`, `UP`, `SIM`) and a `.pre-commit-config.yaml` running `ruff-check` and
-`ruff-format`. The source was reformatted and auto-fixed, so `ruff check .` and
-`ruff format --check .` both pass. The import-order,
-`typing`-modernisation, nested-`with`, closure (`B023`) and `subprocess`
-(`PLW1510`) counts from the review no longer apply.
-
-**Audit 2026-11-19:** lint and formatting are enforced (`ruff check .` and
-`ruff format --check .`, now including `BLE`), but the typing half of this item
-is still open: no `[tool.mypy]`/`[tool.pyright]` config exists and neither tool
-is a declared dependency. Step 1.5 is now complete: `.github/workflows/ci.yml`
-runs ruff and pytest on Python 3.10 and 3.14. Adding a
-type checker is a separate decision because it would introduce a dependency and
-a baseline of errors to clear.
-
-**A5 completed:** All blind `except Exception` blocks (BLE001) have been
-replaced with specific exception types across all source files. The following
-files were updated with `except (ValueError, OSError)` or specific exception types:
-
-- `src/agent/compaction.py`
-- `src/agent/learning.py`
-- `src/agent/local_runtimes.py`
-- `src/agent/memory_context.py`
-- `src/agent/prompts.py`
-- `src/agent/model_capabilities.py`
-- `src/tools/filesystem.py`
-- `src/tools/media.py`
-- `src/tools/location.py`
-- `src/agent/providers.py`
-- `src/agent/runtime.py`
-- `src/agent/status.py`
-- `src/agent/streaming.py`
-- `src/agent/learning.py`
-- `src/tools/mcp.py`
-- `src/tools/web.py`
-- `src/tools/memory.py`
-- `src/skills/loader.py`
-- `src/tools/shell.py`
-- `src/tools/network.py`
-- `src/config.py`
-
-That work narrowed real blind catches, but it did not leave source code free
-of BLE001: the audit in step 5.3 found 29 broad handlers still in `src/`, and
-each one turned out to be a boundary that has to stay broad. Narrowing them is
-what caused a startup crash — `ollama.RequestError` and `ResponseError` derive
-directly from `Exception`, not from `ConnectionError` or `OSError`, so an
-`except (ValueError, OSError)` around a provider probe let real backend errors
-escape. Every one of the 29 now carries an explicit
-`# noqa: BLE001 - <reason>` naming why the catch is broad, `BLE` is selected in
-`[tool.ruff.lint]` (with `tests/**` opted out, since tests may assert on
-arbitrary failure), and a source-hygiene test fails when a broad handler appears
-without a written reason. See 5.3.
-
-**Fixed (2026-11-19): the narrowing above missed `httpx` transport errors.**
-`httpx.ConnectError` and the other `httpx.HTTPError` types are not
-`ConnectionError` or `OSError` subclasses, so handlers narrowed to
-`(ValueError, OSError)` no longer caught a refused connection. The visible
-symptom was that `private-agent` aborted with a `httpx.ConnectError` traceback
-as soon as Ollama was not running, because startup runtime discovery probed a
-closed port.
-
-- `agent/local_runtimes.py` catches `httpx.HTTPError` next to the socket
-  errors, and a probe future that fails is now logged
-  (`provider.local_discovery_task_failed`) instead of aborting the whole
-  discovery pass. With no reachable runtime the CLI reports "No local runtimes
-  found" and continues to the online configuration path.
-- `agent/model_capabilities.py` already handled this for the capability probe;
-  the remaining HTTP-facing tool handlers did not. `tools/web.py`
-  (`web_search`, `fetch_webpage`, `download_web_file`) and `tools/location.py`
-  (`fetch_current_location`, `get_weather`) now return an error string for an
-  `httpx.HTTPError` instead of letting it escape the tool boundary, which
-  previously reached neither their own `(ValueError, OSError)` handlers nor the
-  `(ValueError, OSError, RuntimeError)` tool executor.
-- `cli.py` treats end of input (`EOFError`, Ctrl+D) at a startup prompt as an
-  orderly exit instead of printing a traceback.
-
-Coverage: `tests/unit/test_providers.py` (closed port and HTTP status errors),
-`tests/unit/test_location.py`, `tests/unit/test_tools.py` (web fetch and
-download) and `tests/unit/test_cli.py` (closed stdin). Verified with the real
-client against a closed port: before the change the call raised
-`httpx.ConnectError`; afterwards discovery returns `[]` and the CLI exits 0.
-
-- There is no `[tool.mypy]` config or other type checking.
-- CI is now configured by `.github/workflows/ci.yml` (step 1.5); it runs ruff
-  and pytest on Python 3.10 and 3.14.
-
 ### A6. Logging
   makes problems hard to trace afterwards.
 
-**Completed.** Added module-level loggers (`logging.getLogger(__name__)`) and log statements across the codebase for improved diagnostics and debugging. Key additions:
 
 - **`src/agent/learning.py`**: Added `import logging` and module-level logger; log statements in _run_learning_maintenance and other key functions
 - **`src/agent/task_commands.py`**: Added `import logging` and logger; debug log statements in _task_age_label and _planning_search_citations
@@ -236,30 +118,6 @@ All log statements use the existing `run_logging` infrastructure (`RUN_LOGGER`, 
 - There is no `[tool.mypy]` config or other type checking.
 - CI is now configured by `.github/workflows/ci.yml` (step 1.5); it runs ruff
   and pytest on Python 3.10 and 3.14.
-
-### A7. Async mixed with blocking code
-
-**Completed.** Removed the `asyncio.run`-inside-ThreadPoolExecutor anti-pattern
-from sync tool functions by converting them to fully synchronous HTTP clients:
-
-- **`src/tools/web.py`**: `fetch_webpage` and `download_web_file`
-  now use `public_only_sync_client` and a new synchronous
-  `_get_limited_response_sync` helper instead of spawning a thread pool to run
-  `asyncio.run`. Added `_get_limited_response_sync` to `tools/network.py`.
-- **`src/tools/location.py`**: `_get_json` now uses the sync HTTP
-  client; removed `_run` and `_get_json_async`.
-- **`database/memory.py`**: connection already guarded by `threading.Lock`;
-  verified by `test_sqlite_concurrent_read_write_locking`.
-- `subprocess.run`/`Popen` usages are confined to synchronous functions invoked
-  via `asyncio.to_thread`, so they no longer block the event loop.
-- Logger placement fixed (E402) in `tools/shell.py`, `agent/learning.py`,
-  `agent/task_commands.py` so `ruff check .` passes.
-- Re-verified on 2026-11-19: the package has one `asyncio.run` at the
-  synchronous CLI boundary (`run_agent_cli`); no tool module calls it. The
-  benchmark script uses `asyncio.run` only in its own `main`. All
-  subprocess/HTTP calls are either synchronous or awaited via
-  `asyncio.create_subprocess_exec`/`httpx.AsyncClient`. Boundary exception
-  handlers restored to appropriate breadth (see A5).
 
 ### A8. Smaller issues
 
@@ -335,11 +193,6 @@ local models by default, and works on the project folder it is launched from.
 **Standard practice:** one reusable loop function, or a framework such as
 LangGraph (`create_react_agent`). The project already depends on LangChain.
 
-**Fixed.** All `llm.bind_tools(tools_list)` call sites route through one
-`_bind_tools` helper. The model fallback, per-turn preflight, tool-batch
-execution and outer turn loop now live in `_invoke_initial_model_with_fallback`,
-`_preflight_tool_calls`, `_execute_tool_batch` and `_run_agent_turn` in
-`agent/runtime.py`; planning, coding and skills paths share that loop.
 
 Verified with the full suite: 812 passed, 12 skipped, 0 failed.
 
@@ -353,13 +206,6 @@ Verified with the full suite: 812 passed, 12 skipped, 0 failed.
 **Standard practice:** a single policy check that every tool call passes
 through. Tools never prompt the user directly.
 
-**Fixed.** `tools/shell.py` no longer prompts for approval itself; approval is
-handled by the central `agent.permissions.tool_needs_permission` policy (with
-the `_tool_invocation_approved` context). The runtime wrapper was removed, and
-the interactive prompt now lives in `prompt_tool_approval` beside the policy.
-Direct/unapproved invocations return an explicit error instead of prompting.
-Covered by `test_shell_command_requires_explicit_approval` and
-`test_permission_mode_policy_matrix`.
 
 Residual follow-up: none identified for B2; session-level allow rules remain a
 separate C8 feature.
@@ -374,13 +220,6 @@ separate C8 feature.
 **Standard practice:** pass a context object into each tool, for example
 through LangChain's `RunnableConfig` or injected tool arguments.
 
-**Fixed.** `ToolContext` is now the single process-local source of truth. It
-holds the active DB path, task session/id, runtime owner, skill directory,
-registry and session, code task, and schema-read set. `tools/memory.py`,
-`tools/planner.py`, `create_skill`, `tools/shell.py`, `agent/runtime.py`,
-`agent/task_commands.py` and `agent/task_lease.py` read through
-`get_tool_context()`; runtime/task-command writes go through
-`set_tool_context()`.
 
 `tools/_task_state.py` was removed. `tools/_sqlite_state.py` is reduced to the
 shared `SQLITE_LOCK`; the active DB path no longer lives there. The
@@ -405,57 +244,6 @@ capability probe; `model_capabilities` now treats it as an unknown endpoint
 Residual follow-up: none identified for B3. `ToolContext` is the only
 tool-state write path.
 
-#### B4. The risky-command check matches text fragments
-
-**Fixed.** `evaluate_shell_command` now parses the command with `shlex` instead
-of matching substrings (commit `9726bd5`), and `tests/unit/test_shell_risk.py`
-covers the cases above. The check still only adds a warning to the approval
-prompt; Bubblewrap remains the real protection.
-
-#### B5. The workspace root is decided at import time
-
-**Fixed.** `SandboxManager.root_dir` now starts as `None`; no path is chosen at
-import time. `SandboxManager.set_root()` runs once during startup with the
-configured/project workspace (or the current directory for an empty prompt) and
-rejects missing paths, non-directories, and empty values instead of creating
-them. `SandboxManager.get_root()` is the checked accessor used by all tools and
-runtime code, and fails clearly if startup never configured a root.
-
-Coverage lives in `tests/unit/test_sandbox_root.py` for the unconfigured,
-missing, non-directory, empty and valid-root paths.
-
-#### B6. Skill matching uses keyword overlap
-
-**Fixed.** Skill files now support optional YAML front matter:
-
-```markdown
----
-name: Python Expert
-description: Write secure and robust Python code.
----
-# Python Expert
-...
-```
-
-`skills/loader.py` reads `name` and `description` from the front matter while
-keeping the Markdown body as the system prompt. Files without front matter
-still load with the previous filename/first-lines fallback, and invalid YAML
-is reported and ignored rather than dropping the skill. New skills written by
-`create_skill` include front matter automatically.
-
-`skills/manager.py` accepts an optional embedder. When the RAG vector store is
-active, the runtime passes its embedding model through `asyncio.to_thread`, so
-skill selection uses cosine similarity without blocking the event loop. Skill
-embeddings are cached per loaded skill. If the embedding backend is unavailable
-or returns malformed data, selection falls back to the existing weighted
-keyword matcher. `skills.relevance_embedding_threshold` controls the semantic
-cutoff (default `0.55`).
-
-Coverage lives in `tests/unit/test_skills.py` for front-matter loading, invalid
-front matter, semantic selection, embedding caching, and keyword fallback. The
-semantic path is unit-tested with a fake embedder; it has not been exercised
-against a live Ollama embedding endpoint.
-
 #### B7. Web search scrapes DuckDuckGo's HTML page
 
 - `tools/network.py:593` scrapes `html.duckduckgo.com`. This breaks when the
@@ -464,20 +252,6 @@ against a live Ollama embedding endpoint.
 **Standard practice:** a search API, or a self-hosted SearXNG instance, which
 also suits the privacy goal.
 
-**Fixed.** Search now runs through a provider layer in `tools/search.py`. The
-`[network] search_provider` setting accepts `auto` (default), `searxng` or
-`duckduckgo`; `auto` uses a self-hosted instance when `[network] searxng_url` is
-set and otherwise keeps scraping, so a default install behaves exactly as
-before. `searxng_search` in `tools/network.py` queries the instance's JSON API
-(`?q=...&format=json`) and formats results identically to the scraper, reusing
-the existing redirect limit, response-size cap and concurrency semaphore. When
-a chosen SearXNG fails for any reason (transport, HTML instead of JSON, size
-cap), the failure is logged and, unless `[network] search_fallback` is
-`false`, the scraper answers. The returned text then opens with a warning that
-names the failed provider and the setting, so privacy is never downgraded
-silently; with the fallback disabled the failure is raised as a `ValueError`
-and DuckDuckGo is never contacted. `auto` without a configured instance
-scrapes directly and adds no warning, because nothing was downgraded.
 
 The instance URL is operator configuration, never model- or page-supplied, so a
 loopback instance such as `127.0.0.1:8080` is reachable: `_get_limited_response_sync`
@@ -496,34 +270,6 @@ no live SearXNG or internet search was available here.
 
 #### B8. Sync and async code are mixed
 
-**Fixed by the A7 async cleanup.** Web and location tools use synchronous
-`httpx` clients and are dispatched through `asyncio.to_thread`/`ainvoke`.
-The network resolver has an async child-process path, and shell/code-task
-`subprocess.run` calls live only in synchronous functions. The only
-`asyncio.run` in the package is the synchronous CLI boundary in
-`agent/runtime.py` (`run_agent_cli`). Coverage lives in
-`tests/unit/test_source_hygiene.py`: it fails if `asyncio.run` appears
-elsewhere or if `subprocess.run` is called from an `async def`.
-
-#### B9. The document retriever merges results in a basic way
-
-**Fixed.** `rag/retrieval.py` now tokenizes the BM25 corpus and queries with a
-casefolded, punctuation-aware tokenizer, so `"error,"` and `"error"` match. It
-fuses vector and BM25 rankings with reciprocal rank fusion (`k=60`), dedupes by
-source/chunk, and keeps only the top `k` results. BM25 candidates still use a
-bounded `heapq.nsmallest`, so retrieval remains O(n log k) for corpus scoring
-plus O(k log k) fusion. An all-punctuation corpus is detected before
-`BM25Okapi` construction (which otherwise raises `ZeroDivisionError`) and falls
-back to vector results.
-
-Coverage lives in `tests/unit/test_rag.py` for tokenizer behavior, RRF
-ordering/deduplication, the top-k candidate path, and the no-token fallback.
-A synthetic 20,000-document check measured about 3.25 ms per fused query versus
-3.08 ms for the old merge (~5% overhead) at top-k 4. The live
-`scripts/benchmark_rag.py` run was not possible here because no Ollama endpoint
-is available; the harness remains the measurement path for recall@k and MRR.
-
----
 
 ## Part C: Gaps Compared with Claude Code and Codex
 
@@ -1367,12 +1113,6 @@ back to the same choice prompt.
 | I1h | `scripts/benchmark_rag.py` | The RAG benchmark requires Ollama | The benchmark cannot run with other providers |
 | I1i | `config.py:37` | One `ollama_base_url`; Ollama is always probed first and listed first | Cannot list two Ollama servers; Ollama always appears as option 1 |
 
-**Fixed:** I1b, I1c and I1d. `agent/model_capabilities.py` (commit `7ff2016`)
-reads capabilities from llama.cpp `/props`, LM Studio `/api/v1/models` and the
-`/v1/models` entries many servers extend, merges per-endpoint config overrides,
-and the tool-capable model fallback now applies to every provider. A small
-`MODEL_FAMILY_CAPABILITIES` family table now provides the last capability
-fallback before user overrides.
 
 **Status (updated 2026-11-20):** every I1 item is implemented on branch
 `i-provider-independence`; see `implemented.md`, Part I, for the per-item
@@ -1601,15 +1341,6 @@ online-only.
 that uses them (overlaps steps 11.5 and 12.2), and build the RAG index in the
 background while the user picks a provider.
 
-### J3. Tokenizer downloaded at run time
-
-**Fixed.** The `cl100k_base` vocabulary ships in
-`src/resources/tiktoken/`, and `agent/prompts.py` points
-`TIKTOKEN_CACHE_DIR` at it before loading the encoding (commit `4eddf57`), so
-there is no download, no temp-folder cache to lose, and no outbound request.
-The silent character-estimate fallback and the model-specific tokenizer
-suggestion remain open (step 14.8).
-
 ### J4. Tool definitions sent with every request
 
 All 34 built-in tool definitions, about **4,500 tokens**, are sent with every
@@ -1727,8 +1458,6 @@ defined twice, and values that should stay in code on purpose.
 
 ### K1. Read from config but missing from the defaults
 
-**Fixed** (commit `fc6bfde`). These keys are now in `DEFAULT_CONFIG`, so they
-appear in the generated `~/.conf` and in the README.
 
 | Key | Default |
 |---|---|
