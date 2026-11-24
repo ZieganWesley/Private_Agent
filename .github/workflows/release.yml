@@ -24,7 +24,7 @@ jobs:
 
       - name: Install project
         working-directory: private_agent
-        run: uv pip install --system .
+        run: uv pip install .
 
       - name: Check command starts
         working-directory: private_agent
@@ -33,7 +33,7 @@ jobs:
       - name: Build distributions
         working-directory: private_agent
         run: |
-          uv pip install --system build
+          uv pip install build
           python -m build
 
       - name: Create GitHub Release
