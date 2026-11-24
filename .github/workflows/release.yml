@@ -1,0 +1,43 @@
+name: Build and publish GitHub Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # Your project is in this subdirectory.
+          path: private_agent
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
+
+      - name: Install project
+        working-directory: private_agent
+        run: uv pip install --system .
+
+      - name: Check command starts
+        working-directory: private_agent
+        run: private-agent --help
+
+      - name: Build distributions
+        working-directory: private_agent
+        run: |
+          uv pip install --system build
+          python -m build
+
+      - name: Create GitHub Release
+        working-directory: private_agent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
