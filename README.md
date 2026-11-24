@@ -3,6 +3,9 @@
 Local-first, privacy-focused terminal AI agent with permission-gated tools,
 local RAG, skills, and persistent memory.
 
+##Status
+[![Tests](https://github.com/ZieganWesley/Private_Agent/actions/workflows/pytest.yml/badge.svg)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/pytest.yml)
+
 ## Quick Start
 - Direct install: uv pip install "git+https://github.com/ZieganWesley/Private_Agent.git@main"
 - Detailed instructions to Install: see [docs/INSTALLATION.md](docs/INSTALLATION.md)
