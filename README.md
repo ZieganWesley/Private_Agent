@@ -4,7 +4,8 @@ Local-first, privacy-focused terminal AI agent with permission-gated tools,
 local RAG, skills, and persistent memory.
 
 ## Quick Start
-- Install: see [docs/INSTALLATION.md](docs/INSTALLATION.md)
+- Direct install: uv pip install "git+https://github.com/ZieganWesley/Private_Agent.git@main"
+- Detailed instructions to Install: see [docs/INSTALLATION.md](docs/INSTALLATION.md)
 - Run: `private-agent`
 - Diagnose: `private-agent --doctor`
 
