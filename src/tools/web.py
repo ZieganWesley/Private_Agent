@@ -238,7 +238,8 @@ def _resolve_search_url(url: str) -> str:
         url = "https:" + url
     try:
         parsed = urllib.parse.urlparse(url)
-        if "duckduckgo.com" in (parsed.netloc or "").lower():
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        if hostname == "duckduckgo.com" or hostname.endswith(".duckduckgo.com"):
             query = urllib.parse.parse_qs(parsed.query)
             if "uddg" in query and query["uddg"]:
                 return urllib.parse.unquote(query["uddg"][0])
