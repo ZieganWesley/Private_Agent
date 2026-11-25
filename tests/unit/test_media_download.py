@@ -1,9 +1,7 @@
 """Media search-and-download tool tests."""
 
-import sys
+
 import types
-from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -25,7 +23,7 @@ def fake_web(monkeypatch, temp_workspace):
         target = temp_workspace / save_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("media bytes", encoding="utf-8")
-        return "Success: File downloaded and saved to '%s'." % save_path
+        return f"Success: File downloaded and saved to '{save_path}'."
 
     fake_downloader = types.SimpleNamespace(
         invoke=lambda args: download(**args)
@@ -64,7 +62,7 @@ def test_media_download_uses_direct_url_and_custom_save_path(monkeypatch, temp_w
         target = temp_workspace / save_path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("direct bytes", encoding="utf-8")
-        return "Success: File downloaded and saved to '%s'." % save_path
+        return f"Success: File downloaded and saved to '{save_path}'."
 
     monkeypatch.setattr(
         web, "download_web_file", types.SimpleNamespace(invoke=lambda args: download(**args)), raising=False
