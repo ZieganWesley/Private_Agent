@@ -1,6 +1,5 @@
 """Media search-and-download tool tests."""
 
-
 import types
 
 import pytest
@@ -25,9 +24,7 @@ def fake_web(monkeypatch, temp_workspace):
         target.write_text("media bytes", encoding="utf-8")
         return f"Success: File downloaded and saved to '{save_path}'."
 
-    fake_downloader = types.SimpleNamespace(
-        invoke=lambda args: download(**args)
-    )
+    fake_downloader = types.SimpleNamespace(invoke=lambda args: download(**args))
     monkeypatch.setattr(web, "download_web_file", fake_downloader, raising=False)
     return temp_workspace
 
@@ -53,7 +50,9 @@ def test_media_download_reports_missing_search_result(monkeypatch, temp_workspac
     assert not any(temp_workspace.iterdir())
 
 
-def test_media_download_uses_direct_url_and_custom_save_path(monkeypatch, temp_workspace):
+def test_media_download_uses_direct_url_and_custom_save_path(
+    monkeypatch, temp_workspace
+):
     import tools.web as web
 
     monkeypatch.setattr(web, "has_internet_connection", lambda: True, raising=False)
@@ -65,11 +64,18 @@ def test_media_download_uses_direct_url_and_custom_save_path(monkeypatch, temp_w
         return f"Success: File downloaded and saved to '{save_path}'."
 
     monkeypatch.setattr(
-        web, "download_web_file", types.SimpleNamespace(invoke=lambda args: download(**args)), raising=False
+        web,
+        "download_web_file",
+        types.SimpleNamespace(invoke=lambda args: download(**args)),
+        raising=False,
     )
 
     result = download_media.invoke(
-        {"query": "ignored", "url": "https://example.com/direct.png", "save_path": "nested/out.png"}
+        {
+            "query": "ignored",
+            "url": "https://example.com/direct.png",
+            "save_path": "nested/out.png",
+        }
     )
 
     assert "Success" in result
