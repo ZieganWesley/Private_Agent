@@ -33,8 +33,45 @@ jobs:
       - name: Verify distributions
         run: ls -lah dist
 
-      - name: Install built wheel
-        run: pip install dist/*.whl
+      - name: Generate checksums and asset manifest
+        run: |
+          cd dist
+
+          sha256sum * > SHA256SUMS.txt
+
+          {
+            echo "# Release Assets"
+            echo
+            echo "| File | Size | SHA256 |"
+            echo "|------|------|--------|"
+
+            for file in *; do
+              if [ -f "$file" ] && [ "$file" != "SHA256SUMS.txt" ]; then
+                SIZE=$(du -h "$file" | cut -f1)
+                HASH=$(sha256sum "$file" | awk '{print $1}')
+
+                echo "| $file | $SIZE | \`$HASH\` |"
+              fi
+            done
+          } > RELEASE_ASSETS.md
+
+      - name: Show generated manifest
+        run: |
+          cat dist/RELEASE_ASSETS.md
+
+      - name: Install built package
+        run: |
+          pip install dist/*.whl
 
       - name: Verify CLI
-        run: private-agent --help
+        run: |
+          private-agent --help
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.event.workflow_run.head_sha }}" \
+            dist/* \
+            --title "Build ${{ github.event.workflow_run.head_branch }}" \
+            --notes-file dist/RELEASE_ASSETS.md
