@@ -2,6 +2,12 @@
 
 ## Install
 ```bash
+##DIRECT INSTALL
+"git+https://github.com/ZieganWesley/Private_Agent.git@main"
+```
+
+```bash
+##SOURCE INSTALL
 git clone https://github.com/ZieganWesley/Private_Agent.git
 cd Private_Agent
 pip install -e .
