@@ -82,7 +82,7 @@ def installed_but_idle(
     presets: Iterable[ProviderPreset] | None = None,
 ) -> list[IdleProvider]:
     """Return installed providers that are not among the reachable runtimes."""
-    presets = list(presets if presets is not None else all_presets())
+    presets = list(presets) if presets is not None else []
     running_names = {
         str(getattr(runtime, "name", "")).strip().lower() for runtime in runtimes
     }
@@ -136,7 +136,7 @@ def preset_probe_endpoints(
     }
     endpoints: list[dict[str, str]] = []
     seen = set(configured_urls)
-    for preset in presets if presets is not None else all_presets():
+    for preset in presets if presets is not None else []:
         if preset.kind != "openai-compatible":
             continue
         try:
