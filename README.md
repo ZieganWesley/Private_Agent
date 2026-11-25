@@ -29,4 +29,4 @@ local RAG, skills, and persistent memory.
 See [AGENTS.md](AGENTS.md).
 
 ## For License & Security
-[LICENSE](LICENCE) [SECURITY.md](SECURITY.md)
+[LICENSE](LICENSE) [SECURITY.md](SECURITY.md)
