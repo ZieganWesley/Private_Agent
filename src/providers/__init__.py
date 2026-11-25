@@ -24,8 +24,6 @@ from .adapters import (
     build_adapter,
 )
 from .selection import (
-    IdleProvider,
-    installed_but_idle,
     load_last_provider,
     match_runtime,
     pick_default_model,
@@ -53,8 +51,6 @@ __all__ = [
     "OpenAICompatibleAdapter",
     "build_adapter",
     "all_presets",
-    "IdleProvider",
-    "installed_but_idle",
     "load_last_provider",
     "match_runtime",
     "pick_default_model",

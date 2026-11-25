@@ -7,12 +7,10 @@ import logging
 import os
 import pathlib
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any
 
 from utils.run_logging import RUN_LOGGER, log_event
 
-from .adapters import ProviderPreset, all_presets
 
 STATE_ENV = "PRIVATE_AGENT_PROVIDER_STATE"
 PROVIDER_ENV = "PRIVATE_AGENT_PROVIDER"
@@ -68,44 +66,6 @@ def save_last_provider(
         )
 
 
-@dataclass(frozen=True)
-class IdleProvider:
-    """An installed provider whose server is not answering."""
-
-    preset: ProviderPreset
-    start_hint: str
-
-
-def installed_but_idle(
-    runtimes: Iterable[Any],
-    *,
-    presets: Iterable[ProviderPreset] | None = None,
-) -> list[IdleProvider]:
-    """Return installed providers that are not among the reachable runtimes."""
-    presets = list(presets) if presets is not None else []
-    running_names = {
-        str(getattr(runtime, "name", "")).strip().lower() for runtime in runtimes
-    }
-    idle: list[IdleProvider] = []
-    for preset in presets:
-        if preset.name.strip().lower() in running_names:
-            continue
-        try:
-            installed = bool(preset.install_check())
-        except (OSError, RuntimeError) as exc:
-            log_event(
-                RUN_LOGGER,
-                "provider.install_check_failed",
-                level=logging.DEBUG,
-                provider=preset.name,
-                error_type=type(exc).__name__,
-            )
-            installed = False
-        if installed:
-            idle.append(IdleProvider(preset=preset, start_hint=preset.start_hint))
-    return idle
-
-
 OLLAMA_EXTRA_HINT = (
     "Ollama support is an optional extra: `pip install 'private-agent[ollama]'`, "
     "or choose another runtime."
@@ -117,41 +77,6 @@ def optional_dependency_hint(kind: str, error: BaseException) -> str | None:
     if isinstance(error, ImportError) and str(kind) == "ollama":
         return OLLAMA_EXTRA_HINT
     return None
-
-
-def preset_probe_endpoints(
-    configured: Iterable[Any],
-    *,
-    presets: Iterable[ProviderPreset] | None = None,
-) -> list[dict[str, str]]:
-    """Return default-port endpoints for installed presets not yet configured.
-
-    Probing only installed presets keeps startup cheap while still finding a
-    provider the user installed and started without adding it to config.
-    """
-    configured_urls = {
-        str(entry.get("base_url", "")).rstrip("/")
-        for entry in configured
-        if isinstance(entry, dict)
-    }
-    endpoints: list[dict[str, str]] = []
-    seen = set(configured_urls)
-    for preset in presets if presets is not None else []:
-        if preset.kind != "openai-compatible":
-            continue
-        try:
-            installed = bool(preset.install_check())
-        except (OSError, RuntimeError):
-            installed = False
-        if not installed:
-            continue
-        for port in preset.default_ports:
-            base_url = preset.base_url_template.format(port=port).rstrip("/")
-            if base_url in seen:
-                continue
-            seen.add(base_url)
-            endpoints.append({"name": preset.name, "base_url": base_url})
-    return endpoints
 
 
 def requested_provider() -> str:
