@@ -16,7 +16,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          # Your project is in this subdirectory.
           path: private_agent
 
       - name: Set up uv
