@@ -156,3 +156,13 @@ jobs:
           path: |
             importtime.txt
             flamegraph.svg
+      - name: Startup Benchmark
+        run: |
+          STARTUP_TIME=$(/usr/bin/time -f "%e" private-agent --help 2>&1 >/dev/null)
+            {
+              echo "# Performance Report"
+              echo ""
+              echo "| Metric | Value |"
+              echo "|----------|----------|"
+              echo "| Startup Time | ${STARTUP_TIME}s |"
+            } >> "$GITHUB_STEP_SUMMARY"
