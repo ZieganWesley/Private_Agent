@@ -3,7 +3,7 @@
 ## Install
 ```bash
 ##DIRECT INSTALL
-"git+https://github.com/ZieganWesley/Private_Agent.git@main"
+pip install "git+https://github.com/ZieganWesley/Private_Agent.git@main"
 ```
 
 ```bash
