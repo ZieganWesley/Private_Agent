@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint & Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]" mypy
+
+      - name: Ruff Lint
+        run: ruff check .
+
+      - name: Ruff Format Check
+        run: ruff format --check .
+
+      - name: MyPy
+        run: mypy --ignore-missing-imports src
+
+  smoke:
+    name: Core Smoke Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install Package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Import Smoke Test
+        run: |
+          python -c "import cli, agent.runtime, config; print('core import ok')"
+
+  test:
+    name: Pytest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Run Tests
+        run: |
+          pytest -q
+
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install Security Tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install bandit pip-audit
+
+      - name: Bandit
+        run: |
+          bandit -r src -ll
+
+      - name: Pip Audit
+        run: |
+          pip-audit
