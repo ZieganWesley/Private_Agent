@@ -115,3 +115,44 @@ jobs:
       - name: Pip Audit
         run: |
           pip-audit
+  performance:
+    name: Performance Profile
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install Package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+          python -m pip install py-spy
+
+      - name: Profile Imports
+        run: |
+          python -X importtime -c "import agent.runtime" \
+            2> importtime.txt
+
+      - name: Benchmark CLI Startup
+        run: |
+          /usr/bin/time -v private-agent --help
+
+      - name: Generate Flame Graph
+        run: |
+          py-spy record \
+            -o flamegraph.svg \
+            -- private-agent --help
+
+      - name: Upload Profiling Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-profile
+          path: |
+            importtime.txt
+            flamegraph.svg
