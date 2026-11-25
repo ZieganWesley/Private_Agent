@@ -4,8 +4,8 @@ import contextlib
 import os
 import re
 import sys
-import urllib.parse
 import tempfile
+import urllib.parse
 
 import httpx
 from langchain_core.tools import tool
@@ -255,10 +255,9 @@ def _all_urls(text) -> list[str]:
     for match in re.finditer(r"(?:https?:)?//[^\s<>'\")\]]+", text):
         urls.append(_resolve_search_url(match.group(0)))
     for match in re.finditer(r"uddg=([^\s&'\")\]]+)", text):
-        try:
+        with contextlib.suppress(Exception):
             urls.append(urllib.parse.unquote(match.group(1)))
-        except Exception:  # noqa: BLE001 - best-effort URL decoding
-            pass
+
     # De-duplicate while preserving order.
     seen = set()
     unique = []
