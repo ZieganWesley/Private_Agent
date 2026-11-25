@@ -78,6 +78,17 @@ def test_interrupted_turn_is_not_completion_evidence(memory):
     assert controller.mission()["plan"]["steps"][0]["status"] == "active"
 
 
+def test_stopped_mission_stops_prompting_and_releases_its_lease(memory):
+    controller = _controller(memory)
+    runner = MissionAutoRunner(controller, "owner-1")
+    assert runner.next_prompt() is not None
+
+    controller.stop("user cancelled")
+
+    assert runner.observe("stopped", had_tool_calls=False) is None
+    assert memory.mission_lease_active(controller.mission_id) is False
+
+
 def test_lease_blocks_a_second_controller(memory):
     controller = _controller(memory)
     first = MissionAutoRunner(controller, "owner-1")
