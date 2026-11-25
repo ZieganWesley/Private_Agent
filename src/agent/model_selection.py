@@ -32,6 +32,7 @@ from config import (
     ONLINE_REQUEST_TIMEOUT,
 )
 from hardware import ollama_acceleration_options
+from providers.endpoints import EndpointRegistry, is_loopback_url, remote_allowed
 
 from .console import console
 from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
@@ -70,11 +71,10 @@ def ChatOllama(*args, **kwargs):
 def _local_endpoint_capability_overrides(base_url: str) -> dict | None:
     """Return the configured `capabilities` override for a local endpoint."""
     model_config = APP_CONFIG.get("models", {})
-    endpoints = (
-        model_config.get("local_openai_compatible_endpoints", [])
-        if isinstance(model_config, dict)
-        else []
-    )
+    endpoints = []
+    if isinstance(model_config, dict):
+        endpoints.extend(model_config.get("local_openai_compatible_endpoints", []))
+        endpoints.extend(model_config.get("endpoints", []))
     for entry in endpoints if isinstance(endpoints, list) else []:
         if (
             isinstance(entry, dict)
@@ -198,46 +198,23 @@ def _configured_endpoint_models(entry: dict[str, Any]) -> tuple[str, ...] | None
 
 def _discover_available_local_runtimes() -> list[LocalRuntime]:
     """Probe OpenAI-compatible endpoints configured in the local config file."""
-    model_config = APP_CONFIG.get("models", {})
-    endpoints = (
-        model_config.get("local_openai_compatible_endpoints", [])
-        if isinstance(model_config, dict)
-        else []
-    )
-    allow_remote = False
-    if isinstance(model_config, dict):
-        raw = model_config.get("allow_remote_hosts", False)
-        allow_remote = (
-            raw
-            if isinstance(raw, bool)
-            else str(raw).strip().lower() in {"true", "1", "yes", "on"}
-        )
-    configured = endpoints if isinstance(endpoints, list) else []
-
-    # Drop instance detection/presets: only endpoints explicitly present in the
-    # local configuration are eligible, and every one is treated as OpenAI
-    # compatible.
-    configured_entries = []
-    for entry in configured:
-        if not isinstance(entry, dict):
-            continue
-        normalized = dict(entry)
-        if not (
-            isinstance(normalized.get("name"), str)
-            and str(normalized.get("name")).strip()
-        ):
-            provider = normalized.get("provider")
-            if isinstance(provider, str) and provider.strip():
-                normalized["name"] = provider.strip()
-            elif isinstance(normalized.get("base_url"), str):
-                normalized["name"] = "OpenAI-compatible"
-        configured_entries.append(normalized)
-
-    ollama_base_url = (
-        model_config.get("ollama_base_url") if isinstance(model_config, dict) else None
+    registry = EndpointRegistry.from_config(APP_CONFIG)
+    configured_entries = [
+        {
+            "name": endpoint.name,
+            "base_url": endpoint.base_url,
+            "models": list(endpoint.models),
+        }
+        for endpoint in registry.endpoints
+        if endpoint.enabled and remote_allowed(endpoint)
+    ]
+    allow_remote = any(
+        not is_loopback_url(endpoint.base_url)
+        for endpoint in registry.endpoints
+        if endpoint.enabled
     )
     runtimes = discover_local_runtimes(
-        ollama_base_url,
+        None,
         configured_entries,
         client_factory=public_only_sync_client,
         allow_remote=allow_remote,

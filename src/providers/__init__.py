@@ -5,6 +5,13 @@ discovery, capability detection, model construction and embeddings no longer
 depend on a single runtime (Ollama).
 """
 
+from .endpoints import (
+    EndpointConfig,
+    EndpointRegistry,
+    clamp_limit,
+    normalize_base_url,
+    resolved_limits,
+)
 from .adapters import (
     OllamaAdapter,
     OpenAICompatibleAdapter,
@@ -26,6 +33,11 @@ from .selection import (
 )
 
 __all__ = [
+    "EndpointConfig",
+    "EndpointRegistry",
+    "clamp_limit",
+    "normalize_base_url",
+    "resolved_limits",
     "ProviderAdapter",
     "ProviderRecord",
     "ProviderPreset",
