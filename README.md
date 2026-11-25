@@ -3,8 +3,13 @@
 Local-first, privacy-focused terminal AI agent with permission-gated tools,
 local RAG, skills, and persistent memory.
 
+
+[![CodeQL](https://github.com/ZieganWesley/Private_Agent/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/github-code-scanning/codeql)
+[![CI](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CI.yml)
+[![CD](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CD.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CD.yml)
+
 ## Quick Start
-- Install: see [docs/INSTALLATION.md](docs/INSTALLATION.md)
+- Detailed instructions to Install: see [docs/INSTALLATION.md](docs/INSTALLATION.md)
 - Run: `private-agent`
 - Diagnose: `private-agent --doctor`
 
@@ -22,5 +27,5 @@ local RAG, skills, and persistent memory.
 ## Agent Context
 See [AGENTS.md](AGENTS.md).
 
-## License
-See LICENSE.
+## For License & Security
+[LICENSE](LICENSE) [SECURITY.md](SECURITY.md)

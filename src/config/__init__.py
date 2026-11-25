@@ -34,13 +34,13 @@ CONFIG_PATH_ENV_VAR = "PRIVATE_AGENT_CONFIG"
 
 
 def resolve_config_path(environ=None) -> pathlib.Path:
-    """Return the config file path: $PRIVATE_AGENT_CONFIG or ~/.config/private_agent/conf."""
+    """Return the config file path: $PRIVATE_AGENT_CONFIG or ~/.config/private_agent/private_config.json."""
     override = (environ if environ is not None else os.environ).get(
         CONFIG_PATH_ENV_VAR, ""
     )
     if override.strip():
         return pathlib.Path(override.strip()).expanduser().absolute()
-    return pathlib.Path.home() / ".config" / "private_agent" / "conf"
+    return pathlib.Path.home() / ".config" / "private_agent" / "private_config.json"
 
 
 CONFIG_FILE_PATH = resolve_config_path()

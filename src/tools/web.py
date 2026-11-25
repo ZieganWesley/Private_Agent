@@ -4,8 +4,8 @@ import contextlib
 import os
 import re
 import sys
-import urllib.parse
 import tempfile
+import urllib.parse
 
 import httpx
 from langchain_core.tools import tool
@@ -167,15 +167,22 @@ try:
         )
         type: str | None = _Field(default=None, description="Alias for media_type.")
         kind: str | None = _Field(default=None, description="Alias for media_type.")
-        content_type: str | None = _Field(default=None, description="Alias for media_type.")
+        content_type: str | None = _Field(
+            default=None, description="Alias for media_type."
+        )
         url: str | None = _Field(
-            default=None, description="Direct media URL to download instead of searching."
+            default=None,
+            description="Direct media URL to download instead of searching.",
         )
         save_path: str | None = _Field(
             default=None, description="Destination file path inside the workspace."
         )
-        destination: str | None = _Field(default=None, description="Alias for save_path.")
-        output_path: str | None = _Field(default=None, description="Alias for save_path.")
+        destination: str | None = _Field(
+            default=None, description="Alias for save_path."
+        )
+        output_path: str | None = _Field(
+            default=None, description="Alias for save_path."
+        )
         filename: str | None = _Field(default=None, description="Alias for save_path.")
         path: str | None = _Field(default=None, description="Alias for save_path.")
 
@@ -231,7 +238,8 @@ def _resolve_search_url(url: str) -> str:
         url = "https:" + url
     try:
         parsed = urllib.parse.urlparse(url)
-        if "duckduckgo.com" in (parsed.netloc or "").lower():
+        hostname = (parsed.hostname or "").lower().rstrip(".")
+        if hostname == "duckduckgo.com" or hostname.endswith(".duckduckgo.com"):
             query = urllib.parse.parse_qs(parsed.query)
             if "uddg" in query and query["uddg"]:
                 return urllib.parse.unquote(query["uddg"][0])
@@ -255,10 +263,9 @@ def _all_urls(text) -> list[str]:
     for match in re.finditer(r"(?:https?:)?//[^\s<>'\")\]]+", text):
         urls.append(_resolve_search_url(match.group(0)))
     for match in re.finditer(r"uddg=([^\s&'\")\]]+)", text):
-        try:
+        with contextlib.suppress(Exception):
             urls.append(urllib.parse.unquote(match.group(1)))
-        except Exception:  # noqa: BLE001 - best-effort URL decoding
-            pass
+
     # De-duplicate while preserving order.
     seen = set()
     unique = []
@@ -276,7 +283,9 @@ def _extract_url(text) -> str | None:
 
 def _extract_media_url(text, media_type: str | None = None) -> str | None:
     """Extract a direct downloadable media URL from search results."""
-    allowed = _MEDIA_EXTENSIONS_BY_TYPE.get(media_type or "image", _ALL_MEDIA_EXTENSIONS)
+    allowed = _MEDIA_EXTENSIONS_BY_TYPE.get(
+        media_type or "image", _ALL_MEDIA_EXTENSIONS
+    )
     urls = _all_urls(text)
     for url in urls:
         suffix = os.path.splitext(url.split("?", 1)[0])[1].lower()
@@ -331,7 +340,9 @@ def _extract_media_url(text, media_type: str | None = None) -> str | None:
             # Last resort: return the first absolute image source even if it
             # has no recognizable file extension.
             for url in candidates:
-                if any(token in url.lower() for token in (".jpg", ".png", "image", "img")):
+                if any(
+                    token in url.lower() for token in (".jpg", ".png", "image", "img")
+                ):
                     return url
     return None
 
@@ -339,7 +350,18 @@ def _extract_media_url(text, media_type: str | None = None) -> str | None:
 def _media_extension(media_type: str, url: str | None) -> str:
     if url:
         suffix = os.path.splitext(url.split("?", 1)[0])[1].lower()
-        if suffix in {".jpg", ".jpeg", ".png", ".gif", ".webp", ".mp4", ".mov", ".mp3", ".wav", ".m4a"}:
+        if suffix in {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".gif",
+            ".webp",
+            ".mp4",
+            ".mov",
+            ".mp3",
+            ".wav",
+            ".m4a",
+        }:
             return suffix.lstrip(".")
     return {"image": "jpg", "video": "mp4", "audio": "mp3"}.get(media_type, "bin")
 
@@ -352,7 +374,9 @@ def _search_and_download_media_impl(**kwargs) -> str:
         except Exception:  # noqa: BLE001 - best-effort optional operation
             web_mod = None
 
-    has_internet = getattr(web_mod, "has_internet_connection", None) if web_mod else None
+    has_internet = (
+        getattr(web_mod, "has_internet_connection", None) if web_mod else None
+    )
     if callable(has_internet) and not has_internet():
         return "Error: Network unavailable. Please check your internet connection and try again."
 
@@ -364,7 +388,9 @@ def _search_and_download_media_impl(**kwargs) -> str:
         _first_value(kwargs, ["media_type", "type", "kind", "content_type"])
     )
     url = _first_value(kwargs, ["url"])
-    save_path = _first_value(kwargs, ["save_path", "destination", "output_path", "filename", "path"])
+    save_path = _first_value(
+        kwargs, ["save_path", "destination", "output_path", "filename", "path"]
+    )
 
     if query is None and url is None:
         return "Error: A search query or media URL is required."
@@ -413,7 +439,9 @@ def _search_and_download_media_impl(**kwargs) -> str:
 
     if not save_path:
         ext = _media_extension(media_type, url)
-        save_path = f"{_sanitize_filename(str(query) if query is not None else 'media')}.{ext}"
+        save_path = (
+            f"{_sanitize_filename(str(query) if query is not None else 'media')}.{ext}"
+        )
 
     downloader = None
     if web_mod is not None:
@@ -443,13 +471,20 @@ def _search_and_download_media_impl(**kwargs) -> str:
 # Build and register all alias tools.
 MEDIA_DOWNLOAD_TOOLS = {}
 for _alias_name in _MEDIA_DOWNLOAD_ALIASES:
+
     def _make(_name):
-        @tool(_name, args_schema=SearchAndDownloadMediaInput, description="Search for and download the media content requested by the user.")
+        @tool(
+            _name,
+            args_schema=SearchAndDownloadMediaInput,
+            description="Search for and download the media content requested by the user.",
+        )
         def _tool(**kwargs):
             return _search_and_download_media_impl(**kwargs)
 
         _tool.__name__ = _name
-        _tool.__doc__ = "Search for and download the media content requested by the user."
+        _tool.__doc__ = (
+            "Search for and download the media content requested by the user."
+        )
         return _tool
 
     MEDIA_DOWNLOAD_TOOLS[_alias_name] = _make(_alias_name)

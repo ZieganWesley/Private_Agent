@@ -1,0 +1,78 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: >
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Verify distributions
+        run: ls -lah dist
+
+      - name: Generate checksums and asset manifest
+        run: |
+          cd dist
+
+          sha256sum * > SHA256SUMS.txt
+
+          {
+            echo "# Release Assets"
+            echo
+            echo "| File | Size | SHA256 |"
+            echo "|------|------|--------|"
+
+            for file in *; do
+              if [ -f "$file" ] && [ "$file" != "SHA256SUMS.txt" ]; then
+                SIZE=$(du -h "$file" | cut -f1)
+                HASH=$(sha256sum "$file" | awk '{print $1}')
+
+                echo "| $file | $SIZE | \`$HASH\` |"
+              fi
+            done
+          } > RELEASE_ASSETS.md
+
+      - name: Show generated manifest
+        run: |
+          cat dist/RELEASE_ASSETS.md
+
+      - name: Install built package
+        run: |
+          pip install dist/*.whl
+
+      - name: Verify CLI
+        run: |
+          private-agent --help
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          gh release create "${{ github.event.workflow_run.head_sha }}" \
+            dist/* \
+            --title "Build $RELEASE_BRANCH" \
+            --notes-file dist/RELEASE_ASSETS.md
