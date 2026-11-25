@@ -47,6 +47,11 @@ async def test_cancel_event_interrupts_stream_promptly_and_closes_it():
     assert model.closed is True
     assert "interrupted by user" in str(response.content)
     assert response.additional_kwargs.get("interrupted") is True
+    assert [
+        task
+        for task in asyncio.all_tasks()
+        if task is not asyncio.current_task() and not task.done()
+    ] == []
 
 
 @pytest.mark.asyncio
