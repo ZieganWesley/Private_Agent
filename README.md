@@ -9,7 +9,6 @@ local RAG, skills, and persistent memory.
 [![CD](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CD.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CD.yml)
 
 ## Quick Start
-- Direct install: uv pip install "git+https://github.com/ZieganWesley/Private_Agent.git@main"
 - Detailed instructions to Install: see [docs/INSTALLATION.md](docs/INSTALLATION.md)
 - Run: `private-agent`
 - Diagnose: `private-agent --doctor`
