@@ -107,6 +107,7 @@ from .context_engine import (
 )
 from .context_telemetry import build_runtime_context_report
 from .console import console
+from .commands import mission_runtime as _mission_runtime
 from .commands.mission_runtime import mission_slash_command as _mission_slash_command
 from .steering_session import begin_steering_turn
 from .lazy_imports import install_lazy_globals
@@ -3994,8 +3995,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             state.authorized_planning_searches
                         )
                         tool_call_count = state.tool_call_count
-                        if _steering_channel is not None:
-                            _steering_channel.pause()
+                        if _steering_channel: _steering_channel.pause()
                         response, stop = await _execute_tool_batch(
                             response=response,
                             session_id=session_id,
@@ -4010,8 +4010,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
-                        if _steering_channel is not None:
-                            _steering_channel.resume()
+                        if _steering_channel: _steering_channel.resume()
                         f_integration.finish_iteration(
                             _f_state,  # noqa: B023
                             iteration,
@@ -4157,8 +4156,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 try:
                     response = await _run_agent_turn(response)
                 finally:
-                    if _steering_channel is not None:
-                        _steering_channel.stop()
+                    if _steering_channel: _steering_channel.stop()
                     _turn_control.finish_turn()
                     f_integration.finish_turn(_f_state)
                     session_ui.set_generation(
@@ -4265,8 +4263,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 f"\n[error][Exception] Unexpected runtime error: {ex!s}[/error]\n"
             )
             continue
-        if model_selection_failed:
-            continue
+        if model_selection_failed: continue
+        if (_mission_next := _mission_runtime.after_turn(full_output_content, response)):
+            _pending_user_input = _mission_next; continue
         break
 
 
