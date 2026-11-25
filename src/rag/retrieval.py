@@ -10,6 +10,8 @@ from langchain_core.documents import Document
 from config import RAG_RELEVANCE_THRESHOLD, RAG_SIMILARITY_RESULTS
 from ui.console import console  # noqa: F401 (shared console)
 
+from .rerank import HttpReranker, local_cosine_rerank
+
 _RRF_K = 60
 # Above this many chunks, SQLite FTS5 ranks keyword matches with an index
 # instead of scoring every chunk with BM25 (J9, step 13.9).
@@ -111,9 +113,16 @@ class HybridRAGRetriever:
     keyword_backend: str | None = None
     _fts5: _Fts5KeywordIndex | None = None
 
-    def __init__(self, vectorstore: object, documents: list[Document]):
+    def __init__(
+        self,
+        vectorstore: object,
+        documents: list[Document],
+        *,
+        reranker: HttpReranker | None = None,
+    ):
         self.vectorstore = vectorstore
         self.documents = documents
+        self.reranker = reranker
         self.bm25 = None
         self.keyword_backend: str | None = None
         self._fts5: _Fts5KeywordIndex | None = None
@@ -169,36 +178,18 @@ class HybridRAGRetriever:
         return [self.documents[index] for index, score in top_scored_docs if score > 0]
 
     def _rerank(self, query: str, documents: list[Document]) -> list[Document]:
-        """Re-rank documents by embedding similarity when an embedder is available."""
+        """Prefer ``/v1/rerank``; otherwise use local embedding similarity."""
         if not documents:
             return documents
+        reranker = getattr(self, "reranker", None)
+        if reranker is not None:
+            reranked = reranker.rerank(query, documents)
+            if reranked is not None:
+                return reranked
         embeddings = getattr(self.vectorstore, "embeddings", None)
         if embeddings is None or not hasattr(embeddings, "embed_query"):
             return documents
-        try:
-            query_vec = embeddings.embed_query(query)
-            doc_vecs = embeddings.embed_documents(
-                [getattr(d, "page_content", "") or "" for d in documents]
-            )
-        except (AttributeError, ValueError, RuntimeError, TypeError):
-            return documents
-        if not query_vec or not doc_vecs or len(doc_vecs) != len(documents):
-            return documents
-
-        def _cosine(a, b):
-            dot = sum(x * y for x, y in zip(a, b, strict=False))
-            na = sum(x * x for x in a) ** 0.5
-            nb = sum(x * x for x in b) ** 0.5
-            if na == 0 or nb == 0:
-                return 0.0
-            return dot / (na * nb)
-
-        scored = sorted(
-            zip(documents, doc_vecs, strict=False),
-            key=lambda item: _cosine(query_vec, item[1]),
-            reverse=True,
-        )
-        return [doc for doc, _ in scored]
+        return local_cosine_rerank(query, documents, embeddings=embeddings)
 
     def similarity_search(
         self,
