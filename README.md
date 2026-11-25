@@ -30,3 +30,6 @@ See [AGENTS.md](AGENTS.md).
 
 ## License
 See LICENSE.
+
+## Security
+See SECUTIRY.
