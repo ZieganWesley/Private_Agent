@@ -28,8 +28,5 @@ local RAG, skills, and persistent memory.
 ## Agent Context
 See [AGENTS.md](AGENTS.md).
 
-## License
-See LICENSE.
-
-## Security
-See SECUTIRY.
+## For License & Security
+[LICENSE.md](LICENCE.md) [SECUTIRY.md](SECUTIRY.md)
