@@ -101,6 +101,13 @@ DEFAULT_CONFIG = {
         "context_compaction_threshold": 0.8,
         "context_keep_recent_messages": 6,
         "context_summary_chars": 1500,
+        "context_engine_enabled": False,
+        "context_engine_profile": "auto",
+        "context_safety_margin_tokens": 0,
+        "context_output_reserve_ratio": 0.33,
+        "kv_cache_enabled": False,
+        "kv_cache_provider_hints": "auto",
+        "kv_cache_min_prefix_tokens": 1024,
         "rag_context_results": 5,
         "rag_documents_only": False,
         "streaming_output": True,
@@ -201,6 +208,11 @@ DEFAULT_CONFIG = {
         "relevance_exact_match_score": 3.0,
         "relevance_prefix_match_score": 2.0,
         "relevance_word_match_score": 1.0,
+    },
+    "context_cache": {
+        "kv_cache_enabled": False,
+        "kv_cache_provider_hints": "auto",
+        "kv_cache_min_prefix_tokens": 1024,
     },
     "code_tasks": {
         "git_command_timeout_seconds": 30,
@@ -612,6 +624,13 @@ SUMMARY_PROMPT_SENTENCES = SETTINGS.summary_prompt_sentences
 CONTEXT_COMPACTION_THRESHOLD = SETTINGS.context_compaction_threshold
 CONTEXT_KEEP_RECENT_MESSAGES = SETTINGS.context_keep_recent_messages
 CONTEXT_SUMMARY_CHARS = SETTINGS.context_summary_chars
+CONTEXT_ENGINE_ENABLED = SETTINGS.context_engine_enabled
+CONTEXT_ENGINE_PROFILE = SETTINGS.context_engine_profile
+CONTEXT_SAFETY_MARGIN_TOKENS = SETTINGS.context_safety_margin_tokens
+CONTEXT_OUTPUT_RESERVE_RATIO = SETTINGS.context_output_reserve_ratio
+CONTEXT_KV_CACHE_ENABLED = SETTINGS.context_kv_cache_enabled
+CONTEXT_KV_CACHE_PROVIDER_HINTS = SETTINGS.context_kv_cache_provider_hints
+CONTEXT_KV_CACHE_MIN_PREFIX_TOKENS = SETTINGS.context_kv_cache_min_prefix_tokens
 CODE_TASK_GIT_TIMEOUT = SETTINGS.code_task_git_timeout
 CODE_TASK_TEST_TIMEOUT = SETTINGS.code_task_test_timeout
 CODE_TASK_TEST_COMMANDS = SETTINGS.code_task_test_commands

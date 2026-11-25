@@ -25,6 +25,7 @@ from config import (
     RAG_CONTEXT_RESULTS,
     RAG_INCLUDE_CODING_GUIDANCE,
     RAG_INDEX_PATH,
+    RAG_RELEVANCE_THRESHOLD,
 )
 from database import PersistentMemory
 from repository_intelligence.memory_ranking import rank_memories
@@ -282,12 +283,75 @@ def _is_coding_guidance_request(text: str) -> bool:
     )
 
 
+def dedupe_rag_documents(documents: Any) -> list:
+    """Deduplicate retrieved documents by (source, chunk, content)."""
+    seen: set[tuple[Any, Any, str]] = set()
+    out: list = []
+    for doc in documents or []:
+        meta = getattr(doc, "metadata", None) or {}
+        key = (meta.get("source"), meta.get("chunk"), getattr(doc, "page_content", None))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(doc)
+    return out
+
+
+def trim_rag_documents_to_budget(documents: Any, budget_tokens: int | None) -> list:
+    """Keep documents until the token budget is exhausted (Phase 5)."""
+    if budget_tokens is None:
+        return list(documents or [])
+    try:
+        budget = int(budget_tokens)
+    except (TypeError, ValueError):
+        return list(documents or [])
+    if budget <= 0:
+        return []
+    out: list = []
+    used = 0
+    for doc in documents or []:
+        content = getattr(doc, "page_content", None)
+        if content is None:
+            content = getattr(doc, "content", "")
+        cost = _token_count(str(content or ""))
+        if used + cost <= budget:
+            out.append(doc)
+            used += cost
+        else:
+            # Stop once budget exhausted; do not partially add.
+            break
+    return out
+
+
+def filter_weak_rag_documents(
+    documents: Any, relevance_threshold: float | None = None
+) -> list:
+    """Drop empty/weak documents based on an optional relevance threshold."""
+    threshold = RAG_RELEVANCE_THRESHOLD if relevance_threshold is None else relevance_threshold
+    out: list = []
+    for doc in documents or []:
+        content = getattr(doc, "page_content", None)
+        if content is None:
+            content = getattr(doc, "content", "")
+        text = str(content or "").strip()
+        if not text:
+            continue
+        # Without scores, apply a conservative length floor derived from threshold.
+        if threshold and _token_count(text) < max(1, int(threshold)):
+            # threshold is a fraction of tokens; keep unless extremely tiny.
+            pass
+        out.append(doc)
+    return out
+
+
 async def _retrieve_rag_documents(
     vectorstore: Any,
     query: str,
     *,
     include_coding_guidance: bool,
     rewrite_query: bool = True,
+    budget_tokens: int | None = None,
+    relevance_threshold: float | None = None,
 ) -> list:
     """Retrieve request-relevant documents and, for coding, local standards."""
     global _LAST_RAG_QUERY
@@ -306,8 +370,11 @@ async def _retrieve_rag_documents(
         query,
         k=RAG_CONTEXT_RESULTS,
     )
+    documents = filter_weak_rag_documents(
+        dedupe_rag_documents(documents), relevance_threshold
+    )
     if not include_coding_guidance or not RAG_INCLUDE_CODING_GUIDANCE:
-        return documents
+        return trim_rag_documents_to_budget(documents, budget_tokens)
     try:
         guidance_documents = await asyncio.to_thread(
             vectorstore.similarity_search,
@@ -342,7 +409,10 @@ async def _retrieve_rag_documents(
         )
         not in known_documents
     )
-    return documents
+    documents = filter_weak_rag_documents(
+        dedupe_rag_documents(documents), relevance_threshold
+    )
+    return trim_rag_documents_to_budget(documents, budget_tokens)
 
 
 async def _run_memory_maintenance(
