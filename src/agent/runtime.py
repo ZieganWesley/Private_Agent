@@ -107,6 +107,7 @@ from .context_engine import (
 )
 from .context_telemetry import build_runtime_context_report
 from .console import console
+from .commands.mission_runtime import mission_slash_command as _mission_slash_command
 from .turn_control import TurnController
 from .lazy_imports import install_lazy_globals
 from .memory_context import (
@@ -2644,6 +2645,12 @@ async def _run_agent_cli_session(
                 if user_input.lower() in {"/help", "/commands"}:
                     session_ui.print(_format_interactive_help(GROUPED_HELP))
                     continue
+                _mission_input = _mission_slash_command(
+                    user_input, memory, session_id, session_ui
+                )
+                if _mission_input is None:
+                    continue
+                user_input = _mission_input
                 if user_input.lower() == "/doctor":
                     from diagnostics.doctor import doctor_interactive
 
