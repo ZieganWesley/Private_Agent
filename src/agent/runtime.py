@@ -108,7 +108,7 @@ from .context_engine import (
 from .context_telemetry import build_runtime_context_report
 from .console import console
 from .commands.mission_runtime import mission_slash_command as _mission_slash_command
-from .turn_control import TurnController
+from .steering_session import begin_steering_turn
 from .lazy_imports import install_lazy_globals
 from .memory_context import (
     _build_learned_context,
@@ -3878,8 +3878,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
-                _turn_control = TurnController()
-                _turn_control.begin_turn()
+                _turn_control, _steering_channel = begin_steering_turn(interactive=interactive)
                 start_time = time.monotonic()
                 chat_transcript = ChatTranscript(console=console)
                 chat_transcript.add_message("user", user_input, echo=False)
@@ -3914,6 +3913,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         input_fn=console.input,
                         discover=_discover_available_local_runtimes,
                         first_local_turn=not _local_model_has_answered,
+                        cancel_event=_turn_control.cancel_event,
                     )
                     _local_model_has_answered = (
                         _local_model_has_answered or provider_type == "local"
@@ -3994,6 +3994,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             state.authorized_planning_searches
                         )
                         tool_call_count = state.tool_call_count
+                        if _steering_channel is not None:
+                            _steering_channel.pause()
                         response, stop = await _execute_tool_batch(
                             response=response,
                             session_id=session_id,
@@ -4008,6 +4010,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
+                        if _steering_channel is not None:
+                            _steering_channel.resume()
                         f_integration.finish_iteration(
                             _f_state,  # noqa: B023
                             iteration,
@@ -4057,6 +4061,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                                 context_usage=usage,
+                                cancel_event=_turn_control.cancel_event,
                             )
                         except Exception as exc:  # noqa: BLE001 - wraps any model error after tool execution; re-raised as RuntimeError
                             if provider_type == "online":  # noqa: B023
@@ -4107,6 +4112,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 local_model=provider_type == "local",  # noqa: B023
                                 first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
+                                cancel_event=_turn_control.cancel_event,
                             )
                     if (
                         not getattr(response, "tool_calls", None)
@@ -4133,6 +4139,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             local_model=provider_type == "local",  # noqa: B023
                             first_local_turn=False,  # noqa: B023
                             thinking_enabled=thinking_enabled,  # noqa: B023
+                            cancel_event=_turn_control.cancel_event,
                         )
                     return response
 
@@ -4150,6 +4157,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 try:
                     response = await _run_agent_turn(response)
                 finally:
+                    if _steering_channel is not None:
+                        _steering_channel.stop()
                     _turn_control.finish_turn()
                     f_integration.finish_turn(_f_state)
                     session_ui.set_generation(

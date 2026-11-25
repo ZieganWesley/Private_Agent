@@ -71,6 +71,7 @@ async def _recover_on_another_provider(
     input_fn,
     discover,
     first_local_turn: bool = False,
+    cancel_event=None,
 ):
     """Explain the loss, offer another provider and retry the turn on it."""
     console.print(
@@ -114,6 +115,7 @@ async def _recover_on_another_provider(
             first_local_turn=first_local_turn,
             thinking_enabled=thinking_enabled,
             context_usage=usage,
+            cancel_event=cancel_event,
         )
     except Exception as exc:  # noqa: BLE001 - a second provider may fail too; report it as a failed turn
         console.print(
@@ -160,6 +162,7 @@ async def _invoke_initial_model_with_fallback(
     input_fn=None,
     discover=None,
     first_local_turn: bool = True,
+    cancel_event=None,
 ):
     """Invoke the model, falling back to a tool-capable or other local provider."""
     try:
@@ -173,6 +176,7 @@ async def _invoke_initial_model_with_fallback(
             first_local_turn=first_local_turn,
             thinking_enabled=thinking_enabled,
             context_usage=usage,
+            cancel_event=cancel_event,
         )
         return (
             llm,
@@ -227,6 +231,7 @@ async def _invoke_initial_model_with_fallback(
                     input_fn=input_fn,
                     discover=discover,
                     first_local_turn=first_local_turn,
+                    cancel_event=cancel_event,
                 )
             if recovered is not None:
                 return recovered
@@ -253,6 +258,7 @@ async def _invoke_initial_model_with_fallback(
             local_model=provider_type == "local",
             first_local_turn=first_local_turn,
             thinking_enabled=thinking_enabled,
+            cancel_event=cancel_event,
         )
         return (
             llm,
