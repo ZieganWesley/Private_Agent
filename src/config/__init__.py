@@ -78,6 +78,7 @@ DEFAULT_CONFIG = {
         "preferred_model": None,
         "online_base_url": "https://api.openai.com/v1",
         "online_model": None,
+        "provider_api_mode": "chat",
         "online_api_key": None,
         "online_permission_override": False,
         "temperature": 0.1,
@@ -499,6 +500,7 @@ MODEL_TEMPERATURE = SETTINGS.model_temperature
 ONLINE_PERMISSION_OVERRIDE = SETTINGS.online_permission_override
 EMBEDDING_MODEL = SETTINGS.embedding_model
 EMBEDDING_PROVIDER = SETTINGS.embedding_provider
+PROVIDER_API_MODE = SETTINGS.provider_api_mode
 EMBEDDING_BASE_URL = SETTINGS.embedding_base_url
 RAG_INDEX_PATH = SETTINGS.rag_index_path
 OLLAMA_BASE_URL = SETTINGS.ollama_base_url

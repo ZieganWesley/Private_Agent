@@ -1,7 +1,12 @@
 """Unit tests for optional /v1/completions and /v1/responses clients."""
 
-import httpx
+import asyncio
 
+import httpx
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from agent import model_selection
+from providers.transport_model import TransportChatModel
 from providers.transports import CompletionsClient, ResponsesClient
 
 
@@ -136,3 +141,55 @@ def test_api_key_is_sent_as_bearer_header():
     adapter.complete("p", model="m")
 
     assert captured["headers"]["Authorization"] == "Bearer secret"
+
+
+def test_transport_model_uses_completions_route():
+    client = FakeClient([FakeResponse({"choices": [{"text": "hello"}]})])
+    model = TransportChatModel(
+        "http://127.0.0.1:8080/v1",
+        "m",
+        api_mode="completions",
+        client_factory=_factory(client),
+    )
+
+    result = asyncio.run(
+        model.ainvoke([SystemMessage(content="be brief"), HumanMessage(content="hi")])
+    )
+
+    assert result.content == "hello"
+    assert client.calls[0][0].endswith("/v1/completions")
+    assert "be brief" in client.calls[0][1]["prompt"]
+    assert "HumanMessage: hi" in client.calls[0][1]["prompt"]
+
+
+def test_transport_model_uses_responses_route_with_instructions():
+    client = FakeClient([FakeResponse({"output_text": "answer"})])
+    model = TransportChatModel(
+        "http://127.0.0.1:8080/v1",
+        "m",
+        api_mode="responses",
+        client_factory=_factory(client),
+    )
+
+    result = asyncio.run(model.ainvoke([SystemMessage(content="be brief")]))
+
+    assert result.content == "answer"
+    assert client.calls[0][0].endswith("/v1/responses")
+    assert client.calls[0][1]["instructions"] == "be brief"
+
+
+def test_selected_local_model_honors_configured_api_mode(monkeypatch):
+    class Runtime:
+        base_url = "http://127.0.0.1:8080/v1"
+
+    monkeypatch.setattr(model_selection, "PROVIDER_API_MODE", "responses")
+    result = model_selection._make_selected_local_chat_model(
+        Runtime(),
+        "m",
+        thinking_enabled=False,
+        thinking_effort="medium",
+        capabilities={},
+    )
+
+    assert isinstance(result, TransportChatModel)
+    assert result.api_mode == "responses"
