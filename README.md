@@ -3,11 +3,10 @@
 Local-first, privacy-focused terminal AI agent with permission-gated tools,
 local RAG, skills, and persistent memory.
 
-[![Lint](https://github.com/ZieganWesley/Private_Agent/actions/workflows/lint.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/lint.yml)
+
 [![CodeQL](https://github.com/ZieganWesley/Private_Agent/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/github-code-scanning/codeql)
-[![Core Smoke](https://github.com/ZieganWesley/Private_Agent/actions/workflows/core.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/core.yml)
-[![Tests](https://github.com/ZieganWesley/Private_Agent/actions/workflows/pytest.yml/badge.svg)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/pytest.yml)
-[![Build and publish GitHub Release](https://github.com/ZieganWesley/Private_Agent/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/release.yml)
+[![CI](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CI.yml)
+[![CD](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CD.yml/badge.svg?branch=main)](https://github.com/ZieganWesley/Private_Agent/actions/workflows/CD.yml)
 
 ## Quick Start
 - Direct install: uv pip install "git+https://github.com/ZieganWesley/Private_Agent.git@main"
