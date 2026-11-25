@@ -123,6 +123,14 @@ def format_context_report(telemetry: Any) -> str:
     )
     if data.get("truncated"):
         lines.append(f"  overflow: {', '.join(data['truncated'])}")
+    cache = data.get("cache") if isinstance(data.get("cache"), dict) else {}
+    if cache:
+        lines.append(
+            "  cache prefix: "
+            f"tokens={cache.get('prefix_tokens', 0)} "
+            f"qualifies={bool(cache.get('qualifies'))} "
+            f"invalidated={bool(cache.get('invalidated'))}"
+        )
     return "\n".join(lines)
 
 
