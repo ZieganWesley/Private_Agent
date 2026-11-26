@@ -1,12 +1,18 @@
 """C1/C2: the context allocation owns prompt budgets and source shares."""
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from agent import context_profiles, context_telemetry
-from agent.context_engine import ContextEngine
+from agent.context_engine import ContextEngine, start_turn_allocation
 from agent.context_manager import ContextBudget, ContextSource
 from agent.context_sources import adapt_source
-from agent.prompts import token_count, trim_history_messages
+from agent.context_turn import build_turn_prompt
+from agent.prompts import (
+    build_bounded_user_input,
+    token_count,
+    trim_history_messages,
+    trim_history_to_context_budget,
+)
 
 SOURCES = (
     "system",
@@ -203,6 +209,73 @@ def test_engine_disabled_keeps_the_legacy_path():
     assert allocation.enabled is False
     assert allocation.budgets == {}
     assert allocation.sources == {}
+
+
+def test_turn_prompt_is_built_from_the_turn_allocation():
+    engine = _engine()
+    allocation = start_turn_allocation(
+        engine,
+        1000,
+        "a question",
+        output_reserve=200,
+        safety_margin=50,
+    )
+    history = [HumanMessage(content="older"), HumanMessage(content="newer")]
+
+    prompt = build_turn_prompt(
+        engine,
+        allocation,
+        context_label="[Context]",
+        system_prompts=[SystemMessage(content="system rules")],
+        tools_list=[],
+        active_skill=None,
+        active_task_instruction="",
+        attached_file_context="",
+        context_summary="",
+        episodic_context="episodic text",
+        context_text="retrieved text",
+        user_input="a question",
+        chat_history=history,
+        prompt_budget=500,
+    )
+
+    assert prompt.system_text == "system rules"
+    assert "episodic text" in prompt.enriched_input
+    assert "retrieved text" in prompt.enriched_input
+    assert "[User Query]: a question" in prompt.enriched_input
+    assert prompt.prompt_history == history
+    assert sum(allocation.budgets.values()) == 750
+    assert allocation.telemetry["used"]["history"] > 0
+
+
+def test_turn_prompt_falls_back_to_the_legacy_builders_when_disabled():
+    history = [HumanMessage(content="older")]
+
+    prompt = build_turn_prompt(
+        None,
+        None,
+        context_label="[Context]",
+        system_prompts=[SystemMessage(content="system rules")],
+        tools_list=[],
+        active_skill=None,
+        active_task_instruction="",
+        attached_file_context="",
+        context_summary="",
+        episodic_context="episodic text",
+        context_text="retrieved text",
+        user_input="a question",
+        chat_history=history,
+        prompt_budget=400,
+    )
+
+    expected_input = build_bounded_user_input(
+        "[Context]", "episodic text", "retrieved text", "a question", budget=400
+    )
+    assert prompt.system_text is None
+    assert prompt.enriched_input == expected_input
+    assert prompt.prompt_history == trim_history_to_context_budget(
+        history, expected_input, max_context_tokens=400
+    )
 
 
 def test_source_adapter_priorities_reach_the_budget():
