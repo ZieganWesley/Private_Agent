@@ -136,6 +136,73 @@ def configured_float(
         return default
 
 
+# Flat legacy keys that used to be read directly from the config root. The
+# categorized default config stores the same values under a section, so a flat key
+# is only consulted when that section does not set the canonical key.
+_LEGACY_FLAT_KEYS: dict[str, tuple[str, str]] = {
+    "default_db_path": ("paths", "database"),
+    "workspace_root": ("paths", "workspace"),
+    "code_output_root": ("paths", "code_output"),
+    "embedding_model": ("models", "embedding_model"),
+    "ollama_base_url": ("models", "ollama_base_url"),
+    "ollama_base_urls": ("models", "ollama_base_urls"),
+    "hardware_acceleration": ("models", "hardware_acceleration"),
+    "preferred_model": ("models", "preferred_model"),
+    "max_tool_iterations": ("agent", "max_tool_iterations"),
+    "max_tool_calls": ("agent", "max_tool_calls"),
+    "max_task_seconds": ("agent", "max_task_seconds"),
+    "max_tool_output_chars": ("agent", "max_tool_output_chars"),
+    "max_history_messages": ("agent", "max_history_messages"),
+    "max_context_tokens": ("agent", "max_context_tokens"),
+    "conversation_retention_days": ("memory", "conversation_retention_days"),
+    "episode_retention_days": ("memory", "episode_retention_days"),
+    "registered_skill_retention_days": ("memory", "registered_skill_retention_days"),
+    "task_stale_after_days": ("memory", "task_stale_after_days"),
+    "max_summary_chars": ("memory", "max_summary_chars"),
+    "max_network_concurrency": ("network", "max_concurrent_requests"),
+    "network_request_timeout": ("network", "request_timeout_seconds"),
+    "rag_max_file_bytes": ("rag", "max_file_bytes"),
+    "rag_max_corpus_bytes": ("rag", "max_corpus_bytes"),
+    "rag_max_pdf_pages": ("rag", "max_pdf_pages"),
+    "rag_max_documents": ("rag", "max_documents"),
+    "enable_web_research": ("network", "web_research_enabled"),
+    "web_research_consent": ("network", "web_research_consent"),
+    "internet_check_host": ("network", "internet_check_host"),
+    "internet_check_port": ("network", "internet_check_port"),
+    "internet_check_timeout": ("network", "internet_check_timeout_seconds"),
+    "thinking_toggle_default": ("models", "thinking_enabled_by_default"),
+    "thinking_effort_default": ("models", "thinking_effort"),
+    "agent_permission_mode": ("agent", "permission_mode"),
+    "DEBUG_LOG_ENABLED": ("logging", "debug_enabled"),
+    "mcpServers": ("mcp", "servers"),
+    "mcp_auto_approve_tools": ("mcp", "auto_approve_tools"),
+}
+
+
+def materialize_legacy_keys(config: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy flat legacy keys into their section when the section key is unset."""
+    materialized = dict(config)
+    for legacy_key, (section, key) in _LEGACY_FLAT_KEYS.items():
+        if legacy_key not in config:
+            continue
+        values = dict(config_section(materialized, section))
+        values.setdefault(key, config[legacy_key])
+        materialized[section] = values
+    return materialized
+
+
+def first_configured_bool(
+    config: Mapping[str, Any],
+    candidates: tuple[tuple[str, str], ...],
+    default: bool,
+) -> bool:
+    """Return the first explicitly configured alias, so false can defeat defaults."""
+    for section, key in candidates:
+        if key in config_section(config, section):
+            return configured_bool(config, section, key, default)
+    return default
+
+
 DEFAULT_PATHS: dict[str, str] = {
     "database": "~/.config/private_agent/memory/private_agent.db",
     "workspace": ".",
@@ -153,17 +220,16 @@ def resolve_config_values(
 ) -> dict[str, Any]:
     """Resolve one merged config mapping into validated, runtime-ready values."""
     default_paths = DEFAULT_PATHS if default_paths is None else default_paths
+    config = materialize_legacy_keys(config)
 
     DEFAULT_DB_PATH = os.path.expanduser(
-        str(
-            config.get(
-                "default_db_path", "~/.config/private_agent/memory/private_agent.db"
-            )
-        )
+        str(config_section(config, "paths").get("database", default_paths["database"]))
     )
-    WORKSPACE_ROOT_DEFAULT = str(config.get("workspace_root", "."))
+    WORKSPACE_ROOT_DEFAULT = str(
+        config_section(config, "paths").get("workspace", default_paths["workspace"])
+    )
     CODE_OUTPUT_ROOT = str(
-        config.get("code_output_root", "~/.config/private_agent/projects")
+        config_section(config, "paths").get("code_output", default_paths["code_output"])
     )
     SKILLS_FOLDER_DEFAULT = configured_path(
         config_section(config, "paths").get("skills"),
@@ -179,7 +245,9 @@ def resolve_config_values(
     ONLINE_PERMISSION_OVERRIDE = configured_bool(
         config, "models", "online_permission_override", False
     )
-    EMBEDDING_MODEL = str(config.get("embedding_model", "nomic-embed-text"))
+    EMBEDDING_MODEL = configured_str(
+        config, "models", "embedding_model", "nomic-embed-text"
+    )
     EMBEDDING_PROVIDER = configured_choice(
         config,
         "rag",
@@ -196,8 +264,10 @@ def resolve_config_values(
         config_section(config, "paths").get("rag_index"),
         default_paths["rag_index"],
     )
-    _raw_ollama_urls = config.get(
-        "ollama_base_urls", config.get("ollama_base_url", "http://localhost:11434")
+    _models_section = config_section(config, "models")
+    _raw_ollama_urls = _models_section.get(
+        "ollama_base_urls",
+        _models_section.get("ollama_base_url", "http://localhost:11434"),
     )
     if isinstance(_raw_ollama_urls, str):
         OLLAMA_BASE_URLS = (
@@ -218,16 +288,17 @@ def resolve_config_values(
             OLLAMA_BASE_URLS = ["http://localhost:11434"]
     OLLAMA_BASE_URL = OLLAMA_BASE_URLS[0] if OLLAMA_BASE_URLS else ""
     HARDWARE_ACCELERATION_MODE = normalize_acceleration_mode(
-        config.get("hardware_acceleration", "auto")
+        _models_section.get("hardware_acceleration", "auto")
     )
-    PREFERRED_MODEL = config.get("preferred_model")
+    PREFERRED_MODEL = _models_section.get("preferred_model")
 
-    MAX_TOOL_ITERATIONS = positive_int(config, "max_tool_iterations", 15)
-    MAX_TOOL_CALLS = positive_int(config, "max_tool_calls", 60)
-    MAX_TASK_SECONDS = positive_int(config, "max_task_seconds", 600)
-    MAX_TOOL_OUTPUT_CHARS = positive_int(config, "max_tool_output_chars", 12000)
-    MAX_HISTORY_MESSAGES = positive_int(config, "max_history_messages", 20)
-    MAX_CONTEXT_TOKENS = positive_int(config, "max_context_tokens", 12000)
+    _agent_section = config_section(config, "agent")
+    MAX_TOOL_ITERATIONS = positive_int(_agent_section, "max_tool_iterations", 15)
+    MAX_TOOL_CALLS = positive_int(_agent_section, "max_tool_calls", 60)
+    MAX_TASK_SECONDS = positive_int(_agent_section, "max_task_seconds", 600)
+    MAX_TOOL_OUTPUT_CHARS = positive_int(_agent_section, "max_tool_output_chars", 12000)
+    MAX_HISTORY_MESSAGES = positive_int(_agent_section, "max_history_messages", 20)
+    MAX_CONTEXT_TOKENS = positive_int(_agent_section, "max_context_tokens", 12000)
     MAX_OUTPUT_TOKENS = configured_int_range(
         config, "agent", "max_output_tokens", 2048, 1, 32768
     )
@@ -235,32 +306,48 @@ def resolve_config_values(
     VISIBLE_REASONING = configured_bool(config, "agent", "visible_reasoning", False)
     VERBOSE_TIMINGS = configured_bool(config, "agent", "verbose_timings", False)
     STATUS_BAR = configured_bool(config, "agent", "status_bar", True)
-    SHOW_WELCOME_SCREEN = (
-        configured_bool(config, "ui", "show_welcome_screen", True)
-        or configured_bool(config, "agent", "show_welcome_screen", True)
-        or configured_bool(config, "ui", "welcome_screen", True)
-        or configured_bool(config, "agent", "welcome_screen", True)
+    SHOW_WELCOME_SCREEN = first_configured_bool(
+        config,
+        (
+            ("ui", "show_welcome_screen"),
+            ("agent", "show_welcome_screen"),
+            ("ui", "welcome_screen"),
+            ("agent", "welcome_screen"),
+        ),
+        True,
     )
-    INFORMATIVE_PROMPT = configured_bool(
-        config, "ui", "informative_prompt", True
-    ) or configured_bool(config, "agent", "informative_prompt", True)
-    SHOW_TURN_DIVIDER = (
-        configured_bool(config, "ui", "show_turn_divider", True)
-        or configured_bool(config, "agent", "show_turn_divider", True)
-        or configured_bool(config, "ui", "turn_divider", True)
-        or configured_bool(config, "agent", "turn_divider", True)
+    INFORMATIVE_PROMPT = first_configured_bool(
+        config,
+        (("ui", "informative_prompt"), ("agent", "informative_prompt")),
+        True,
     )
-    SHOW_TURN_STATS = (
-        configured_bool(config, "ui", "show_turn_stats", True)
-        or configured_bool(config, "agent", "show_turn_stats", True)
-        or configured_bool(config, "ui", "turn_stats", True)
-        or configured_bool(config, "agent", "turn_stats", True)
-        or configured_bool(config, "ui", "per_turn_tokens", True)
-        or configured_bool(config, "agent", "per_turn_tokens", True)
+    SHOW_TURN_DIVIDER = first_configured_bool(
+        config,
+        (
+            ("ui", "show_turn_divider"),
+            ("agent", "show_turn_divider"),
+            ("ui", "turn_divider"),
+            ("agent", "turn_divider"),
+        ),
+        True,
     )
-    GROUPED_HELP = configured_bool(
-        config, "ui", "grouped_help", True
-    ) or configured_bool(config, "agent", "grouped_help", True)
+    SHOW_TURN_STATS = first_configured_bool(
+        config,
+        (
+            ("ui", "show_turn_stats"),
+            ("agent", "show_turn_stats"),
+            ("ui", "turn_stats"),
+            ("agent", "turn_stats"),
+            ("ui", "per_turn_tokens"),
+            ("agent", "per_turn_tokens"),
+        ),
+        True,
+    )
+    GROUPED_HELP = first_configured_bool(
+        config,
+        (("ui", "grouped_help"), ("agent", "grouped_help")),
+        True,
+    )
     _configured_system_prompt = config_section(config, "agent").get("system_prompt")
     PROJECT_INSTRUCTIONS_FILE = config_section(config, "agent").get(
         "project_instructions_file", "AGENTS.md"
@@ -274,36 +361,30 @@ def resolve_config_values(
     APPROVED_EXTRA_FOLDERS = list(
         config_section(config, "permissions").get("approved_extra_folders", []) or []
     )
-    SANDBOX_NETWORK_DEFAULT = configured_bool(
-        config, "sandbox", "network", False
-    ) or configured_bool(config, "permissions", "sandbox_network", False)
+    SANDBOX_NETWORK_DEFAULT = first_configured_bool(
+        config,
+        (("permissions", "sandbox_network"), ("sandbox", "network")),
+        False,
+    )
     SYSTEM_PROMPT = (
         _configured_system_prompt.strip()
         if isinstance(_configured_system_prompt, str)
         and _configured_system_prompt.strip()
         else DEFAULT_SYSTEM_PROMPT
     )
-    CONVERSATION_RETENTION_DAYS = (
-        max(0, positive_int(config, "conversation_retention_days", 0))
-        if config.get("conversation_retention_days", 0)
-        else 0
+    CONVERSATION_RETENTION_DAYS = configured_nonnegative_int(
+        config, "memory", "conversation_retention_days", 0
     )
-    EPISODE_RETENTION_DAYS = (
-        max(0, positive_int(config, "episode_retention_days", 0))
-        if config.get("episode_retention_days", 0)
-        else 0
+    EPISODE_RETENTION_DAYS = configured_nonnegative_int(
+        config, "memory", "episode_retention_days", 0
     )
-    REGISTERED_SKILL_RETENTION_DAYS = (
-        max(0, positive_int(config, "registered_skill_retention_days", 0))
-        if config.get("registered_skill_retention_days", 0)
-        else 0
+    REGISTERED_SKILL_RETENTION_DAYS = configured_nonnegative_int(
+        config, "memory", "registered_skill_retention_days", 0
     )
-    TASK_STALE_AFTER_DAYS = (
-        max(0, positive_int(config, "task_stale_after_days", 0))
-        if config.get("task_stale_after_days", 0)
-        else 0
+    TASK_STALE_AFTER_DAYS = configured_nonnegative_int(
+        config, "memory", "task_stale_after_days", 0
     )
-    MAX_SUMMARY_CHARS = positive_int(config, "max_summary_chars", 2000)
+    MAX_SUMMARY_CHARS = configured_int(config, "memory", "max_summary_chars", 2000)
     MAX_LEARNED_ITEM_CHARS = configured_int_range(
         config, "memory", "max_learned_item_chars", 1000, 1, 10000
     )
@@ -328,14 +409,20 @@ def resolve_config_values(
     DEFAULT_EPISODIC_SUMMARIES = configured_int(
         config, "memory", "default_episodic_summaries", 5
     )
-    MAX_NETWORK_CONCURRENCY = positive_int(config, "max_network_concurrency", 4)
-    NETWORK_REQUEST_TIMEOUT = positive_int(config, "network_request_timeout", 30)
-    RAG_MAX_FILE_BYTES = positive_int(config, "rag_max_file_bytes", 5 * 1024 * 1024)
-    RAG_MAX_CORPUS_BYTES = positive_int(
-        config, "rag_max_corpus_bytes", 25 * 1024 * 1024
+    MAX_NETWORK_CONCURRENCY = configured_int(
+        config, "network", "max_concurrent_requests", 4
     )
-    RAG_MAX_PDF_PAGES = positive_int(config, "rag_max_pdf_pages", 250)
-    RAG_MAX_DOCUMENTS = positive_int(config, "rag_max_documents", 20000)
+    NETWORK_REQUEST_TIMEOUT = configured_int(
+        config, "network", "request_timeout_seconds", 30
+    )
+    RAG_MAX_FILE_BYTES = configured_int(
+        config, "rag", "max_file_bytes", 5 * 1024 * 1024
+    )
+    RAG_MAX_CORPUS_BYTES = configured_int(
+        config, "rag", "max_corpus_bytes", 25 * 1024 * 1024
+    )
+    RAG_MAX_PDF_PAGES = configured_int(config, "rag", "max_pdf_pages", 250)
+    RAG_MAX_DOCUMENTS = configured_int(config, "rag", "max_documents", 20000)
     RAG_CHUNK_SIZE_CHARS = configured_int(config, "rag", "chunk_size_chars", 1200)
     RAG_CHUNK_OVERLAP_CHARS = configured_int(config, "rag", "chunk_overlap_chars", 200)
     CHUNKING_STRATEGY = (
@@ -381,17 +468,22 @@ def resolve_config_values(
     RAG_AUTO_REFRESH_SECONDS = configured_nonnegative_int(
         config, "rag", "auto_refresh_seconds", 30
     )
-    _raw_web_research = config.get("enable_web_research", True)
+    _network_section = config_section(config, "network")
+    _raw_web_research = _network_section.get("web_research_enabled", True)
     if isinstance(_raw_web_research, str):
         ENABLE_WEB_RESEARCH = _raw_web_research.lower() in ("true", "1", "yes", "on")
     else:
         ENABLE_WEB_RESEARCH = bool(_raw_web_research)
-    WEB_RESEARCH_CONSENT = str(config.get("web_research_consent", "ask")).lower()
+    WEB_RESEARCH_CONSENT = str(
+        _network_section.get("web_research_consent", "ask")
+    ).lower()
     if WEB_RESEARCH_CONSENT not in {"ask", "session", "never"}:
         WEB_RESEARCH_CONSENT = "ask"
-    INTERNET_CHECK_HOST = str(config.get("internet_check_host", "1.1.1.1"))
-    INTERNET_CHECK_PORT = positive_int(config, "internet_check_port", 443)
-    INTERNET_CHECK_TIMEOUT = positive_float(config, "internet_check_timeout", 3.0)
+    INTERNET_CHECK_HOST = str(_network_section.get("internet_check_host", "1.1.1.1"))
+    INTERNET_CHECK_PORT = positive_int(_network_section, "internet_check_port", 443)
+    INTERNET_CHECK_TIMEOUT = positive_float(
+        _network_section, "internet_check_timeout_seconds", 3.0
+    )
 
     _raw_override_tool_list = config_section(config, "tools").get(
         "override_tool_list", []
@@ -405,19 +497,19 @@ def resolve_config_values(
     else:
         OVERRIDE_TOOL_LIST = frozenset()
 
-    _raw_thinking = config.get("thinking_toggle_default", False)
+    _raw_thinking = _models_section.get("thinking_enabled_by_default", False)
     if isinstance(_raw_thinking, str):
         THINKING_TOGGLE_DEFAULT = _raw_thinking.lower() in ("true", "1", "yes", "on")
     else:
         THINKING_TOGGLE_DEFAULT = bool(_raw_thinking)
 
     THINKING_EFFORT_DEFAULT = str(
-        config.get("thinking_effort_default", "medium")
+        _models_section.get("thinking_effort", "medium")
     ).lower()
     if THINKING_EFFORT_DEFAULT not in {"low", "medium", "high"}:
         THINKING_EFFORT_DEFAULT = "medium"
 
-    AGENT_PERMISSION_MODE = str(config.get("agent_permission_mode", "auto")).lower()
+    AGENT_PERMISSION_MODE = str(_agent_section.get("permission_mode", "auto")).lower()
     if AGENT_PERMISSION_MODE not in {"manual", "auto", "full"}:
         AGENT_PERMISSION_MODE = "auto"
 
@@ -425,7 +517,7 @@ def resolve_config_values(
     if _env_debug.strip().lower() in {"1", "true", "yes", "on"}:
         DEBUG_LOG_ENABLED = True
     else:
-        _debug_log_enabled = config.get("DEBUG_LOG_ENABLED", 0)
+        _debug_log_enabled = config_section(config, "logging").get("debug_enabled", 0)
         if isinstance(_debug_log_enabled, str):
             DEBUG_LOG_ENABLED = _debug_log_enabled.strip() == "1"
         else:
@@ -437,9 +529,10 @@ def resolve_config_values(
     if DEBUG_LOG_LEVEL not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
         DEBUG_LOG_LEVEL = "INFO"
 
-    _raw_mcp = config.get("mcpServers", {})
+    _mcp_section = config_section(config, "mcp")
+    _raw_mcp = _mcp_section.get("servers", {})
     MCP_SERVERS = _raw_mcp if isinstance(_raw_mcp, dict) else {}
-    _raw_mcp_approvals = config.get("mcp_auto_approve_tools", [])
+    _raw_mcp_approvals = _mcp_section.get("auto_approve_tools", [])
     MCP_AUTO_APPROVE_TOOLS = (
         {str(name) for name in _raw_mcp_approvals}
         if isinstance(_raw_mcp_approvals, list)

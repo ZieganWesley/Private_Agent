@@ -544,6 +544,26 @@ def test_merged_config_does_not_duplicate_a_listed_ollama_endpoint():
     assert names == ["Local Ollama"]
 
 
+def test_merged_config_folds_legacy_context_cache_into_agent():
+    merged = config._merge_config(
+        {"context_cache": {"kv_cache_enabled": True, "kv_cache_min_prefix_tokens": 7}}
+    )
+
+    assert merged["agent"]["kv_cache_enabled"] is True
+    assert merged["agent"]["kv_cache_min_prefix_tokens"] == 7
+
+
+def test_merged_config_keeps_agent_context_cache_values_over_the_legacy_section():
+    merged = config._merge_config(
+        {
+            "agent": {"kv_cache_enabled": False},
+            "context_cache": {"kv_cache_enabled": True},
+        }
+    )
+
+    assert merged["agent"]["kv_cache_enabled"] is False
+
+
 def test_online_endpoints_default_is_empty_and_legacy_key_is_kept():
     merged = config._merge_config({})
 
