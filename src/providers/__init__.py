@@ -12,6 +12,7 @@ from .endpoints import (
     normalize_base_url,
     resolved_limits,
 )
+from .native import NativeClient, NativeProfile, detect_native
 from .adapters import (
     OllamaAdapter,
     OpenAICompatibleAdapter,
@@ -33,6 +34,9 @@ from .selection import (
 )
 
 __all__ = [
+    "NativeClient",
+    "NativeProfile",
+    "detect_native",
     "EndpointConfig",
     "EndpointRegistry",
     "clamp_limit",
