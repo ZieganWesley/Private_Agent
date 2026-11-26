@@ -139,6 +139,32 @@ def trim_history_to_context_budget(
     return list(reversed(selected))
 
 
+def trim_history_messages(
+    chat_history: list,
+    max_tokens: int,
+) -> list:
+    """Keep the newest whole messages that fit in ``max_tokens``.
+
+    A message is never cut in half: an oversized message is dropped rather
+    than partially rendered.
+    """
+    budget = max(0, int(max_tokens))
+    selected = []
+    for message in reversed(chat_history):
+        content = message.content
+        text = (
+            "".join(str(item) for item in content)
+            if isinstance(content, list)
+            else str(content)
+        )
+        cost = token_count(text)
+        if cost > budget:
+            break
+        selected.append(message)
+        budget -= cost
+    return list(reversed(selected))
+
+
 def token_count(text: str) -> int:
     encoding = _get_tokenizer()
     if encoding is None:
