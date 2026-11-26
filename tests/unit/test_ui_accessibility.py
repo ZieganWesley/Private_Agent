@@ -19,7 +19,7 @@ def test_no_color_output_has_no_ansi_escapes(monkeypatch):
     ui.turn_finished(report)
     text = console.export_text()
     assert "\x1b[" not in text
-    assert "model=m" in text
+    assert "Model: m" in text
     assert "[Turn]" in text
 
 
@@ -35,9 +35,9 @@ def test_narrow_width_keeps_essential_segments():
         )
         segs = state.segments(width=width)
         assert len(segs) >= 3
-        assert segs[0].startswith("model=")
-        assert segs[1].startswith("context=")
-        assert segs[2].startswith("permission=")
+        assert segs[0].startswith("Model: ")
+        assert segs[1].startswith("Context: ")
+        assert segs[2].startswith("Permission: ")
         # Dropping only removes trailing optional segments.
         assert len(segs) <= 7
 
@@ -105,8 +105,8 @@ def test_provider_mode_segment_is_shown_when_bound():
         permission_mode="auto",
         provider_mode="local",
     )
-    assert "mode=local" in bound.segments()
-    assert not any(s.startswith("mode=") for s in StatusState().segments())
+    assert "Mode: local" in bound.segments()
+    assert not any(s.startswith("Mode:") for s in StatusState().segments())
 
 
 def test_session_ui_ribbon_reports_provider_mode():
@@ -115,5 +115,28 @@ def test_session_ui_ribbon_reports_provider_mode():
     ui.bind(model="m", permission="ask", provider_mode="online")
     ui.set_context(1, 4)
     ribbon = ui.ribbon_text(width=120)
-    assert "mode=online" in ribbon
-    assert "permission=ask" in ribbon
+    assert "Mode: online" in ribbon
+    assert "Permission: ask" in ribbon
+
+
+def test_ribbon_segments_use_human_labels():
+    state = StatusState(
+        model="qwen",
+        context_tokens=1,
+        context_maximum=4,
+        permission_mode="ask",
+        output_tokens=64,
+        background_processes=1,
+        provider_mode="local",
+    )
+    segs = state.segments()
+    assert segs == [
+        "Model: qwen",
+        "Context: 25.0%",
+        "Permission: ask",
+        "Mode: local",
+        "Output: 64",
+        "Background: 1",
+    ]
+    # No raw key=value keys survive in the user-facing ribbon.
+    assert not any("=" in segment for segment in segs)

@@ -15,6 +15,17 @@ SEGMENT_SEPARATOR = " | "
 # Prefix used for the per-turn summary line.
 TURN_LABEL = "[Turn]"
 
+# Human-readable names for the status-ribbon segments.
+SEGMENT_LABELS: dict[str, str] = {
+    "model": "Model",
+    "context": "Context",
+    "permission": "Permission",
+    "mode": "Mode",
+    "window": "Window",
+    "output": "Output",
+    "background": "Background",
+}
+
 # Environment variable that disables colour.
 NO_COLOR_ENV = "NO_COLOR"
 

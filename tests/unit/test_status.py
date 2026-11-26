@@ -278,13 +278,11 @@ def test_indicator_honours_every_known_phase(phase):
 
 def test_status_line_includes_model_context_and_permission():
     line = status.status_line("gpt-test", 2500, 10000, "full")
-    assert "model=gpt-test" in line
-    assert "context=25.0%" in line
-    assert "permission=full" in line
+    assert "Model: gpt-test" in line
+    assert "Context: 25.0%" in line
+    assert "Permission: full" in line
 
 
 def test_status_line_handles_missing_context():
     line = status.status_line("local", 0, 0, "auto")
-    assert (
-        line == "model=local | context=0.0% | permission=auto | background_processes=0"
-    )
+    assert line == "Model: local | Context: 0.0% | Permission: auto | Background: 0"
