@@ -93,6 +93,7 @@ DEFAULT_CONFIG = {
         "online_permission_override": False,
         "temperature": 0.1,
         "embedding_model": "nomic-embed-text",
+        "tokenizer_encoding": "cl100k_base",
         "thinking_enabled_by_default": False,
         "thinking_effort": "medium",
         "online_request_timeout_seconds": 60,
@@ -227,6 +228,13 @@ DEFAULT_CONFIG = {
         "max_search_results": 8,
         "search_provider": "auto",
         "searxng_url": "",
+        "geocoding_url": "https://geocoding-api.open-meteo.com/v1/search",
+        "forecast_url": "https://api.open-meteo.com/v1/forecast",
+        "archive_url": "https://archive-api.open-meteo.com/v1/archive",
+        "ip_geolocation_urls": ["https://ipwho.is/", "https://ipapi.co/json/"],
+        "location_max_response_bytes": 1048576,
+        "weather_max_days": 16,
+        "weather_past_days": 90,
         "search_fallback": True,
         "max_fetched_webpage_chars": 12000,
     },
@@ -679,6 +687,14 @@ MAX_SEARCH_QUERY_CHARS = SETTINGS.max_search_query_chars
 MAX_SEARCH_RESULTS = SETTINGS.max_search_results
 SEARCH_PROVIDER = SETTINGS.search_provider
 SEARXNG_URL = SETTINGS.searxng_url
+GEOCODING_URL = SETTINGS.geocoding_url
+FORECAST_URL = SETTINGS.forecast_url
+ARCHIVE_URL = SETTINGS.archive_url
+IP_GEOLOCATION_URLS = SETTINGS.ip_geolocation_urls
+LOCATION_MAX_RESPONSE_BYTES = SETTINGS.location_max_response_bytes
+WEATHER_MAX_DAYS = SETTINGS.weather_max_days
+WEATHER_PAST_DAYS = SETTINGS.weather_past_days
+TOKENIZER_ENCODING = SETTINGS.tokenizer_encoding
 SEARCH_FALLBACK = SETTINGS.search_fallback
 MAX_FETCHED_WEBPAGE_CHARS = SETTINGS.max_fetched_webpage_chars
 MAX_READ_FILE_BYTES = SETTINGS.max_read_file_bytes

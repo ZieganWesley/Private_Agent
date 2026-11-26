@@ -9,26 +9,31 @@ from typing import Any
 import httpx
 from langchain_core.tools import tool
 
-from config import NETWORK_REQUEST_TIMEOUT
+from config import (
+    ARCHIVE_URL,
+    FORECAST_URL,
+    GEOCODING_URL,
+    IP_GEOLOCATION_URLS,
+    LOCATION_MAX_RESPONSE_BYTES,
+    NETWORK_REQUEST_TIMEOUT,
+    WEATHER_MAX_DAYS,
+    WEATHER_PAST_DAYS,
+)
 
 from . import has_internet_connection, record_network_failure
 from .network import _get_limited_response_sync, public_only_sync_client
 from .schemas import GetWeatherInput
 
-MAX_API_RESPONSE_BYTES = 1_048_576
-MAX_WEATHER_DAYS = 16
-FORECAST_LIMIT_DAYS = 16
-FORECAST_API_PAST_DAYS = 90
+MAX_API_RESPONSE_BYTES = LOCATION_MAX_RESPONSE_BYTES
+MAX_WEATHER_DAYS = WEATHER_MAX_DAYS
+FORECAST_LIMIT_DAYS = WEATHER_MAX_DAYS
+FORECAST_API_PAST_DAYS = WEATHER_PAST_DAYS
 NO_INTERNET_MESSAGE = (
     "Error: Network unavailable. Please check your internet connection and try again."
 )
-IP_GEOLOCATION_SERVICES = (
-    ("https://ipwho.is/", "ipwho.is"),
-    ("https://ipapi.co/json/", "ipapi.co"),
+IP_GEOLOCATION_SERVICES = tuple(
+    (url, urllib.parse.urlsplit(url).hostname or url) for url in IP_GEOLOCATION_URLS
 )
-GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
-FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 WEATHER_CODES = {
     0: "clear sky",
     1: "mainly clear",
