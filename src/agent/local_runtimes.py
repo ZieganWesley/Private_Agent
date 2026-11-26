@@ -3,6 +3,7 @@
 import ipaddress
 import logging
 import math
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -12,6 +13,14 @@ from urllib.parse import urlsplit
 import httpx
 
 from utils.run_logging import RUN_LOGGER, log_event
+
+from .model_catalog import (
+    DEFAULT_CATALOG_TTL_SECONDS,
+    ROLE_EMBEDDING,
+    ModelRecord,
+    iter_model_entries,
+    record_from_listing_entry,
+)
 
 MAX_DISCOVERY_ENDPOINTS = 8
 DISCOVERY_TIMEOUT_SECONDS = 1.5
@@ -26,6 +35,7 @@ class LocalRuntime:
     base_url: str
     models: tuple[str, ...]
     embedding_models: tuple[str, ...] = ()
+    records: tuple[ModelRecord, ...] = ()
 
 
 def _is_loopback_url(url: str) -> bool:
@@ -44,20 +54,43 @@ def _is_loopback_url(url: str) -> bool:
         return False
 
 
+def _extract_model_entries(body: Any) -> tuple[dict, ...]:
+    """Read model entries from Ollama or OpenAI-compatible responses."""
+    return tuple(dict(entry) for entry in iter_model_entries(body))
+
+
 def _extract_models(body: Any) -> tuple[str, ...]:
     """Read valid model identifiers from Ollama or OpenAI-compatible responses."""
-    if not isinstance(body, dict):
-        return ()
-    entries = body.get("models", body.get("data", []))
-    if not isinstance(entries, list):
-        return ()
     identifiers = []
-    for item in entries:
-        if isinstance(item, dict):
-            value = item.get("model") or item.get("name") or item.get("id")
-            if isinstance(value, str) and value.strip():
-                identifiers.append(value.strip())
+    for entry in _extract_model_entries(body):
+        value = entry.get("model") or entry.get("name") or entry.get("id")
+        if isinstance(value, str) and value.strip():
+            identifiers.append(value.strip())
     return tuple(dict.fromkeys(identifiers))
+
+
+def _records_for_entries(
+    entries: tuple[dict, ...],
+    *,
+    name: str,
+    kind: str,
+    base_url: str,
+) -> tuple[ModelRecord, ...]:
+    """Build catalog records for every entry advertised by one endpoint."""
+    now = time.monotonic()
+    records = []
+    for entry in entries:
+        record = record_from_listing_entry(
+            entry,
+            base_url=base_url,
+            endpoint_name=name,
+            provider=kind,
+            ttl_seconds=DEFAULT_CATALOG_TTL_SECONDS,
+            now=now,
+        )
+        if record.model_id != "unknown":
+            records.append(record)
+    return tuple(records)
 
 
 def _probe_endpoint(
@@ -90,18 +123,33 @@ def _probe_endpoint(
         with client:
             response = client.get(f"{base_url.rstrip('/')}{path}")
             response.raise_for_status()
-            all_models = _extract_models(response.json())
-            embedding_markers = ("embed", "embedding", "bge", "e5", "nomic-embed")
+            entries = _extract_model_entries(response.json())
+            records = _records_for_entries(
+                entries,
+                name=name,
+                kind=kind,
+                base_url=base_url,
+            )
+            # The catalog owns classification: server metadata first, then a
+            # visible name-marker default.  Non-embedding roles keep the
+            # historical "available chat model" behaviour.
             embedding_models = tuple(
-                model
-                for model in all_models
-                if any(marker in model.lower() for marker in embedding_markers)
+                record.model_id
+                for record in records
+                if record.role == ROLE_EMBEDDING
             )
             models = tuple(
-                model for model in all_models if model not in embedding_models
+                record.model_id
+                for record in records
+                if record.role != ROLE_EMBEDDING
             )
             return LocalRuntime(
-                name, kind, base_url.rstrip("/"), models, embedding_models
+                name,
+                kind,
+                base_url.rstrip("/"),
+                models,
+                embedding_models,
+                records,
             )
     except (httpx.HTTPError, ValueError, ConnectionError, OSError) as exc:
         log_event(
