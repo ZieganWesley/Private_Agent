@@ -79,6 +79,7 @@ DEFAULT_CONFIG = {
         "online_base_url": "https://api.openai.com/v1",
         "online_model": None,
         "provider_api_mode": "chat",
+        "raw_completions_enabled": False,
         "online_api_key": None,
         "online_permission_override": False,
         "temperature": 0.1,
@@ -501,6 +502,7 @@ ONLINE_PERMISSION_OVERRIDE = SETTINGS.online_permission_override
 EMBEDDING_MODEL = SETTINGS.embedding_model
 EMBEDDING_PROVIDER = SETTINGS.embedding_provider
 PROVIDER_API_MODE = SETTINGS.provider_api_mode
+RAW_COMPLETIONS_ENABLED = SETTINGS.raw_completions_enabled
 EMBEDDING_BASE_URL = SETTINGS.embedding_base_url
 RAG_INDEX_PATH = SETTINGS.rag_index_path
 OLLAMA_BASE_URL = SETTINGS.ollama_base_url

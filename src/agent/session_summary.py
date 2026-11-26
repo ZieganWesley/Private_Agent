@@ -152,12 +152,20 @@ async def _summarize_and_save_session(
             phase=SUMMARIZING,
             console=console_obj,
         ):
-            call_started = time.monotonic()
-            summary_res = await llm.ainvoke(summary_messages)
-            _SESSION_STATS.record_model_call(
-                summary_messages, summary_res, time.monotonic() - call_started
+            from providers.utility import complete_utility
+
+            raw_summary = await asyncio.to_thread(
+                complete_utility, summary_messages, model=model_name, llm=llm
             )
-            summary_text = str(summary_res.content).strip()
+            if raw_summary is not None:
+                summary_text = raw_summary.text.strip()
+            else:
+                call_started = time.monotonic()
+                summary_res = await llm.ainvoke(summary_messages)
+                _SESSION_STATS.record_model_call(
+                    summary_messages, summary_res, time.monotonic() - call_started
+                )
+                summary_text = str(summary_res.content).strip()
             if len(summary_text) > summary_limit:
                 shorten_messages = [
                     SystemMessage(

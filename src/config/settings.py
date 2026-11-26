@@ -465,6 +465,9 @@ def resolve_config_values(
         "chat",
         ("chat", "completions", "responses"),
     )
+    RAW_COMPLETIONS_ENABLED = configured_bool(
+        config, "models", "raw_completions_enabled", False
+    )
     MAX_MODEL_CAPABILITY_CACHE_ENTRIES = configured_int(
         config, "agent", "max_model_capability_cache_entries", 128
     )
@@ -779,6 +782,7 @@ class Settings:
     online_max_retries: int
     online_model_list_limit: int
     provider_api_mode: str
+    raw_completions_enabled: bool
     max_model_capability_cache_entries: int
     max_webpage_bytes: int
     max_download_bytes: int
