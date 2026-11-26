@@ -141,17 +141,23 @@ def inspect_openai_compatible_model_record(
 
 
 def _effective_context_window(
-    capabilities: dict, record: ModelRecord | None = None
+    capabilities: dict,
+    record: ModelRecord | None = None,
+    *,
+    ceiling_context: int | None = None,
 ) -> int:
+    context_ceiling = (
+        MAX_CONTEXT_TOKENS if ceiling_context is None else int(ceiling_context)
+    )
     if isinstance(record, ModelRecord):
         return record.effective_limits(
-            ceiling_context=MAX_CONTEXT_TOKENS,
+            ceiling_context=context_ceiling,
             ceiling_output=MAX_OUTPUT_TOKENS,
         ).context
     declared = capabilities.get("context_window")
     if isinstance(declared, int) and not isinstance(declared, bool) and declared > 0:
-        return min(MAX_CONTEXT_TOKENS, declared)
-    return MAX_CONTEXT_TOKENS
+        return min(context_ceiling, declared)
+    return context_ceiling
 
 
 def request_limits_for_provider(
@@ -159,14 +165,29 @@ def request_limits_for_provider(
     runtime: LocalRuntime | None,
     model_name: str,
     capabilities: dict,
+    *,
+    ceiling_context: int | None = None,
+    ceiling_output: int | None = None,
 ) -> RequestLimits:
     """Resolve limits for the selected provider (catalog-aware for local)."""
+    context_ceiling = (
+        MAX_CONTEXT_TOKENS if ceiling_context is None else int(ceiling_context)
+    )
+    output_ceiling = (
+        MAX_OUTPUT_TOKENS if ceiling_output is None else int(ceiling_output)
+    )
     if provider_type == "local" and runtime is not None:
-        return request_limits_for_model(runtime, model_name, capabilities)
+        return request_limits_for_model(
+            runtime,
+            model_name,
+            capabilities,
+            ceiling_context=context_ceiling,
+            ceiling_output=output_ceiling,
+        )
     return RequestLimits(
-        context=MAX_CONTEXT_TOKENS,
-        input_tokens=MAX_CONTEXT_TOKENS,
-        output_tokens=MAX_OUTPUT_TOKENS,
+        context=context_ceiling,
+        input_tokens=context_ceiling,
+        output_tokens=output_ceiling,
     )
 
 
@@ -174,8 +195,17 @@ def request_limits_for_model(
     runtime: LocalRuntime,
     model_name: str,
     capabilities: dict,
+    *,
+    ceiling_context: int | None = None,
+    ceiling_output: int | None = None,
 ) -> RequestLimits:
     """Resolve request limits for a local model from the catalog."""
+    context_ceiling = (
+        MAX_CONTEXT_TOKENS if ceiling_context is None else int(ceiling_context)
+    )
+    output_ceiling = (
+        MAX_OUTPUT_TOKENS if ceiling_output is None else int(ceiling_output)
+    )
     record = _MODEL_CATALOG.get(model_name, runtime.base_url)
     if record is None:
         record = next(
@@ -188,14 +218,16 @@ def request_limits_for_model(
         )
     if record is not None:
         return record.effective_limits(
-            ceiling_context=MAX_CONTEXT_TOKENS,
-            ceiling_output=MAX_OUTPUT_TOKENS,
+            ceiling_context=context_ceiling,
+            ceiling_output=output_ceiling,
         )
-    context = _effective_context_window(capabilities)
+    context = _effective_context_window(
+        capabilities, ceiling_context=context_ceiling
+    )
     return RequestLimits(
         context=context,
         input_tokens=context,
-        output_tokens=min(MAX_OUTPUT_TOKENS, context),
+        output_tokens=min(output_ceiling, context),
     )
 
 
