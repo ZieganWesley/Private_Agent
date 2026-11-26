@@ -8,15 +8,25 @@ The runtime was split into focused modules (``streaming``, ``task_commands``,
 from . import learning as _learning
 from . import memory_context as _memory_context
 from . import model_selection as _model_selection
+from . import prompts as _prompts
 from . import runtime as _runtime
 from . import streaming as _streaming
 from . import task_commands as _task_commands
 from . import task_lease as _task_lease
 from . import tool_display as _tool_display
 
+# Backwards-compatible aliases formerly imported by the runtime module.
+_build_bounded_user_input = _prompts.build_bounded_user_input
+trim_history_to_context_budget = _prompts.trim_history_to_context_budget
+
+# Backwards-compatible aliases formerly imported by the runtime module.
+_build_bounded_user_input = _prompts.build_bounded_user_input
+trim_history_to_context_budget = _prompts.trim_history_to_context_budget
+
 _HELPER_MODULES = (
     _tool_display,
     _model_selection,
+    _prompts,
     _streaming,
     _learning,
     _memory_context,
@@ -26,10 +36,13 @@ _HELPER_MODULES = (
 
 __all__ = list(
     dict.fromkeys(
-        name
-        for module in (_runtime, *_HELPER_MODULES)
-        for name in vars(module)
-        if not name.startswith("_")
+        [
+            name
+            for module in (_runtime, *_HELPER_MODULES)
+            for name in vars(module)
+            if not name.startswith("_")
+        ]
+        + ["_build_bounded_user_input", "trim_history_to_context_budget"]
     )
 )
 
