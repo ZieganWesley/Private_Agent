@@ -312,10 +312,10 @@ def online_request_failure(exc: Exception) -> str:
 
 
 def has_saved_online_config(app_config: dict) -> bool:
-    """Return whether a non-empty API key is available in categorized config."""
-    models = app_config.get("models")
-    configured_key = models.get("online_api_key") if isinstance(models, dict) else None
-    return isinstance(configured_key, str) and bool(configured_key.strip())
+    """Return whether any configured online endpoint has an API key."""
+    from providers.online import has_configured_online_key
+
+    return has_configured_online_key(app_config)
 
 
 def select_online_model(
@@ -345,19 +345,36 @@ def select_online_model(
 
     model_config = app_config.get("models")
     model_config = model_config if isinstance(model_config, dict) else {}
-    configured_url = str(
-        model_config.get(
-            "online_base_url",
-            app_config.get("online_base_url", "https://api.openai.com/v1"),
-        )
+    from providers.online import (
+        DEFAULT_ONLINE_BASE_URL,
+        online_endpoints_from_config,
+        resolve_online_endpoint,
     )
-    configured_key_value = model_config.get(
-        "online_api_key",
-        app_config.get("online_api_key"),
+
+    endpoints = [
+        endpoint
+        for endpoint in online_endpoints_from_config(app_config)
+        if endpoint.enabled
+    ]
+    selected_endpoint = resolve_online_endpoint(app_config)
+    if len(endpoints) > 1 and use_saved_details is None:
+        console.print("[bold]Configured online endpoints:[/bold]")
+        for index, endpoint in enumerate(endpoints, 1):
+            console.print(
+                f"  [info]{index}.[/info] {endpoint.name} ({endpoint.base_url})"
+            )
+        choice = console.input(
+            f"[info]Select endpoint number [{endpoints[0].name}]: [/info]"
+        ).strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(endpoints):
+            selected_endpoint = endpoints[int(choice) - 1]
+    configured_url = (
+        selected_endpoint.base_url
+        if selected_endpoint is not None
+        else DEFAULT_ONLINE_BASE_URL
     )
-    configured_key = (
-        configured_key_value.strip() if isinstance(configured_key_value, str) else ""
-    )
+    configured_key = (selected_endpoint.api_key or "") if selected_endpoint else ""
+    endpoint_models = tuple(selected_endpoint.models) if selected_endpoint else ()
     if use_saved_details is True and not configured_key:
         console.print(
             "[error]Saved online configuration was selected, but no API key is "
@@ -497,6 +514,8 @@ def select_online_model(
     if configured_model_value is None:
         configured_model_value = app_config.get("online_model")
     configured_model = str(configured_model_value or "")
+    if not configured_model and endpoint_models:
+        configured_model = endpoint_models[0]
     if model_choices:
         console.print("[bold]Available API models:[/bold]")
         for index, candidate in enumerate(model_choices[:model_list_limit], 1):

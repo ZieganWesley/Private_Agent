@@ -17,6 +17,13 @@ from .endpoints import (
     resolved_limits,
 )
 from .native import NativeClient, NativeProfile, detect_native
+from .online import (
+    OnlineEndpoint,
+    has_configured_online_key,
+    normalize_online_base_url,
+    online_endpoints_from_config,
+    resolve_online_endpoint,
+)
 from .selection import (
     load_last_provider,
     match_runtime,
@@ -39,6 +46,11 @@ __all__ = [
     "clamp_limit",
     "normalize_base_url",
     "resolved_limits",
+    "OnlineEndpoint",
+    "has_configured_online_key",
+    "normalize_online_base_url",
+    "online_endpoints_from_config",
+    "resolve_online_endpoint",
     "ProviderAdapter",
     "ProviderRecord",
     "OpenAICompatibleAdapter",

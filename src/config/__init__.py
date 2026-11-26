@@ -73,10 +73,18 @@ DEFAULT_CONFIG = {
                 "name": "llama.cpp",
                 "base_url": "http://127.0.0.1:8080/v1",
             },
+            {
+                # Mirrors models.ollama_base_url so one list describes every
+                # locally hosted OpenAI-compatible server.
+                "name": "Ollama",
+                "base_url": "http://localhost:11434/v1",
+            },
         ],
         "hardware_acceleration": "auto",
         "preferred_model": None,
         "online_base_url": "https://api.openai.com/v1",
+        "online_endpoints": [],
+        "preferred_online_endpoint": "",
         "online_model": None,
         "provider_api_mode": "chat",
         "raw_completions_enabled": False,
@@ -276,6 +284,12 @@ def _merge_config(config: dict) -> dict:
         merged["agent"]["system_prompt"].strip()
     ):
         merged["agent"]["system_prompt"] = DEFAULT_SYSTEM_PROMPT
+    # The local endpoint list is the single description of locally hosted
+    # servers; mirror a legacy ollama_base_url into it instead of keeping a
+    # second representation alive.
+    from endpoint_legacy import fold_legacy_ollama_endpoints
+
+    merged["models"] = fold_legacy_ollama_endpoints(merged["models"])
     return merged
 
 

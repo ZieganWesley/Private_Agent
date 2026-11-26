@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import config
 from config import load_or_create_config
 
 
@@ -501,3 +502,51 @@ def test_config_file_can_be_loaded_from_another_path(tmp_path, monkeypatch):
 
     assert custom.exists()
     assert settings["agent"] == config.DEFAULT_CONFIG["agent"]
+
+
+def test_merged_config_mirrors_ollama_base_url_into_local_endpoints():
+    merged = config._merge_config(
+        {"models": {"ollama_base_url": "http://127.0.0.1:11500"}}
+    )
+
+    entries = merged["models"]["local_openai_compatible_endpoints"]
+    ollama = [
+        entry
+        for entry in entries
+        if entry["base_url"].rstrip("/") == "http://127.0.0.1:11500/v1"
+    ]
+    assert ollama == [
+        {
+            "name": "Ollama",
+            "base_url": "http://127.0.0.1:11500/v1",
+            "roles": ["chat", "embedding", "rerank", "native"],
+        }
+    ]
+
+
+def test_merged_config_does_not_duplicate_a_listed_ollama_endpoint():
+    merged = config._merge_config(
+        {
+            "models": {
+                "ollama_base_url": "http://127.0.0.1:11434",
+                "local_openai_compatible_endpoints": [
+                    {"name": "Local Ollama", "base_url": "http://127.0.0.1:11434/v1"}
+                ],
+            }
+        }
+    )
+
+    names = [
+        entry["name"]
+        for entry in merged["models"]["local_openai_compatible_endpoints"]
+        if entry["base_url"].rstrip("/") == "http://127.0.0.1:11434/v1"
+    ]
+    assert names == ["Local Ollama"]
+
+
+def test_online_endpoints_default_is_empty_and_legacy_key_is_kept():
+    merged = config._merge_config({})
+
+    assert merged["models"]["online_endpoints"] == []
+    assert merged["models"]["preferred_online_endpoint"] == ""
+    assert merged["models"]["online_base_url"] == "https://api.openai.com/v1"
