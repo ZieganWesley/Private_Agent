@@ -2706,7 +2706,9 @@ async def _run_agent_cli_session(
                     from .context_telemetry import print_context_usage
 
                     print_context_usage(
-                        _CONTEXT_REPORT_STATE.get("value", {}) or {}, session_ui.print
+                        _CONTEXT_REPORT_STATE.get("value", {}) or {},
+                        session_ui.print,
+                        console=session_ui.console,
                     )
                     continue
                 from .provider_report import handle_provider_command

@@ -175,6 +175,26 @@ def run_ui_check(console: Any = None) -> int:
             overlong = [line for line in rendered.splitlines() if len(line) > width]
             assert not overlong, f"width {width} produced {overlong[:1]}"
 
+    def context_bars() -> None:
+        from agent.context_telemetry import build_context_telemetry
+
+        from .context_view import context_report_panel
+
+        telemetry = build_context_telemetry(
+            profile="chat",
+            total_tokens=4096,
+            budgets={"system": 400, "history": 200},
+            sources={"system": "s " * 50, "history": "h " * 400},
+            requested={"system": 500, "history": 400},
+        )
+        for width in (60, 80, 120):
+            rendered = _render(context_report_panel(telemetry), width)
+            assert "Context usage" in rendered, f"no title at width {width}"
+            for expected in ("history", "system", "total", "overflow"):
+                assert expected in rendered, f"width {width} lost {expected}"
+            overlong = [line for line in rendered.splitlines() if len(line) > width]
+            assert not overlong, f"width {width} produced {overlong[:1]}"
+
     def failure_panel_render() -> None:
         from .failure_panel import model_failure_panel
 
@@ -220,6 +240,7 @@ def run_ui_check(console: Any = None) -> int:
         ("failure_panel", failure_panel_render),
         ("startup_summary", startup_summary),
         ("status_panel", status_panel_render),
+        ("context_bars", context_bars),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),

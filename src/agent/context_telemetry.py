@@ -139,10 +139,20 @@ def log_context_allocation(report: Any, cache: Any = None) -> None:
     )
 
 
-def print_context_usage(telemetry: Any, print_fn) -> None:
-    """Print the last turn's usage report, swallowing optional-surface errors."""
+def print_context_usage(telemetry: Any, print_fn, *, console: Any = None) -> None:
+    """Print the last turn's usage report, swallowing optional-surface errors.
+
+    On a colour-capable console each source gets a budget bar; everywhere else
+    (``NO_COLOR``, no colour system, accessible mode, or no console at all) the
+    plain ``used/budget`` text report is printed instead.
+    """
     try:
-        print_fn(format_context_report(telemetry))
+        from ui.context_view import bars_supported, context_report_panel
+
+        if bars_supported(console):
+            print_fn(context_report_panel(telemetry))
+        else:
+            print_fn(format_context_report(telemetry))
     except Exception as exc:  # noqa: BLE001 - optional inspection surface
         print_fn(f"[warning][Context] {exc}[/warning]")
 

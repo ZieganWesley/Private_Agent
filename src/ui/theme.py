@@ -67,6 +67,9 @@ DARK_STYLES: dict[str, str] = {
     "ribbon.permission.full": "red",
     "ribbon.meta": "grey54",
     "ribbon.dim": "grey54",
+    "context.bar.back": "grey30",
+    "context.bar.fill": "cyan",
+    "context.bar.over": "red",
 }
 
 # Light terminals: same names, darker hues that stay legible on white.
@@ -91,6 +94,9 @@ LIGHT_STYLES: dict[str, str] = {
     "ribbon.permission.full": "dark_red",
     "ribbon.meta": "grey30",
     "ribbon.dim": "grey30",
+    "context.bar.back": "grey70",
+    "context.bar.fill": "blue",
+    "context.bar.over": "dark_red",
 }
 
 LIGHT_MESSAGE_LEVELS: dict[str, str] = {
