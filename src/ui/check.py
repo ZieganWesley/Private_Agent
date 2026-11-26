@@ -231,6 +231,16 @@ def run_ui_check(console: Any = None) -> int:
         assert "def answer()" in streamed, "streamed reply lost text"
         assert "```" not in streamed, "fence leaked from the streamed reply"
 
+    def markup_escapes() -> None:
+        from .markup import assistant_header, plan_line
+
+        hostile = "see [bold]b[/bold] and [/] plus [not-a-style]"
+        rendered = _render(plan_line(hostile), 80)
+        assert "[Plan]" in rendered, "plan chrome label was lost"
+        assert "[not-a-style]" in rendered, "hostile markup was consumed"
+        header = _render(assistant_header(hostile), 120)
+        assert "AI (see [bold]b[/bold]" in header, "model name was escaped wrongly"
+
     def failure_panel_render() -> None:
         from .failure_panel import model_failure_panel
 
@@ -279,6 +289,7 @@ def run_ui_check(console: Any = None) -> int:
         ("context_bars", context_bars),
         ("tool_result_footer", tool_result_footer),
         ("markdown_stream", markdown_stream),
+        ("markup_escapes", markup_escapes),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),

@@ -18,6 +18,7 @@ from rich.text import Text
 from config import STREAMING_OUTPUT, VERBOSE_TIMINGS, VISIBLE_REASONING
 from ui.failure_panel import model_failure_panel
 from ui.markdown_view import MarkdownStream
+from ui.markup import assistant_header, reasoning_header
 from ui.status_bar import get_active_footer
 from ui.turn import GenerationStats
 from utils.run_logging import RUN_LOGGER, log_event
@@ -276,7 +277,7 @@ async def _invoke_with_budget(
                             _pause_footer()
                             if not reasoning_open:
                                 console.print(
-                                    f"\n[dim]Thinking ({model_name}):[/dim] ",
+                                    reasoning_header(model_name),
                                     end="",
                                 )
                                 reasoning_open = True
@@ -303,7 +304,7 @@ async def _invoke_with_budget(
                             reasoning_open = False
                         if not emitted_header:
                             console.print(
-                                f"\n[bold success]AI ({model_name}):[/bold success] ",
+                                assistant_header(model_name),
                                 end="",
                             )
                             emitted_header = True

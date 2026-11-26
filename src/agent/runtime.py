@@ -27,6 +27,7 @@ from . import capabilities as capability_packs
 from ui import json_output
 from . import runtime_f_integration as f_integration
 from ui.chat_ui import ChatTranscript
+from ui.markup import citation_line, plan_line, verification_line
 from ui.startup import startup_section, welcome_panel
 from ui.status_view import StatusSection, status_panel
 from platform_support import (
@@ -2373,10 +2374,10 @@ def _store_turn_output(
     if retrieved_citations:
         session_ui.print_markup("[bold info][Retrieved Sources][/bold info]")
         for citation in retrieved_citations:
-            session_ui.print_markup(f"  - {citation}")
+            session_ui.print_markup(citation_line(citation))
     if active_code_workspace is not None:
         verification = cleanup_code_task(finalize=True)
-        session_ui.print_markup(f"[info][Code Task Verification][/info] {verification}")
+        session_ui.print_markup(verification_line(verification))
         full_output_content += f"\n\n[Code task verification]\n{verification}"
     memory.save_message(session_id, "human", user_input, turn_id=turn_id)
     memory.save_message(session_id, "ai", full_output_content, turn_id=turn_id)
@@ -4020,9 +4021,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         ):
                             plan_text = str(response.content).strip()
                             if plan_text:
-                                session_ui.print_markup(
-                                    f"[info][Plan][/info] {plan_text}"
-                                )
+                                session_ui.print_markup(plan_line(plan_text))
                         iteration_label = (
                             f"{iteration} of {tool_iteration_limit}"  # noqa: B023
                             if tool_iteration_limit is not None  # noqa: B023
