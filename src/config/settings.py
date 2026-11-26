@@ -462,6 +462,47 @@ def resolve_config_values(
         config, "chunking", "semantic_max_sentences", 2000
     )
     RAG_SIMILARITY_RESULTS = configured_int(config, "rag", "similarity_results", 6)
+    _raw_rag_file_types = config_section(config, "rag").get("file_types", [])
+    RAG_FILE_TYPES = []
+    if isinstance(_raw_rag_file_types, list):
+        for _suffix in _raw_rag_file_types[:50]:
+            if not isinstance(_suffix, str):
+                continue
+            _normalized = _suffix.strip().lower()
+            if _normalized and not _normalized.startswith("."):
+                _normalized = f".{_normalized}"
+            if 2 <= len(_normalized) <= 16 and all(
+                character.isalnum() or character == "." for character in _normalized
+            ):
+                RAG_FILE_TYPES.append(_normalized)
+    if not RAG_FILE_TYPES:
+        RAG_FILE_TYPES = [
+            ".pdf",
+            ".txt",
+            ".md",
+            ".py",
+            ".json",
+            ".csv",
+            ".rs",
+            ".js",
+            ".ts",
+            ".html",
+            ".htm",
+            ".docx",
+            ".xlsx",
+            ".pptx",
+            ".epub",
+            ".db",
+            ".sqlite",
+            ".sqlite3",
+            ".db3",
+        ]
+    RAG_SQLITE_ROWS_PER_CHUNK = configured_int_range(
+        config, "rag", "sqlite_rows_per_chunk", 10, 1, 1000
+    )
+    RAG_SQLITE_MAX_CELL_CHARS = configured_int_range(
+        config, "rag", "sqlite_max_cell_chars", 200, 20, 10000
+    )
     RAG_SQLITE_MAX_ROWS_PER_TABLE = configured_int(
         config, "rag", "sqlite_max_rows_per_table", 5000
     )
@@ -876,6 +917,9 @@ class Settings:
     chunking_semantic_max_sentences: int
     rag_similarity_results: int
     rag_sqlite_max_rows_per_table: int
+    rag_file_types: list[str]
+    rag_sqlite_rows_per_chunk: int
+    rag_sqlite_max_cell_chars: int
     rag_auto_refresh_seconds: int
     enable_web_research: bool
     web_research_consent: str

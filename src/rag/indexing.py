@@ -29,12 +29,15 @@ from config import (
     EMBEDDING_PROVIDER,
     HARDWARE_ACCELERATION_MODE,
     OLLAMA_BASE_URL,
+    RAG_FILE_TYPES,
     RAG_INDEX_PATH,
     RAG_MAX_CORPUS_BYTES,
     RAG_MAX_DOCUMENTS,
     RAG_MAX_FILE_BYTES,
     RAG_MAX_PDF_PAGES,
+    RAG_SQLITE_MAX_CELL_CHARS,
     RAG_SQLITE_MAX_ROWS_PER_TABLE,
+    RAG_SQLITE_ROWS_PER_CHUNK,
 )
 from hardware import ollama_acceleration_options
 from ui.console import console
@@ -42,31 +45,10 @@ from ui.console import console
 from .chunking import ChunkingSettings, split_text
 
 SQLITE_EXTENSIONS = frozenset({".db", ".sqlite", ".sqlite3", ".db3"})
-SUPPORTED_EXTENSIONS = (
-    frozenset(
-        {
-            ".pdf",
-            ".txt",
-            ".md",
-            ".py",
-            ".json",
-            ".csv",
-            ".rs",
-            ".js",
-            ".ts",
-            ".html",
-            ".htm",
-            ".docx",
-            ".xlsx",
-            ".pptx",
-            ".epub",
-        }
-    )
-    | SQLITE_EXTENSIONS
-)
+SUPPORTED_EXTENSIONS = frozenset(RAG_FILE_TYPES) | SQLITE_EXTENSIONS
 _SQLITE_HEADER = b"SQLite format 3\x00"
-_SQLITE_ROWS_PER_CHUNK = 10
-_SQLITE_MAX_CELL_CHARS = 200
+_SQLITE_ROWS_PER_CHUNK = RAG_SQLITE_ROWS_PER_CHUNK
+_SQLITE_MAX_CELL_CHARS = RAG_SQLITE_MAX_CELL_CHARS
 
 
 def _iter_source_files(root: pathlib.Path):
