@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -410,6 +411,26 @@ def test_isolated_command_shares_network_only_when_explicitly_enabled(
     assert "--share-net" not in isolated
     assert "--unshare-all" in connected
     assert "--share-net" in connected
+
+
+def test_isolated_command_keeps_interpreter_shared_libraries(monkeypatch, tmp_path):
+    import code_tasks
+
+    monkeypatch.setattr(code_tasks.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        code_tasks.shutil,
+        "which",
+        lambda name: f"/usr/bin/{name}",
+    )
+
+    _, environment = code_tasks._isolated_command(["python", "-V"], tmp_path)
+
+    expected = [
+        f"/opt/private-agent-python/{name}"
+        for name in ("lib", "lib64")
+        if (pathlib.Path(sys.base_prefix) / name).is_dir()
+    ]
+    assert environment.get("LD_LIBRARY_PATH", "") == os.pathsep.join(expected)
 
 
 @pytest.mark.skipif(

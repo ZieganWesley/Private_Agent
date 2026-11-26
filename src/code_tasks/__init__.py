@@ -329,6 +329,17 @@ def _isolated_command(
         )
     if interpreter_in_base:
         environment["PYTHONHOME"] = "/opt/private-agent-python"
+        # The interpreter's RUNPATH points at its real install path, which is hidden
+        # behind the /opt tmpfs here, so the loader would fall back to a system
+        # libpython (a different patch release with its own site layout) and the
+        # sandboxed interpreter would stop seeing its own site-packages.
+        library_dirs = [
+            f"/opt/private-agent-python/{name}"
+            for name in ("lib", "lib64")
+            if (interpreter_base / name).is_dir()
+        ]
+        if library_dirs:
+            environment["LD_LIBRARY_PATH"] = os.pathsep.join(library_dirs)
     return args, environment
 
 
