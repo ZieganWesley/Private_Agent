@@ -36,6 +36,29 @@ def _document_key(document: Document) -> tuple[str, str]:
     return str(source), str(chunk)
 
 
+DEFAULT_MAX_RERANK_CANDIDATES = 50
+
+
+def _dedupe_and_cap(documents: list[Document], limit: int) -> list[Document]:
+    """Drop duplicate chunks and bound how many documents reach the reranker."""
+    seen: set[tuple[str, str, str]] = set()
+    unique: list[Document] = []
+    for document in documents:
+        metadata = getattr(document, "metadata", None) or {}
+        key = (
+            str(metadata.get("source", "")),
+            str(metadata.get("chunk", metadata.get("chunk_id", ""))),
+            str(getattr(document, "page_content", "")),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(document)
+        if 0 < limit <= len(unique):
+            break
+    return unique
+
+
 def _reciprocal_rank_fusion(
     ranked_lists: tuple[list[Document], ...],
     k: int,
@@ -181,6 +204,9 @@ class HybridRAGRetriever:
         """Prefer ``/v1/rerank``; otherwise use local embedding similarity."""
         if not documents:
             return documents
+        documents = _dedupe_and_cap(
+            documents, getattr(self, "max_candidates", DEFAULT_MAX_RERANK_CANDIDATES)
+        )
         reranker = getattr(self, "reranker", None)
         if reranker is not None:
             reranked = reranker.rerank(query, documents)

@@ -175,7 +175,7 @@ class ContextCachePolicy:
             markers = {"prompt_cache_key": "stable_prefix"}
         elif provider in {"ollama", "llama.cpp", "lm studio", "lm-studio"}:
             markers = {"prefix_cache": True}
-        return {"enabled": True, "provider": provider, "markers": markers}
+        return {"enabled": bool(markers), "provider": provider, "markers": markers}
 
     def telemetry(
         self,

@@ -142,8 +142,9 @@ def test_allocation_trims_each_source_to_its_budget():
     rag = allocation.sources["rag"]
     assert token_count(rag.text) <= allocation.budgets["rag"]
     assert allocation.telemetry["used"]["rag"] <= allocation.budgets["rag"]
-    assert allocation.telemetry["overflow"]["rag"] == 0
-    assert "rag" not in allocation.telemetry["truncated"]
+    # Requested tokens are measured before trimming, so the trim is visible.
+    assert allocation.telemetry["overflow"]["rag"] > 0
+    assert "rag" in allocation.telemetry["truncated"]
 
 
 def test_fill_sources_keeps_budgets_and_updates_usage():

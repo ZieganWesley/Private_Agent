@@ -106,6 +106,30 @@ def needs_history_compaction(
     return messages_tokens(history) + current_input_tokens > threshold * prompt_budget
 
 
+def trim_history_for_budget(
+    history: list[Any],
+    current_input_tokens: int,
+    prompt_budget: int,
+    threshold: float,
+    max_messages: int,
+    *,
+    keep_recent: int = 2,
+) -> tuple[list[Any], int]:
+    """Drop whole oldest messages until the turn fits, keeping a recent floor."""
+    limit = int(threshold * prompt_budget)
+    trimmed = list(history)
+    floor = max(0, min(len(trimmed), int(keep_recent)))
+    hard_max = max(0, int(max_messages))
+    while trimmed and (
+        len(trimmed) > hard_max
+        or messages_tokens(trimmed) + current_input_tokens > limit
+    ):
+        if len(trimmed) <= floor:
+            break
+        trimmed = trimmed[1:]
+    return trimmed, messages_tokens(trimmed) + current_input_tokens
+
+
 async def compact_history(
     llm: Any,
     history: list[Any],

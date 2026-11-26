@@ -17,6 +17,7 @@ class ContextTelemetry:
     profile: str = "chat"
     total_tokens: int = 0
     budgets: dict[str, int] = field(default_factory=dict)
+    requested: dict[str, int] = field(default_factory=dict)
     used: dict[str, int] = field(default_factory=dict)
     overflow: dict[str, int] = field(default_factory=dict)
     truncated: list[str] = field(default_factory=list)
@@ -28,12 +29,14 @@ class ContextTelemetry:
             "profile": self.profile,
             "total_tokens": int(self.total_tokens),
             "budgets": dict(self.budgets),
+            "requested": dict(self.requested),
             "used": dict(self.used),
             "overflow": dict(self.overflow),
             "truncated": list(self.truncated),
             "cacheable_prefix_tokens": int(self.cacheable_prefix_tokens),
             "invalidations": int(self.invalidations),
             "sum_budgets": int(sum(self.budgets.values())),
+            "sum_requested": int(sum(self.requested.values())),
             "sum_used": int(sum(self.used.values())),
             "usage_percent": (
                 (sum(self.used.values()) / self.total_tokens * 100.0)
@@ -63,8 +66,10 @@ def build_context_telemetry(
     sources: Any = None,
     cacheable_prefix_tokens: int = 0,
     invalidations: int = 0,
+    requested: dict[str, int] | None = None,
 ) -> ContextTelemetry:
     budgets = dict(budgets or {})
+    requested = dict(requested or {})
     used: dict[str, int] = {}
     overflow: dict[str, int] = {}
     truncated: list[str] = []
@@ -80,7 +85,10 @@ def build_context_telemetry(
                 text = str(val or "")
         u = _token_count(text)
         used[name] = u
-        ov = max(0, u - int(budget or 0))
+        requested.setdefault(name, u)
+        # Overflow is measured against what the source asked to contribute,
+        # not against the text after trimming, so trimming is visible.
+        ov = max(0, int(requested.get(name, u)) - int(budget or 0))
         overflow[name] = ov
         if ov > 0:
             truncated.append(name)
@@ -92,14 +100,18 @@ def build_context_telemetry(
                 if not hasattr(src_map[name], "text"):
                     text = str(src_map[name] or "")
                 used[name] = _token_count(text)
+                requested.setdefault(name, used[name])
                 budgets.setdefault(name, 0)
-                overflow[name] = max(0, used[name] - budgets.get(name, 0))
+                overflow[name] = max(
+                    0, int(requested.get(name, used[name])) - budgets.get(name, 0)
+                )
                 if overflow[name] > 0:
                     truncated.append(name)
     return ContextTelemetry(
         profile=profile,
         total_tokens=int(total_tokens or 0),
         budgets=budgets,
+        requested={name: int(value) for name, value in requested.items()},
         used=used,
         overflow=overflow,
         truncated=truncated,
@@ -108,18 +120,48 @@ def build_context_telemetry(
     )
 
 
+def log_context_allocation(report: Any, cache: Any = None) -> None:
+    """Emit one redacted allocation event: names and counts only."""
+    from utils.run_logging import RUN_LOGGER, log_event
+
+    data = report if isinstance(report, dict) else {}
+    log_event(
+        RUN_LOGGER,
+        "context.allocation",
+        level=10,
+        profile=data.get("profile"),
+        total_tokens=data.get("total_tokens"),
+        budgets=data.get("budgets"),
+        requested=data.get("requested"),
+        used=data.get("used"),
+        overflow=data.get("truncated"),
+        cache=cache,
+    )
+
+
+def print_context_usage(telemetry: Any, print_fn) -> None:
+    """Print the last turn's usage report, swallowing optional-surface errors."""
+    try:
+        print_fn(format_context_report(telemetry))
+    except Exception as exc:  # noqa: BLE001 - optional inspection surface
+        print_fn(f"[warning][Context] {exc}[/warning]")
+
+
 def format_context_report(telemetry: Any) -> str:
     data = telemetry.to_dict() if hasattr(telemetry, "to_dict") else (telemetry or {})
     lines = [f"Context usage ({data.get('profile', 'chat')}):"]
     budgets = data.get("budgets", {}) or {}
     used = data.get("used", {}) or {}
-    for name in sorted(set(budgets) | set(used)):
+    requested = data.get("requested", {}) or {}
+    for name in sorted(set(budgets) | set(used) | set(requested)):
         b = int(budgets.get(name, 0))
         u = int(used.get(name, 0))
-        lines.append(f"  {name}: used={u} budget={b}")
+        r = int(requested.get(name, u))
+        lines.append(f"  {name}: requested={r} allocated={b} used={u}")
     lines.append(
         f"  total: used={data.get('sum_used', 0)} / {data.get('total_tokens', 0)} "
-        f"({data.get('usage_percent', 0.0):.1f}%)"
+        f"(requested={data.get('sum_requested', 0)}; "
+        f"{data.get('usage_percent', 0.0):.1f}%)"
     )
     if data.get("truncated"):
         lines.append(f"  overflow: {', '.join(data['truncated'])}")
@@ -200,4 +242,11 @@ def build_runtime_context_report(
 
 
 
-__all__ = ["ContextTelemetry", "build_context_telemetry", "format_context_report", "build_runtime_context_report"]
+__all__ = [
+    "ContextTelemetry",
+    "build_context_telemetry",
+    "build_runtime_context_report",
+    "format_context_report",
+    "log_context_allocation",
+    "print_context_usage",
+]

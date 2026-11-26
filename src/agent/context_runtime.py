@@ -45,6 +45,27 @@ def prepare_context_request(
         "history": history_text,
         "user": user_text,
     }
+    if not policy.enabled:
+        cache = {
+            "enabled": False,
+            "cacheable_sources": [],
+            "prefix_tokens": 0,
+            "prefix_hash": None,
+            "qualifies": False,
+            "invalidated": False,
+            "reason": None,
+            "provider": {"enabled": False, "markers": {}},
+        }
+        messages = list(system_prompts) + list(prompt_history) + [user_message]
+        telemetry = build_context_telemetry(
+            profile="chat",
+            total_tokens=0,
+            budgets={},
+            sources={},
+            cacheable_prefix_tokens=0,
+            invalidations=0,
+        ).to_dict()
+        return messages, {"cache": cache, "telemetry": telemetry}
     prefix = policy.detect_cacheable_prefix(sources)
     invalidation = policy.track_invalidation(
         previous_hash, str(prefix["prefix_hash"])

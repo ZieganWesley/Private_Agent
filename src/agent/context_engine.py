@@ -12,7 +12,11 @@ from typing import Any
 
 from config import CONTEXT_ENGINE_ENABLED, CONTEXT_ENGINE_PROFILE
 
-from .compaction import needs_history_compaction
+from .compaction import (
+    messages_tokens,
+    needs_history_compaction,
+    trim_history_for_budget,
+)
 from .context_manager import ContextBudget, ContextSource
 from .context_profiles import (
     apply_profile_to_budget,
@@ -23,6 +27,15 @@ from .context_profiles import (
 from .context_sources import ADAPTERS, adapt_source
 from .context_telemetry import build_context_telemetry
 from .prompts import token_count, trim_history_messages
+
+
+@dataclass(frozen=True)
+class CompactionDecision:
+    """Why the next turn does or does not need summarization."""
+
+    reason: str
+    history: list[Any]
+    post_trim_tokens: int
 
 
 @dataclass
@@ -61,6 +74,44 @@ class ContextEngine:
             )
         except Exception:  # noqa: BLE001 - optional best-effort context feature
             return False
+
+    def should_compact(
+        self,
+        history: Any,
+        current_input_tokens: int,
+        prompt_budget: int,
+        threshold: float,
+        max_messages: int,
+        *,
+        keep_recent: int = 2,
+    ) -> CompactionDecision:
+        """Trim first, then decide whether summarization is still required."""
+        messages = list(history or [])
+        if threshold <= 0 or not messages:
+            return CompactionDecision("below_threshold", messages, 0)
+        if not needs_history_compaction(
+            messages,
+            current_input_tokens,
+            prompt_budget,
+            threshold,
+            max_messages,
+        ):
+            return CompactionDecision(
+                "below_threshold",
+                messages,
+                messages_tokens(messages) + current_input_tokens,
+            )
+        trimmed, post_trim = trim_history_for_budget(
+            messages,
+            current_input_tokens,
+            prompt_budget,
+            threshold,
+            max_messages,
+            keep_recent=keep_recent,
+        )
+        if post_trim <= threshold * prompt_budget and len(trimmed) <= max_messages:
+            return CompactionDecision("trim_sufficient", trimmed, post_trim)
+        return CompactionDecision("compact", trimmed, post_trim)
 
     def resolve_profile(self, request_text: str = "") -> str:
         if self.profile and self.profile != "auto":
@@ -118,6 +169,11 @@ class ContextEngine:
         """Update an allocation's source text without changing its budgets."""
         if not allocation.enabled:
             return allocation
+        requested = {
+            name: token_count(str(text or ""))
+            for name, text in source_texts.items()
+            if name in allocation.budgets
+        }
         for name, text in source_texts.items():
             if name not in allocation.budgets:
                 continue
@@ -131,11 +187,13 @@ class ContextEngine:
             else:
                 source = self._build_source(name, text, budget)
             allocation.sources[name] = source
+        previous = allocation.telemetry.get("requested", {}) if allocation.telemetry else {}
         allocation.telemetry = build_context_telemetry(
             profile=allocation.profile,
             total_tokens=allocation.total_tokens,
             budgets=allocation.budgets,
             sources=allocation.sources,
+            requested={**previous, **requested},
         ).to_dict()
         return allocation
 
@@ -192,11 +250,16 @@ class ContextEngine:
             if name not in budgets:
                 budgets[name] = 0
         sources = self.build_sources(source_texts, budgets)
+        requested = {
+            name: token_count(str(text or ""))
+            for name, text in (source_texts or {}).items()
+        }
         telemetry = build_context_telemetry(
             profile=prof,
             total_tokens=total_tokens,
             budgets=budgets,
             sources=sources,
+            requested=requested,
         ).to_dict()
         return ContextAllocation(
             profile=prof,
@@ -248,6 +311,30 @@ TURN_SOURCE_NAMES: tuple[str, ...] = (
     "tool_results",
     "user",
 )
+
+
+def plan_turn_compaction(
+    engine: ContextEngine,
+    history: Any,
+    current_input_tokens: int,
+    prompt_budget: int,
+    threshold: float,
+    max_messages: int,
+    *,
+    keep_recent: int = 2,
+) -> tuple[list[Any], bool]:
+    """Return the possibly trimmed history and whether to summarize."""
+    decision = engine.should_compact(
+        history,
+        current_input_tokens,
+        prompt_budget,
+        threshold,
+        max_messages,
+        keep_recent=keep_recent,
+    )
+    if decision.reason == "trim_sufficient":
+        return decision.history, False
+    return list(history or []), decision.reason == "compact"
 
 
 def start_turn_allocation(
