@@ -44,7 +44,7 @@ def test_config_uses_per_user_home_path():
     import config
 
     assert (
-        pathlib.Path.home() / ".config" / "private_agent" / "conf"
+        pathlib.Path.home() / ".config" / "private_agent" / "private_config.json"
         == config.CONFIG_FILE_PATH
     )
 
@@ -482,7 +482,7 @@ def test_config_path_honours_environment_variable(tmp_path):
 
     custom = tmp_path / "custom.conf"
     assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": str(custom)}) == custom
-    default = pathlib.Path.home() / ".config" / "private_agent" / "conf"
+    default = pathlib.Path.home() / ".config" / "private_agent" / "private_config.json"
     assert config.resolve_config_path({"PRIVATE_AGENT_CONFIG": "  "}) == default
     assert config.resolve_config_path({}) == default
 
