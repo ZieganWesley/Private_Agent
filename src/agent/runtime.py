@@ -48,6 +48,7 @@ from config import (
     EPISODE_RETENTION_DAYS,
     MAX_CONTEXT_TOKENS,
     MAX_HISTORY_MESSAGES,
+    MAX_OUTPUT_TOKENS,
     MAX_TASK_SECONDS,
     MAX_TOOL_CALLS,
     MAX_TOOL_ITERATIONS,
@@ -3506,6 +3507,8 @@ async def _run_agent_cli_session(
                         selected_model,
                         capabilities,
                         user_input,
+                        max_context_tokens=MAX_CONTEXT_TOKENS,
+                        max_output_tokens=MAX_OUTPUT_TOKENS,
                     )
                 )
                 if vectorstore and include_private_context:

@@ -29,10 +29,18 @@ def start_turn_context(
     selected_model: str,
     capabilities: Any,
     user_input: str,
+    *,
+    max_context_tokens: int | None = None,
+    max_output_tokens: int | None = None,
 ) -> tuple[int, int, ContextEngine | None, ContextAllocation | None]:
     """Resolve limits and allocate every turn source once before retrieval."""
     limits = request_limits_for_provider(
-        provider_type, selected_local_runtime, selected_model, capabilities
+        provider_type,
+        selected_local_runtime,
+        selected_model,
+        capabilities,
+        ceiling_context=max_context_tokens,
+        ceiling_output=max_output_tokens,
     )
     effective_context = limits.context
     output_ceiling = limits.output_tokens
