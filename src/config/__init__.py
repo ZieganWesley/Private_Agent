@@ -143,6 +143,15 @@ DEFAULT_CONFIG = {
         "chunk_overlap_chars": 200,
         "similarity_results": 6,
         "relevance_threshold": 0.25,
+        "rerank_mode": "auto",
+        "rerank_model": "",
+        "rerank_timeout_seconds": 2.5,
+        "rerank_top_n": 20,
+        "rerank_max_candidates": 50,
+        "rerank_local_threshold": 20,
+        "rerank_cache_entries": 128,
+        "rerank_breaker_failures": 3,
+        "rerank_breaker_cooldown_seconds": 60,
         "include_coding_guidance": True,
         "sqlite_max_rows_per_table": 5000,
         "auto_refresh_seconds": 30,
@@ -626,6 +635,15 @@ RAG_CONTEXT_RESULTS = SETTINGS.rag_context_results
 RAG_DOCUMENTS_ONLY = SETTINGS.rag_documents_only
 RAG_RELEVANCE_THRESHOLD = SETTINGS.rag_relevance_threshold
 RAG_INCLUDE_CODING_GUIDANCE = SETTINGS.rag_include_coding_guidance
+RERANK_MODE = SETTINGS.rerank_mode
+RERANK_MODEL = SETTINGS.rerank_model
+RERANK_TIMEOUT_SECONDS = SETTINGS.rerank_timeout_seconds
+RERANK_TOP_N = SETTINGS.rerank_top_n
+RERANK_MAX_CANDIDATES = SETTINGS.rerank_max_candidates
+RERANK_LOCAL_THRESHOLD = SETTINGS.rerank_local_threshold
+RERANK_CACHE_ENTRIES = SETTINGS.rerank_cache_entries
+RERANK_BREAKER_FAILURES = SETTINGS.rerank_breaker_failures
+RERANK_BREAKER_COOLDOWN_SECONDS = SETTINGS.rerank_breaker_cooldown_seconds
 SUMMARY_PROMPT_SENTENCES = SETTINGS.summary_prompt_sentences
 CONTEXT_COMPACTION_THRESHOLD = SETTINGS.context_compaction_threshold
 CONTEXT_KEEP_RECENT_MESSAGES = SETTINGS.context_keep_recent_messages
