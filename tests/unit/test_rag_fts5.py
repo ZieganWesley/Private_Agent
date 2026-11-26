@@ -3,6 +3,7 @@
 import statistics
 import time
 
+import pytest
 from langchain_core.documents import Document
 
 from rag import retrieval
@@ -22,6 +23,11 @@ def _documents(count: int) -> list[Document]:
 
 
 def test_small_corpus_still_uses_bm25(monkeypatch):
+    pytest.importorskip(
+        "rank_bm25",
+        reason="BM25 retrieval requires the optional 'rag' extra (rank-bm25); "
+        "install with pip install -e '.[rag]'",
+    )
     monkeypatch.setattr(retrieval, "_FTS5_MIN_DOCUMENTS", 10_000)
     retriever = HybridRAGRetriever(None, _documents(10))
     assert retriever.keyword_backend == "bm25"
@@ -56,6 +62,11 @@ def test_fts5_quotes_query_terms(monkeypatch):
 
 
 def test_falls_back_to_bm25_when_fts5_is_unavailable(monkeypatch):
+    pytest.importorskip(
+        "rank_bm25",
+        reason="BM25 fallback requires the optional 'rag' extra (rank-bm25); "
+        "install with pip install -e '.[rag]'",
+    )
     monkeypatch.setattr(retrieval, "_FTS5_MIN_DOCUMENTS", 100)
     monkeypatch.setattr(
         retrieval._Fts5KeywordIndex, "available", staticmethod(lambda: False)
