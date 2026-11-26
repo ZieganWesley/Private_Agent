@@ -201,7 +201,7 @@ def help_page_lines(default: int = _HELP_PAGE_LINES) -> int:
     """Return how many help lines fit on the current terminal."""
     try:
         rows = shutil.get_terminal_size((80, 24)).lines
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return default
     # Leave a row for the "more?" prompt and a row for breathing room.
     return max(5, rows - 2)
@@ -255,7 +255,7 @@ def wait_for_next_help_page(index: int, total: int) -> bool:
     """Prompt before the next help page; Enter continues, ``q`` stops."""
     try:
         answer = input(f"[{index}/{total}] Enter for more, q to stop: ")
-    except (EOFError, KeyboardInterrupt, OSError):
+    except EOFError, KeyboardInterrupt, OSError:
         print()
         return False
     return answer.strip().lower() not in {"q", "quit"}
@@ -273,7 +273,7 @@ def load_custom_slash_commands(workspace_root=None) -> dict[str, str]:
         for path in sorted(root.glob("*.md")):
             try:
                 content = path.read_text(encoding="utf-8").strip()
-            except (OSError, UnicodeError):
+            except OSError, UnicodeError:
                 continue
             commands[f"/{path.stem}"] = content
     return commands
@@ -733,7 +733,7 @@ def _run_arrow_app(app: Any) -> str | None:
     def _runner() -> None:
         try:
             outcome["value"] = app.run()
-        except (KeyboardInterrupt, EOFError):
+        except KeyboardInterrupt, EOFError:
             outcome["value"] = None
         except Exception:  # noqa: BLE001 - fall back to typed prompt on any UI failure
             outcome["value"] = None

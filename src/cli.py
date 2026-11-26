@@ -278,7 +278,7 @@ def main():
         )
         console.print(f"[error][Startup error] {exc}[/error]")
         exit_code = 1
-    except (ValueError, OSError):
+    except ValueError, OSError:
         log_event(
             RUN_LOGGER,
             "application.terminated_unexpectedly",

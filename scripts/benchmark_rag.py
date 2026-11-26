@@ -89,7 +89,7 @@ def _document_source(document, documents_root: Path) -> str | None:
         return None
     try:
         return Path(source).resolve().relative_to(documents_root).as_posix()
-    except (OSError, RuntimeError, ValueError):
+    except OSError, RuntimeError, ValueError:
         return None
 
 

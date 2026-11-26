@@ -217,7 +217,7 @@ def add_project_permission_rule(rule: str, workspace_root: Any = None) -> bool:
                 loaded = json.loads(path.read_text(encoding="utf-8"))
                 if isinstance(loaded, dict):
                     existing = loaded
-            except (json.JSONDecodeError, OSError, ValueError):
+            except json.JSONDecodeError, OSError, ValueError:
                 existing = {}
         permissions = existing.setdefault("permissions", {})
         if not isinstance(permissions, dict):

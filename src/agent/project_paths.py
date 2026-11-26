@@ -40,7 +40,7 @@ def discover_project_resources(project_root: Path) -> ProjectResources:
                     continue
                 resolved_parent = parent.resolve(strict=True)
                 resolved_candidate = candidate.resolve(strict=True)
-            except (OSError, RuntimeError):
+            except OSError, RuntimeError:
                 continue
             if (
                 not parent.is_dir()

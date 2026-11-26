@@ -157,7 +157,7 @@ class TaskActionMixin:
             return None
         try:
             capsule = json.loads(capsule_json)
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        except json.JSONDecodeError, TypeError, UnicodeDecodeError:
             _LOGGER.warning("Skipping malformed task resume capsule id=%s", task_id)
             return None
         if (

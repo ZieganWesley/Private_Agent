@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def run_project_tests(
-    workspace: "CodeTaskWorkspace",
+    workspace: CodeTaskWorkspace,
     timeout: int = CODE_TASK_TEST_TIMEOUT,
     extra_commands: list[list[str]] | None = None,
 ) -> str:

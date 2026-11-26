@@ -205,7 +205,7 @@ class HttpReranker:
             self._remember(cache_key, order)
             self.breaker.record_success()
             return [candidates[index] for index in order]
-        except (httpx.HTTPError, ValueError, TypeError, OSError):
+        except httpx.HTTPError, ValueError, TypeError, OSError:
             self.breaker.record_failure()
             return None
         finally:
@@ -228,7 +228,7 @@ def local_cosine_rerank(
         doc_vecs = embeddings.embed_documents(
             [_document_text(document) for document in documents]
         )
-    except (AttributeError, ValueError, RuntimeError, TypeError, OSError):
+    except AttributeError, ValueError, RuntimeError, TypeError, OSError:
         return list(documents)
     if not query_vec or not doc_vecs or len(doc_vecs) != len(documents):
         return list(documents)

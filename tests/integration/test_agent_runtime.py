@@ -2185,8 +2185,7 @@ async def test_cli_retention_prunes_old_messages_and_summaries_end_to_end(
             "UPDATE chat_history SET timestamp = ? WHERE session_id = 'expired'",
             (
                 (
-                    datetime.datetime.now(datetime.timezone.utc)
-                    - datetime.timedelta(days=60)
+                    datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=60)
                 ).strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )

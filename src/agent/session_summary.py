@@ -43,12 +43,12 @@ def _print_context_state(
         from tools.shell import background_process_indicator
 
         process_status = background_process_indicator()
-    except (ImportError, OSError, RuntimeError, ValueError):  # pragma: no cover
+    except ImportError, OSError, RuntimeError, ValueError:  # pragma: no cover
         process_status = ""
     if process_status.startswith("background_processes="):
         try:
             background_processes = int(process_status.split("=", 1)[1])
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             background_processes = 0
     else:
         background_processes = 0
@@ -65,12 +65,12 @@ def _print_context_state(
     used = context_tokens
     try:
         used = int(context_tokens)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         used = 0
     maximum = context_maximum
     try:
         maximum = int(context_maximum)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         maximum = 0
     return used, maximum
 
@@ -206,7 +206,7 @@ async def _summarize_and_save_session(
             f"{format_duration(elapsed)})."
         )
         return True
-    except (KeyboardInterrupt, asyncio.CancelledError):
+    except KeyboardInterrupt, asyncio.CancelledError:
         console_obj.print("[warning][Summary] Skipped; no summary was saved.[/warning]")
     except Exception as exc:  # noqa: BLE001 - summary mixes model/transport/SQLite failures
         log_event(

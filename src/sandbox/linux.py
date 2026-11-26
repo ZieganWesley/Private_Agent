@@ -26,7 +26,7 @@ class SandboxManager:
         for path in paths or []:
             try:
                 resolved.append(pathlib.Path(path).expanduser().resolve())
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 continue
         cls.approved_extra_folders = resolved
         return resolved

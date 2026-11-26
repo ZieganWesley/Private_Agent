@@ -22,13 +22,13 @@ def _context_use(tokens: Any, maximum: Any) -> tuple[int, int, float]:
     """Clamp context-window counts to a usable ``(used, maximum, fraction)``."""
     try:
         limit = int(maximum)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         limit = 0
     if limit <= 0:
         return 0, 0, 0.0
     try:
         used = int(tokens)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         used = 0
     used = max(0, min(used, limit))
     return used, limit, used / limit

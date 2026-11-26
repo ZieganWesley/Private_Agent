@@ -43,7 +43,7 @@ class InputChannel:
     def _stdin_fd() -> int | None:
         try:
             fd = sys.stdin.fileno()
-        except (AttributeError, OSError, ValueError):
+        except AttributeError, OSError, ValueError:
             return None
         return fd if isinstance(fd, int) and fd >= 0 else None
 
@@ -69,7 +69,7 @@ class InputChannel:
         while not self._stop.is_set():
             try:
                 line = self._read_line()
-            except (EOFError, OSError, ValueError):
+            except EOFError, OSError, ValueError:
                 break
             if line == "":
                 break
@@ -84,7 +84,7 @@ class InputChannel:
         while not self._stop.is_set():
             try:
                 ready, _, _ = select.select([self._fd], [], [], 0.05)
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 break
             if self._stop.is_set():
                 break
@@ -92,7 +92,7 @@ class InputChannel:
                 continue
             try:
                 chunk = os.read(self._fd, 4096)
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 break
             if not chunk:
                 break

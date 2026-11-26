@@ -605,7 +605,7 @@ def _offer_skill_capture(
                 description,
                 source_task_id=task.get("task_id"),
             )
-        except (ValueError, OSError, sqlite3.Error):
+        except ValueError, OSError, sqlite3.Error:
             skill_path.unlink(missing_ok=True)
             raise
     except (OSError, ValueError, sqlite3.Error) as exc:

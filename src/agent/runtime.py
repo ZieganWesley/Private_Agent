@@ -708,7 +708,7 @@ async def _execute_tool_batch(
                     asyncio.gather(*tool_tasks),
                     timeout=remaining,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 timed_out_calls = [
                     {
                         "tool": str(call.get("name") or "unknown"),
@@ -2612,7 +2612,7 @@ async def _run_agent_cli_session(
                     if not non_interactive:
                         session_ui._footer.start()
                         session_ui._footer.update(session_ui._current_state())
-                except (KeyboardInterrupt, EOFError, asyncio.CancelledError):
+                except KeyboardInterrupt, EOFError, asyncio.CancelledError:
                     _acknowledge_interrupt()
                     user_input = "exit"
                     if not non_interactive:
@@ -3763,7 +3763,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             _project_instructions = _instructions_path.read_text(
                                 encoding="utf-8"
                             ).strip()
-                    except (OSError, ValueError):
+                    except OSError, ValueError:
                         _project_instructions = ""
                 _project_instructions_block = (
                     f"\nProject instructions (from {PROJECT_INSTRUCTIONS_FILE}):\n"
@@ -4217,7 +4217,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 session_summary_saved = False
                 _SESSION_STATS.turns += 1
                 chat_history = chat_history[-MAX_HISTORY_MESSAGES:]
-        except (KeyboardInterrupt, asyncio.CancelledError):
+        except KeyboardInterrupt, asyncio.CancelledError:
             cleanup_code_task(finalize=False)
             _acknowledge_interrupt()
             if non_interactive:

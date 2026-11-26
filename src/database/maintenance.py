@@ -4,7 +4,7 @@ import os
 import pathlib
 import sqlite3
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 class MaintenanceMixin:
@@ -36,8 +36,7 @@ class MaintenanceMixin:
         with self._lock, self._write_transaction():
             if days_by_class["conversation"]:
                 cutoff = (
-                    datetime.now(timezone.utc)
-                    - timedelta(days=days_by_class["conversation"])
+                    datetime.now(UTC) - timedelta(days=days_by_class["conversation"])
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 cursor = self.conn.execute(
                     "DELETE FROM chat_history WHERE timestamp < ? "
@@ -48,8 +47,7 @@ class MaintenanceMixin:
                 deleted["conversation"] = cursor.rowcount
             if days_by_class["episode"]:
                 cutoff = (
-                    datetime.now(timezone.utc)
-                    - timedelta(days=days_by_class["episode"])
+                    datetime.now(UTC) - timedelta(days=days_by_class["episode"])
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 cursor = self.conn.execute(
                     "DELETE FROM chat_history WHERE role = 'summary' "
@@ -61,7 +59,7 @@ class MaintenanceMixin:
                 deleted["episodes"] = cursor.rowcount
             if days_by_class["skill"]:
                 cutoff = (
-                    datetime.now(timezone.utc) - timedelta(days=days_by_class["skill"])
+                    datetime.now(UTC) - timedelta(days=days_by_class["skill"])
                 ).strftime("%Y-%m-%d %H:%M:%S")
                 skill_paths = [
                     str(row[0])

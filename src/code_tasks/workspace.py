@@ -7,7 +7,6 @@ import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from config import CODE_TASK_TEST_TIMEOUT
 
@@ -48,7 +47,7 @@ class CodeTaskWorkspace:
         direct_source: bool = False,
         allow_network: bool = False,
         confirm_without_git=None,
-    ) -> Optional["CodeTaskWorkspace"]:
+    ) -> CodeTaskWorkspace | None:
         from . import (
             _ask_without_git,
             _copy_ignore,
@@ -115,7 +114,7 @@ class CodeTaskWorkspace:
                     symlinks=True,
                 )
                 _remove_copied_symlinks(destination)
-            except (ValueError, OSError):
+            except ValueError, OSError:
                 shutil.rmtree(destination)
                 raise
             from . import console
@@ -135,7 +134,7 @@ class CodeTaskWorkspace:
         git_path = shutil.which("git")
         ask = confirm_without_git or _ask_without_git
 
-        def continue_without_git() -> "CodeTaskWorkspace":
+        def continue_without_git() -> CodeTaskWorkspace:
             git_metadata = destination / ".git"
             if git_metadata.is_dir():
                 shutil.rmtree(git_metadata)

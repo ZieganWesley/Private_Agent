@@ -33,7 +33,7 @@ def load_last_provider() -> dict[str, Any] | None:
     path = state_path()
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+    except OSError, UnicodeDecodeError, json.JSONDecodeError:
         return None
     return raw if isinstance(raw, dict) else None
 

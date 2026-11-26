@@ -25,7 +25,7 @@ import shutil
 import stat
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ class UndoResult:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def manifest_path(root: pathlib.Path) -> pathlib.Path:

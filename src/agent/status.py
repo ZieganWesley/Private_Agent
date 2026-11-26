@@ -53,7 +53,7 @@ def status_line(
                 background_processes = int(indicator.split("=", 1)[1])
             else:
                 background_processes = 0
-        except (ImportError, OSError, RuntimeError, ValueError):
+        except ImportError, OSError, RuntimeError, ValueError:
             background_processes = 0
     state = StatusState(
         model=model_name,

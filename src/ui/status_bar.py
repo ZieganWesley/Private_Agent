@@ -49,7 +49,7 @@ def _plain_mode() -> bool:
         return True
     try:
         return not os.isatty(1)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return True
 
 

@@ -13,7 +13,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import urlsplit, urlunsplit
 
 from rich.panel import Panel
@@ -43,14 +43,12 @@ def _task_age_label(created_at: str) -> str:
     try:
         created = datetime.fromisoformat(created_at)
         if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
+            created = created.replace(tzinfo=UTC)
         age_seconds = max(
             0,
-            (
-                datetime.now(timezone.utc) - created.astimezone(timezone.utc)
-            ).total_seconds(),
+            (datetime.now(UTC) - created.astimezone(UTC)).total_seconds(),
         )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return "age unavailable"
     if age_seconds < 3600:
         return f"{int(age_seconds // 60)}m old"
@@ -729,7 +727,7 @@ def _run_task_management(
                         scope,
                         owner_id=owner_id,
                     )
-                except (ValueError, OSError):
+                except ValueError, OSError:
                     memory.release_task_lease(task_id, owner_id)
                     raise
                 active_task_id = task_id
@@ -1016,7 +1014,7 @@ def _approved_coding_task_scope(
         return None
     try:
         scope = json.loads(task["approved_scope"])
-    except (TypeError, json.JSONDecodeError):
+    except TypeError, json.JSONDecodeError:
         return None
     if isinstance(scope, dict):
         scope.setdefault("access_level", "isolated_governed")
@@ -1046,7 +1044,7 @@ def _approved_coding_task_scope(
                 SandboxManager.get_root().resolve()
             ):
                 return None
-        except (KeyError, OSError, RuntimeError, TypeError):
+        except KeyError, OSError, RuntimeError, TypeError:
             return None
     if scope.get("network_access") is not _coding_allows_command_network(access_level):
         return None

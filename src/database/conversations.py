@@ -1,6 +1,6 @@
 """Conversation history, summaries and retention."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from langchain_core.messages import (
     AIMessage,
@@ -216,9 +216,9 @@ class ConversationMixin:
         """Delete messages and derived summaries older than the retention window."""
         if retention_days <= 0:
             return 0
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(days=retention_days)
-        ).isoformat(sep=" ", timespec="seconds")
+        cutoff = (datetime.now(UTC) - timedelta(days=retention_days)).isoformat(
+            sep=" ", timespec="seconds"
+        )
         with self._lock, self.conn:
             cursor = self.conn.execute(
                 "DELETE FROM chat_history WHERE timestamp < ?", (cutoff,)
