@@ -118,6 +118,29 @@ def run_ui_check(console: Any = None) -> int:
         assert "[REDACTED]" in rendered
         assert "secret-value" not in rendered
 
+    def startup_summary() -> None:
+        from .startup import startup_section, welcome_panel
+
+        pairs = (
+            ("Config file", "/home/example/private_config.json"),
+            ("RAG documents", "not configured"),
+            ("RAG index", "/home/example/.private_agent/rag_index"),
+            ("Skills", "/home/example/skills"),
+        )
+        for width in (40, 80, 120):
+            rendered = _render(startup_section("Configuration", pairs), width)
+            assert "Configuration" in rendered, f"missing rule title at {width}"
+            for label, _value in pairs:
+                assert label in rendered, f"width {width} dropped {label}"
+            assert "\u2026" not in rendered, f"width {width} truncated a value"
+            overlong = [line for line in rendered.splitlines() if len(line) > width]
+            assert not overlong, f"width {width} produced {overlong[:1]}"
+            welcome = _render(
+                welcome_panel("test-model", "/home/example/workspace"), width
+            )
+            assert "test-model" in welcome, f"welcome lost the model at {width}"
+            assert "Workspace" in welcome, f"welcome lost the workspace at {width}"
+
     def failure_panel_render() -> None:
         from .failure_panel import model_failure_panel
 
@@ -161,6 +184,7 @@ def run_ui_check(console: Any = None) -> int:
         ("help_tree", help_tree_widths),
         ("tool_request", tool_request_panel),
         ("failure_panel", failure_panel_render),
+        ("startup_summary", startup_summary),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),

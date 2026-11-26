@@ -27,6 +27,7 @@ from . import capabilities as capability_packs
 from ui import json_output
 from . import runtime_f_integration as f_integration
 from ui.chat_ui import ChatTranscript
+from ui.startup import startup_section, welcome_panel
 from platform_support import (
     detect_platform,
     is_windows_mount_path,
@@ -112,7 +113,7 @@ from .context_telemetry import (
     log_context_allocation,
 )
 from .context_engine import plan_turn_compaction
-from .console import console, resolve_style
+from .console import console
 from .commands import mission_runtime as _mission_runtime
 from .commands.mission_runtime import mission_slash_command as _mission_slash_command
 from .steering_session import begin_steering_turn
@@ -1302,14 +1303,15 @@ async def _build_session_setup(
         )
     if verbose_startup:
         console.print(
-            "[bold success][Config Status][/bold success] Loaded configuration "
-            f"from: [info]{CONFIG_FILE_PATH.resolve()}[/info]"
-        )
-        console.print(
-            "[bold success][Configured paths][/bold success] "
-            f"RAG documents: [info]{rag_docs_default or 'not configured'}[/info] | "
-            f"RAG index: [info]{RAG_INDEX_PATH}[/info] | "
-            f"Skills: [info]{skills_folder_default or 'not configured'}[/info]"
+            startup_section(
+                "Configuration",
+                (
+                    ("Config file", CONFIG_FILE_PATH.resolve()),
+                    ("RAG documents", rag_docs_default or "not configured"),
+                    ("RAG index", RAG_INDEX_PATH),
+                    ("Skills", skills_folder_default or "not configured"),
+                ),
+            )
         )
     import code_tasks as code_tasks_module
 
@@ -2578,15 +2580,7 @@ async def _run_agent_cli_session(
         )
         session_ui.bind(model=selected_model, permission=permission_mode)
         if SHOW_WELCOME_SCREEN and not non_interactive:
-            from rich.panel import Panel
-
-            session_ui.print(
-                Panel(
-                    f"Private Agent\nModel: {selected_model}\nWorkspace: {SandboxManager.get_root()}",
-                    title="Welcome",
-                    border_style=resolve_style("accent"),
-                )
-            )
+            session_ui.print(welcome_panel(selected_model, SandboxManager.get_root()))
         _local_model_has_answered = False
         _pending_user_input = None
         try:
