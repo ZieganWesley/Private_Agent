@@ -13,6 +13,7 @@ from .endpoints import (
     resolved_limits,
 )
 from .native import NativeClient, NativeProfile, detect_native
+from .transports import CompletionsClient, ResponsesClient, TransportResult
 from .adapters import (
     OllamaAdapter,
     OpenAICompatibleAdapter,
@@ -37,6 +38,9 @@ __all__ = [
     "NativeClient",
     "NativeProfile",
     "detect_native",
+    "CompletionsClient",
+    "ResponsesClient",
+    "TransportResult",
     "EndpointConfig",
     "EndpointRegistry",
     "clamp_limit",
