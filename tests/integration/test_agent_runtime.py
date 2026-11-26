@@ -1504,12 +1504,15 @@ def test_tool_request_is_visible_and_redacts_secrets(monkeypatch):
         }
     )
 
-    assert printed[0][0][0] == "[info][Tool Request][/info]"
-    summary = printed[0][0][1].plain
-    assert summary.startswith("web_search")
-    assert "public profile" in summary
-    assert "[REDACTED]" in summary
-    assert "must-not-be-visible" not in summary
+    panel = printed[0][0][0]
+    assert panel.title.plain == "[Tool Request] web_search"
+    output_buffer = StringIO()
+    Console(file=output_buffer, width=100, no_color=True).print(panel)
+    rendered = output_buffer.getvalue()
+    assert "public profile" in rendered
+    assert "api_key" in rendered
+    assert "[REDACTED]" in rendered
+    assert "must-not-be-visible" not in rendered
 
 
 def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):

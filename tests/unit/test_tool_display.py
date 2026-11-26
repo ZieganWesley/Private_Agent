@@ -61,6 +61,12 @@ def test_log_redactions_include_sensitive_values_and_short_strings_are_unique():
     assert len(redactions) == len(set(redactions))
 
 
+def _render(renderable, width=100):
+    output = io.StringIO()
+    Console(file=output, width=width, no_color=True).print(renderable)
+    return output.getvalue()
+
+
 def test_tool_request_panel_uses_shared_console(monkeypatch):
     output = io.StringIO()
     captured = Console(file=output, width=100, force_terminal=False)
@@ -75,12 +81,37 @@ def test_tool_request_panel_uses_shared_console(monkeypatch):
         {"name": "web_search", "args": {"query": "public", "api_key": "hidden"}}
     )
 
-    assert printed[0][0] == "[info][Tool Request][/info]"
-    summary = printed[0][1].plain
-    assert summary.startswith("web_search")
-    assert "[REDACTED]" in summary
-    assert "hidden" not in summary
+    panel = printed[0][0]
+    assert isinstance(panel, tool_display.Panel)
+    assert panel.title.plain == "[Tool Request] web_search"
+    rendered = _render(panel)
+    assert "query" in rendered
+    assert "api_key" in rendered
+    assert "public" in rendered
+    assert "[REDACTED]" in rendered
+    assert "hidden" not in rendered
     assert captured.file is output
+
+
+def test_tool_request_grid_elides_only_huge_values(monkeypatch):
+    printed = []
+    monkeypatch.setattr(
+        tool_display.console,
+        "print",
+        lambda *values, **_kwargs: printed.append(values),
+    )
+
+    tool_display._display_tool_request(
+        {
+            "name": "write_file",
+            "args": {"path": "notes.txt", "content": "x" * 400},
+        }
+    )
+
+    rendered = _render(printed[0][0])
+    assert "'notes.txt'" in rendered
+    assert "more chars]" in rendered
+    assert "x" * 300 not in rendered
 
 
 def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
