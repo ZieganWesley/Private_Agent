@@ -120,6 +120,7 @@ from .memory_context import (
     _is_coding_guidance_request,
     _prune_memory_retention,
     _retrieve_rag_documents,
+    build_rag_context,
 )
 from .permissions import (
     authorize_network_research as _authorize_network_research,
@@ -3517,14 +3518,11 @@ async def _run_agent_cli_session(
                                 f"{rag_search_elapsed:.1f}s."
                             )
                         if relevant_docs:
+                            context_text, relevant_docs = build_rag_context(
+                                relevant_docs, _rag_budget
+                            )
                             retrieved_citations = format_retrieved_citations(
                                 relevant_docs
-                            )
-                            context_text = "\n".join(
-                                f"[Source: {d.metadata.get('source', 'local knowledge base')}"
-                                f"{', chunk ' + str(d.metadata['chunk']) if 'chunk' in d.metadata else ''}]\n"
-                                f"{d.page_content}"
-                                for d in relevant_docs
                             )
                             session_ui.print(
                                 f"[info][RAG State][/info] Retrieved {len(relevant_docs)} document/episodic chunks."
