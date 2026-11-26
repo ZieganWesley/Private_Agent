@@ -151,19 +151,12 @@ jobs:
         run: |
           /usr/bin/time -v private-agent --help
 
-      - name: Generate Flame Graph
-        run: |
-          py-spy record \
-            -o flamegraph.svg \
-            -- private-agent --help
-
       - name: Upload Profiling Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: performance-profile
           path: |
             importtime.txt
-            flamegraph.svg
       - name: Startup Benchmark
         run: |
           STARTUP_TIME=$(/usr/bin/time -f "%e" private-agent --help 2>&1 >/dev/null)
