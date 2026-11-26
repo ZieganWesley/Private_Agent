@@ -110,6 +110,7 @@ from .context_telemetry import (
     build_runtime_context_report,
     log_context_allocation,
 )
+from .context_engine import plan_turn_compaction
 from .console import console
 from .commands import mission_runtime as _mission_runtime
 from .commands.mission_runtime import mission_slash_command as _mission_slash_command
@@ -3739,13 +3740,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 )
                 if context_engine_is_enabled():
                     try:
-                        _needs_compact = ContextEngine.from_config().needs_compaction(
-                            chat_history,
-                            messages_tokens([HumanMessage(content=user_input)]),
-                            prompt_budget,
-                            CONTEXT_COMPACTION_THRESHOLD,
-                            MAX_HISTORY_MESSAGES,
-                        )
+                        chat_history, _needs_compact = plan_turn_compaction(ContextEngine.from_config(), chat_history, messages_tokens([HumanMessage(content=user_input)]), prompt_budget, CONTEXT_COMPACTION_THRESHOLD, MAX_HISTORY_MESSAGES, keep_recent=CONTEXT_KEEP_RECENT_MESSAGES)
                     except Exception:  # noqa: BLE001 - optional best-effort context feature
                         pass
                 if _needs_compact:
