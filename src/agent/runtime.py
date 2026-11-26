@@ -112,7 +112,7 @@ from .context_telemetry import (
     log_context_allocation,
 )
 from .context_engine import plan_turn_compaction
-from .console import console
+from .console import console, resolve_style
 from .commands import mission_runtime as _mission_runtime
 from .commands.mission_runtime import mission_slash_command as _mission_slash_command
 from .steering_session import begin_steering_turn
@@ -2584,7 +2584,7 @@ async def _run_agent_cli_session(
                 Panel(
                     f"Private Agent\nModel: {selected_model}\nWorkspace: {SandboxManager.get_root()}",
                     title="Welcome",
-                    border_style="cyan",
+                    border_style=resolve_style("accent"),
                 )
             )
         _local_model_has_answered = False

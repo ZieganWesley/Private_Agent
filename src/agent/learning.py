@@ -20,7 +20,7 @@ from config import (
 from database import PersistentMemory
 from skills import create_skill_file
 
-from .console import console
+from .console import console, resolve_style
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
                 f"Verified work:\n{evidence}\n\n"
                 f"Proposed preference ({scope}): {statement}",
                 title="Task-derived learning proposal",
-                border_style="cyan",
+                border_style=resolve_style("border.info"),
             )
         )
         if (
@@ -234,7 +234,7 @@ def _run_learning_maintenance(memory: PersistentMemory, command: str) -> None:
                     f"Review due: {item['review_at'] or 'not scheduled'}\n"
                     f"Source task: {item['source_task_id'] or 'user-confirmed'}",
                     title=f"Learned item {item['item_id']}",
-                    border_style="cyan",
+                    border_style=resolve_style("border.info"),
                 )
             )
             return
@@ -581,7 +581,7 @@ def _offer_skill_capture(
         Panel(
             content,
             title=f"Skill preview: {normalized_name}.md",
-            border_style="magenta",
+            border_style=resolve_style("accent_alt"),
         )
     )
     if (
