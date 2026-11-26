@@ -22,7 +22,7 @@ from typing import Any
 from rich.console import Console
 from rich.live import Live
 
-from .ribbon import status_ribbon
+from .ribbon import ribbon_text, status_ribbon
 from .state import StatusState
 from .theme import ACCESSIBLE_ENV, NO_COLOR_ENV
 
@@ -101,17 +101,17 @@ class StatusBar:
                 )
                 return f"{self._busy_message} | {ribbon}"
             spinner, style = phase_spinner(self._busy_phase)
-            ribbon = status_ribbon(
+            ribbon = ribbon_text(
                 self._current_state(),
                 accessible=bool(os.environ.get(ACCESSIBLE_ENV)),
             )
             return Spinner(
                 spinner,
-                text=f"{self._busy_message} | {ribbon}",
+                text=f"{self._busy_message} | {ribbon.plain}",
                 style=style,
                 speed=1.0,
             )
-        return status_ribbon(
+        return ribbon_text(
             self._current_state(), accessible=bool(os.environ.get(ACCESSIBLE_ENV))
         )
 

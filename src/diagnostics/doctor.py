@@ -13,8 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from rich.console import Console
-from rich.table import Table
+from rich.text import Text
 
 from platform_support import (
     detect_distribution,
@@ -22,8 +21,10 @@ from platform_support import (
     format_install_command,
     system_dependency_status,
 )
+from ui.console import build_console
+from ui.status_view import StatusSection, status_panel
 
-console = Console()
+console = build_console()
 
 ENDPOINT_PROBE_TIMEOUT_SECONDS = 0.75
 
@@ -318,51 +319,141 @@ def system_dependency_fix_command() -> str:
     )
 
 
-def run_doctor() -> int:
-    console.print("[bold info]Private Agent Doctor[/bold info]")
+def _status_label(value: str, level: str) -> Text:
+    """Return a status cell; values are literal, only the style is markup."""
+    from ui.console import resolve_style
+
+    return Text(value, style=resolve_style(level))
+
+
+def doctor_sections() -> tuple[StatusSection, ...]:
+    """Collect the doctor's report as one section list (shared with /status)."""
     platform_info = detect_platform()
     distro = detect_distribution()
-    platform_table = Table(title="Platform")
-    platform_table.add_column("Field")
-    platform_table.add_column("Value")
-    platform_table.add_row("Platform", platform_info.name)
-    platform_table.add_row("Machine", platform_info.machine or "unknown")
-    platform_table.add_row(
-        "Features", ", ".join(platform_info.available_features) or "none"
-    )
-    console.print(platform_table)
-    console.print(
-        "[info]Distribution:[/info] "
-        + f"{distro.name} {distro.version}".strip()
-        + f" (package manager: {distro.package_manager})"
-    )
-
     deps = check_dependencies()
-    table = Table(title="Dependencies")
-    table.add_column("Status")
-    table.add_column("Item")
-    if deps["required"]:
-        for item in deps["required"]:
-            table.add_row("[error]MISSING (required)[/error]", item)
-    else:
-        table.add_row("[success]OK[/success]", "All required dependencies present")
-    for item in deps["optional"]:
-        table.add_row("[warning]OPTIONAL[/warning]", item)
-    console.print(table)
+    endpoints = configured_endpoints()
+    info = analyze_machine()
+    problems = check_config_file()
 
-    system_table = Table(title="System dependencies")
-    system_table.add_column("Tool")
-    system_table.add_column("Package")
-    system_table.add_column("Status")
-    for item in system_dependency_status(platform_info):
-        system_table.add_row(
+    dependency_rows: list[tuple[object, object]] = []
+    if deps["required"]:
+        dependency_rows.extend(
+            (_status_label("MISSING (required)", "error"), item)
+            for item in deps["required"]
+        )
+    else:
+        dependency_rows.append(
+            (_status_label("OK", "success"), "All required dependencies present")
+        )
+    dependency_rows.extend(
+        (_status_label("OPTIONAL", "warning"), item) for item in deps["optional"]
+    )
+
+    system_rows = [
+        (
             str(item["tool"]),
             str(item["package"]),
-            "[success]available[/success]"
+            _status_label("available", "success")
             if item["available"]
-            else "[error]missing[/error]",
+            else _status_label("missing", "error"),
         )
-    console.print(system_table)
+        for item in system_dependency_status(platform_info)
+    ]
+
+    endpoint_rows = [
+        (
+            str(endpoint["name"]),
+            str(endpoint["base_url"]),
+            str(endpoint["roles"]),
+            str(endpoint["models"]),
+            str(endpoint["status"]),
+        )
+        for endpoint in endpoints
+    ] or [
+        (
+            "none",
+            "-",
+            "-",
+            "-",
+            "add models.endpoints or models.local_openai_compatible_endpoints",
+        )
+    ]
+
+    config_rows: list[tuple[object, object]] = []
+    if not problems:
+        config_rows.append((_status_label("OK", "success"), "Configuration is valid"))
+    config_rows.extend(
+        (
+            _status_label(
+                "ERROR" if problem.severity == "error" else "WARNING",
+                "error" if problem.severity == "error" else "warning",
+            ),
+            problem.message,
+        )
+        for problem in problems
+    )
+
+    return (
+        StatusSection(
+            "Platform",
+            (
+                ("Platform", platform_info.name),
+                ("Machine", platform_info.machine or "unknown"),
+                ("Features", ", ".join(platform_info.available_features) or "none"),
+                (
+                    "Distribution",
+                    f"{distro.name} {distro.version}".strip()
+                    + f" (package manager: {distro.package_manager})",
+                ),
+            ),
+            ("Field", "Value"),
+        ),
+        StatusSection(
+            "Dependencies",
+            tuple(dependency_rows),
+            ("Status", "Item"),
+            header=True,
+            justify_first="left",
+        ),
+        StatusSection(
+            "System dependencies",
+            tuple(system_rows),
+            ("Tool", "Package", "Status"),
+            header=True,
+            justify_first="left",
+        ),
+        StatusSection(
+            "Configured endpoints",
+            tuple(endpoint_rows),
+            ("Name", "Base URL", "Roles", "Models", "Status"),
+            header=True,
+            justify_first="left",
+        ),
+        StatusSection(
+            "Machine",
+            tuple((str(key), str(value)) for key, value in info.items()),
+            ("Field", "Value"),
+        ),
+        StatusSection(
+            "Configuration",
+            tuple(config_rows),
+            ("Status", "Item"),
+            header=True,
+            justify_first="left",
+        ),
+    )
+
+
+def run_doctor() -> int:
+    deps = check_dependencies()
+    problems = check_config_file()
+    console.print(
+        status_panel(
+            "Private Agent Doctor",
+            doctor_sections(),
+            subtitle=f"Configuration file: {_config_path()}",
+        )
+    )
     fix_command = system_dependency_fix_command()
     if fix_command:
         console.print(
@@ -380,52 +471,6 @@ def run_doctor() -> int:
     if media_missing:
         console.print("[warning]Install optional media dependencies with:[/warning]")
         console.print('  python -m pip install -e ".[media]"', markup=False)
-
-    endpoints = configured_endpoints()
-    endpoint_table = Table(title="Configured endpoints")
-    for column in ("Name", "Base URL", "Roles", "Models", "Status"):
-        endpoint_table.add_column(column)
-    if endpoints:
-        for endpoint in endpoints:
-            endpoint_table.add_row(
-                str(endpoint["name"]),
-                str(endpoint["base_url"]),
-                str(endpoint["roles"]),
-                str(endpoint["models"]),
-                str(endpoint["status"]),
-            )
-    else:
-        endpoint_table.add_row(
-            "none",
-            "-",
-            "-",
-            "-",
-            "add models.endpoints or models.local_openai_compatible_endpoints",
-        )
-    console.print(endpoint_table)
-
-    info = analyze_machine()
-    mtable = Table(title="Machine")
-    mtable.add_column("Field")
-    mtable.add_column("Value")
-    for key, value in info.items():
-        mtable.add_row(str(key), str(value))
-    console.print(mtable)
-
-    console.print(f"[info]Configuration file path:[/info] {_config_path()}")
-
-    problems = check_config_file()
-    config_table = Table(title="Configuration")
-    config_table.add_column("Status")
-    config_table.add_column("Item")
-    if not problems:
-        config_table.add_row("[success]OK[/success]", "Configuration is valid")
-    for problem in problems:
-        if problem.severity == "error":
-            config_table.add_row("[error]ERROR[/error]", problem.message)
-        else:
-            config_table.add_row("[warning]WARNING[/warning]", problem.message)
-    console.print(config_table)
 
     if deps["required"]:
         console.print(

@@ -7,17 +7,22 @@ from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import ToolMessage
+from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.table import Table
 from rich.text import Text
 
-from .console import console
+from .console import console, resolve_style
 
 TOOL_RESULT_PREVIEW_CHARS = 500
 
 # Absolute paths printed in a tool result: they become terminal hyperlinks.
 _PATH_TOKEN = re.compile(r"(?<![\w./~-])(~/[^\s\"'<>|]+|/[^\s\"'<>|]+)")
 _TRAILING_PATH_PUNCTUATION = ".,;:)]}\"'"
+
+# Longest argument value shown in a tool-request grid row before eliding.
+TOOL_ARGUMENT_PREVIEW_CHARS = 200
 
 _RECENT_TOOL_RESULTS: list[tuple[str, str]] = []
 _MAX_RECENT_TOOL_RESULTS = 20
@@ -102,33 +107,50 @@ def _tool_log_redactions(arguments: Any) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
 
 
-def _display_tool_request(tool_call: dict) -> None:
+def _argument_value(value: Any) -> Text:
+    """Render one argument value, eliding only genuinely huge payloads."""
+    rendered = repr(value)
+    if len(rendered) > TOOL_ARGUMENT_PREVIEW_CHARS:
+        omitted = len(rendered) - TOOL_ARGUMENT_PREVIEW_CHARS
+        rendered = (
+            rendered[:TOOL_ARGUMENT_PREVIEW_CHARS] + f"\u2026 [{omitted} more chars]"
+        )
+    return Text(rendered, overflow="fold")
+
+
+def _tool_request_renderable(tool_call: dict) -> Panel:
+    """Build the tool-request panel: one grid row per argument."""
     name = str(tool_call.get("name") or "unknown")
     arguments = _redact_tool_arguments(tool_call.get("args", {}))
+    table = Table.grid(padding=(0, 1))
+    table.add_column(style=resolve_style("key"), justify="right", no_wrap=True)
+    table.add_column(style=resolve_style("value"), overflow="fold")
     if isinstance(arguments, dict) and arguments:
-        parts = []
         for key, value in arguments.items():
-            rendered = repr(value)
-            if len(rendered) > 80:
-                rendered = rendered[:77] + "..."
-            parts.append(f"{key}={rendered}")
-        summary = " \u00b7 ".join(parts)
+            table.add_row(str(key), _argument_value(value))
     else:
-        summary = repr(arguments)
-    if len(summary) > 300:
-        summary = summary[:297] + "..."
-    console.print(
-        "[info][Tool Request][/info]",
-        Text(f"{name} \u00b7 {summary}", overflow="ellipsis"),
+        table.add_row("args", _argument_value(arguments))
+    return Panel(
+        table,
+        title=Text(f"[Tool Request] {name}", style=resolve_style("accent")),
+        border_style=resolve_style("border"),
+        padding=(0, 1),
     )
+
+
+def _display_tool_request(tool_call: dict) -> None:
+    console.print(_tool_request_renderable(tool_call))
 
 
 def _display_tool_error(tool_name: str, details: str) -> None:
     console.print(
         Panel(
             Text(details),
-            title=Text(f"\u2717 Tool '{tool_name}' returned an error", style="red"),
-            border_style="red",
+            title=Text(
+                f"\u2717 Tool '{tool_name}' returned an error",
+                style=resolve_style("error"),
+            ),
+            border_style=resolve_style("border.error"),
         )
     )
 
@@ -186,22 +208,38 @@ def _render_tool_result_text(result: str) -> Text:
     return text
 
 
-def _display_tool_result(tool_name: str, result: str) -> None:
+def _result_footer(result: str, shown: int) -> Text:
+    """Return the footer line for a truncated result."""
+    lines = max(len(result.splitlines()), 1)
+    footer = Text(overflow="fold", style=resolve_style("muted"))
+    footer.append(
+        f"{lines:,} lines \u00b7 preview of {shown:,} of {len(result):,} characters \u00b7 "
+    )
+    footer.append("/expand", style=resolve_style("accent"))
+    footer.append(" shows the full result")
+    return footer
+
+
+def _tool_result_panel(tool_name: str, result: str) -> Panel:
+    """Build the tool-result panel, with a footer only when it was truncated."""
     preview = result[:TOOL_RESULT_PREVIEW_CHARS]
     truncated = len(result) > TOOL_RESULT_PREVIEW_CHARS
-    if truncated:
-        preview += "\n[Preview truncated; full result was sent to the model.]"
     if not preview.strip():
         preview = "(Tool completed with no textual output.)"
+    body: object = _render_tool_result_text(preview)
+    if truncated:
+        body = Group(body, _result_footer(result, len(preview)))
     symbol = "\u2713" if not _tool_result_is_error(result) else "\u2717"
-    style = "green" if symbol == "\u2713" else "red"
-    console.print(
-        Panel(
-            _render_tool_result_text(preview),
-            title=Text(f"{symbol} Tool output: {tool_name}", style=style),
-            border_style="blue",
-        )
+    style = resolve_style("success" if symbol == "\u2713" else "error")
+    return Panel(
+        body,
+        title=Text(f"{symbol} Tool output: {tool_name}", style=style),
+        border_style=resolve_style("border"),
     )
+
+
+def _display_tool_result(tool_name: str, result: str) -> None:
+    console.print(_tool_result_panel(tool_name, result))
     record_tool_result(tool_name, result)
 
 

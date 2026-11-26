@@ -9,6 +9,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from rich.markup import escape
+
 MUTATING_TOOL_NAMES = frozenset(
     {
         "edit_local_file",
@@ -182,6 +184,9 @@ def _approval_diff(name: str, safe_args: Any) -> str | None:
     )
     rendered = []
     for line in diff_lines:
+        # File content is untrusted: unescaped brackets would restyle the diff
+        # or raise MarkupError on a value like [not-a-style].
+        line = escape(line)
         if line.startswith("+++") or line.startswith("---"):
             rendered.append(f"[bold]{line}[/bold]")
         elif line.startswith("@@"):

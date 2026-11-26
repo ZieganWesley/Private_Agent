@@ -140,3 +140,131 @@ def test_ribbon_segments_use_human_labels():
     ]
     # No raw key=value keys survive in the user-facing ribbon.
     assert not any("=" in segment for segment in segs)
+
+
+def test_light_palette_follows_argument_then_environment(monkeypatch):
+    from ui.theme import DARK_STYLES, LIGHT_STYLES, build_theme
+
+    monkeypatch.delenv("PRIVATE_AGENT_LIGHT", raising=False)
+    dark = build_theme(light=False)
+    light = build_theme(light=True)
+    assert dark.styles["accent"].color.name == DARK_STYLES["accent"]
+    assert light.styles["accent"].color.name == LIGHT_STYLES["accent"]
+    assert dark.styles["value"].color.name == DARK_STYLES["value"]
+
+    monkeypatch.setenv("PRIVATE_AGENT_LIGHT", "1")
+    assert build_theme().styles["value"].color.name == LIGHT_STYLES["value"]
+    assert build_theme(light=False).styles["value"].color.name == DARK_STYLES["value"]
+
+
+def test_cli_error_and_warning_tags_resolve_against_the_shared_theme():
+    import cli
+    from ui.console import console as shared
+
+    assert cli.console is shared
+    for level in ("info", "success", "warning", "error"):
+        style = shared.get_style(level)
+        assert style.color is not None, level
+        assert style.color.name
+
+
+def _ribbon_colours(text):
+    return {
+        span.style.color.name
+        for span in text.spans
+        if getattr(span.style, "color", None)
+    }
+
+
+def test_ribbon_text_styles_each_segment_by_meaning():
+    from ui.ribbon import ribbon_text
+    from ui.theme import DARK_STYLES
+
+    state = StatusState(
+        model="m",
+        context_tokens=9,
+        context_maximum=10,
+        permission_mode="auto",
+        output_tokens=5,
+        background_processes=0,
+    )
+    text = ribbon_text(state)
+    colours = _ribbon_colours(text)
+    assert text.plain == status_ribbon(state)
+    assert DARK_STYLES["ribbon.model"] in colours
+    assert DARK_STYLES["ribbon.context.high"] in colours
+    assert DARK_STYLES["ribbon.permission.auto"] in colours
+
+
+def test_ribbon_text_colours_context_and_permission_levels():
+    from ui.ribbon import ribbon_text
+    from ui.theme import DARK_STYLES
+
+    low = StatusState(
+        model="m",
+        context_tokens=1,
+        context_maximum=10,
+        permission_mode="readonly",
+    )
+    low_colours = _ribbon_colours(ribbon_text(low))
+    assert DARK_STYLES["ribbon.context.ok"] in low_colours
+    assert DARK_STYLES["ribbon.permission.readonly"] in low_colours
+
+    mid = StatusState(model="m", context_tokens=6, context_maximum=10)
+    assert DARK_STYLES["ribbon.context.warn"] in _ribbon_colours(ribbon_text(mid))
+
+
+def test_ribbon_text_keeps_the_same_words_without_colour():
+    from ui.ribbon import ribbon_text
+
+    console = Console(record=True, no_color=True, width=100)
+    state = StatusState(
+        model="m", context_tokens=3, context_maximum=10, permission_mode="auto"
+    )
+    console.print(ribbon_text(state))
+    rendered = console.export_text()
+    assert rendered.strip() == status_ribbon(state)
+    assert "\x1b[" not in rendered
+
+
+def test_model_failure_panel_shows_reference_and_never_the_exception_text():
+    import io
+
+    from ui.failure_panel import model_failure_panel
+
+    panel = model_failure_panel(
+        "The request did not complete.",
+        reference_id="deadbeef",
+        model_name="local-model",
+        error_type="RuntimeError",
+        hints=("`/retry` resends the previous request.",),
+    )
+    output = io.StringIO()
+    Console(file=output, width=100, no_color=True).print(panel)
+    rendered = output.getvalue()
+
+    assert "Model request failed" in rendered
+    assert "deadbeef" in rendered
+    assert "local-model" in rendered
+    assert "RuntimeError" in rendered
+    assert "/retry" in rendered
+    assert "The request did not complete." in rendered
+
+
+def test_ui_check_covers_every_component_and_passes(capsys):
+    from ui.check import run_ui_check
+
+    assert run_ui_check() == 0
+    assert "All UI components rendered successfully" in capsys.readouterr().out
+
+
+def test_ui_check_reports_a_component_failure(monkeypatch, capsys):
+    from ui import check
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(check, "status_ribbon", boom)
+
+    assert check.run_ui_check() == 1
+    assert "render exploded" in capsys.readouterr().out

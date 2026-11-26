@@ -61,6 +61,12 @@ def test_log_redactions_include_sensitive_values_and_short_strings_are_unique():
     assert len(redactions) == len(set(redactions))
 
 
+def _render(renderable, width=100):
+    output = io.StringIO()
+    Console(file=output, width=width, no_color=True).print(renderable)
+    return output.getvalue()
+
+
 def test_tool_request_panel_uses_shared_console(monkeypatch):
     output = io.StringIO()
     captured = Console(file=output, width=100, force_terminal=False)
@@ -75,12 +81,37 @@ def test_tool_request_panel_uses_shared_console(monkeypatch):
         {"name": "web_search", "args": {"query": "public", "api_key": "hidden"}}
     )
 
-    assert printed[0][0] == "[info][Tool Request][/info]"
-    summary = printed[0][1].plain
-    assert summary.startswith("web_search")
-    assert "[REDACTED]" in summary
-    assert "hidden" not in summary
+    panel = printed[0][0]
+    assert isinstance(panel, tool_display.Panel)
+    assert panel.title.plain == "[Tool Request] web_search"
+    rendered = _render(panel)
+    assert "query" in rendered
+    assert "api_key" in rendered
+    assert "public" in rendered
+    assert "[REDACTED]" in rendered
+    assert "hidden" not in rendered
     assert captured.file is output
+
+
+def test_tool_request_grid_elides_only_huge_values(monkeypatch):
+    printed = []
+    monkeypatch.setattr(
+        tool_display.console,
+        "print",
+        lambda *values, **_kwargs: printed.append(values),
+    )
+
+    tool_display._display_tool_request(
+        {
+            "name": "write_file",
+            "args": {"path": "notes.txt", "content": "x" * 400},
+        }
+    )
+
+    rendered = _render(printed[0][0])
+    assert "'notes.txt'" in rendered
+    assert "more chars]" in rendered
+    assert "x" * 300 not in rendered
 
 
 def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
@@ -98,9 +129,42 @@ def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
 
     panel = printed[0][0]
     assert panel.title.plain == "\u2713 Tool output: search_workspace"
-    body = panel.renderable.plain
-    assert body.startswith("x" * tool_display.TOOL_RESULT_PREVIEW_CHARS)
-    assert "Preview truncated" in body
+    rendered = _render(panel)
+    assert "x" * 40 in rendered
+    assert rendered.count("x") < tool_display.TOOL_RESULT_PREVIEW_CHARS + 20
+    assert "lines \u00b7 preview of" in rendered
+    assert "/expand" in rendered
+    assert "x" * (tool_display.TOOL_RESULT_PREVIEW_CHARS + 20) not in rendered
+
+
+def test_short_tool_result_has_no_footer(monkeypatch):
+    printed = []
+    monkeypatch.setattr(
+        tool_display.console,
+        "print",
+        lambda *values, **_kwargs: printed.append(values),
+    )
+
+    tool_display._display_tool_result("search_workspace", "one line")
+
+    rendered = _render(printed[0][0])
+    assert "one line" in rendered
+    assert "/expand" not in rendered
+
+
+def test_tool_result_panel_escapes_markup_like_text(monkeypatch):
+    printed = []
+    monkeypatch.setattr(
+        tool_display.console,
+        "print",
+        lambda *values, **_kwargs: printed.append(values),
+    )
+
+    tool_display._display_tool_result("read_file", "a [/] b [bold] c [not-a-style]")
+
+    rendered = _render(printed[0][0])
+    assert "[bold]" in rendered
+    assert "[not-a-style]" in rendered
 
 
 def test_empty_tool_result_reports_no_textual_output(monkeypatch):

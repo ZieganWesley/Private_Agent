@@ -1,0 +1,66 @@
+"""Startup framing renderables: section rules and key/value summaries."""
+
+from __future__ import annotations
+
+import io
+
+from rich.console import Console
+
+from ui.startup import field_text, key_value_columns, startup_rule, startup_section
+
+
+def _render(renderable, width: int = 80) -> str:
+    buffer = io.StringIO()
+    Console(file=buffer, width=width, no_color=True).print(renderable)
+    return buffer.getvalue()
+
+
+def test_startup_rule_names_the_section():
+    rendered = _render(startup_rule("Configuration"))
+    assert "Configuration" in rendered
+    assert "\u2500" in rendered
+
+
+def test_every_field_reaches_the_summary():
+    rendered = _render(
+        startup_section(
+            "Configuration",
+            (
+                ("Config file", "/tmp/private_config.json"),
+                ("RAG documents", "not configured"),
+                ("Skills", "/tmp/skills"),
+            ),
+        )
+    )
+    for expected in (
+        "Config file:",
+        "/tmp/private_config.json",
+        "RAG documents:",
+        "not configured",
+        "Skills:",
+        "/tmp/skills",
+    ):
+        assert expected in rendered, expected
+
+
+def test_long_paths_fold_instead_of_truncating():
+    path = "/home/someone/projects/private-agent/private_config.json"
+    rendered = _render(
+        startup_section("Configuration", (("Config file", path),)),
+        width=40,
+    )
+    assert "\u2026" not in rendered
+    assert "".join(rendered.split()).count("private_config.json") == 1
+    assert max(len(line) for line in rendered.splitlines()) <= 40
+
+
+def test_field_text_never_treats_a_value_as_markup():
+    rendered = _render(key_value_columns((("Model", "[bold]evil[/bold]"),)))
+    assert "[bold]evil[/bold]" in rendered
+
+
+def test_summary_renders_on_a_console_without_the_theme():
+    # A bare Console does not know the application theme: unknown style names
+    # would raise MissingStyle, so every lookup must carry a fallback.
+    rendered = _render(field_text("Model", "m"), width=20)
+    assert "Model: m" in rendered

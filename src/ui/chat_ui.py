@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from .console import console as _shared_console
+from .markdown_view import print_markdown
 
 
 class ChatMessage:
@@ -44,9 +45,7 @@ class ChatTranscript:
             return message
         if markdown:
             self.console.print(f"[bold success]{message.avatar}:[/bold success]")
-            from rich.markdown import Markdown
-
-            self.console.print(Markdown(content), soft_wrap=True)
+            print_markdown(self.console, content)
         else:
             self.console.print(message.render_text())
         return message
@@ -54,12 +53,10 @@ class ChatTranscript:
     def stream_chunk(
         self, role: str, chunk: str, end: str = "", markdown: bool = True
     ) -> None:
-        # Incremental, non-blocking write for streaming tokens. Assistant replies
-        # are Markdown, so chunks are rendered through rich.markdown.Markdown.
+        # Assistant replies are Markdown; both this path and the live streaming
+        # path render through ui.markdown_view so there is one parser.
         if markdown:
-            from rich.markdown import Markdown
-
-            self.console.print(Markdown(chunk), end=end, soft_wrap=True)
+            print_markdown(self.console, chunk, end=end)
         else:
             self.console.print(chunk, end=end)
 
@@ -78,9 +75,7 @@ def render_chat_message(
         return message.render_text()
     if markdown:
         target.print(f"[bold success]{message.avatar}:[/bold success]")
-        from rich.markdown import Markdown
-
-        target.print(Markdown(content), soft_wrap=True)
+        print_markdown(target, content)
     else:
         target.print(message.render_text())
     return message.render_text()

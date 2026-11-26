@@ -16,15 +16,15 @@ import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
 from config import CODE_OUTPUT_ROOT
 from database import PersistentMemory
 from sandbox import SandboxManager
+from ui.markdown_view import markdown_renderable
 
-from .console import console
+from .console import console, resolve_style
 from .learning import _offer_skill_capture
 from .permissions import coding_allows_command_network as _coding_allows_command_network
 from .permissions import coding_uses_isolated_copy as _coding_uses_isolated_copy
@@ -406,7 +406,7 @@ def _run_task_management(
                 + ("\n".join(plan_notes) + "\n\n" if plan_notes else "")
                 + "\n".join(step_lines),
                 title=f"Task {task['task_id']}",
-                border_style="cyan",
+                border_style=resolve_style("border.info"),
             )
         )
 
@@ -552,7 +552,7 @@ def _run_task_management(
                     )
                     continue
                 show_task(task)
-                console.print(Markdown(_task_plan_markdown(task)))
+                console.print(markdown_renderable(_task_plan_markdown(task)))
                 approval_choice = (
                     console.input(
                         "Approval choice [1 approve, 2 approve and allow edits, "
@@ -834,7 +834,7 @@ def _run_task_management(
                                 "for the task. These URLs came from search results "
                                 "but have not been independently verified.",
                                 title="Research source review",
-                                border_style="yellow",
+                                border_style=resolve_style("border.warning"),
                             )
                         )
                     else:

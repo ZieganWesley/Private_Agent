@@ -65,6 +65,14 @@ def context_bar(
     return f"{GAUGE_FILLED * filled}{GAUGE_EMPTY * (cells - filled)} {percent:.0f}%"
 
 
+def _pair_text(pair: tuple[str, str]) -> str:
+    """Render one ribbon segment, escaping markup in its value."""
+    key, value = pair
+    if not key:
+        return value
+    return f"{SEGMENT_LABELS.get(key, key)}: {escape(value)}"
+
+
 def context_state_line(
     stats: Any,
     output_tokens: Any,
@@ -105,31 +113,44 @@ class StatusState:
     def percent(self) -> float:
         return context_percent(self.context_tokens, self.context_maximum)
 
+    def segment_pairs(
+        self, *, width: int | None = None, accessible: bool = False
+    ) -> list[tuple[str, str]]:
+        """Build ``(key, value)`` ribbon segments, dropping trailing ones.
+
+        Keys are the stable names used for per-segment styling; the accessible
+        gauge has no key because it reads as a value on its own.
+        """
+        model_name = "" if self.model is None else str(self.model)
+        pairs: list[tuple[str, str]] = [
+            ("model", model_name),
+            ("context", f"{self.percent()}%"),
+            ("permission", str(self.permission_mode)),
+        ]
+        if self.provider_mode:
+            pairs.append(("mode", str(self.provider_mode)))
+        if accessible and self.context_maximum:
+            used, limit, _fraction = _context_use(
+                self.context_tokens, self.context_maximum
+            )
+            if limit > 0:
+                pairs.append(("window", f"{used}/{limit} ({self.percent():.0f}%)"))
+        if self.output_tokens is not None:
+            pairs.append(("output", str(self.output_tokens)))
+        pairs.append(("background", str(self.background_processes)))
+        if width is not None:
+            while (
+                len(SEGMENT_SEPARATOR.join(_pair_text(pair) for pair in pairs)) > width
+                and len(pairs) > 3
+            ):
+                pairs.pop()
+        return pairs
+
     def segments(
         self, *, width: int | None = None, accessible: bool = False
     ) -> list[str]:
         """Build the ribbon segments, dropping trailing ones if ``width`` is given."""
-        model_name = "" if self.model is None else str(self.model)
-        segs: list[str] = [
-            f"{SEGMENT_LABELS['model']}: {escape(model_name)}",
-            f"{SEGMENT_LABELS['context']}: {self.percent()}%",
-            f"{SEGMENT_LABELS['permission']}: {self.permission_mode}",
+        return [
+            _pair_text(pair)
+            for pair in self.segment_pairs(width=width, accessible=accessible)
         ]
-        if self.provider_mode:
-            segs.append(f"{SEGMENT_LABELS['mode']}: {escape(str(self.provider_mode))}")
-        if accessible and self.context_maximum:
-            _used, limit, _fraction = _context_use(
-                self.context_tokens, self.context_maximum
-            )
-            if limit > 0:
-                segs.append(
-                    f"{SEGMENT_LABELS['window']}: "
-                    f"{_used}/{limit} ({self.percent():.0f}%)"
-                )
-        if self.output_tokens is not None:
-            segs.append(f"{SEGMENT_LABELS['output']}: {self.output_tokens}")
-        segs.append(f"{SEGMENT_LABELS['background']}: {self.background_processes}")
-        if width is not None:
-            while len(SEGMENT_SEPARATOR.join(segs)) > width and len(segs) > 3:
-                segs.pop()
-        return segs

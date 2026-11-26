@@ -31,7 +31,7 @@ from database import PersistentMemory
 from repository_intelligence.memory_ranking import rank_memories
 from utils.run_logging import RUN_LOGGER
 
-from .console import console
+from .console import console, resolve_style
 from .learning import _run_learning_maintenance, _run_learning_suggestion
 from .prompts import token_count as _token_count
 
@@ -735,7 +735,7 @@ async def _run_memory_maintenance(
                             f"Episode {entry['id']} — {entry['timestamp']} — "
                             f"session {entry['session_id']}"
                         ),
-                        border_style="cyan",
+                        border_style=resolve_style("border.info"),
                     )
                 )
             elif action == "ask":

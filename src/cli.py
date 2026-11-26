@@ -4,9 +4,7 @@ import os
 import sys
 import time
 
-from rich.console import Console
-
-console = Console()
+from ui.console import apply_theme, console
 
 
 def enforce_offline_environment() -> None:
@@ -195,6 +193,7 @@ def main():
         os.environ["PRIVATE_AGENT_CONFIG"] = args.config
     if args.light:
         os.environ["PRIVATE_AGENT_LIGHT"] = "1"
+        apply_theme(light=True)
     if args.provider:
         os.environ["PRIVATE_AGENT_PROVIDER"] = args.provider
     if args.model:

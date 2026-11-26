@@ -3,7 +3,7 @@
 import json
 import re
 
-from rich.markdown import Markdown
+from ui.markdown_view import markdown_renderable
 
 from .task_commands import _task_plan_markdown
 
@@ -54,7 +54,7 @@ def create_text_plan(memory, session_id, user_input, llm, console) -> None:
     _tool_context = get_tool_context()
     _tool_context.task_id = task["task_id"]
     set_tool_context(_tool_context)
-    console.print(Markdown(_task_plan_markdown(task)))
+    console.print(markdown_renderable(_task_plan_markdown(task)))
     console.print(
         "[success]Text plan saved in SQLite; review and approve it with /tasks.[/success]"
     )

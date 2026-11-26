@@ -28,6 +28,16 @@ from agent import (
 from database import PersistentMemory
 from sandbox import SandboxManager
 
+
+def _rendered(*values) -> str:
+    """Render captured console arguments as plain text for assertions."""
+    output = StringIO()
+    console = Console(file=output, width=100, no_color=True)
+    for value in values:
+        console.print(value)
+    return output.getvalue()
+
+
 try:
     from agent import get_robust_chat_model
 except ImportError:
@@ -1394,7 +1404,9 @@ async def test_model_invocation_streams_and_aggregates_text(monkeypatch):
         def stop(self):
             return None
 
-    monkeypatch.setattr(streaming, "Live", FakeLive)
+    from ui import markdown_view
+
+    monkeypatch.setattr(markdown_view, "Live", FakeLive)
     response = await _invoke_with_budget(
         StreamingModel(),
         [],
@@ -1504,12 +1516,15 @@ def test_tool_request_is_visible_and_redacts_secrets(monkeypatch):
         }
     )
 
-    assert printed[0][0][0] == "[info][Tool Request][/info]"
-    summary = printed[0][0][1].plain
-    assert summary.startswith("web_search")
-    assert "public profile" in summary
-    assert "[REDACTED]" in summary
-    assert "must-not-be-visible" not in summary
+    panel = printed[0][0][0]
+    assert panel.title.plain == "[Tool Request] web_search"
+    output_buffer = StringIO()
+    Console(file=output_buffer, width=100, no_color=True).print(panel)
+    rendered = output_buffer.getvalue()
+    assert "public profile" in rendered
+    assert "api_key" in rendered
+    assert "[REDACTED]" in rendered
+    assert "must-not-be-visible" not in rendered
 
 
 def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
@@ -1530,10 +1545,11 @@ def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
     panel = printed[0][0][0]
     assert isinstance(panel, tool_display.Panel)
     assert panel.title.plain == "✓ Tool output: search_workspace"
-    assert panel.renderable.plain.startswith(
-        "x" * tool_display.TOOL_RESULT_PREVIEW_CHARS
-    )
-    assert "Preview truncated" in panel.renderable.plain
+    rendered = _rendered(panel)
+    assert "x" * 40 in rendered
+    assert "lines · preview of" in rendered
+    assert "/expand" in rendered
+    assert "x" * (tool_display.TOOL_RESULT_PREVIEW_CHARS + 20) not in rendered
 
 
 @pytest.mark.asyncio
@@ -1695,7 +1711,9 @@ async def test_streaming_response_stops_the_spinner_before_rendering(monkeypatch
         def stop(self):
             return None
 
-    monkeypatch.setattr(streaming, "Live", FakeLive)
+    from ui import markdown_view
+
+    monkeypatch.setattr(markdown_view, "Live", FakeLive)
 
     response = await agent._invoke_with_status(
         StreamingModel(),
@@ -1802,8 +1820,8 @@ async def test_model_failure_shows_reference_without_exposing_exception(
             status_message="Generating",
         )
 
-    output = " ".join(map(str, printed))
-    reference = re.search(r"reference ([a-f0-9]{8})", output)
+    output = _rendered(*printed)
+    reference = re.search(r"reference\s+([a-f0-9]{8})", output)
     assert reference
     assert "private endpoint details" not in output
     assert events[0]["reference_id"] == reference.group(1)

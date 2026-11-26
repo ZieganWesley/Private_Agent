@@ -27,6 +27,8 @@ from . import capabilities as capability_packs
 from ui import json_output
 from . import runtime_f_integration as f_integration
 from ui.chat_ui import ChatTranscript
+from ui.markup import citation_line, plan_line, verification_line
+from ui.startup import startup_section, welcome_panel
 from platform_support import (
     detect_platform,
     is_windows_mount_path,
@@ -1302,14 +1304,15 @@ async def _build_session_setup(
         )
     if verbose_startup:
         console.print(
-            "[bold success][Config Status][/bold success] Loaded configuration "
-            f"from: [info]{CONFIG_FILE_PATH.resolve()}[/info]"
-        )
-        console.print(
-            "[bold success][Configured paths][/bold success] "
-            f"RAG documents: [info]{rag_docs_default or 'not configured'}[/info] | "
-            f"RAG index: [info]{RAG_INDEX_PATH}[/info] | "
-            f"Skills: [info]{skills_folder_default or 'not configured'}[/info]"
+            startup_section(
+                "Configuration",
+                (
+                    ("Config file", CONFIG_FILE_PATH.resolve()),
+                    ("RAG documents", rag_docs_default or "not configured"),
+                    ("RAG index", RAG_INDEX_PATH),
+                    ("Skills", skills_folder_default or "not configured"),
+                ),
+            )
         )
     import code_tasks as code_tasks_module
 
@@ -2357,10 +2360,12 @@ def _store_turn_output(
     )
     if not isinstance(response, AIMessageChunk):
         chat_transcript.add_message("assistant", full_output_content, echo=False)
-        for i in range(0, len(full_output_content), 120):
-            chat_transcript.stream_chunk("assistant", full_output_content[i : i + 120])
+        # One render of the whole reply: slicing it into 120-character chunks
+        # rendered every slice as its own Markdown document, which broke tables
+        # and code fences that straddled a boundary.
         if full_output_content:
-            chat_transcript.stream_chunk("assistant", "\n")
+            chat_transcript.stream_chunk("assistant", full_output_content)
+            chat_transcript.stream_chunk("assistant", "\n", markdown=False)
     elif not full_output_content and not getattr(response, "tool_calls", None):
         session_ui.print_markup(
             "[warning]The model returned no visible response text.[/warning]"
@@ -2368,10 +2373,10 @@ def _store_turn_output(
     if retrieved_citations:
         session_ui.print_markup("[bold info][Retrieved Sources][/bold info]")
         for citation in retrieved_citations:
-            session_ui.print_markup(f"  - {citation}")
+            session_ui.print_markup(citation_line(citation))
     if active_code_workspace is not None:
         verification = cleanup_code_task(finalize=True)
-        session_ui.print_markup(f"[info][Code Task Verification][/info] {verification}")
+        session_ui.print_markup(verification_line(verification))
         full_output_content += f"\n\n[Code task verification]\n{verification}"
     memory.save_message(session_id, "human", user_input, turn_id=turn_id)
     memory.save_message(session_id, "ai", full_output_content, turn_id=turn_id)
@@ -2578,15 +2583,7 @@ async def _run_agent_cli_session(
         )
         session_ui.bind(model=selected_model, permission=permission_mode)
         if SHOW_WELCOME_SCREEN and not non_interactive:
-            from rich.panel import Panel
-
-            session_ui.print(
-                Panel(
-                    f"Private Agent\nModel: {selected_model}\nWorkspace: {SandboxManager.get_root()}",
-                    title="Welcome",
-                    border_style="cyan",
-                )
-            )
+            session_ui.print(welcome_panel(selected_model, SandboxManager.get_root()))
         _local_model_has_answered = False
         _pending_user_input = None
         try:
@@ -2661,7 +2658,9 @@ async def _run_agent_cli_session(
                 if _handled and _cont:
                     continue
                 if user_input.lower() in {"/help", "/commands"}:
-                    session_ui.print(_format_interactive_help(GROUPED_HELP))
+                    from .interactive import help_renderable
+
+                    session_ui.print(help_renderable(GROUPED_HELP))
                     continue
                 _mission_input = _mission_slash_command(
                     user_input, memory, session_id, session_ui
@@ -2709,7 +2708,9 @@ async def _run_agent_cli_session(
                     from .context_telemetry import print_context_usage
 
                     print_context_usage(
-                        _CONTEXT_REPORT_STATE.get("value", {}) or {}, session_ui.print
+                        _CONTEXT_REPORT_STATE.get("value", {}) or {},
+                        session_ui.print,
+                        console=session_ui.console,
                     )
                     continue
                 from .provider_report import handle_provider_command
@@ -2731,42 +2732,30 @@ async def _run_agent_cli_session(
                     )
                     continue
                 if user_input.lower() == "/status":
-                    table = Table(
-                        title="Session Status",
-                        box=None,
-                        show_header=False,
+                    from .commands.status import session_status_panel
+
+                    session_ui.print(
+                        session_status_panel(
+                            provider_type=provider_type,
+                            local_runtime_name=(
+                                selected_local_runtime.name
+                                if selected_local_runtime is not None
+                                else ""
+                            ),
+                            selected_model=selected_model,
+                            permission_mode=permission_mode,
+                            workspace=str(SandboxManager.get_root()),
+                            rag_description=(
+                                f"active — {docs_input}"
+                                if vectorstore and docs_input
+                                else "inactive"
+                            ),
+                            queued_context_present=bool(pending_folder_context),
+                            queued_context_files=len(pending_folder_context_files),
+                            queued_context_bytes=pending_folder_context_bytes,
+                            context_value=_CONTEXT_REPORT_STATE.get("value") or {},
+                        )
                     )
-                    table.add_column("Setting", style="cyan")
-                    table.add_column("Current value", overflow="fold")
-                    table.add_row(
-                        "Provider",
-                        (
-                            f"Local ({selected_local_runtime.name})"
-                            if provider_type == "local"
-                            else "Online"
-                        ),
-                    )
-                    table.add_row("Model", selected_model)
-                    table.add_row("Permission mode", permission_mode.title())
-                    table.add_row("Workspace", str(SandboxManager.get_root()))
-                    table.add_row(
-                        "RAG",
-                        (
-                            f"active — {docs_input}"
-                            if vectorstore and docs_input
-                            else "inactive"
-                        ),
-                    )
-                    table.add_row(
-                        "Queued folder context",
-                        (
-                            f"{len(pending_folder_context_files)} file(s), "
-                            f"{pending_folder_context_bytes:,} bytes"
-                            if pending_folder_context
-                            else "none"
-                        ),
-                    )
-                    session_ui.print(table)
                     continue
                 if user_input.lower() == "/undo":
                     undo_outcome = await asyncio.to_thread(
@@ -3983,9 +3972,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         ):
                             plan_text = str(response.content).strip()
                             if plan_text:
-                                session_ui.print_markup(
-                                    f"[info][Plan][/info] {plan_text}"
-                                )
+                                session_ui.print_markup(plan_line(plan_text))
                         iteration_label = (
                             f"{iteration} of {tool_iteration_limit}"  # noqa: B023
                             if tool_iteration_limit is not None  # noqa: B023
