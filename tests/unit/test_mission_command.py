@@ -46,7 +46,13 @@ def test_start_creates_a_mission(memory):
 
     assert result is not None
     controller = result["controller"]
-    assert controller.mission()["goal"] == "ship the registry"
+    mission = controller.mission()
+    assert mission["goal"] == "ship the registry"
+    assert [step["step_id"] for step in mission["plan"]["steps"]] == [
+        "step-1",
+        "step-2",
+        "step-3",
+    ]
     assert "Mission started" in ui.messages[0]
 
 

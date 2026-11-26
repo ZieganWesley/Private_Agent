@@ -52,7 +52,23 @@ def handle_mission_command(
             memory,
             session_id,
             goal,
-            [{"step_id": "step-1", "description": goal}],
+            [
+                {
+                    "step_id": "step-1",
+                    "description": f"Plan the work for: {goal}",
+                    "acceptance": ["the approach and risks are explicit"],
+                },
+                {
+                    "step_id": "step-2",
+                    "description": f"Do the work for: {goal}",
+                    "acceptance": ["the requested outcome is implemented"],
+                },
+                {
+                    "step_id": "step-3",
+                    "description": f"Verify the work for: {goal}",
+                    "acceptance": ["verification evidence is reported"],
+                },
+            ],
         )
         _print(
             session_ui,
