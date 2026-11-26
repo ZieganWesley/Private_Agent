@@ -30,6 +30,7 @@ from config import (
     ONLINE_MODEL_LIST_TIMEOUT,
     ONLINE_PERMISSION_OVERRIDE,
     ONLINE_REQUEST_TIMEOUT,
+    PROVIDER_API_MODE,
 )
 from hardware import ollama_acceleration_options
 from providers.endpoints import EndpointRegistry, is_loopback_url, remote_allowed
@@ -43,6 +44,7 @@ from .providers import (
 from .providers import create_robust_local_chat_model as _create_robust_local_chat_model
 from .providers import select_online_model as _select_online_model
 from .providers import validate_online_base_url as _validate_online_base_url
+from providers.transport_model import TransportChatModel
 from .session_state import SESSION_STATS as _SESSION_STATS
 
 _MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] = {}
@@ -168,8 +170,19 @@ def _make_selected_local_chat_model(
     thinking_enabled: bool,
     thinking_effort: str,
     capabilities: dict,
+    api_mode: str | None = None,
 ):
-    """Build a chat model using the selected local runtime's OpenAI-compatible API."""
+    """Build a chat model using the configured provider API surface."""
+    mode = str(api_mode or PROVIDER_API_MODE).strip().lower()
+    if mode in {"completions", "responses"}:
+        return TransportChatModel(
+            runtime.base_url,
+            model_name,
+            api_mode=mode,
+            api_key="local-runtime",
+            timeout=float(ONLINE_REQUEST_TIMEOUT),
+            client_factory=public_only_sync_client,
+        )
     if not _is_loopback_url(runtime.base_url):
         console.print(
             f"[warning][Remote host][/warning] {runtime.base_url} is not on this "

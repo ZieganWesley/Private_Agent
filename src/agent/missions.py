@@ -16,6 +16,10 @@ DEFAULT_MAX_CONSECUTIVE_FAILURES = 3
 DEFAULT_NO_PROGRESS_REPEATS = 3
 
 
+class MissionLeaseError(RuntimeError):
+    """Raised when another controller already owns the mission lease."""
+
+
 @dataclass
 class MissionPlanStep:
     step_id: str
@@ -56,6 +60,7 @@ class MissionController:
         max_iterations: int = 20,
         tool_call_budget: int = 60,
         deadline: float | None = None,
+        lease_owner: str | None = None,
     ) -> "MissionController":
         normalized = []
         for index, step in enumerate(steps, start=1):
@@ -92,6 +97,13 @@ class MissionController:
             plan={"steps": normalized},
         )
         controller = cls(memory, mission["mission_id"])
+        if lease_owner and not memory.acquire_mission_lease(
+            mission["mission_id"], lease_owner
+        ):
+            controller.fail("Another controller owns this mission lease.")
+            raise MissionLeaseError(
+                "Another controller is already running this mission."
+            )
         controller._record("planned", {"steps": len(normalized)})
         return controller
 
@@ -295,10 +307,19 @@ class MissionController:
         self._record("failed", {"reason": reason})
         return mission
 
+    def release_lease(self, owner: str) -> bool:
+        return self.memory.release_mission_lease(self.mission_id, owner)
+
+    def has_pending_steps(self) -> bool:
+        return any(
+            step.get("status") != "completed" for step in self._steps()
+        )
+
 
 __all__ = [
     "DEFAULT_MAX_CONSECUTIVE_FAILURES",
     "DEFAULT_NO_PROGRESS_REPEATS",
     "MissionController",
+    "MissionLeaseError",
     "MissionPlanStep",
 ]

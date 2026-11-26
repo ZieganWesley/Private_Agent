@@ -159,6 +159,54 @@ def _display_visible_reasoning(response: Any) -> None:
         )
 
 
+async def _run_with_cancel(
+    awaitable: Any,
+    *,
+    timeout: float,
+    cancel_event: asyncio.Event | None,
+) -> tuple[Any, bool]:
+    """Await a task or cancel it promptly; return (result, interrupted)."""
+    task = asyncio.ensure_future(awaitable)
+    if cancel_event is None:
+        return await asyncio.wait_for(task, timeout=timeout), False
+    cancel_task = asyncio.create_task(cancel_event.wait())
+    try:
+        done, _ = await asyncio.wait(
+            {task, cancel_task},
+            timeout=timeout,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+    except BaseException:
+        task.cancel()
+        cancel_task.cancel()
+        raise
+    if task in done:
+        cancel_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await cancel_task
+        return task.result(), False
+    if cancel_task in done:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        return None, True
+    task.cancel()
+    cancel_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    with contextlib.suppress(asyncio.CancelledError):
+        await cancel_task
+    raise asyncio.TimeoutError("Model invocation deadline reached.")
+
+
+def _interrupted_response(partial_text: str = "") -> AIMessageChunk:
+    suffix = "\n\n[interrupted by user]" if partial_text else "[interrupted by user]"
+    return AIMessageChunk(
+        content=f"{partial_text}{suffix}",
+        additional_kwargs={"interrupted": True},
+    )
+
+
 async def _invoke_with_budget(
     model: Any,
     messages: list,
@@ -169,6 +217,7 @@ async def _invoke_with_budget(
     local_model: bool = False,
     first_local_turn: bool = True,
     context_usage: tuple[int, int] | None = None,
+    cancel_event: asyncio.Event | None = None,
 ):
     """Invoke a model within the task deadline, streaming text when supported."""
     remaining = deadline - time.monotonic()
@@ -192,6 +241,7 @@ async def _invoke_with_budget(
             context_usage=context_usage,
         ).start()
         _paused_footer: dict[str, Any] = {"footer": None}
+        partial: dict[str, Any] = {"text": ""}
 
         def _pause_footer() -> None:
             footer = get_active_footer(console)
@@ -258,6 +308,7 @@ async def _invoke_with_budget(
                             )
                             emitted_header = True
                         streamed_text += text
+                        partial["text"] = streamed_text
                         if live is None:
                             live = Live(
                                 Markdown(streamed_text),
@@ -281,10 +332,14 @@ async def _invoke_with_budget(
             return aggregate, first_token_at
 
         try:
-            aggregate, first_token_at = await asyncio.wait_for(
+            result, interrupted = await _run_with_cancel(
                 collect_stream(),
                 timeout=remaining,
+                cancel_event=cancel_event,
             )
+            if interrupted:
+                return _interrupted_response(partial.get("text", ""))
+            aggregate, first_token_at = result
             if _model_response_is_empty(aggregate):
                 _SESSION_STATS.record_model_call(
                     messages,
@@ -329,10 +384,13 @@ async def _invoke_with_budget(
                                 "Please try again in this session."
                             )
                         )
-                    aggregate = await asyncio.wait_for(
+                    aggregate, retry_interrupted = await _run_with_cancel(
                         retry_response,
                         timeout=retry_remaining,
+                        cancel_event=cancel_event,
                     )
+                    if retry_interrupted:
+                        return _interrupted_response(partial.get("text", ""))
                 except (ValueError, OSError) as retry_error:
                     log_event(
                         RUN_LOGGER,
@@ -426,7 +484,13 @@ async def _invoke_with_budget(
             raise
 
     try:
-        response = await asyncio.wait_for(model.ainvoke(messages), timeout=remaining)
+        response, interrupted = await _run_with_cancel(
+            model.ainvoke(messages),
+            timeout=remaining,
+            cancel_event=cancel_event,
+        )
+        if interrupted:
+            return _interrupted_response()
     except (ValueError, OSError):
         log_event(
             RUN_LOGGER,
@@ -528,6 +592,7 @@ async def _invoke_with_status(
     first_local_turn: bool = True,
     thinking_enabled: bool = False,
     context_usage: tuple[int, int] | None = None,
+    cancel_event: asyncio.Event | None = None,
 ):
     """Show operation progress and report elapsed time for slow model calls."""
     started = time.monotonic()
@@ -542,6 +607,7 @@ async def _invoke_with_status(
                 local_model=local_model,
                 first_local_turn=first_local_turn,
                 context_usage=context_usage,
+                cancel_event=cancel_event,
             )
         except (ValueError, OSError, RuntimeError) as exc:
             reference_id = uuid.uuid4().hex[:8]
@@ -586,6 +652,7 @@ async def _invoke_with_status(
                     model_name=model_name,
                     local_model=local_model,
                     first_local_turn=first_local_turn,
+                    cancel_event=cancel_event,
                 )
         except (ValueError, OSError, RuntimeError) as exc:
             reference_id = uuid.uuid4().hex[:8]

@@ -458,6 +458,13 @@ def resolve_config_values(
     ONLINE_MODEL_LIST_LIMIT = configured_int(
         config, "models", "online_model_list_limit", 30
     )
+    PROVIDER_API_MODE = configured_choice(
+        config,
+        "models",
+        "provider_api_mode",
+        "chat",
+        ("chat", "completions", "responses"),
+    )
     MAX_MODEL_CAPABILITY_CACHE_ENTRIES = configured_int(
         config, "agent", "max_model_capability_cache_entries", 128
     )
@@ -771,6 +778,7 @@ class Settings:
     online_model_list_timeout: int
     online_max_retries: int
     online_model_list_limit: int
+    provider_api_mode: str
     max_model_capability_cache_entries: int
     max_webpage_bytes: int
     max_download_bytes: int
