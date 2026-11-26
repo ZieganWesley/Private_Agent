@@ -23,8 +23,11 @@ def start_steering_channel(
     """Return a running TTY reader, or None for non-interactive sessions."""
     if not interactive or not sys.stdin.isatty():
         return None
-    channel = InputChannel(controller, read_line=sys.stdin.readline)
+    channel = InputChannel(controller)
     channel.start()
+    if not channel.running:
+        channel.stop()
+        return None
     return channel
 
 

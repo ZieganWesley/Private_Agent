@@ -149,6 +149,54 @@ def test_input_channel_is_inert_without_a_tty():
     channel.stop()
 
 
+def test_input_channel_uses_a_stoppable_fd_reader(monkeypatch):
+    import os
+
+    from agent import input_channel
+
+    read_fd, write_fd = os.pipe()
+
+    class Stdin:
+        def fileno(self):
+            return read_fd
+
+    monkeypatch.setattr(input_channel.sys, "stdin", Stdin())
+    controller = TurnController()
+    controller.begin_turn()
+    channel = input_channel.InputChannel(controller, is_tty=True)
+    try:
+        channel.start()
+        os.write(write_fd, b"queued from fd\n")
+        for _ in range(100):
+            if controller.queued_count:
+                break
+            time.sleep(0.005)
+        channel.stop()
+
+        assert channel.running is False
+        assert controller.drain()[0].text == "queued from fd"
+    finally:
+        channel.stop()
+        os.close(read_fd)
+        os.close(write_fd)
+
+
+def test_input_channel_stays_inert_for_a_non_fd_stdin(monkeypatch):
+    from types import SimpleNamespace
+
+    from agent import input_channel
+
+    monkeypatch.setattr(
+        input_channel.sys, "stdin", SimpleNamespace(isatty=lambda: True)
+    )
+    controller = TurnController()
+    channel = input_channel.InputChannel(controller)
+
+    channel.start()
+
+    assert channel.running is False
+
+
 def test_input_channel_reads_lines_in_a_thread():
     controller = TurnController()
     lines = iter(["queued from thread", ""])
