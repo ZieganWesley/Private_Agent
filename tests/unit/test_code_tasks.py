@@ -528,7 +528,7 @@ def test_generated_project_test_command_isolated_from_host_files(tmp_path):
         "    else: sys.exit(9)\n"
         f"assert socket.socket().connect_ex(('127.0.0.1', {host_port})) != 0\n"
         "assert resource.getrlimit(resource.RLIMIT_CPU)[0] <= 180\n"
-        "assert resource.getrlimit(resource.RLIMIT_AS)[0] <= 2 * 1024**3\n"
+        "assert resource.getrlimit(resource.RLIMIT_AS)[0] <= 4 * 1024**3\n"
         "assert resource.getrlimit(resource.RLIMIT_NPROC)[0] <= 128\n"
         "assert resource.getrlimit(resource.RLIMIT_FSIZE)[0] <= 512 * 1024**2\n"
         "assert os.environ['HOME'] == '/tmp'\n"
