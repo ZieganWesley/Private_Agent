@@ -295,7 +295,9 @@ async def test_streamed_text_is_printed_only_after_the_spinner_stops(monkeypatch
         def stop(self):
             return None
 
-    monkeypatch.setattr(streaming, "Live", FakeLive)
+    from ui import markdown_view
+
+    monkeypatch.setattr(markdown_view, "Live", FakeLive)
 
     class SimpleModel:
         async def astream(self, _messages):

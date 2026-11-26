@@ -29,7 +29,6 @@ from . import runtime_f_integration as f_integration
 from ui.chat_ui import ChatTranscript
 from ui.markup import citation_line, plan_line, verification_line
 from ui.startup import startup_section, welcome_panel
-from ui.status_view import StatusSection, status_panel
 from platform_support import (
     detect_platform,
     is_windows_mount_path,
@@ -2733,76 +2732,28 @@ async def _run_agent_cli_session(
                     )
                     continue
                 if user_input.lower() == "/status":
-                    context_value = _CONTEXT_REPORT_STATE.get("value") or {}
-                    context_rows: list[tuple[str, Any]] = []
-                    if isinstance(context_value, dict) and context_value.get(
-                        "total_tokens"
-                    ):
-                        context_rows.append(
-                            ("Window", f"{context_value['total_tokens']} tokens")
-                        )
-                        context_rows.append(
-                            (
-                                "Used last turn",
-                                f"{context_value.get('sum_used', 0)} tokens "
-                                f"({float(context_value.get('usage_percent', 0.0)):.1f}%)",
-                            )
-                        )
-                        truncated = context_value.get("truncated") or []
-                        if truncated:
-                            context_rows.append(
-                                ("Trimmed", ", ".join(str(name) for name in truncated))
-                            )
-                    else:
-                        context_rows.append(("Last turn", "not measured yet"))
+                    from .commands.status import session_status_panel
+
                     session_ui.print(
-                        status_panel(
-                            "Session Status",
-                            (
-                                StatusSection(
-                                    "Session",
-                                    (
-                                        (
-                                            "Provider kind",
-                                            str(provider_type).title(),
-                                        ),
-                                        (
-                                            "Provider",
-                                            f"Local ({selected_local_runtime.name})"
-                                            if provider_type == "local"
-                                            else "Online",
-                                        ),
-                                        ("Model", selected_model),
-                                        ("Permission mode", permission_mode.title()),
-                                        ("Workspace", str(SandboxManager.get_root())),
-                                    ),
-                                    ("Setting", "Value"),
-                                ),
-                                StatusSection(
-                                    "Context",
-                                    tuple(context_rows),
-                                    ("Measure", "Value"),
-                                ),
-                                StatusSection(
-                                    "Workspace",
-                                    (
-                                        (
-                                            "RAG",
-                                            f"active — {docs_input}"
-                                            if vectorstore and docs_input
-                                            else "inactive",
-                                        ),
-                                        (
-                                            "Queued folder context",
-                                            f"{len(pending_folder_context_files)} "
-                                            f"file(s), {pending_folder_context_bytes:,} bytes"
-                                            if pending_folder_context
-                                            else "none",
-                                        ),
-                                    ),
-                                    ("Source", "State"),
-                                ),
+                        session_status_panel(
+                            provider_type=provider_type,
+                            local_runtime_name=(
+                                selected_local_runtime.name
+                                if selected_local_runtime is not None
+                                else ""
                             ),
+                            selected_model=selected_model,
+                            permission_mode=permission_mode,
+                            workspace=str(SandboxManager.get_root()),
+                            rag_description=(
+                                f"active — {docs_input}"
+                                if vectorstore and docs_input
+                                else "inactive"
+                            ),
+                            queued_context_present=bool(pending_folder_context),
+                            queued_context_files=len(pending_folder_context_files),
+                            queued_context_bytes=pending_folder_context_bytes,
+                            context_value=_CONTEXT_REPORT_STATE.get("value") or {},
                         )
                     )
                     continue

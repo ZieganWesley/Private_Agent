@@ -91,6 +91,61 @@ def test_panel_fits_the_requested_width():
         assert "\u2026" not in rendered
 
 
+def test_session_status_panel_reports_context_and_queue_state():
+    from agent.commands.status import session_status_panel
+
+    rendered = _render(
+        session_status_panel(
+            provider_type="local",
+            local_runtime_name="Ollama",
+            selected_model="qwen2.5-coder:7b",
+            permission_mode="ask",
+            workspace="/w",
+            rag_description="inactive",
+            queued_context_present=True,
+            queued_context_files=2,
+            queued_context_bytes=1024,
+            context_value={
+                "total_tokens": 4096,
+                "sum_used": 512,
+                "usage_percent": 12.5,
+                "truncated": ["history"],
+            },
+        )
+    )
+    for expected in (
+        "Local (Ollama)",
+        "4096 tokens",
+        "512 tokens (12.5%)",
+        "Trimmed",
+        "history",
+        "2 file(s), 1,024 bytes",
+    ):
+        assert expected in rendered, expected
+
+
+def test_session_status_panel_says_when_nothing_was_measured():
+    from agent.commands.status import session_status_panel
+
+    rendered = _render(
+        session_status_panel(
+            provider_type="online",
+            local_runtime_name="",
+            selected_model="gpt",
+            permission_mode="allow",
+            workspace="/w",
+            rag_description="inactive",
+            queued_context_present=False,
+            queued_context_files=0,
+            queued_context_bytes=0,
+            context_value={},
+        )
+    )
+    assert "Online" in rendered
+    assert "not measured yet" in rendered
+    assert "none" in rendered
+
+
 def test_panel_renders_on_a_console_without_the_theme():
     table = status_table(StatusSection("Session", (("Model", "m"),), ("Key", "Value")))
     assert "Model" in _render(table)
