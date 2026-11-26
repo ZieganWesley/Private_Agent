@@ -21,6 +21,7 @@ Server-specific routes (2 and 3) are only probed on loopback endpoints.
 
 import logging
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from typing import Any
 from urllib.parse import quote
 
@@ -29,6 +30,21 @@ import httpx
 from utils.run_logging import RUN_LOGGER, log_event
 
 from .local_runtimes import DISCOVERY_TIMEOUT_SECONDS, _is_loopback_url
+from .model_catalog import (
+    CAPABILITY_FLAGS,
+    DEFAULT_CATALOG_TTL_SECONDS,
+    INPUT_FIELDS,
+    OUTPUT_FIELDS,
+    PROVENANCE_DECLARED,
+    PROVENANCE_DEFAULT,
+    PROVENANCE_PROBE,
+    ModelCatalog,
+    ModelRecord,
+    build_model_record,
+    default_model_record,
+    merge_flag_sources,
+    modalities_from_entry,
+)
 
 CAPABILITY_FLAGS = (
     "tools",
@@ -280,6 +296,190 @@ def _get_json(client: Any, url: str) -> Any:
         return None
 
 
+def _entry_limit(entry: Any, fields: Iterable[str]) -> int | None:
+    if not isinstance(entry, dict):
+        return None
+    for name in fields:
+        value = _positive_int(entry.get(name))
+        if value is not None:
+            return value
+    return None
+
+
+def _record_with_declared_overrides(
+    record: ModelRecord,
+    overrides: dict | None,
+) -> ModelRecord:
+    """Apply configured overrides to a cached record without mutating it."""
+    if not isinstance(overrides, dict) or not overrides:
+        return record
+    flags = dict(record.flags)
+    provenance = dict(record.provenance)
+    changed = False
+    for name in CAPABILITY_FLAGS:
+        value = overrides.get(name)
+        if isinstance(value, bool):
+            flags[name] = value
+            provenance[name] = PROVENANCE_DECLARED
+            changed = True
+    context_length = _positive_int(overrides.get("context_window"))
+    input_tokens = _positive_int(overrides.get("input_tokens"))
+    output_tokens = _positive_int(overrides.get("output_tokens"))
+    if context_length is not None:
+        provenance["context_length"] = PROVENANCE_DECLARED
+    if input_tokens is not None:
+        provenance["input_tokens"] = PROVENANCE_DECLARED
+    if output_tokens is not None:
+        provenance["output_tokens"] = PROVENANCE_DECLARED
+    if not changed and all(
+        value is None for value in (context_length, input_tokens, output_tokens)
+    ):
+        return record
+    return replace(
+        record,
+        flags=flags,
+        provenance=provenance,
+        context_length=(
+            context_length if context_length is not None else record.context_length
+        ),
+        input_tokens=(input_tokens if input_tokens is not None else record.input_tokens),
+        output_tokens=(
+            output_tokens if output_tokens is not None else record.output_tokens
+        ),
+    )
+
+
+def _probe_model_record(
+    model_name: str,
+    *,
+    base_url: str,
+    client_factory: Callable[..., Any],
+    timeout: float,
+    ttl_seconds: float = DEFAULT_CATALOG_TTL_SECONDS,
+) -> ModelRecord:
+    """Probe one endpoint and turn every source into a catalog record."""
+    root = _server_root(base_url)
+    props: Any = None
+    lm_entry: dict | None = None
+    listing_entry: dict | None = None
+    try:
+        with client_factory(
+            headers={}, timeout=timeout, allow_loopback=True
+        ) as client:
+            if _is_loopback_url(base_url):
+                props = _get_json(
+                    client, f"{root}/props?model={quote(model_name, safe='')}"
+                )
+                if props is None:
+                    props = _get_json(client, f"{root}/props")
+                for path in _LMSTUDIO_MODEL_PATHS:
+                    lm_entry = find_model_entry(
+                        _get_json(client, f"{root}{path}"), model_name
+                    )
+                    if lm_entry is not None:
+                        break
+            listing = _get_json(client, f"{base_url.rstrip('/')}/models")
+            listing_entry = find_model_entry(listing, model_name)
+    except (httpx.HTTPError, ConnectionError, OSError) as exc:
+        log_event(
+            RUN_LOGGER,
+            "provider.capability_detection_failed",
+            level=logging.WARNING,
+            model=model_name,
+            error_type=type(exc).__name__,
+            exc_info=True,
+        )
+
+    props_caps = capabilities_from_llamacpp_props(props)
+    lm_caps = capabilities_from_model_entry(lm_entry)
+    listing_caps = capabilities_from_model_entry(listing_entry)
+    family_caps = capabilities_from_family(model_name)
+
+    # Server-reported values win; the family table only fills the gaps.
+    flags, flag_provenance = merge_flag_sources(
+        [
+            (PROVENANCE_PROBE, props_caps),
+            (PROVENANCE_PROBE, lm_caps),
+            (PROVENANCE_PROBE, listing_caps),
+            (PROVENANCE_DEFAULT, family_caps),
+        ]
+    )
+
+    modalities = modalities_from_entry(props)
+    if not modalities:
+        modalities = modalities_from_entry(lm_entry)
+    if not modalities:
+        modalities = modalities_from_entry(listing_entry)
+
+    return build_model_record(
+        model_name,
+        base_url=base_url,
+        provider="openai-compatible",
+        role_entries=(listing_entry, lm_entry, props),
+        context_candidates=(
+            (PROVENANCE_PROBE, props_caps.get("context_window")),
+            (PROVENANCE_PROBE, lm_caps.get("context_window")),
+            (PROVENANCE_PROBE, listing_caps.get("context_window")),
+        ),
+        input_candidates=(
+            (PROVENANCE_PROBE, _entry_limit(lm_entry, INPUT_FIELDS)),
+            (PROVENANCE_PROBE, _entry_limit(listing_entry, INPUT_FIELDS)),
+        ),
+        output_candidates=(
+            (PROVENANCE_PROBE, _entry_limit(lm_entry, OUTPUT_FIELDS)),
+            (PROVENANCE_PROBE, _entry_limit(listing_entry, OUTPUT_FIELDS)),
+        ),
+        modality_candidates=(
+            (PROVENANCE_PROBE if modalities else PROVENANCE_DEFAULT, modalities),
+        ),
+        flags=flags,
+        flag_provenance=flag_provenance,
+        ttl_seconds=ttl_seconds,
+    )
+
+
+def detect_openai_compatible_model_record(
+    model_name: str,
+    *,
+    base_url: str,
+    client_factory: Callable[..., Any],
+    catalog: ModelCatalog | None = None,
+    overrides: dict | None = None,
+    timeout: float = DISCOVERY_TIMEOUT_SECONDS,
+) -> ModelRecord:
+    """Return the catalog record for one model, probing at most once."""
+    store = catalog if catalog is not None else ModelCatalog()
+    record = store.lookup(
+        model_name,
+        base_url,
+        probe=lambda: _probe_model_record(
+            model_name,
+            base_url=base_url,
+            client_factory=client_factory,
+            timeout=timeout,
+            ttl_seconds=store.ttl_seconds,
+        ),
+    )
+    if record is None:
+        record = default_model_record(model_name, base_url=base_url)
+    return _record_with_declared_overrides(record, overrides)
+
+
+def capabilities_with_limits(record: ModelRecord) -> dict[str, Any]:
+    """Return capabilities plus the listing limits and their provenance."""
+    surface: dict[str, Any] = dict(record.capabilities())
+    surface.update(
+        {
+            "input_tokens": record.input_tokens,
+            "output_tokens": record.output_tokens,
+            "modalities": list(record.modalities),
+            "role": record.role,
+            "provenance": dict(record.provenance),
+        }
+    )
+    return surface
+
+
 def detect_openai_compatible_capabilities(
     model_name: str,
     *,
@@ -289,49 +489,25 @@ def detect_openai_compatible_capabilities(
     max_cache_entries: int = 64,
     overrides: dict | None = None,
     timeout: float = DISCOVERY_TIMEOUT_SECONDS,
+    catalog: ModelCatalog | None = None,
 ) -> dict[str, bool | int | None]:
     """Detect what a model on an OpenAI-compatible endpoint can do.
 
-    Probe failures are logged and treated as "unknown"; this never raises.
+    The catalog owns the record, limits and provenance; this wrapper keeps the
+    historical capability dict for existing callers.  Probe failures are logged
+    and treated as "unknown"; this never raises.
     """
     cache_key = ("openai-compatible", base_url.rstrip("/"), model_name)
     detected = capability_cache.get(cache_key) if capability_cache is not None else None
     if detected is None:
-        sources: list[dict] = []
-        root = _server_root(base_url)
-        try:
-            with client_factory(
-                headers={}, timeout=timeout, allow_loopback=True
-            ) as client:
-                if _is_loopback_url(base_url):
-                    props = _get_json(
-                        client, f"{root}/props?model={quote(model_name, safe='')}"
-                    )
-                    if props is None:
-                        props = _get_json(client, f"{root}/props")
-                    sources.append(capabilities_from_llamacpp_props(props))
-                    for path in _LMSTUDIO_MODEL_PATHS:
-                        entry = find_model_entry(
-                            _get_json(client, f"{root}{path}"), model_name
-                        )
-                        if entry is not None:
-                            sources.append(capabilities_from_model_entry(entry))
-                            break
-                listing = _get_json(client, f"{base_url.rstrip('/')}/models")
-                sources.append(
-                    capabilities_from_model_entry(find_model_entry(listing, model_name))
-                )
-        except (httpx.HTTPError, ConnectionError, OSError) as exc:
-            log_event(
-                RUN_LOGGER,
-                "provider.capability_detection_failed",
-                level=logging.WARNING,
-                model=model_name,
-                error_type=type(exc).__name__,
-                exc_info=True,
-            )
-        # Server-reported values win; the family table only fills the gaps.
-        detected = merge_capabilities(*sources, capabilities_from_family(model_name))
+        record = detect_openai_compatible_model_record(
+            model_name,
+            base_url=base_url,
+            client_factory=client_factory,
+            catalog=catalog,
+            timeout=timeout,
+        )
+        detected = record.capabilities()
         if capability_cache is not None:
             if len(capability_cache) >= max_cache_entries:
                 capability_cache.clear()
