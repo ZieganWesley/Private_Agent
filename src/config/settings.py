@@ -13,20 +13,17 @@ from typing import Any
 
 from hardware import normalize_acceleration_mode
 
-DEFAULT_SYSTEM_PROMPT_PATH = (
-    pathlib.Path(__file__).resolve().parent.parent
-    / "resources"
-    / "default_system_prompt.md"
+from .defaults import (
+    DEFAULT_CONFIG,
+    DEFAULT_PATHS,
+    DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_SYSTEM_PROMPT_PATH,  # noqa: F401  (re-exported for compatibility)
 )
-try:
-    DEFAULT_SYSTEM_PROMPT = DEFAULT_SYSTEM_PROMPT_PATH.read_text(
-        encoding="utf-8"
-    ).strip()
-except OSError as exc:
-    raise RuntimeError(
-        f"Could not load packaged default system prompt at "
-        f"{DEFAULT_SYSTEM_PROMPT_PATH}: {exc}"
-    ) from exc
+
+
+def default_for(section: str, key: str) -> Any:
+    """Return the generated default for one settings key; defaults live once."""
+    return DEFAULT_CONFIG[section][key]
 
 
 def config_section(config: Mapping[str, Any], name: str) -> Mapping[str, Any]:
@@ -205,16 +202,6 @@ def first_configured_bool(
     return default
 
 
-DEFAULT_PATHS: dict[str, str] = {
-    "database": "~/.config/private_agent/memory/private_agent.db",
-    "workspace": ".",
-    "code_output": "~/.config/private_agent/projects",
-    "skills": "~/.config/private_agent/skills",
-    "rag_documents": "~/.config/private_agent/rag/",
-    "rag_index": "~/.config/private_agent/rag/index",
-}
-
-
 def resolve_config_values(
     config: Mapping[str, Any],
     *,
@@ -242,19 +229,24 @@ def resolve_config_values(
         default_paths["rag_documents"],
     )
 
-    MODEL_TEMPERATURE = configured_float(config, "models", "temperature", 0.1)
+    MODEL_TEMPERATURE = configured_float(
+        config, "models", "temperature", default_for("models", "temperature")
+    )
 
     ONLINE_PERMISSION_OVERRIDE = configured_bool(
-        config, "models", "online_permission_override", False
+        config,
+        "models",
+        "online_permission_override",
+        default_for("models", "online_permission_override"),
     )
     EMBEDDING_MODEL = configured_str(
-        config, "models", "embedding_model", "nomic-embed-text"
+        config, "models", "embedding_model", default_for("models", "embedding_model")
     )
     EMBEDDING_PROVIDER = configured_choice(
         config,
         "rag",
         "embedding_provider",
-        "ollama",
+        default_for("rag", "embedding_provider"),
         ("ollama", "openai-compatible", "auto", "none"),
     )
     EMBEDDING_BASE_URL = str(
@@ -302,37 +294,83 @@ def resolve_config_values(
     MAX_HISTORY_MESSAGES = positive_int(_agent_section, "max_history_messages", 20)
     MAX_CONTEXT_TOKENS = positive_int(_agent_section, "max_context_tokens", 12000)
     CONTEXT_COMPACTION_SOURCE_TOKENS = configured_nonnegative_int(
-        config, "agent", "compaction_source_tokens", 0
+        config,
+        "agent",
+        "compaction_source_tokens",
+        default_for("agent", "compaction_source_tokens"),
     )
     if not CONTEXT_COMPACTION_SOURCE_TOKENS:
         # Derive the transcript cap from the context window; a fixed cap wastes
         # large windows and overflows small ones.
         CONTEXT_COMPACTION_SOURCE_TOKENS = max(1000, MAX_CONTEXT_TOKENS // 2)
     TOOL_RESULT_PREVIEW_CHARS = configured_int_range(
-        config, "agent", "tool_result_preview_chars", 500, 100, 20000
+        config,
+        "agent",
+        "tool_result_preview_chars",
+        default_for("agent", "tool_result_preview_chars"),
+        100,
+        20000,
     )
     TOOL_ARGUMENT_PREVIEW_CHARS = configured_int_range(
-        config, "agent", "tool_argument_preview_chars", 200, 50, 2000
+        config,
+        "agent",
+        "tool_argument_preview_chars",
+        default_for("agent", "tool_argument_preview_chars"),
+        50,
+        2000,
     )
     SEARCH_MAX_FILES = configured_int_range(
-        config, "tools", "search_max_files", 10000, 100, 100000
+        config,
+        "tools",
+        "search_max_files",
+        default_for("tools", "search_max_files"),
+        100,
+        100000,
     )
     SEARCH_MAX_BYTES = configured_int_range(
-        config, "tools", "search_max_bytes", 16 * 1024 * 1024, 1024**2, 256 * 1024**2
+        config,
+        "tools",
+        "search_max_bytes",
+        default_for("tools", "search_max_bytes"),
+        1024**2,
+        256 * 1024**2,
     )
     SEARCH_OUTPUT_CHARS = configured_int_range(
-        config, "tools", "search_output_chars", 12000, 1000, 100000
+        config,
+        "tools",
+        "search_output_chars",
+        default_for("tools", "search_output_chars"),
+        1000,
+        100000,
     )
     TASK_CITATION_BUDGET_CHARS = configured_int_range(
-        config, "tools", "task_citation_budget_chars", 10000, 1000, 50000
+        config,
+        "tools",
+        "task_citation_budget_chars",
+        default_for("tools", "task_citation_budget_chars"),
+        1000,
+        50000,
     )
     MAX_OUTPUT_TOKENS = configured_int_range(
-        config, "agent", "max_output_tokens", 2048, 1, 32768
+        config,
+        "agent",
+        "max_output_tokens",
+        default_for("agent", "max_output_tokens"),
+        1,
+        32768,
     )
-    STREAMING_OUTPUT = configured_bool(config, "agent", "streaming_output", True)
-    VISIBLE_REASONING = configured_bool(config, "agent", "visible_reasoning", False)
-    VERBOSE_TIMINGS = configured_bool(config, "agent", "verbose_timings", False)
-    STATUS_BAR = configured_bool(config, "agent", "status_bar", True)
+    STREAMING_OUTPUT = configured_bool(
+        config, "agent", "streaming_output", default_for("agent", "streaming_output")
+    )
+    VISIBLE_REASONING = configured_bool(
+        config, "agent", "visible_reasoning", default_for("agent", "visible_reasoning")
+    )
+    VERBOSE_TIMINGS = configured_bool(
+        config, "agent", "verbose_timings", default_for("agent", "verbose_timings")
+    )
+    STATUS_BAR = configured_bool(
+        config, "agent", "status_bar", default_for("agent", "status_bar")
+    )
     SHOW_WELCOME_SCREEN = first_configured_bool(
         config,
         (
@@ -400,47 +438,106 @@ def resolve_config_values(
         else DEFAULT_SYSTEM_PROMPT
     )
     CONVERSATION_RETENTION_DAYS = configured_nonnegative_int(
-        config, "memory", "conversation_retention_days", 0
+        config,
+        "memory",
+        "conversation_retention_days",
+        default_for("memory", "conversation_retention_days"),
     )
     EPISODE_RETENTION_DAYS = configured_nonnegative_int(
-        config, "memory", "episode_retention_days", 0
+        config,
+        "memory",
+        "episode_retention_days",
+        default_for("memory", "episode_retention_days"),
     )
     REGISTERED_SKILL_RETENTION_DAYS = configured_nonnegative_int(
-        config, "memory", "registered_skill_retention_days", 0
+        config,
+        "memory",
+        "registered_skill_retention_days",
+        default_for("memory", "registered_skill_retention_days"),
     )
     TASK_STALE_AFTER_DAYS = configured_nonnegative_int(
-        config, "memory", "task_stale_after_days", 0
+        config,
+        "memory",
+        "task_stale_after_days",
+        default_for("memory", "task_stale_after_days"),
     )
-    MAX_SUMMARY_CHARS = configured_int(config, "memory", "max_summary_chars", 2000)
+    MAX_SUMMARY_CHARS = configured_int(
+        config,
+        "memory",
+        "max_summary_chars",
+        default_for("memory", "max_summary_chars"),
+    )
     MAX_LEARNED_ITEM_CHARS = configured_int_range(
-        config, "memory", "max_learned_item_chars", 1000, 1, 10000
+        config,
+        "memory",
+        "max_learned_item_chars",
+        default_for("memory", "max_learned_item_chars"),
+        1,
+        10000,
     )
     MAX_RESUME_STATE_CHARS = configured_int_range(
-        config, "memory", "max_resume_state_chars", 12000, 256, 100000
+        config,
+        "memory",
+        "max_resume_state_chars",
+        default_for("memory", "max_resume_state_chars"),
+        256,
+        100000,
     )
     MAX_MEMORY_CONTEXT_TOKENS = configured_int_range(
-        config, "memory", "max_memory_context_tokens", 1200, 128, 12000
+        config,
+        "memory",
+        "max_memory_context_tokens",
+        default_for("memory", "max_memory_context_tokens"),
+        128,
+        12000,
     )
     MAX_RELEVANT_EPISODES = configured_int_range(
-        config, "memory", "max_relevant_episodes", 3, 1, 20
+        config,
+        "memory",
+        "max_relevant_episodes",
+        default_for("memory", "max_relevant_episodes"),
+        1,
+        20,
     )
     LEARNED_ITEM_EXPIRY_DAYS = configured_int_range(
-        config, "memory", "learned_item_expiry_days", 365, 1, 3650
+        config,
+        "memory",
+        "learned_item_expiry_days",
+        default_for("memory", "learned_item_expiry_days"),
+        1,
+        3650,
     )
     LEARNED_ITEM_REVIEW_DAYS = configured_int_range(
-        config, "memory", "learned_item_review_days", 180, 1, 3650
+        config,
+        "memory",
+        "learned_item_review_days",
+        default_for("memory", "learned_item_review_days"),
+        1,
+        3650,
     )
     DEFAULT_HISTORY_MESSAGES = configured_int(
-        config, "memory", "default_history_messages", 20
+        config,
+        "memory",
+        "default_history_messages",
+        default_for("memory", "default_history_messages"),
     )
     DEFAULT_EPISODIC_SUMMARIES = configured_int(
-        config, "memory", "default_episodic_summaries", 5
+        config,
+        "memory",
+        "default_episodic_summaries",
+        default_for("memory", "default_episodic_summaries"),
     )
     MAX_NETWORK_CONCURRENCY = configured_int(
-        config, "network", "max_concurrent_requests", 4
+        config,
+        "network",
+        "max_concurrent_requests",
+        default_for("network", "max_concurrent_requests"),
     )
     NETWORK_REQUEST_TIMEOUT = configured_int(
-        config, "network", "request_timeout_seconds", 30
+        config,
+        "network",
+        "request_timeout_seconds",
+        default_for("network", "request_timeout_seconds"),
     )
     RAG_MAX_FILE_BYTES = configured_int(
         config, "rag", "max_file_bytes", 5 * 1024 * 1024
@@ -448,10 +545,18 @@ def resolve_config_values(
     RAG_MAX_CORPUS_BYTES = configured_int(
         config, "rag", "max_corpus_bytes", 25 * 1024 * 1024
     )
-    RAG_MAX_PDF_PAGES = configured_int(config, "rag", "max_pdf_pages", 250)
-    RAG_MAX_DOCUMENTS = configured_int(config, "rag", "max_documents", 20000)
-    RAG_CHUNK_SIZE_CHARS = configured_int(config, "rag", "chunk_size_chars", 1200)
-    RAG_CHUNK_OVERLAP_CHARS = configured_int(config, "rag", "chunk_overlap_chars", 200)
+    RAG_MAX_PDF_PAGES = configured_int(
+        config, "rag", "max_pdf_pages", default_for("rag", "max_pdf_pages")
+    )
+    RAG_MAX_DOCUMENTS = configured_int(
+        config, "rag", "max_documents", default_for("rag", "max_documents")
+    )
+    RAG_CHUNK_SIZE_CHARS = configured_int(
+        config, "rag", "chunk_size_chars", default_for("rag", "chunk_size_chars")
+    )
+    RAG_CHUNK_OVERLAP_CHARS = configured_int(
+        config, "rag", "chunk_overlap_chars", default_for("rag", "chunk_overlap_chars")
+    )
     CHUNKING_STRATEGY = (
         str(config_section(config, "chunking").get("strategy", "character"))
         .strip()
@@ -468,7 +573,10 @@ def resolve_config_values(
         config, "chunking", "chunk_overlap", RAG_CHUNK_OVERLAP_CHARS
     )
     CHUNKING_MIN_CHUNK_CHARS = configured_nonnegative_int(
-        config, "chunking", "min_chunk_chars", 0
+        config,
+        "chunking",
+        "min_chunk_chars",
+        default_for("chunking", "min_chunk_chars"),
     )
     _raw_separators = config_section(config, "chunking").get("separators")
     CHUNKING_SEPARATORS = (
@@ -480,15 +588,28 @@ def resolve_config_values(
     )
     CHUNKING_SEMANTIC_PERCENTILE = min(
         100.0,
-        configured_float(config, "chunking", "semantic_breakpoint_percentile", 90.0),
+        configured_float(
+            config,
+            "chunking",
+            "semantic_breakpoint_percentile",
+            default_for("chunking", "semantic_breakpoint_percentile"),
+        ),
     )
     CHUNKING_SEMANTIC_BUFFER = configured_nonnegative_int(
-        config, "chunking", "semantic_buffer_sentences", 1
+        config,
+        "chunking",
+        "semantic_buffer_sentences",
+        default_for("chunking", "semantic_buffer_sentences"),
     )
     CHUNKING_SEMANTIC_MAX_SENTENCES = configured_int(
-        config, "chunking", "semantic_max_sentences", 2000
+        config,
+        "chunking",
+        "semantic_max_sentences",
+        default_for("chunking", "semantic_max_sentences"),
     )
-    RAG_SIMILARITY_RESULTS = configured_int(config, "rag", "similarity_results", 6)
+    RAG_SIMILARITY_RESULTS = configured_int(
+        config, "rag", "similarity_results", default_for("rag", "similarity_results")
+    )
     _raw_rag_file_types = config_section(config, "rag").get("file_types", [])
     RAG_FILE_TYPES = []
     if isinstance(_raw_rag_file_types, list):
@@ -503,38 +624,34 @@ def resolve_config_values(
             ):
                 RAG_FILE_TYPES.append(_normalized)
     if not RAG_FILE_TYPES:
-        RAG_FILE_TYPES = [
-            ".pdf",
-            ".txt",
-            ".md",
-            ".py",
-            ".json",
-            ".csv",
-            ".rs",
-            ".js",
-            ".ts",
-            ".html",
-            ".htm",
-            ".docx",
-            ".xlsx",
-            ".pptx",
-            ".epub",
-            ".db",
-            ".sqlite",
-            ".sqlite3",
-            ".db3",
-        ]
+        RAG_FILE_TYPES = list(default_for("rag", "file_types"))
     RAG_SQLITE_ROWS_PER_CHUNK = configured_int_range(
-        config, "rag", "sqlite_rows_per_chunk", 10, 1, 1000
+        config,
+        "rag",
+        "sqlite_rows_per_chunk",
+        default_for("rag", "sqlite_rows_per_chunk"),
+        1,
+        1000,
     )
     RAG_SQLITE_MAX_CELL_CHARS = configured_int_range(
-        config, "rag", "sqlite_max_cell_chars", 200, 20, 10000
+        config,
+        "rag",
+        "sqlite_max_cell_chars",
+        default_for("rag", "sqlite_max_cell_chars"),
+        20,
+        10000,
     )
     RAG_SQLITE_MAX_ROWS_PER_TABLE = configured_int(
-        config, "rag", "sqlite_max_rows_per_table", 5000
+        config,
+        "rag",
+        "sqlite_max_rows_per_table",
+        default_for("rag", "sqlite_max_rows_per_table"),
     )
     RAG_AUTO_REFRESH_SECONDS = configured_nonnegative_int(
-        config, "rag", "auto_refresh_seconds", 30
+        config,
+        "rag",
+        "auto_refresh_seconds",
+        default_for("rag", "auto_refresh_seconds"),
     )
     _network_section = config_section(config, "network")
     _raw_web_research = _network_section.get("web_research_enabled", True)
@@ -608,29 +725,47 @@ def resolve_config_values(
     )
 
     ONLINE_REQUEST_TIMEOUT = configured_int(
-        config, "models", "online_request_timeout_seconds", 60
+        config,
+        "models",
+        "online_request_timeout_seconds",
+        default_for("models", "online_request_timeout_seconds"),
     )
     ONLINE_MODEL_LIST_TIMEOUT = configured_int(
-        config, "models", "online_model_list_timeout_seconds", 10
+        config,
+        "models",
+        "online_model_list_timeout_seconds",
+        default_for("models", "online_model_list_timeout_seconds"),
     )
     ONLINE_MAX_RETRIES = configured_nonnegative_int(
-        config, "models", "online_max_retries", 1
+        config,
+        "models",
+        "online_max_retries",
+        default_for("models", "online_max_retries"),
     )
     ONLINE_MODEL_LIST_LIMIT = configured_int(
-        config, "models", "online_model_list_limit", 30
+        config,
+        "models",
+        "online_model_list_limit",
+        default_for("models", "online_model_list_limit"),
     )
     PROVIDER_API_MODE = configured_choice(
         config,
         "models",
         "provider_api_mode",
-        "chat",
+        default_for("models", "provider_api_mode"),
         ("chat", "completions", "responses"),
     )
     RAW_COMPLETIONS_ENABLED = configured_bool(
-        config, "models", "raw_completions_enabled", False
+        config,
+        "models",
+        "raw_completions_enabled",
+        default_for("models", "raw_completions_enabled"),
     )
     MAX_MODEL_CAPABILITY_CACHE_ENTRIES = configured_int(
-        config, "agent", "max_model_capability_cache_entries", 128
+        config,
+        "agent",
+        "max_model_capability_cache_entries",
+        default_for("agent", "max_model_capability_cache_entries"),
     )
     MAX_WEBPAGE_BYTES = configured_int(
         config, "network", "max_webpage_bytes", 2 * 1024 * 1024
@@ -639,20 +774,33 @@ def resolve_config_values(
         config, "network", "max_download_bytes", 25 * 1024 * 1024
     )
     MAX_HTTP_REDIRECTS = configured_nonnegative_int(
-        config, "network", "max_http_redirects", 5
+        config,
+        "network",
+        "max_http_redirects",
+        default_for("network", "max_http_redirects"),
     )
     MAX_SEARCH_QUERY_CHARS = configured_int(
-        config, "network", "max_search_query_chars", 2000
+        config,
+        "network",
+        "max_search_query_chars",
+        default_for("network", "max_search_query_chars"),
     )
-    MAX_SEARCH_RESULTS = configured_int(config, "network", "max_search_results", 8)
+    MAX_SEARCH_RESULTS = configured_int(
+        config,
+        "network",
+        "max_search_results",
+        default_for("network", "max_search_results"),
+    )
     SEARCH_PROVIDER = configured_choice(
         config,
         "network",
         "search_provider",
-        "auto",
+        default_for("network", "search_provider"),
         ("auto", "searxng", "duckduckgo"),
     )
-    SEARXNG_URL = configured_str(config, "network", "searxng_url", "")
+    SEARXNG_URL = configured_str(
+        config, "network", "searxng_url", default_for("network", "searxng_url")
+    )
 
     def _https_url(value: object, default: str) -> str:
         url = str(value or "").strip()
@@ -664,14 +812,15 @@ def resolve_config_values(
     _network_values = config_section(config, "network")
     GEOCODING_URL = _https_url(
         _network_values.get("geocoding_url"),
-        "https://geocoding-api.open-meteo.com/v1/search",
+        default_for("network", "geocoding_url"),
     )
     FORECAST_URL = _https_url(
-        _network_values.get("forecast_url"), "https://api.open-meteo.com/v1/forecast"
+        _network_values.get("forecast_url"),
+        default_for("network", "forecast_url"),
     )
     ARCHIVE_URL = _https_url(
         _network_values.get("archive_url"),
-        "https://archive-api.open-meteo.com/v1/archive",
+        default_for("network", "archive_url"),
     )
     _raw_ip_services = _network_values.get("ip_geolocation_urls", [])
     IP_GEOLOCATION_URLS = []
@@ -681,136 +830,284 @@ def resolve_config_values(
             if _url:
                 IP_GEOLOCATION_URLS.append(_url)
     if not IP_GEOLOCATION_URLS:
-        IP_GEOLOCATION_URLS = ["https://ipwho.is/", "https://ipapi.co/json/"]
+        IP_GEOLOCATION_URLS = list(default_for("network", "ip_geolocation_urls"))
     LOCATION_MAX_RESPONSE_BYTES = configured_int_range(
         config,
         "network",
         "location_max_response_bytes",
-        1048576,
+        default_for("network", "location_max_response_bytes"),
         65536,
         16 * 1024 * 1024,
     )
     WEATHER_MAX_DAYS = configured_int_range(
-        config, "network", "weather_max_days", 16, 1, 16
+        config,
+        "network",
+        "weather_max_days",
+        default_for("network", "weather_max_days"),
+        1,
+        16,
     )
     WEATHER_PAST_DAYS = configured_int_range(
-        config, "network", "weather_past_days", 90, 0, 366
+        config,
+        "network",
+        "weather_past_days",
+        default_for("network", "weather_past_days"),
+        0,
+        366,
     )
     TOKENIZER_ENCODING = configured_str(
-        config, "models", "tokenizer_encoding", "cl100k_base"
+        config,
+        "models",
+        "tokenizer_encoding",
+        default_for("models", "tokenizer_encoding"),
     )
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", TOKENIZER_ENCODING):
-        TOKENIZER_ENCODING = "cl100k_base"
-    SEARCH_FALLBACK = configured_bool(config, "network", "search_fallback", True)
+        TOKENIZER_ENCODING = default_for("models", "tokenizer_encoding")
+    SEARCH_FALLBACK = configured_bool(
+        config, "network", "search_fallback", default_for("network", "search_fallback")
+    )
     MAX_FETCHED_WEBPAGE_CHARS = configured_int(
-        config, "network", "max_fetched_webpage_chars", 12000
+        config,
+        "network",
+        "max_fetched_webpage_chars",
+        default_for("network", "max_fetched_webpage_chars"),
     )
     MAX_READ_FILE_BYTES = configured_int(
         config, "tools", "max_read_file_bytes", 1024 * 1024
     )
     FILE_READ_CHUNK_BYTES = configured_int(
-        config, "tools", "file_read_chunk_bytes", 65536
+        config,
+        "tools",
+        "file_read_chunk_bytes",
+        default_for("tools", "file_read_chunk_bytes"),
     )
-    BINARY_PROBE_BYTES = configured_int(config, "tools", "binary_probe_bytes", 2048)
+    BINARY_PROBE_BYTES = configured_int(
+        config,
+        "tools",
+        "binary_probe_bytes",
+        default_for("tools", "binary_probe_bytes"),
+    )
     SHELL_COMMAND_TIMEOUT = configured_int(
-        config, "tools", "shell_command_timeout_seconds", 30
+        config,
+        "tools",
+        "shell_command_timeout_seconds",
+        default_for("tools", "shell_command_timeout_seconds"),
     )
     DEFAULT_HISTORY_READ_LIMIT = configured_int(
-        config, "tools", "default_history_read_limit", 20
+        config,
+        "tools",
+        "default_history_read_limit",
+        default_for("tools", "default_history_read_limit"),
     )
-    MAX_SKILL_NAME_CHARS = configured_int(config, "skills", "max_name_chars", 64)
+    MAX_SKILL_NAME_CHARS = configured_int(
+        config, "skills", "max_name_chars", default_for("skills", "max_name_chars")
+    )
     MAX_STREAM_TIMEOUT = configured_int(
-        config, "network", "max_stream_timeout_seconds", 600
+        config,
+        "network",
+        "max_stream_timeout_seconds",
+        default_for("network", "max_stream_timeout_seconds"),
     )
     MAX_CAPTURED_IMAGE_BYTES = configured_int(
         config, "media", "max_captured_image_bytes", 2 * 1024 * 1024
     )
     MAX_DECODED_IMAGE_PIXELS = configured_int(
-        config, "media", "max_decoded_image_pixels", 20_000_000
+        config,
+        "media",
+        "max_decoded_image_pixels",
+        default_for("media", "max_decoded_image_pixels"),
     )
     MAX_MEDIA_FILE_BYTES = configured_int(
         config, "media", "max_media_file_bytes", 25 * 1024 * 1024
     )
-    MAX_IMAGES_PER_TURN = configured_int(config, "media", "max_images_per_turn", 3)
-    MAX_MICROPHONE_SECONDS = configured_int(
-        config, "media", "max_microphone_seconds", 30
+    MAX_IMAGES_PER_TURN = configured_int(
+        config,
+        "media",
+        "max_images_per_turn",
+        default_for("media", "max_images_per_turn"),
     )
-    MAX_VIDEO_SECONDS = configured_int(config, "media", "max_video_seconds", 120)
+    MAX_MICROPHONE_SECONDS = configured_int(
+        config,
+        "media",
+        "max_microphone_seconds",
+        default_for("media", "max_microphone_seconds"),
+    )
+    MAX_VIDEO_SECONDS = configured_int(
+        config, "media", "max_video_seconds", default_for("media", "max_video_seconds")
+    )
     DEFAULT_MICROPHONE_SECONDS = configured_float(
-        config, "media", "default_microphone_seconds", 5.0
+        config,
+        "media",
+        "default_microphone_seconds",
+        default_for("media", "default_microphone_seconds"),
     )
     MICROPHONE_SAMPLE_RATE = configured_int(
-        config, "media", "microphone_sample_rate", 16000
+        config,
+        "media",
+        "microphone_sample_rate",
+        default_for("media", "microphone_sample_rate"),
     )
     DEFAULT_CAMERA_DEVICE_INDEX = configured_nonnegative_int(
-        config, "media", "default_camera_device_index", 0
+        config,
+        "media",
+        "default_camera_device_index",
+        default_for("media", "default_camera_device_index"),
     )
     MAX_CAMERA_DEVICE_INDEX = configured_int(
-        config, "media", "max_camera_device_index", 32
+        config,
+        "media",
+        "max_camera_device_index",
+        default_for("media", "max_camera_device_index"),
     )
     MAX_MICROPHONE_DEVICE_INDEX = configured_int(
-        config, "media", "max_microphone_device_index", 128
+        config,
+        "media",
+        "max_microphone_device_index",
+        default_for("media", "max_microphone_device_index"),
     )
-    MAX_IMAGE_WIDTH = configured_int(config, "media", "max_image_width", 1280)
-    MAX_IMAGE_HEIGHT = configured_int(config, "media", "max_image_height", 720)
-    JPEG_QUALITY = configured_int_range(config, "media", "jpeg_quality", 85, 1, 100)
+    MAX_IMAGE_WIDTH = configured_int(
+        config, "media", "max_image_width", default_for("media", "max_image_width")
+    )
+    MAX_IMAGE_HEIGHT = configured_int(
+        config, "media", "max_image_height", default_for("media", "max_image_height")
+    )
+    JPEG_QUALITY = configured_int_range(
+        config, "media", "jpeg_quality", default_for("media", "jpeg_quality"), 1, 100
+    )
     MAX_SKILL_DESCRIPTION_CHARS = configured_int(
-        config, "skills", "max_description_chars", 500
+        config,
+        "skills",
+        "max_description_chars",
+        default_for("skills", "max_description_chars"),
     )
     MAX_SKILL_INSTRUCTION_CHARS = configured_int(
-        config, "skills", "max_instruction_chars", 20000
+        config,
+        "skills",
+        "max_instruction_chars",
+        default_for("skills", "max_instruction_chars"),
     )
     MAX_SKILL_PREVIEW_CHARS = configured_int_range(
-        config, "skills", "max_preview_chars", 12000, 512, 100000
+        config,
+        "skills",
+        "max_preview_chars",
+        default_for("skills", "max_preview_chars"),
+        512,
+        100000,
     )
-    SKILL_MAX_ITERATIONS = configured_int(config, "skills", "max_iterations", 15)
+    SKILL_MAX_ITERATIONS = configured_int(
+        config, "skills", "max_iterations", default_for("skills", "max_iterations")
+    )
     SKILL_DESCRIPTION_PREVIEW_CHARS = configured_int(
-        config, "skills", "description_preview_chars", 100
+        config,
+        "skills",
+        "description_preview_chars",
+        default_for("skills", "description_preview_chars"),
     )
     SKILL_RELEVANCE_THRESHOLD = configured_float(
-        config, "skills", "relevance_threshold", 1.5
+        config,
+        "skills",
+        "relevance_threshold",
+        default_for("skills", "relevance_threshold"),
     )
     SKILL_RELEVANCE_EXACT_MATCH_SCORE = configured_float(
-        config, "skills", "relevance_exact_match_score", 3.0
+        config,
+        "skills",
+        "relevance_exact_match_score",
+        default_for("skills", "relevance_exact_match_score"),
     )
     SKILL_RELEVANCE_PREFIX_MATCH_SCORE = configured_float(
-        config, "skills", "relevance_prefix_match_score", 2.0
+        config,
+        "skills",
+        "relevance_prefix_match_score",
+        default_for("skills", "relevance_prefix_match_score"),
     )
     SKILL_RELEVANCE_WORD_MATCH_SCORE = configured_float(
-        config, "skills", "relevance_word_match_score", 1.0
+        config,
+        "skills",
+        "relevance_word_match_score",
+        default_for("skills", "relevance_word_match_score"),
     )
     SKILL_RELEVANCE_EMBEDDING_THRESHOLD = configured_float(
-        config, "skills", "relevance_embedding_threshold", 0.55
+        config,
+        "skills",
+        "relevance_embedding_threshold",
+        default_for("skills", "relevance_embedding_threshold"),
     )
-    RAG_CONTEXT_RESULTS = configured_int(config, "agent", "rag_context_results", 5)
-    RAG_DOCUMENTS_ONLY = configured_bool(config, "agent", "rag_documents_only", False)
+    RAG_CONTEXT_RESULTS = configured_int(
+        config,
+        "agent",
+        "rag_context_results",
+        default_for("agent", "rag_context_results"),
+    )
+    RAG_DOCUMENTS_ONLY = configured_bool(
+        config,
+        "agent",
+        "rag_documents_only",
+        default_for("agent", "rag_documents_only"),
+    )
     RAG_RELEVANCE_THRESHOLD = configured_float(
-        config, "rag", "relevance_threshold", 0.25
+        config, "rag", "relevance_threshold", default_for("rag", "relevance_threshold")
     )
     RERANK_MODE = configured_choice(
-        config, "rag", "rerank_mode", "auto", ("api", "local", "auto")
+        config,
+        "rag",
+        "rerank_mode",
+        default_for("rag", "rerank_mode"),
+        ("api", "local", "auto"),
     )
-    RERANK_MODEL = configured_str(config, "rag", "rerank_model", "")
+    RERANK_MODEL = configured_str(
+        config, "rag", "rerank_model", default_for("rag", "rerank_model")
+    )
     RERANK_TIMEOUT_SECONDS = configured_float(
-        config, "rag", "rerank_timeout_seconds", 2.5
+        config,
+        "rag",
+        "rerank_timeout_seconds",
+        default_for("rag", "rerank_timeout_seconds"),
     )
-    RERANK_TOP_N = configured_int(config, "rag", "rerank_top_n", 20)
-    RERANK_MAX_CANDIDATES = configured_int(config, "rag", "rerank_max_candidates", 50)
+    RERANK_TOP_N = configured_int(
+        config, "rag", "rerank_top_n", default_for("rag", "rerank_top_n")
+    )
+    RERANK_MAX_CANDIDATES = configured_int(
+        config,
+        "rag",
+        "rerank_max_candidates",
+        default_for("rag", "rerank_max_candidates"),
+    )
     RERANK_LOCAL_THRESHOLD = configured_nonnegative_int(
-        config, "rag", "rerank_local_threshold", 20
+        config,
+        "rag",
+        "rerank_local_threshold",
+        default_for("rag", "rerank_local_threshold"),
     )
-    RERANK_CACHE_ENTRIES = configured_int(config, "rag", "rerank_cache_entries", 128)
+    RERANK_CACHE_ENTRIES = configured_int(
+        config,
+        "rag",
+        "rerank_cache_entries",
+        default_for("rag", "rerank_cache_entries"),
+    )
     RERANK_BREAKER_FAILURES = configured_int(
-        config, "rag", "rerank_breaker_failures", 3
+        config,
+        "rag",
+        "rerank_breaker_failures",
+        default_for("rag", "rerank_breaker_failures"),
     )
     RERANK_BREAKER_COOLDOWN_SECONDS = configured_float(
-        config, "rag", "rerank_breaker_cooldown_seconds", 60.0
+        config,
+        "rag",
+        "rerank_breaker_cooldown_seconds",
+        default_for("rag", "rerank_breaker_cooldown_seconds"),
     )
     RAG_INCLUDE_CODING_GUIDANCE = configured_bool(
-        config, "rag", "include_coding_guidance", True
+        config,
+        "rag",
+        "include_coding_guidance",
+        default_for("rag", "include_coding_guidance"),
     )
     SUMMARY_PROMPT_SENTENCES = configured_int(
-        config, "agent", "summary_prompt_sentences", 2
+        config,
+        "agent",
+        "summary_prompt_sentences",
+        default_for("agent", "summary_prompt_sentences"),
     )
     try:
         CONTEXT_COMPACTION_THRESHOLD = float(
@@ -821,26 +1118,41 @@ def resolve_config_values(
     if not 0 <= CONTEXT_COMPACTION_THRESHOLD <= 1:
         CONTEXT_COMPACTION_THRESHOLD = 0.8
     CONTEXT_KEEP_RECENT_MESSAGES = configured_int(
-        config, "agent", "context_keep_recent_messages", 6
+        config,
+        "agent",
+        "context_keep_recent_messages",
+        default_for("agent", "context_keep_recent_messages"),
     )
     CONTEXT_SUMMARY_CHARS = configured_int(
-        config, "agent", "context_summary_chars", 1500
+        config,
+        "agent",
+        "context_summary_chars",
+        default_for("agent", "context_summary_chars"),
     )
     CONTEXT_ENGINE_ENABLED = configured_bool(
-        config, "agent", "context_engine_enabled", False
+        config,
+        "agent",
+        "context_engine_enabled",
+        default_for("agent", "context_engine_enabled"),
     )
     CONTEXT_ENGINE_PROFILE = configured_choice(
         config,
         "agent",
         "context_engine_profile",
-        "auto",
+        default_for("agent", "context_engine_profile"),
         ("auto", "chat", "coding", "research", "memory"),
     )
     CONTEXT_SAFETY_MARGIN_TOKENS = configured_nonnegative_int(
-        config, "agent", "context_safety_margin_tokens", 0
+        config,
+        "agent",
+        "context_safety_margin_tokens",
+        default_for("agent", "context_safety_margin_tokens"),
     )
     CONTEXT_OUTPUT_RESERVE_RATIO = configured_float(
-        config, "agent", "context_output_reserve_ratio", 0.33
+        config,
+        "agent",
+        "context_output_reserve_ratio",
+        default_for("agent", "context_output_reserve_ratio"),
     )
 
     # KV cache settings may live under agent, agent.context_cache, or a
@@ -870,13 +1182,24 @@ def resolve_config_values(
         {"_": {"v": _kv_min_prefix_raw}}, "_", "v", 1024
     )
     CODE_TASK_GIT_TIMEOUT = configured_int(
-        config, "code_tasks", "git_command_timeout_seconds", 30
+        config,
+        "code_tasks",
+        "git_command_timeout_seconds",
+        default_for("code_tasks", "git_command_timeout_seconds"),
     )
     CODE_TASK_TEST_TIMEOUT = configured_int(
-        config, "code_tasks", "test_command_timeout_seconds", 180
+        config,
+        "code_tasks",
+        "test_command_timeout_seconds",
+        default_for("code_tasks", "test_command_timeout_seconds"),
     )
     CODE_TASK_SANDBOX_CPU_SECONDS = configured_int_range(
-        config, "code_tasks", "sandbox_cpu_seconds", 180, 1, 86400
+        config,
+        "code_tasks",
+        "sandbox_cpu_seconds",
+        default_for("code_tasks", "sandbox_cpu_seconds"),
+        1,
+        86400,
     )
     CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES = configured_int_range(
         config,
@@ -887,7 +1210,12 @@ def resolve_config_values(
         32 * 1024**3,
     )
     CODE_TASK_SANDBOX_PROCESS_COUNT = configured_int_range(
-        config, "code_tasks", "sandbox_process_count", 128, 8, 4096
+        config,
+        "code_tasks",
+        "sandbox_process_count",
+        default_for("code_tasks", "sandbox_process_count"),
+        8,
+        4096,
     )
     CODE_TASK_SANDBOX_FILE_SIZE_BYTES = configured_int_range(
         config,
@@ -932,10 +1260,16 @@ def resolve_config_values(
             stacklevel=2,
         )
     CODE_TASK_SUCCESS_OUTPUT_CHARS = configured_int(
-        config, "code_tasks", "successful_test_output_chars", 6000
+        config,
+        "code_tasks",
+        "successful_test_output_chars",
+        default_for("code_tasks", "successful_test_output_chars"),
     )
     CODE_TASK_FAILURE_OUTPUT_CHARS = configured_int(
-        config, "code_tasks", "failed_test_output_chars", 3000
+        config,
+        "code_tasks",
+        "failed_test_output_chars",
+        default_for("code_tasks", "failed_test_output_chars"),
     )
 
     return {name.lower(): value for name, value in locals().items() if name.isupper()}

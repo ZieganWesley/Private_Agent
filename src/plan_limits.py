@@ -1,5 +1,7 @@
 """Single source of truth for task-plan validation limits (K8/14.9)."""
 
+from config import TASK_CITATION_BUDGET_CHARS
+
 PLAN_MAX_GOAL_CHARS = 2000
 PLAN_MAX_STEPS = 20
 PLAN_MAX_STEP_DESCRIPTION_CHARS = 1000
@@ -9,4 +11,5 @@ PLAN_MAX_TEXT_ITEMS = 10
 PLAN_MAX_TEXT_ITEM_CHARS = 500
 PLAN_MAX_REFERENCE_CHARS = 1500
 PLAN_MAX_CITATIONS = 10
-PLAN_MAX_CITATION_CHARS = 10000
+# The citation budget is configurable (K4); schemas and the database share it.
+PLAN_MAX_CITATION_CHARS = TASK_CITATION_BUDGET_CHARS

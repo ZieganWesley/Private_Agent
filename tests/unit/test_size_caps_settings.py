@@ -140,9 +140,9 @@ def test_citation_budget_is_enforced_from_the_configured_value(monkeypatch) -> N
 
     references = ["x" * 1000, "y" * 1000]
 
-    monkeypatch.setattr(tasks, "TASK_CITATION_BUDGET_CHARS", 1500)
+    monkeypatch.setattr(tasks, "PLAN_MAX_CITATION_CHARS", 1500)
     with pytest.raises(ValueError, match="1500-character plan budget"):
         tasks.TaskMixin._normalize_research_references(references)
 
-    monkeypatch.setattr(tasks, "TASK_CITATION_BUDGET_CHARS", 2000)
+    monkeypatch.setattr(tasks, "PLAN_MAX_CITATION_CHARS", 2000)
     assert tasks.TaskMixin._normalize_research_references(references) == references
