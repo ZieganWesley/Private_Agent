@@ -270,6 +270,47 @@ class NativeClient:
             return body["content"]
         return None
 
+    def complete(
+        self,
+        prompt: str,
+        *,
+        n_predict: int = 128,
+        temperature: float = 0.0,
+        top_p: float = 0.95,
+        top_k: int | None = None,
+        stop: list[str] | None = None,
+        seed: int | None = None,
+        cache_prompt: bool = True,
+        stream: bool = False,
+        return_tokens: bool = False,
+    ) -> str | None:
+        """Call llama.cpp ``/completion`` using only whitelisted options."""
+        payload: dict[str, Any] = {
+            "prompt": prompt,
+            "n_predict": max(1, int(n_predict)),
+            "temperature": float(temperature),
+            "top_p": float(top_p),
+            "cache_prompt": bool(cache_prompt),
+            "stream": bool(stream),
+            "return_tokens": bool(return_tokens),
+        }
+        if top_k is not None:
+            payload["top_k"] = max(1, int(top_k))
+        if stop:
+            payload["stop"] = list(stop)
+        if seed is not None:
+            payload["seed"] = int(seed)
+        response = self._request("POST", "completion", json=payload)
+        if response is None:
+            return None
+        try:
+            body = response.json()
+        except (ValueError, TypeError):
+            return None
+        if isinstance(body, dict) and isinstance(body.get("content"), str):
+            return body["content"]
+        return None
+
     def apply_template(
         self,
         *,

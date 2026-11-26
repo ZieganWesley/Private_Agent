@@ -163,7 +163,16 @@ class ContextCachePolicy:
         }
 
     def provider_hint(self, provider: str | None = None) -> dict[str, Any]:
-        """Emit an optional provider-specific cache control marker."""
+        """Return advisory cache metadata for inspection.
+
+        This project speaks only the generic OpenAI-compatible surface, whose
+        chat/completions and responses schemas define no field for
+        ``cache_control`` or ``prompt_cache_key``.  Adding one as an unknown
+        body key would be rejected by strict servers, so the marker is reported
+        through ``/context usage`` instead of being attached to the outbound
+        request.  Providers that support prefix caching do so server-side from
+        the stable prefix this policy preserves.
+        """
         provider = (provider or "").strip().lower()
         hints_enabled = self.provider_hints in {"on", "auto"}
         if not self.enabled or not hints_enabled:
