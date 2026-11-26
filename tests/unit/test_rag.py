@@ -914,6 +914,11 @@ def test_embeddings_can_come_from_an_openai_compatible_adapter(tmp_path, monkeyp
 
 
 def test_missing_openai_compatible_embedding_client_fails_closed(tmp_path, monkeypatch):
+    pytest.importorskip(
+        "langchain_chroma",
+        reason="requires the optional 'rag' extra (langchain-chroma); "
+        "install with pip install -e '.[rag]'",
+    )
     from providers import adapters
     from rag import indexing
 

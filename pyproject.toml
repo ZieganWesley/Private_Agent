@@ -10,6 +10,7 @@ classifiers = [
     "Operating System :: MacOS",
 ]
 dependencies = [
+    "beautifulsoup4==4.15.0",
     "httpx==0.28.1",
     "httpcore==1.0.9",
     "langchain-core==1.6.3",
@@ -47,7 +48,6 @@ ollama = [
     "ollama==0.6.2",
 ]
 rag = [
-    "beautifulsoup4==4.15.0",
     "langchain-chroma==1.1.0",
     "pypdf==6.21.4",
     "rank-bm25==0.2.2",
@@ -60,7 +60,6 @@ media = [
 ]
 
 all = [
-    "beautifulsoup4==4.15.0",
     "langchain-chroma==1.1.0",
     "pypdf==6.21.4",
     "rank-bm25==0.2.2",
