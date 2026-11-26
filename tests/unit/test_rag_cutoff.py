@@ -110,6 +110,7 @@ class _RecordingStore:
 
 def test_retrieval_uses_budget_derived_k_and_trims(monkeypatch):
     monkeypatch.setattr(memory_context, "RAG_INCLUDE_CODING_GUIDANCE", False)
+    monkeypatch.setattr(memory_context, "_LAST_RAG_QUERY", "")
     documents = [_doc("word " * 30, chunk=index) for index in range(10)]
     store = _RecordingStore(documents)
 
