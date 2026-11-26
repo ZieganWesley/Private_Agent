@@ -759,6 +759,28 @@ def resolve_config_values(
     CODE_TASK_TEST_TIMEOUT = configured_int(
         config, "code_tasks", "test_command_timeout_seconds", 180
     )
+    CODE_TASK_SANDBOX_CPU_SECONDS = configured_int_range(
+        config, "code_tasks", "sandbox_cpu_seconds", 180, 1, 86400
+    )
+    CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES = configured_int_range(
+        config,
+        "code_tasks",
+        "sandbox_address_space_bytes",
+        4 * 1024**3,
+        1024**3,
+        32 * 1024**3,
+    )
+    CODE_TASK_SANDBOX_PROCESS_COUNT = configured_int_range(
+        config, "code_tasks", "sandbox_process_count", 128, 8, 4096
+    )
+    CODE_TASK_SANDBOX_FILE_SIZE_BYTES = configured_int_range(
+        config,
+        "code_tasks",
+        "sandbox_file_size_bytes",
+        512 * 1024**2,
+        1024**2,
+        10 * 1024**3,
+    )
     _raw_code_task_test_commands = config_section(config, "code_tasks").get(
         "test_commands", []
     )
@@ -963,6 +985,10 @@ class Settings:
     context_kv_cache_min_prefix_tokens: int
     code_task_git_timeout: int
     code_task_test_timeout: int
+    code_task_sandbox_cpu_seconds: int
+    code_task_sandbox_address_space_bytes: int
+    code_task_sandbox_process_count: int
+    code_task_sandbox_file_size_bytes: int
     code_task_test_commands: list[list[str]]
     code_task_success_output_chars: int
     code_task_failure_output_chars: int
