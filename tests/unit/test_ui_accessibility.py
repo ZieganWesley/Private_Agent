@@ -19,7 +19,7 @@ def test_no_color_output_has_no_ansi_escapes(monkeypatch):
     ui.turn_finished(report)
     text = console.export_text()
     assert "\x1b[" not in text
-    assert "model=m" in text
+    assert "Model: m" in text
     assert "[Turn]" in text
 
 
@@ -35,9 +35,9 @@ def test_narrow_width_keeps_essential_segments():
         )
         segs = state.segments(width=width)
         assert len(segs) >= 3
-        assert segs[0].startswith("model=")
-        assert segs[1].startswith("context=")
-        assert segs[2].startswith("permission=")
+        assert segs[0].startswith("Model: ")
+        assert segs[1].startswith("Context: ")
+        assert segs[2].startswith("Permission: ")
         # Dropping only removes trailing optional segments.
         assert len(segs) <= 7
 
@@ -70,3 +70,73 @@ def test_segments_never_drop_below_three():
     )
     for width in (1, 5, 10, 20):
         assert len(state.segments(width=width)) >= 3
+
+
+def test_reduced_motion_prints_one_static_status_line(monkeypatch):
+    monkeypatch.setenv("PRIVATE_AGENT_REDUCED_MOTION", "1")
+    from ui.spinner import StatusIndicator, motion_reduced
+
+    assert motion_reduced() is True
+    console = Console(record=True, width=80)
+    indicator = StatusIndicator("Waiting for llama", phase="loading", console=console)
+    indicator.start()
+    assert indicator.active is True
+    # Updates do not redraw, so nothing moves on screen.
+    indicator.update(phase="thinking", message="Thinking")
+    indicator.stop()
+    text = console.export_text()
+    assert "Waiting for llama" in text
+    assert "Thinking" not in text
+    assert indicator.active is False
+
+
+def test_reduced_motion_off_by_default(monkeypatch):
+    monkeypatch.delenv("PRIVATE_AGENT_REDUCED_MOTION", raising=False)
+    from ui.spinner import motion_reduced
+
+    assert motion_reduced() is False
+
+
+def test_provider_mode_segment_is_shown_when_bound():
+    bound = StatusState(
+        model="m",
+        context_tokens=1,
+        context_maximum=2,
+        permission_mode="auto",
+        provider_mode="local",
+    )
+    assert "Mode: local" in bound.segments()
+    assert not any(s.startswith("Mode:") for s in StatusState().segments())
+
+
+def test_session_ui_ribbon_reports_provider_mode():
+    console = Console(record=True, width=120)
+    ui = SessionUI(console=console)
+    ui.bind(model="m", permission="ask", provider_mode="online")
+    ui.set_context(1, 4)
+    ribbon = ui.ribbon_text(width=120)
+    assert "Mode: online" in ribbon
+    assert "Permission: ask" in ribbon
+
+
+def test_ribbon_segments_use_human_labels():
+    state = StatusState(
+        model="qwen",
+        context_tokens=1,
+        context_maximum=4,
+        permission_mode="ask",
+        output_tokens=64,
+        background_processes=1,
+        provider_mode="local",
+    )
+    segs = state.segments()
+    assert segs == [
+        "Model: qwen",
+        "Context: 25.0%",
+        "Permission: ask",
+        "Mode: local",
+        "Output: 64",
+        "Background: 1",
+    ]
+    # No raw key=value keys survive in the user-facing ribbon.
+    assert not any("=" in segment for segment in segs)

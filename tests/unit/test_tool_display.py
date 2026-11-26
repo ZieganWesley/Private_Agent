@@ -166,3 +166,65 @@ def test_captured_images_from_tool_results_are_appended(monkeypatch):
 
     assert collected == ["image:workspace-image:" + "b" * 32]
     assert appended == ["workspace-image:" + "b" * 32]
+
+
+def test_tool_result_links_existing_files_as_hyperlinks(tmp_path):
+    target = tmp_path / "notes.md"
+    target.write_text("hello", encoding="utf-8")
+
+    text = tool_display._render_tool_result_text(f"Wrote {target} successfully")
+
+    links = [
+        str(span.style)
+        for span in text.spans
+        if span.style is not None and "link" in str(span.style)
+    ]
+    assert links == [f"link {target.as_uri()}"]
+    assert str(target) in text.plain
+    assert text.plain.endswith(" successfully")
+
+
+def test_tool_result_keeps_trailing_punctuation_outside_the_link(tmp_path):
+    target = tmp_path / "report.txt"
+    target.write_text("x", encoding="utf-8")
+
+    text = tool_display._render_tool_result_text(f"Saved {target}.")
+
+    assert f"link {target.as_uri()}" in [str(span.style) for span in text.spans]
+    assert text.plain == f"Saved {target}."
+    linked = text.spans[0]
+    assert text.plain[linked.start : linked.end] == str(target)
+
+
+def test_tool_result_leaves_missing_paths_unlinked():
+    text = tool_display._render_tool_result_text("Could not read /no/such/file.txt")
+
+    assert not [span for span in text.spans if "link" in str(span.style)]
+    assert text.plain == "Could not read /no/such/file.txt"
+
+
+def test_tool_result_diffs_are_not_linkified(tmp_path):
+    target = tmp_path / "diff.py"
+    target.write_text("x", encoding="utf-8")
+
+    rendered = tool_display._render_tool_result_text(
+        f"--- a/file.py\n+++ {target}\n@@ -1 +1 @@\n-x\n+y"
+    )
+
+    # Diffs stay a Syntax block so added/removed lines keep their colours.
+    assert rendered.__class__.__name__ == "Syntax"
+
+
+def test_tool_result_file_link_is_emitted_as_osc8_escape(tmp_path):
+    target = tmp_path / "osc.md"
+    target.write_text("x", encoding="utf-8")
+    output = io.StringIO()
+    terminal = Console(
+        file=output, width=80, force_terminal=True, color_system="truecolor"
+    )
+
+    terminal.print(tool_display._render_tool_result_text(f"Wrote {target}"))
+
+    escape = output.getvalue()
+    assert "\x1b]8;" in escape, "no OSC-8 hyperlink emitted"
+    assert target.as_uri() in escape

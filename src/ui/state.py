@@ -11,7 +11,7 @@ from typing import Any
 
 from rich.markup import escape
 
-from .theme import SEGMENT_SEPARATOR
+from .theme import SEGMENT_LABELS, SEGMENT_SEPARATOR
 
 # Context-window gauge glyphs (owned here so theme stays minimal).
 GAUGE_FILLED = "\u25b0"
@@ -100,6 +100,7 @@ class StatusState:
     permission_mode: str = "auto"
     output_tokens: Any = None
     background_processes: int = 0
+    provider_mode: str = ""
 
     def percent(self) -> float:
         return context_percent(self.context_tokens, self.context_maximum)
@@ -110,19 +111,24 @@ class StatusState:
         """Build the ribbon segments, dropping trailing ones if ``width`` is given."""
         model_name = "" if self.model is None else str(self.model)
         segs: list[str] = [
-            f"model={escape(model_name)}",
-            f"context={self.percent()}%",
-            f"permission={self.permission_mode}",
+            f"{SEGMENT_LABELS['model']}: {escape(model_name)}",
+            f"{SEGMENT_LABELS['context']}: {self.percent()}%",
+            f"{SEGMENT_LABELS['permission']}: {self.permission_mode}",
         ]
+        if self.provider_mode:
+            segs.append(f"{SEGMENT_LABELS['mode']}: {escape(str(self.provider_mode))}")
         if accessible and self.context_maximum:
             _used, limit, _fraction = _context_use(
                 self.context_tokens, self.context_maximum
             )
             if limit > 0:
-                segs.append(f"{_used}/{limit} ({self.percent():.0f}%)")
+                segs.append(
+                    f"{SEGMENT_LABELS['window']}: "
+                    f"{_used}/{limit} ({self.percent():.0f}%)"
+                )
         if self.output_tokens is not None:
-            segs.append(f"output={self.output_tokens}")
-        segs.append(f"background_processes={self.background_processes}")
+            segs.append(f"{SEGMENT_LABELS['output']}: {self.output_tokens}")
+        segs.append(f"{SEGMENT_LABELS['background']}: {self.background_processes}")
         if width is not None:
             while len(SEGMENT_SEPARATOR.join(segs)) > width and len(segs) > 3:
                 segs.pop()

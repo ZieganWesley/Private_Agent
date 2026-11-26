@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from langchain_core.messages import ToolMessage
@@ -13,6 +14,10 @@ from rich.text import Text
 from .console import console
 
 TOOL_RESULT_PREVIEW_CHARS = 500
+
+# Absolute paths printed in a tool result: they become terminal hyperlinks.
+_PATH_TOKEN = re.compile(r"(?<![\w./~-])(~/[^\s\"'<>|]+|/[^\s\"'<>|]+)")
+_TRAILING_PATH_PUNCTUATION = ".,;:)]}\"'"
 
 _RECENT_TOOL_RESULTS: list[tuple[str, str]] = []
 _MAX_RECENT_TOOL_RESULTS = 20
@@ -128,6 +133,39 @@ def _display_tool_error(tool_name: str, details: str) -> None:
     )
 
 
+def file_uri(value: str) -> str | None:
+    """Return a ``file://`` URI for an existing file, or None if unusable.
+
+    Only paths that resolve to a real file are linked, so arbitrary words in a
+    tool result never turn into broken links.
+    """
+    try:
+        path = Path(value).expanduser()
+        if not path.is_file():
+            return None
+        return path.resolve().as_uri()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def _append_line_with_file_links(target: Text, line: str) -> None:
+    """Append one line, marking existing file paths as OSC-8 hyperlinks.
+
+    Terminals that support hyperlinks turn the path into a clickable link;
+    others print the same text unchanged, so nothing is lost either way.
+    """
+    position = 0
+    for match in _PATH_TOKEN.finditer(line):
+        candidate = match.group(1).rstrip(_TRAILING_PATH_PUNCTUATION)
+        uri = file_uri(candidate) if candidate else None
+        if uri is None:
+            continue
+        target.append(line[position : match.start(1)])
+        target.append(candidate, style=f"link {uri}")
+        position = match.start(1) + len(candidate)
+    target.append(line[position:])
+
+
 def _render_tool_result_text(result: str) -> Text:
     """Render a tool result, colouring diff-like output when detected.
 
@@ -144,7 +182,7 @@ def _render_tool_result_text(result: str) -> Text:
     for index, line in enumerate(lines):
         if index:
             text.append("\n")
-        text.append(line)
+        _append_line_with_file_links(text, line)
     return text
 
 

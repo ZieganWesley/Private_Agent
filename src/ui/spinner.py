@@ -12,7 +12,7 @@ import contextlib
 import os
 from typing import Any
 
-from .theme import ACCESSIBLE_ENV
+from .theme import ACCESSIBLE_ENV, REDUCED_MOTION_ENV
 
 LOADING = "loading"
 THINKING = "thinking"
@@ -28,6 +28,19 @@ _PHASE_SPINNERS: dict[str, tuple[str, str]] = {
 
 _REASONING_BLOCK_TYPES = frozenset({"thinking", "reasoning", "thinking_delta"})
 _REASONING_FIELDS = ("reasoning_content", "reasoning", "thinking")
+
+
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def motion_reduced() -> bool:
+    """Return True when animated spinners should be replaced by static text.
+
+    Terminals and screen readers that cannot keep up with a redrawn spinner
+    (or users who simply do not want motion) set ``REDUCED_MOTION_ENV``; the
+    status then prints one line and stays put.
+    """
+    return os.environ.get(REDUCED_MOTION_ENV, "").strip().lower() in _TRUE_VALUES
 
 
 def phase_spinner(phase: str) -> tuple[str, str]:
@@ -105,10 +118,11 @@ class StatusIndicator:
         self._status: Any = None
         self._footer: Any = None
         self._used_footer = False
+        self._static = False
 
     @property
     def active(self) -> bool:
-        return self._status is not None
+        return self._status is not None or self._static
 
     def _render(self) -> str:
         _spinner, style = phase_spinner(self.phase)
@@ -126,7 +140,12 @@ class StatusIndicator:
         return text
 
     def start(self) -> StatusIndicator:
-        if self._status is not None or not self.message:
+        if self._status is not None or self._static or not self.message:
+            return self
+        if motion_reduced():
+            with contextlib.suppress(ValueError, OSError, RuntimeError):
+                self._console.print(self._render(), highlight=False)
+                self._static = True
             return self
         try:
             from .status_bar import get_active_footer
@@ -166,6 +185,8 @@ class StatusIndicator:
             self.message = message
         if phase is not None:
             self.phase = phase
+        if self._static:
+            return
         if self._used_footer and self._footer is not None:
             try:
                 self._footer.set_busy(self._render(), self.phase)
@@ -183,6 +204,9 @@ class StatusIndicator:
             self._status = None
 
     def stop(self) -> None:
+        if self._static:
+            self._static = False
+            return
         if self._used_footer and self._footer is not None:
             with contextlib.suppress(ValueError, OSError, RuntimeError):
                 self._footer.clear_busy()
@@ -224,5 +248,6 @@ __all__ = [
     "summarizing_message",
     "waiting_message",
     "reasoning_text",
+    "motion_reduced",
     "StatusIndicator",
 ]
