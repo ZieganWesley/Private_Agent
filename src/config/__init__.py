@@ -61,6 +61,8 @@ DEFAULT_CONFIG = {
     },
     "hooks": {},
     "models": {
+        "endpoints": [],
+        "endpoint_probe_ttl_seconds": 300,
         "ollama_base_url": "http://localhost:11434",
         "local_openai_compatible_endpoints": [
             {
