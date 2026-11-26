@@ -2064,3 +2064,110 @@ def test_arrow_select_treats_cancel_and_errors_as_no_choice(monkeypatch):
 
     monkeypatch.setattr(Application, "run", broken)
     assert interactive.arrow_select("Pick", [("1", "one")]) is None
+
+
+def test_paginate_help_splits_long_help_into_screen_sized_pages():
+    text = "\n".join(f"/cmd{i}" for i in range(47))
+
+    pages = interactive.paginate_help(text, page_lines=20)
+
+    assert len(pages) == 3
+    assert all(len(page.splitlines()) <= 20 for page in pages)
+    assert [line for page in pages for line in page.splitlines()] == text.splitlines()
+
+
+def test_paginate_help_never_starts_a_page_with_a_blank_line():
+    text = "\n".join(
+        ["Chat", "/plan", "", "", "/code", "/status"]  # blank lines at a boundary
+    )
+
+    pages = interactive.paginate_help(text, page_lines=4)
+
+    assert len(pages) >= 2
+    assert all(page.splitlines()[0].strip() for page in pages)
+
+
+def test_paginate_help_keeps_short_help_on_one_page():
+    text = "Commands\n  /help"
+
+    assert interactive.paginate_help(text, page_lines=20) == [text]
+
+
+def test_paginate_help_handles_empty_text():
+    assert interactive.paginate_help("", page_lines=20) == []
+
+
+def test_print_help_pages_prints_every_page_and_stops_when_reader_quits():
+    text = "\n".join(f"/cmd{i}" for i in range(30))
+    printed = []
+    pauses = []
+
+    def pause(index, total):
+        pauses.append((index, total))
+        return index < 2
+
+    shown = interactive.print_help_pages(
+        printed.append, text, page_lines=10, pause=pause
+    )
+
+    assert shown == 2
+    assert len(printed) == 2, "the third page must not be printed after a quit"
+    assert pauses == [(1, 3), (2, 3)]
+    assert "/cmd20" not in "".join(printed), "content from page 3 leaked through"
+
+
+def test_print_help_pages_without_pause_prints_everything():
+    text = "\n".join(f"/cmd{i}" for i in range(25))
+    printed = []
+
+    shown = interactive.print_help_pages(printed.append, text, page_lines=10)
+
+    assert shown == 3
+    assert "\n".join(printed) == text
+
+
+def test_help_page_lines_follows_terminal_height(monkeypatch):
+    monkeypatch.setattr(
+        interactive.shutil,
+        "get_terminal_size",
+        lambda fallback=(80, 24): __import__("os").terminal_size((80, 30)),
+    )
+    assert interactive.help_page_lines() == 28
+
+
+def test_help_page_lines_has_a_floor_for_tiny_terminals(monkeypatch):
+    monkeypatch.setattr(
+        interactive.shutil,
+        "get_terminal_size",
+        lambda fallback=(80, 24): __import__("os").terminal_size((40, 6)),
+    )
+    assert interactive.help_page_lines() == 5
+
+
+def test_print_help_pages_accepts_rendered_grouped_help():
+    help_text = format_help()
+    printed = []
+
+    shown = interactive.print_help_pages(printed.append, help_text, page_lines=12)
+
+    assert shown == len(printed)
+    assert shown > 1, "grouped help should not fit on a 12-line page"
+    assert "\n".join(printed) == help_text
+    assert any("/list_tools" in page for page in printed)
+
+
+def test_wait_for_next_help_page_continues_on_enter_and_stops_on_q(monkeypatch):
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "")
+    assert interactive.wait_for_next_help_page(1, 2) is True
+
+    monkeypatch.setattr("builtins.input", lambda _prompt="": " Q ")
+    assert interactive.wait_for_next_help_page(1, 2) is False
+
+
+def test_wait_for_next_help_page_stops_when_input_is_closed(monkeypatch):
+    def raise_eof(_prompt=""):
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", raise_eof)
+
+    assert interactive.wait_for_next_help_page(1, 2) is False

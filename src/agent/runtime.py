@@ -2611,7 +2611,29 @@ async def _run_agent_cli_session(
                 if _handled and _cont:
                     continue
                 if user_input.lower() in {"/help", "/commands"}:
-                    session_ui.print(_format_interactive_help(GROUPED_HELP))
+                    _help_markup = _format_interactive_help(GROUPED_HELP)
+                    # Paging is a terminal affordance: both ends must be one,
+                    # otherwise the whole block goes out in a single print.
+                    _page_help = (
+                        not non_interactive
+                        and sys.stdin.isatty()
+                        and bool(getattr(console, "is_terminal", False))
+                    )
+                    if not _page_help:
+                        session_ui.print(_help_markup)
+                    else:
+                        from .interactive import (
+                            help_page_lines,
+                            print_help_pages,
+                            wait_for_next_help_page,
+                        )
+
+                        print_help_pages(
+                            session_ui.print,
+                            _help_markup,
+                            page_lines=help_page_lines(),
+                            pause=wait_for_next_help_page,
+                        )
                     continue
                 _mission_input = _mission_slash_command(
                     user_input, memory, session_id, session_ui

@@ -4,6 +4,7 @@ import os
 import pathlib
 import re
 import shlex
+import shutil
 import sys
 import threading
 from collections.abc import Mapping
@@ -165,6 +166,73 @@ def format_help(grouped: bool = True) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+_HELP_PAGE_LINES = 20
+
+
+def help_page_lines(default: int = _HELP_PAGE_LINES) -> int:
+    """Return how many help lines fit on the current terminal."""
+    try:
+        rows = shutil.get_terminal_size((80, 24)).lines
+    except (OSError, ValueError):
+        return default
+    # Leave a row for the "more?" prompt and a row for breathing room.
+    return max(5, rows - 2)
+
+
+def paginate_help(text: str, *, page_lines: int | None = None) -> list[str]:
+    """Split rendered help into pages that fit on one screen.
+
+    Pages never start with a blank separator line, so a page boundary does not
+    leave a screenful that appears to begin mid-section.
+    """
+    limit = page_lines if page_lines is not None else help_page_lines()
+    lines = text.splitlines()
+    if not lines:
+        return []
+    if limit <= 0 or len(lines) <= limit:
+        return ["\n".join(lines)]
+    pages: list[str] = []
+    for start in range(0, len(lines), limit):
+        chunk = lines[start : start + limit]
+        while chunk and not chunk[0].strip():
+            chunk = chunk[1:]
+        if chunk:
+            pages.append("\n".join(chunk))
+    return pages
+
+
+def print_help_pages(
+    print_page: Any,
+    text: str,
+    *,
+    page_lines: int | None = None,
+    pause: Any = None,
+) -> int:
+    """Print help a page at a time and return how many pages were shown.
+
+    ``print_page`` receives markup text. ``pause(index, total)`` is asked
+    between pages; returning a false value stops paging (the reader quit).
+    """
+    pages = paginate_help(text, page_lines=page_lines)
+    shown = 0
+    for index, page in enumerate(pages, start=1):
+        print_page(page)
+        shown = index
+        if pause is not None and index < len(pages) and not pause(index, len(pages)):
+            break
+    return shown
+
+
+def wait_for_next_help_page(index: int, total: int) -> bool:
+    """Prompt before the next help page; Enter continues, ``q`` stops."""
+    try:
+        answer = input(f"[{index}/{total}] Enter for more, q to stop: ")
+    except (EOFError, KeyboardInterrupt, OSError):
+        print()
+        return False
+    return answer.strip().lower() not in {"q", "quit"}
 
 
 def load_custom_slash_commands(workspace_root=None) -> dict[str, str]:
