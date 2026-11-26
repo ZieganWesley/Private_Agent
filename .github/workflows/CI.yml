@@ -12,8 +12,40 @@ permissions:
   contents: read
 
 jobs:
+  cleanup:
+    name: Delete Previous Runs
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+
+    steps:
+      - name: Delete previous runs of this workflow
+        # Older runs keep their logs and artifacts around and clutter the
+        # Actions tab; clear them before the rest of the pipeline starts.
+        # Best effort: fork pull requests get a read-only token.
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run list \
+            --repo "$GITHUB_REPOSITORY" \
+            --workflow "$GITHUB_WORKFLOW" \
+            --limit 100 \
+            --json databaseId \
+            --jq '.[].databaseId' |
+          while read -r run_id; do
+            if [ "$run_id" = "$GITHUB_RUN_ID" ]; then
+              continue
+            fi
+            echo "Deleting previous run $run_id"
+            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+          done
+
   lint:
     name: Lint & Static Analysis
+    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
@@ -51,6 +83,7 @@ jobs:
 
   smoke:
     name: Core Smoke Test
+    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
@@ -75,6 +108,7 @@ jobs:
 
   test:
     name: Pytest
+    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
@@ -104,6 +138,7 @@ jobs:
 
   audit:
     name: Security Audit
+    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
@@ -131,6 +166,7 @@ jobs:
 
   performance:
     name: Performance Profile
+    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
