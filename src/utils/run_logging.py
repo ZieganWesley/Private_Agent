@@ -31,6 +31,7 @@ _LOG_CONTEXT: contextvars.ContextVar[Mapping[str, Any]] = contextvars.ContextVar
     default=MappingProxyType({}),
 )
 _ACTIVE_HANDLERS: list[logging.Handler] = []
+_LOGGER_LEVELS: list[tuple[logging.Logger, int]] = []
 _RUN_ID_TOKEN: contextvars.Token | None = None
 
 _SENSITIVE_FIELD = re.compile(
@@ -196,7 +197,9 @@ def start_debug_logging() -> pathlib.Path | None:
         handler.setFormatter(JsonLineFormatter())
         level = getattr(logging, DEBUG_LOG_LEVEL, logging.INFO)
         handler.setLevel(level)
+        _LOGGER_LEVELS.clear()
         for logger in (PACKAGE_LOGGER, RUN_LOGGER):
+            _LOGGER_LEVELS.append((logger, logger.level))
             logger.setLevel(level)
             logger.addHandler(handler)
         _ACTIVE_HANDLERS.append(handler)
@@ -221,6 +224,9 @@ def stop_debug_logging() -> None:
         handler.flush()
         handler.close()
     _ACTIVE_HANDLERS.clear()
+    for logger, level in _LOGGER_LEVELS:
+        logger.setLevel(level)
+    _LOGGER_LEVELS.clear()
     if _RUN_ID_TOKEN is not None:
         _RUN_ID.reset(_RUN_ID_TOKEN)
         _RUN_ID_TOKEN = None
