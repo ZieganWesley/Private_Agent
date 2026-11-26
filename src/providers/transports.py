@@ -8,13 +8,19 @@ routes is never called speculatively.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from .endpoint_telemetry import record_endpoint_request
+from .responses_protocol import (
+    ResponsesStreamState,
+    iter_sse_events,
+    reply_from_body,
+    tool_definitions,
+)
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
@@ -24,6 +30,7 @@ class TransportResult:
     text: str
     model: str | None = None
     usage: dict[str, Any] | None = None
+    tool_calls: list[dict[str, Any]] | None = None
 
 
 def _endpoint(base_url: str, path: str) -> str:
@@ -175,6 +182,7 @@ class ResponsesClient:
         instructions: str | None = None,
         max_output_tokens: int = 512,
         temperature: float = 0.0,
+        tools: Any = None,
     ) -> TransportResult | None:
         if not self.enabled:
             return None
@@ -198,6 +206,9 @@ class ResponsesClient:
         }
         if instructions:
             payload["instructions"] = instructions
+        definitions = tool_definitions(tools)
+        if definitions:
+            payload["tools"] = definitions
         client = None
         try:
             client = self.client_factory(
@@ -207,21 +218,102 @@ class ResponsesClient:
             response = client.post(_endpoint(self.base_url, "responses"), json=payload)
             response.raise_for_status()
             body = response.json()
-            text = self._text(body)
-            if text is None:
+            parsed = reply_from_body(body)
+            if parsed is None:
                 _record(False, "invalid_response")
                 return None
-            usage = body.get("usage") if isinstance(body, dict) else None
-            model_name = body.get("model") if isinstance(body, dict) else None
-            _record(True, usage=usage if isinstance(usage, dict) else None)
+            usage = parsed["usage"]
+            _record(True, usage=usage)
             return TransportResult(
-                text=text,
-                model=model_name if isinstance(model_name, str) else model,
-                usage=usage if isinstance(usage, dict) else None,
+                text=parsed["text"],
+                model=parsed["model"] or model,
+                usage=usage,
+                tool_calls=parsed["tool_calls"],
             )
         except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
             _record(False, type(exc).__name__)
             return None
+        finally:
+            if client is not None and hasattr(client, "close"):
+                try:
+                    client.close()
+                except (httpx.HTTPError, OSError):
+                    pass
+
+
+    def stream_respond(
+        self,
+        input_text: str,
+        *,
+        model: str,
+        instructions: str | None = None,
+        max_output_tokens: int = 512,
+        temperature: float = 0.0,
+        tools: Any = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Consume the Responses SSE stream and yield normalized deltas."""
+        if not self.enabled:
+            return
+        started = time.perf_counter()
+
+        def _record(ok: bool, error: str | None = None, usage=None) -> None:
+            record_endpoint_request(
+                "responses_stream",
+                self.base_url,
+                success=ok,
+                elapsed_seconds=time.perf_counter() - started,
+                error_type=error,
+                usage=usage,
+            )
+
+        payload: dict[str, Any] = {
+            "model": model,
+            "input": input_text,
+            "max_output_tokens": max(1, int(max_output_tokens)),
+            "temperature": float(temperature),
+            "stream": True,
+        }
+        if instructions:
+            payload["instructions"] = instructions
+        definitions = tool_definitions(tools)
+        if definitions:
+            payload["tools"] = definitions
+        client = None
+        try:
+            client = self.client_factory(
+                headers=_headers(self.api_key, self.headers),
+                timeout=self.timeout,
+            )
+            state = ResponsesStreamState()
+            with client.stream(
+                "POST", _endpoint(self.base_url, "responses"), json=payload
+            ) as response:
+                response.raise_for_status()
+                for event in iter_sse_events(response.iter_lines()):
+                    for delta in state.handle(event):
+                        if delta["type"] == "error":
+                            raise RuntimeError(delta["error"])
+                        if delta["type"] != "completed":
+                            yield delta
+            result = state.result()
+            if result is None:
+                raise RuntimeError("empty responses stream")
+            usage = result["usage"]
+            _record(True, usage=usage)
+            yield {
+                "type": "final",
+                "result": TransportResult(
+                    text=result["text"],
+                    model=result["model"] or model,
+                    usage=usage,
+                    tool_calls=result["tool_calls"],
+                ),
+            }
+        except (httpx.HTTPError, ValueError, TypeError, OSError, RuntimeError) as exc:
+            _record(False, type(exc).__name__)
+            raise RuntimeError(
+                f"The responses stream failed ({type(exc).__name__})."
+            ) from exc
         finally:
             if client is not None and hasattr(client, "close"):
                 try:
