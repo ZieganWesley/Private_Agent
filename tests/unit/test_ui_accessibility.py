@@ -356,3 +356,31 @@ def test_ui_check_exercises_every_colour_depth(monkeypatch, capsys):
     capsys.readouterr()
     assert {"truecolor", "256", "standard"} <= set(depths)
     assert None in depths
+
+
+def test_ui_check_runs_as_a_module(tmp_path):
+    import pathlib
+    import subprocess
+    import sys
+
+    import ui
+
+    source_root = pathlib.Path(ui.__file__).resolve().parent.parent
+    env = {
+        **os.environ,
+        "HOME": str(tmp_path),
+        "PYTHONPATH": os.pathsep.join(
+            [str(source_root), os.environ.get("PYTHONPATH", "")]
+        ),
+    }
+
+    result = subprocess.run(
+        [sys.executable, "-m", "ui.check"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "All UI components rendered successfully" in result.stdout

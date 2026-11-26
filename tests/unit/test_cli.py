@@ -233,3 +233,13 @@ def test_startup_banner_prints(monkeypatch, capsys):
     cli.main()
 
     assert "Private Agent" in capsys.readouterr().out
+
+
+def test_ui_check_flag_is_retired(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["private-agent", "--ui-check"])
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 2
+    assert "unrecognized arguments: --ui-check" in capsys.readouterr().err

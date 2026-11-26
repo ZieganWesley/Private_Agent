@@ -1,8 +1,8 @@
-"""Manual UI self-check trigger point.
+"""Manual UI self-check entry point.
 
 This module exists only to exercise the terminal UI in isolation, without
-starting the agent. It is intentionally separate so it can be deleted (or the
-``--ui-check`` flag removed) before the code is marked for production.
+starting the agent. Run it with ``python -m ui.check``; it stays out of the
+``private-agent`` flag surface so the CLI keeps only shipped options.
 
 REMOVE BEFORE PRODUCTION.
 """
@@ -375,4 +375,13 @@ def run_ui_check(console: Any = None) -> int:
     return 0
 
 
-__all__ = ["run_ui_check"]
+def main() -> int:
+    """Run the self-check for ``python -m ui.check``."""
+    return run_ui_check()
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised via runpy in tests
+    raise SystemExit(main())
+
+
+__all__ = ["main", "run_ui_check"]

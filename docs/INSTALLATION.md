@@ -23,6 +23,6 @@ private-agent --doctor
 
 ## UI Check (developer only)
 ```bash
-private-agent --ui-check
+python -m ui.check
 ```
-Remove this trigger before production.
+Remove this entry point before production.
