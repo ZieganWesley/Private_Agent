@@ -29,19 +29,40 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh run list \
-            --repo "$GITHUB_REPOSITORY" \
-            --workflow "$GITHUB_WORKFLOW" \
-            --limit 100 \
-            --json databaseId \
-            --jq '.[].databaseId' |
-          while read -r run_id; do
-            if [ "$run_id" = "$GITHUB_RUN_ID" ]; then
-              continue
+
+          # Derive the workflow file (e.g. CI.yml) from the ref the run was
+          # started from; `gh run list` caps at 100 entries, so page through the
+          # REST API instead and re-list after each sweep until only this run is
+          # left. Deletion shifts the pages, hence the outer loop.
+          workflow_file="${GITHUB_WORKFLOW_REF#*/.github/workflows/}"
+          workflow_file="${workflow_file%%@*}"
+
+          deleted=0
+          for _pass in $(seq 1 200); do
+            stale=$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_file}/runs?per_page=100" \
+              --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID}) | .id")
+            if [ -z "$stale" ]; then
+              break
             fi
-            echo "Deleting previous run $run_id"
-            gh run delete "$run_id" --repo "$GITHUB_REPOSITORY"
+            while read -r run_id; do
+              [ -n "$run_id" ] || continue
+              echo "Deleting previous run ${run_id}"
+              if gh api --method DELETE \
+                "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >/dev/null; then
+                deleted=$((deleted + 1))
+              else
+                echo "Could not delete run ${run_id}"
+              fi
+            done <<< "$stale"
           done
+
+          remaining=$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_file}/runs?per_page=100" \
+            --jq "[.workflow_runs[] | select(.id != ${GITHUB_RUN_ID})] | length" |
+            awk '{ total += $1 } END { print total + 0 }')
+          echo "Deleted ${deleted} previous run(s); ${remaining} left besides run ${GITHUB_RUN_ID}."
+          test "$remaining" -eq 0
 
   lint:
     name: Lint & Static Analysis
