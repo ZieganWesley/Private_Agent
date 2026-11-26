@@ -207,3 +207,21 @@ def test_run_doctor_fails_when_the_configuration_has_errors(monkeypatch):
 
     assert doctor.run_doctor() == 1
     assert "Fix the configuration errors" in "\n".join(fake.output)
+
+
+def test_run_doctor_reports_the_context_budget_plan(monkeypatch):
+    from diagnostics import doctor
+
+    fake = _FakeConsole("n")
+    monkeypatch.setattr(doctor, "console", fake)
+    monkeypatch.setattr(doctor, "probe_endpoint", lambda base_url: "reachable")
+    monkeypatch.setattr(doctor, "check_config_file", lambda path=None: [])
+    monkeypatch.setattr(
+        doctor, "check_dependencies", lambda: {"required": [], "optional": []}
+    )
+
+    assert doctor.run_doctor() == 0
+    joined = "\n".join(fake.output)
+    assert "Context usage" in joined
+    assert "history: requested=" in joined
+    assert "allocated=" in joined

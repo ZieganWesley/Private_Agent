@@ -139,6 +139,45 @@ def log_context_allocation(report: Any, cache: Any = None) -> None:
     )
 
 
+def configured_context_telemetry(window: int | None = None) -> dict[str, Any] | None:
+    """Return the budget plan for one turn at the configured context window.
+
+    ``--doctor`` runs outside a session, so it shows how the window *would* be
+    divided instead of a turn's usage: budgets are real, ``used`` stays zero.
+    The engine is forced on because this is a plan preview, not a feature flag.
+    """
+    try:
+        from config import (
+            APP_CONFIG,
+            CONTEXT_OUTPUT_RESERVE_RATIO,
+            CONTEXT_SAFETY_MARGIN_TOKENS,
+            MAX_CONTEXT_TOKENS,
+            MAX_OUTPUT_TOKENS,
+        )
+
+        from .context_engine import ContextEngine, start_turn_allocation
+
+        total = int(window or MAX_CONTEXT_TOKENS)
+        output_reserve = min(
+            int(MAX_OUTPUT_TOKENS), max(1, int(total * CONTEXT_OUTPUT_RESERVE_RATIO))
+        )
+        engine = ContextEngine.from_config(APP_CONFIG)
+        # Preview the plan even while the feature flag keeps the runtime on the
+        # legacy path; the configured shares are the same either way.
+        engine.enabled = True
+        allocation = start_turn_allocation(
+            engine,
+            total,
+            "",
+            output_reserve=output_reserve,
+            safety_margin=CONTEXT_SAFETY_MARGIN_TOKENS,
+        )
+        telemetry = dict(allocation.telemetry or {})
+        return telemetry or None
+    except Exception:  # noqa: BLE001 - optional inspection surface
+        return None
+
+
 def print_context_usage(telemetry: Any, print_fn, *, console: Any = None) -> None:
     """Print the last turn's usage report, swallowing optional-surface errors.
 
@@ -254,6 +293,7 @@ __all__ = [
     "ContextTelemetry",
     "build_context_telemetry",
     "build_runtime_context_report",
+    "configured_context_telemetry",
     "format_context_report",
     "log_context_allocation",
     "print_context_usage",

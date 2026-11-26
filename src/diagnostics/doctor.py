@@ -454,6 +454,17 @@ def run_doctor() -> int:
             subtitle=f"Configuration file: {_config_path()}",
         )
     )
+    from agent.context_telemetry import (
+        configured_context_telemetry,
+        print_context_usage,
+    )
+
+    context_plan = configured_context_telemetry()
+    if context_plan:
+        console.print(
+            "[muted]Context budget for one turn (plan only, no usage yet):[/muted]"
+        )
+        print_context_usage(context_plan, console.print, console=console)
     fix_command = system_dependency_fix_command()
     if fix_command:
         console.print(
