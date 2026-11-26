@@ -55,9 +55,7 @@ def after_turn(text: str, response) -> str | None:
     return mission_after_turn(
         text,
         had_tool_calls=bool(getattr(response, "tool_calls", None)),
-        interrupted=bool(
-            getattr(response, "additional_kwargs", {}).get("interrupted")
-        ),
+        interrupted=bool(getattr(response, "additional_kwargs", {}).get("interrupted")),
     )
 
 

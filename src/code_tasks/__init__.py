@@ -230,7 +230,8 @@ def _isolated_command(
             "--proc",
             "/proc",
             "--tmpfs",
-            "/tmp",
+            # Mounted inside the sandbox namespace, not on the host.
+            "/tmp",  # nosec B108
             "--tmpfs",
             "/home",
             "--tmpfs",
@@ -303,8 +304,9 @@ def _isolated_command(
     )
     environment = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
-        "HOME": "/tmp",
-        "TMPDIR": "/tmp",
+        # Sandboxed child environment; /tmp lives in the sandbox namespace.
+        "HOME": "/tmp",  # nosec B108
+        "TMPDIR": "/tmp",  # nosec B108
         "PYTHONDONTWRITEBYTECODE": "1",
         "LANG": os.environ.get("LANG", "C.UTF-8"),
     }

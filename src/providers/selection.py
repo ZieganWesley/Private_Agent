@@ -11,7 +11,6 @@ from typing import Any
 
 from utils.run_logging import RUN_LOGGER, log_event
 
-
 STATE_ENV = "PRIVATE_AGENT_PROVIDER_STATE"
 PROVIDER_ENV = "PRIVATE_AGENT_PROVIDER"
 MODEL_ENV = "PRIVATE_AGENT_MODEL"

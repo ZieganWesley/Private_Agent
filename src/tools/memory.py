@@ -107,6 +107,8 @@ def search_chat_history_in_sqlite(
             parameters.append(min(max(limit, 1), 50))
             rows = conn.execute(
                 "SELECT id, session_id, role, timestamp, content "
+                # only a fixed clause fragment is appended; values are bound
+                # nosec B608
                 "FROM chat_history WHERE instr(lower(content), ? ) > 0"
                 + session_clause
                 + " ORDER BY id DESC LIMIT ?",

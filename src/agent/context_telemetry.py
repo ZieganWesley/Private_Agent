@@ -240,8 +240,6 @@ def build_runtime_context_report(
     return report
 
 
-
-
 __all__ = [
     "ContextTelemetry",
     "build_context_telemetry",

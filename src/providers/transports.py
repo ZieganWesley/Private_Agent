@@ -7,6 +7,7 @@ routes is never called speculatively.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
@@ -101,7 +102,9 @@ class CompletionsClient:
                 headers=_headers(self.api_key, self.headers),
                 timeout=self.timeout,
             )
-            response = client.post(_endpoint(self.base_url, "completions"), json=payload)
+            response = client.post(
+                _endpoint(self.base_url, "completions"), json=payload
+            )
             response.raise_for_status()
             body = response.json()
             choices = body.get("choices") if isinstance(body, dict) else None
@@ -126,10 +129,8 @@ class CompletionsClient:
             return None
         finally:
             if client is not None and hasattr(client, "close"):
-                try:
+                with contextlib.suppress(httpx.HTTPError, OSError):
                     client.close()
-                except (httpx.HTTPError, OSError):
-                    pass
 
 
 class ResponsesClient:
@@ -235,11 +236,8 @@ class ResponsesClient:
             return None
         finally:
             if client is not None and hasattr(client, "close"):
-                try:
+                with contextlib.suppress(httpx.HTTPError, OSError):
                     client.close()
-                except (httpx.HTTPError, OSError):
-                    pass
-
 
     def stream_respond(
         self,
@@ -316,10 +314,8 @@ class ResponsesClient:
             ) from exc
         finally:
             if client is not None and hasattr(client, "close"):
-                try:
+                with contextlib.suppress(httpx.HTTPError, OSError):
                     client.close()
-                except (httpx.HTTPError, OSError):
-                    pass
 
 
 __all__ = [

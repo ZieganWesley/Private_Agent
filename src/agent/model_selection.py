@@ -34,18 +34,19 @@ from config import (
 )
 from hardware import ollama_acceleration_options
 from providers.endpoints import EndpointRegistry, is_loopback_url, remote_allowed
+from providers.transport_model import TransportChatModel
 
 from .console import console
 from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
+from .model_capabilities import (
+    detect_openai_compatible_capabilities,
+    detect_openai_compatible_model_record,
+)
 from .model_catalog import (
     DEFAULT_CATALOG_TTL_SECONDS,
     ModelCatalog,
     ModelRecord,
     RequestLimits,
-)
-from .model_capabilities import (
-    detect_openai_compatible_capabilities,
-    detect_openai_compatible_model_record,
 )
 from .providers import (
     create_openai_compatible_chat_model as _create_openai_compatible_chat_model,
@@ -53,7 +54,6 @@ from .providers import (
 from .providers import create_robust_local_chat_model as _create_robust_local_chat_model
 from .providers import select_online_model as _select_online_model
 from .providers import validate_online_base_url as _validate_online_base_url
-from providers.transport_model import TransportChatModel
 from .session_state import SESSION_STATS as _SESSION_STATS
 
 
@@ -221,9 +221,7 @@ def request_limits_for_model(
             ceiling_context=context_ceiling,
             ceiling_output=output_ceiling,
         )
-    context = _effective_context_window(
-        capabilities, ceiling_context=context_ceiling
-    )
+    context = _effective_context_window(capabilities, ceiling_context=context_ceiling)
     return RequestLimits(
         context=context,
         input_tokens=context,

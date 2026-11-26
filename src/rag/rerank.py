@@ -8,6 +8,7 @@ broken endpoint from adding a timeout to every retrieval.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import math
 import time
@@ -169,9 +170,7 @@ class HttpReranker:
             seen: set[int] = set()
             for item in items:
                 index = item.get("index")
-                score = _score(
-                    item.get("relevance_score", item.get("score"))
-                )
+                score = _score(item.get("relevance_score", item.get("score")))
                 if (
                     isinstance(index, bool)
                     or not isinstance(index, int)
@@ -195,10 +194,8 @@ class HttpReranker:
             return None
         finally:
             if client is not None and hasattr(client, "close"):
-                try:
+                with contextlib.suppress(httpx.HTTPError, OSError):
                     client.close()
-                except (httpx.HTTPError, OSError):
-                    pass
 
 
 def local_cosine_rerank(
@@ -259,7 +256,9 @@ def reranker_from_config(config: Any) -> HttpReranker | None:
         base_url=endpoint.base_url,
         model=model,
         headers=endpoint.headers(),
-        timeout=timeout if isinstance(timeout, (int, float)) else DEFAULT_RERANK_TIMEOUT_SECONDS,
+        timeout=timeout
+        if isinstance(timeout, (int, float))
+        else DEFAULT_RERANK_TIMEOUT_SECONDS,
         top_n=top_n if isinstance(top_n, int) else DEFAULT_RERANK_TOP_N,
         enabled=bool(enabled),
     )

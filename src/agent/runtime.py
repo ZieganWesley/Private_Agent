@@ -2183,7 +2183,9 @@ async def _choose_provider(
             previous=resumed_record,
         )
     else:
-        console.print(f"[error]Select a provider from 1 to {last_choice}.[/error]")
+        console.print(
+            f"[error]Please choose a provider between 1 and {last_choice}.[/error]"
+        )
         return None
     if provider_type == "local":
         webcam_status = (
@@ -2645,10 +2647,16 @@ async def _run_agent_cli_session(
                                 "online provider with your next prompt.[/warning]"
                             )
                     continue
-                if user_input.lower() in {"/context report", "/context stats", "/context usage"}:
+                if user_input.lower() in {
+                    "/context report",
+                    "/context stats",
+                    "/context usage",
+                }:
                     from .context_telemetry import print_context_usage
 
-                    print_context_usage(_CONTEXT_REPORT_STATE.get("value", {}) or {}, session_ui.print)
+                    print_context_usage(
+                        _CONTEXT_REPORT_STATE.get("value", {}) or {}, session_ui.print
+                    )
                     continue
                 from .provider_report import handle_provider_command
 
@@ -3500,16 +3508,19 @@ async def _run_agent_cli_session(
                             error_type=type(exc).__name__,
                             exc_info=True,
                         )
-                effective_context, _output_ceiling, _context_engine, _context_allocation = (
-                    start_turn_context(
-                        provider_type,
-                        selected_local_runtime,
-                        selected_model,
-                        capabilities,
-                        user_input,
-                        max_context_tokens=MAX_CONTEXT_TOKENS,
-                        max_output_tokens=MAX_OUTPUT_TOKENS,
-                    )
+                (
+                    effective_context,
+                    _output_ceiling,
+                    _context_engine,
+                    _context_allocation,
+                ) = start_turn_context(
+                    provider_type,
+                    selected_local_runtime,
+                    selected_model,
+                    capabilities,
+                    user_input,
+                    max_context_tokens=MAX_CONTEXT_TOKENS,
+                    max_output_tokens=MAX_OUTPUT_TOKENS,
                 )
                 if vectorstore and include_private_context:
                     rag_search_started = time.monotonic()
@@ -3742,10 +3753,16 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     MAX_HISTORY_MESSAGES,
                 )
                 if context_engine_is_enabled():
-                    try:
-                        chat_history, _needs_compact = plan_turn_compaction(ContextEngine.from_config(), chat_history, messages_tokens([HumanMessage(content=user_input)]), prompt_budget, CONTEXT_COMPACTION_THRESHOLD, MAX_HISTORY_MESSAGES, keep_recent=CONTEXT_KEEP_RECENT_MESSAGES)
-                    except Exception:  # noqa: BLE001 - optional best-effort context feature
-                        pass
+                    with contextlib.suppress(Exception):
+                        chat_history, _needs_compact = plan_turn_compaction(
+                            ContextEngine.from_config(),
+                            chat_history,
+                            messages_tokens([HumanMessage(content=user_input)]),
+                            prompt_budget,
+                            CONTEXT_COMPACTION_THRESHOLD,
+                            MAX_HISTORY_MESSAGES,
+                            keep_recent=CONTEXT_KEEP_RECENT_MESSAGES,
+                        )
                 if _needs_compact:
                     try:
                         chat_history, context_summary = await compact_history(
@@ -3797,9 +3814,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     prompt_budget=prompt_budget,
                 )
                 if _turn_prompt.system_text is not None:
-                    system_prompts = [
-                        SystemMessage(content=_turn_prompt.system_text)
-                    ]
+                    system_prompts = [SystemMessage(content=_turn_prompt.system_text)]
                 enriched_input = _turn_prompt.enriched_input
                 prompt_history = _turn_prompt.prompt_history
                 context_stats = estimate_context_window(
@@ -3824,14 +3839,17 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     system_prompts=system_prompts,
                     prompt_history=prompt_history[-MAX_HISTORY_MESSAGES:],
                     user_message=HumanMessage(content=enriched_input),
-                    policy=_CONTEXT_CACHE_STATE["policy"], provider=provider_type,
+                    policy=_CONTEXT_CACHE_STATE["policy"],
+                    provider=provider_type,
                     previous_hash=_CONTEXT_CACHE_STATE["prefix_hash"],
                 )
                 if _report is not None:
                     _report.update(_context_meta)
                     _CONTEXT_REPORT_STATE["value"] = _report
                     log_context_allocation(_report, _context_meta.get("cache"))
-                _CONTEXT_CACHE_STATE["prefix_hash"] = _context_meta["cache"]["prefix_hash"]
+                _CONTEXT_CACHE_STATE["prefix_hash"] = _context_meta["cache"][
+                    "prefix_hash"
+                ]
                 turn_id = uuid.uuid4().hex
                 _f_state = f_integration.begin_turn(
                     turn_id, user_input, effective_context, non_interactive
@@ -3839,7 +3857,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
-                _turn_control, _steering_channel = begin_steering_turn(interactive=interactive)
+                _turn_control, _steering_channel = begin_steering_turn(
+                    interactive=interactive
+                )
                 start_time = time.monotonic()
                 chat_transcript = ChatTranscript(console=console)
                 chat_transcript.add_message("user", user_input, echo=False)
@@ -3955,7 +3975,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             state.authorized_planning_searches
                         )
                         tool_call_count = state.tool_call_count
-                        if _steering_channel: _steering_channel.pause()
+                        if _steering_channel:  # noqa: B023
+                            _steering_channel.pause()  # noqa: B023
                         response, stop = await _execute_tool_batch(
                             response=response,
                             session_id=session_id,
@@ -3970,7 +3991,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             deadline=deadline,  # noqa: B023
                             console=console,
                         )
-                        if _steering_channel: _steering_channel.resume()
+                        if _steering_channel:  # noqa: B023
+                            _steering_channel.resume()  # noqa: B023
                         f_integration.finish_iteration(
                             _f_state,  # noqa: B023
                             iteration,
@@ -3983,9 +4005,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 user_input,  # noqa: B023
                                 llm,  # noqa: B023
                             )
-                        if stop or _turn_control.stop_requested:
+                        if stop or _turn_control.stop_requested:  # noqa: B023
                             break
-                        for steer in _turn_control.drain():
+                        for steer in _turn_control.drain():  # noqa: B023
                             messages.append(  # noqa: B023
                                 HumanMessage(content=steer.prompt_text)
                             )
@@ -4020,7 +4042,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
                                 context_usage=usage,
-                                cancel_event=_turn_control.cancel_event,
+                                cancel_event=_turn_control.cancel_event,  # noqa: B023
                             )
                         except Exception as exc:  # noqa: BLE001 - wraps any model error after tool execution; re-raised as RuntimeError
                             if provider_type == "online":  # noqa: B023
@@ -4071,7 +4093,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 local_model=provider_type == "local",  # noqa: B023
                                 first_local_turn=False,  # noqa: B023
                                 thinking_enabled=thinking_enabled,  # noqa: B023
-                                cancel_event=_turn_control.cancel_event,
+                                cancel_event=_turn_control.cancel_event,  # noqa: B023
                             )
                     if (
                         not getattr(response, "tool_calls", None)
@@ -4098,7 +4120,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             local_model=provider_type == "local",  # noqa: B023
                             first_local_turn=False,  # noqa: B023
                             thinking_enabled=thinking_enabled,  # noqa: B023
-                            cancel_event=_turn_control.cancel_event,
+                            cancel_event=_turn_control.cancel_event,  # noqa: B023
                         )
                     return response
 
@@ -4116,7 +4138,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 try:
                     response = await _run_agent_turn(response)
                 finally:
-                    if _steering_channel: _steering_channel.stop()
+                    if _steering_channel:  # noqa: B023
+                        _steering_channel.stop()  # noqa: B023
                     _turn_control.finish_turn()
                     f_integration.finish_turn(_f_state)
                     session_ui.set_generation(
@@ -4223,9 +4246,11 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 f"\n[error][Exception] Unexpected runtime error: {ex!s}[/error]\n"
             )
             continue
-        if model_selection_failed: continue
-        if (_mission_next := _mission_runtime.after_turn(full_output_content, response)):
-            _pending_user_input = _mission_next; continue
+        if model_selection_failed:
+            continue
+        if _mission_next := _mission_runtime.after_turn(full_output_content, response):
+            _pending_user_input = _mission_next
+            continue
         break
 
 

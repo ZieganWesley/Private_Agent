@@ -5,15 +5,6 @@ discovery, capability detection, model construction and embeddings no longer
 depend on a single runtime (Ollama).
 """
 
-from .endpoints import (
-    EndpointConfig,
-    EndpointRegistry,
-    clamp_limit,
-    normalize_base_url,
-    resolved_limits,
-)
-from .native import NativeClient, NativeProfile, detect_native
-from .transports import CompletionsClient, ResponsesClient, TransportResult
 from .adapters import (
     OllamaAdapter,
     OpenAICompatibleAdapter,
@@ -23,6 +14,14 @@ from .adapters import (
     all_presets,
     build_adapter,
 )
+from .endpoints import (
+    EndpointConfig,
+    EndpointRegistry,
+    clamp_limit,
+    normalize_base_url,
+    resolved_limits,
+)
+from .native import NativeClient, NativeProfile, detect_native
 from .selection import (
     load_last_provider,
     match_runtime,
@@ -31,6 +30,7 @@ from .selection import (
     requested_provider,
     save_last_provider,
 )
+from .transports import CompletionsClient, ResponsesClient, TransportResult
 
 __all__ = [
     "NativeClient",

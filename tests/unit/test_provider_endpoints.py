@@ -13,8 +13,7 @@ from providers.endpoints import (
 
 def test_normalize_base_url_accepts_http_and_strips_slash():
     assert (
-        normalize_base_url(" http://127.0.0.1:8080/v1/ ")
-        == "http://127.0.0.1:8080/v1"
+        normalize_base_url(" http://127.0.0.1:8080/v1/ ") == "http://127.0.0.1:8080/v1"
     )
 
 
@@ -34,9 +33,7 @@ def test_is_loopback_url():
 
 def test_with_v1_only_appends_when_missing():
     assert with_v1("http://127.0.0.1:11434") == "http://127.0.0.1:11434/v1"
-    assert (
-        with_v1("http://127.0.0.1:8080/v1/") == "http://127.0.0.1:8080/v1"
-    )
+    assert with_v1("http://127.0.0.1:8080/v1/") == "http://127.0.0.1:8080/v1"
 
 
 def test_registry_reads_roles_and_limits():

@@ -15,7 +15,7 @@ import ipaddress
 import math
 import os
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -227,7 +227,11 @@ class EndpointRegistry:
     def by_name(self, name: str) -> EndpointConfig | None:
         wanted = str(name or "").strip().lower()
         return next(
-            (endpoint for endpoint in self.endpoints if endpoint.name.lower() == wanted),
+            (
+                endpoint
+                for endpoint in self.endpoints
+                if endpoint.name.lower() == wanted
+            ),
             None,
         )
 
@@ -311,9 +315,7 @@ class EndpointRegistry:
                     continue
                 endpoint = _endpoint_from_mapping(
                     {
-                        "name": (
-                            "Ollama" if index == 0 else f"Ollama {index + 1}"
-                        ),
+                        "name": ("Ollama" if index == 0 else f"Ollama {index + 1}"),
                         "base_url": value,
                         "roles": list(VALID_ROLES),
                     },
@@ -377,9 +379,7 @@ def resolved_limits(
     context = clamp_limit(
         discovered_context, endpoint.max_context_tokens, ceiling_context
     )
-    output = clamp_limit(
-        discovered_output, endpoint.max_output_tokens, ceiling_output
-    )
+    output = clamp_limit(discovered_output, endpoint.max_output_tokens, ceiling_output)
     return context, min(output, context)
 
 

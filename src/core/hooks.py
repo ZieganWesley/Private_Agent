@@ -184,9 +184,16 @@ def run_hooks(
         hook_timeout = _hook_timeout(hook, timeout)
         command = str(hook["command"])
         try:
+            # Hooks are deliberately shell commands from the user's own config
+            # (they need pipes, redirects and built-ins). Untrusted payload data
+            # is passed through stdin/env only and never interpolated into the
+            # command string, so no injection path exists here.
+            # Hooks are shell commands by design (pipes, redirects, built-ins) and
+            # come from the user's own configuration; the payload is passed via
+            # stdin/env, never interpolated into the command string.
             completed = subprocess.run(
                 command,
-                shell=True,
+                shell=True,  # nosec B602
                 cwd=str(workspace_root) if workspace_root is not None else None,
                 input=json.dumps(payload),
                 capture_output=True,

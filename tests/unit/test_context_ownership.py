@@ -92,9 +92,7 @@ def test_context_shares_config_override_changes_allocation_without_code():
             }
         }
     )
-    allocation = engine.allocate(
-        1000, source_texts={name: "" for name in SOURCES}
-    )
+    allocation = engine.allocate(1000, source_texts={name: "" for name in SOURCES})
 
     assert allocation.budgets["rag"] >= 290
     assert allocation.budgets["rag"] > allocation.budgets["history"]
@@ -121,9 +119,7 @@ def test_unused_budget_only_redistributes_to_compressible_sources():
         compressible={"system": False, "rag": True},
     )
     allocation = budget.allocate(["system", "rag"])
-    updated = budget.redistribute_unused(
-        {"system": 0, "rag": 0}, total=300
-    )
+    updated = budget.redistribute_unused({"system": 0, "rag": 0}, total=300)
 
     assert allocation["system"] == allocation["rag"] == 150
     assert updated["system"] == 150
@@ -149,9 +145,7 @@ def test_allocation_trims_each_source_to_its_budget():
 
 def test_fill_sources_keeps_budgets_and_updates_usage():
     engine = _engine()
-    allocation = engine.allocate(
-        1000, source_texts={name: "" for name in SOURCES}
-    )
+    allocation = engine.allocate(1000, source_texts={name: "" for name in SOURCES})
     budgets = dict(allocation.budgets)
 
     engine.fill_sources(
@@ -172,7 +166,9 @@ def test_history_trimming_keeps_whole_messages_only():
         HumanMessage(content="third"),
     ]
 
-    trimmed = trim_history_messages(history, token_count("second") + token_count("third"))
+    trimmed = trim_history_messages(
+        history, token_count("second") + token_count("third")
+    )
 
     assert [message.content for message in trimmed] == ["second", "third"]
     assert all(message in history for message in trimmed)

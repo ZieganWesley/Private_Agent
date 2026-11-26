@@ -84,8 +84,9 @@ class ProviderRecordMixin:
         self, table: str, key_column: str, key: str, record: ProviderRecord
     ) -> None:
         with self._lock, self.conn:
+            # table/key_column come from fixed internal constants; values stay bound.
             self.conn.execute(
-                f"INSERT INTO {table} "
+                f"INSERT INTO {table} "  # nosec B608
                 f"({key_column}, adapter_type, display_name, base_url, model, "
                 "needs_tools, needs_vision, context_window, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
@@ -110,6 +111,8 @@ class ProviderRecordMixin:
         try:
             row = self.conn.execute(
                 "SELECT adapter_type, display_name, base_url, model, "
+                # table/key_column come from fixed internal constants; values are bound
+                # nosec B608
                 f"needs_tools, needs_vision, context_window FROM {table} "
                 f"WHERE {key_column} = ?",
                 (key,),

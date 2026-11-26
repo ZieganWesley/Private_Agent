@@ -289,7 +289,11 @@ def dedupe_rag_documents(documents: Any) -> list:
     out: list = []
     for doc in documents or []:
         meta = getattr(doc, "metadata", None) or {}
-        key = (meta.get("source"), meta.get("chunk"), getattr(doc, "page_content", None))
+        key = (
+            meta.get("source"),
+            meta.get("chunk"),
+            getattr(doc, "page_content", None),
+        )
         if key in seen:
             continue
         seen.add(key)
@@ -367,9 +371,7 @@ def filter_weak_rag_documents(
     are non-empty instead of being filtered twice.
     """
     threshold = (
-        RAG_RELEVANCE_THRESHOLD
-        if relevance_threshold is None
-        else relevance_threshold
+        RAG_RELEVANCE_THRESHOLD if relevance_threshold is None else relevance_threshold
     )
     out: list = []
     for doc in documents or []:

@@ -109,7 +109,9 @@ def test_tool_budget_guard_fails_mission(memory):
     controller = _controller(memory, tool_call_budget=1)
     controller.begin_iteration()
 
-    assert controller.record_tool_call("read_file", {"path": "a"}, success=True) is False
+    assert (
+        controller.record_tool_call("read_file", {"path": "a"}, success=True) is False
+    )
     assert controller.mission()["status"] == "failed"
 
 
@@ -120,8 +122,7 @@ def test_repeated_identical_tool_call_trips_no_progress_guard(memory):
     assert controller.record_tool_call("read_file", {"path": "a"}, success=True)
     assert controller.record_tool_call("read_file", {"path": "a"}, success=True)
     assert (
-        controller.record_tool_call("read_file", {"path": "a"}, success=True)
-        is False
+        controller.record_tool_call("read_file", {"path": "a"}, success=True) is False
     )
     assert controller.mission()["status"] == "failed"
     assert "No progress" in controller.mission()["last_error"]
@@ -153,7 +154,10 @@ def test_events_are_appended(memory):
     controller.next_step()
     controller.complete_step("s1", "proof")
 
-    events = [event["event_type"] for event in memory.list_mission_events(controller.mission_id)]
+    events = [
+        event["event_type"]
+        for event in memory.list_mission_events(controller.mission_id)
+    ]
     assert "planned" in events
     assert "iteration_started" in events
     assert "step_started" in events
