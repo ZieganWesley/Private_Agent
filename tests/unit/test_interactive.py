@@ -1931,8 +1931,9 @@ def test_file_context_rejects_non_text_files(
 @pytest.mark.asyncio
 async def test_noninteractive_prompt_uses_existing_console_input(temp_workspace):
     class NonInteractive:
-        def input(self, prompt):
+        def input(self, prompt, **kwargs):
             assert prompt == "User: "
+            assert kwargs.get("markup") is False
             return "hello"
 
     assert await prompt_user_input(NonInteractive(), temp_workspace) == "hello"

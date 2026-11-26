@@ -272,6 +272,48 @@ def test_ui_check_reports_a_component_failure(monkeypatch, capsys):
     assert "render exploded" in capsys.readouterr().out
 
 
+def test_prompt_text_is_plain_without_colour(monkeypatch):
+    from ui.prompt import prompt_text
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.delenv("PRIVATE_AGENT_ACCESSIBLE", raising=False)
+
+    assert prompt_text("User: ") == "User: "
+
+
+def test_prompt_text_is_plain_in_accessible_mode(monkeypatch):
+    from ui.prompt import prompt_text
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("PRIVATE_AGENT_ACCESSIBLE", "1")
+
+    assert prompt_text("User: ") == "User: "
+
+
+def test_prompt_text_follows_the_active_palette(monkeypatch):
+    from rich.console import Console
+
+    from ui.prompt import prompt_text
+    from ui.theme import build_theme
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("PRIVATE_AGENT_ACCESSIBLE", raising=False)
+    dark = Console(
+        force_terminal=True, color_system="truecolor", theme=build_theme(light=False)
+    )
+    light = Console(
+        force_terminal=True, color_system="truecolor", theme=build_theme(light=True)
+    )
+
+    dark_prompt = prompt_text("User: ", console=dark)
+    light_prompt = prompt_text("User: ", console=light)
+
+    assert "User: " in dark_prompt.value
+    assert "User: " in light_prompt.value
+    assert "\x1b[" in dark_prompt.value
+    assert dark_prompt.value != light_prompt.value
+
+
 def test_ui_check_does_not_leak_the_accessible_flag(monkeypatch):
     """Probing accessible mode must not change later renders in this process."""
     from ui.check import run_ui_check

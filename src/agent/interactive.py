@@ -14,12 +14,12 @@ from typing import Any
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import Completer, Completion
-from prompt_toolkit.formatted_text import ANSI
 from prompt_toolkit.history import History
 from prompt_toolkit.key_binding import KeyBindings
 
 from config import MAX_READ_FILE_BYTES
 from sandbox import SandboxManager
+from ui.prompt import prompt_text
 
 SLASH_COMMANDS = {
     "/help": "Show available commands and file-context syntax.",
@@ -431,7 +431,7 @@ async def prompt_user_input(
     bottom_toolbar: str | None = None,
 ) -> str:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
-        return console.input(prompt_message)
+        return console.input(prompt_message, markup=False)
     session = PromptSession(
         completer=AgentCompleter(workspace_root, skills),
         complete_while_typing=True,
@@ -443,7 +443,7 @@ async def prompt_user_input(
     if bottom_toolbar:
         kwargs["bottom_toolbar"] = bottom_toolbar
     return await session.prompt_async(
-        ANSI("\x1b[1;34m" + prompt_message + "\x1b[0m"), **kwargs
+        prompt_text(prompt_message, console=console), **kwargs
     )
 
 

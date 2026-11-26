@@ -84,6 +84,7 @@ DARK_STYLES: dict[str, str] = {
     "context.bar.back": "grey30",
     "context.bar.fill": "cyan",
     "context.bar.over": "red",
+    "prompt": "bold cyan",
 }
 
 # Light terminals: same names, darker hues that stay legible on white.
@@ -111,6 +112,7 @@ LIGHT_STYLES: dict[str, str] = {
     "context.bar.back": "grey70",
     "context.bar.fill": "blue",
     "context.bar.over": "dark_red",
+    "prompt": "bold blue",
 }
 
 LIGHT_MESSAGE_LEVELS: dict[str, str] = {
