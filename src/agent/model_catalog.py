@@ -107,7 +107,9 @@ def _clamp(value: int | None, ceiling: int) -> int:
     candidates = [
         candidate
         for candidate in (value, ceiling)
-        if isinstance(candidate, int) and not isinstance(candidate, bool) and candidate > 0
+        if isinstance(candidate, int)
+        and not isinstance(candidate, bool)
+        and candidate > 0
     ]
     return min(candidates) if candidates else max(1, int(ceiling))
 
@@ -393,9 +395,7 @@ def record_from_listing_entry(
         endpoint_name=endpoint_name,
         provider=provider,
         role_entries=(entry,),
-        context_candidates=(
-            (PROVENANCE_PROBE, _entry_values(entry, CONTEXT_FIELDS)),
-        ),
+        context_candidates=((PROVENANCE_PROBE, _entry_values(entry, CONTEXT_FIELDS)),),
         input_candidates=((PROVENANCE_PROBE, _entry_values(entry, INPUT_FIELDS)),),
         output_candidates=((PROVENANCE_PROBE, _entry_values(entry, OUTPUT_FIELDS)),),
         modality_candidates=(
@@ -586,7 +586,10 @@ class ModelCatalog:
     ) -> ModelRecord | None:
         normalized_url = str(base_url or "").rstrip("/")
         for record in records:
-            if record.model_id == model_id and record.base_url.rstrip("/") == normalized_url:
+            if (
+                record.model_id == model_id
+                and record.base_url.rstrip("/") == normalized_url
+            ):
                 return record
         for record in records:
             if record.model_id == model_id:

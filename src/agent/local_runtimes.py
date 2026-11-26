@@ -134,14 +134,10 @@ def _probe_endpoint(
             # visible name-marker default.  Non-embedding roles keep the
             # historical "available chat model" behaviour.
             embedding_models = tuple(
-                record.model_id
-                for record in records
-                if record.role == ROLE_EMBEDDING
+                record.model_id for record in records if record.role == ROLE_EMBEDDING
             )
             models = tuple(
-                record.model_id
-                for record in records
-                if record.role != ROLE_EMBEDDING
+                record.model_id for record in records if record.role != ROLE_EMBEDDING
             )
             return LocalRuntime(
                 name,

@@ -1,8 +1,8 @@
-from agent.prompts import token_count as _tc
 from agent.context_telemetry import (
     build_context_telemetry,
     format_context_report,
 )
+from agent.prompts import token_count as _tc
 
 
 def test_context_telemetry_sums_correctly():

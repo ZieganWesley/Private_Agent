@@ -11,8 +11,12 @@ permissions:
 
 jobs:
   release:
+    # Only build a release for a successful CI run triggered by a push to main.
+    # Pull-request runs have no head branch and must never publish.
     if: >
-      github.event.workflow_run.conclusion == 'success'
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +26,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.14"
+          python-version: "3.12"
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
@@ -65,14 +69,18 @@ jobs:
 
       - name: Verify CLI
         run: |
+          ulimit -v 2400000
           private-agent --help
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RELEASE_TAG: build-${{ github.event.workflow_run.head_sha }}-${{ github.run_id }}
         run: |
-          gh release create "${{ github.event.workflow_run.head_sha }}" \
+          # One tag per run: re-running CI for the same commit must not fail on an
+          # existing release.
+          gh release create "$RELEASE_TAG" \
             dist/* \
             --title "Build $RELEASE_BRANCH" \
             --notes-file dist/RELEASE_ASSETS.md

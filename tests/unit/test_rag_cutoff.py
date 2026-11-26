@@ -26,7 +26,11 @@ def test_weak_scores_are_dropped_and_strong_scores_kept():
 
     kept = filter_weak_rag_documents(documents, relevance_threshold=0.25)
 
-    assert [doc.metadata["relevance_score"] for doc in kept if "relevance_score" in doc.metadata] == [0.9]
+    assert [
+        doc.metadata["relevance_score"]
+        for doc in kept
+        if "relevance_score" in doc.metadata
+    ] == [0.9]
     assert kept[-1].page_content == "no score"
 
 
@@ -126,9 +130,7 @@ def test_retrieval_uses_budget_derived_k_and_trims(monkeypatch):
     expected_k = rag_result_limit(800)
     assert store.calls == [("query", expected_k)]
     assert results
-    assert sum(
-        memory_context._token_count(doc.page_content) for doc in results
-    ) <= 800
+    assert sum(memory_context._token_count(doc.page_content) for doc in results) <= 800
 
 
 def test_retrieval_returns_nothing_when_budget_is_exhausted():

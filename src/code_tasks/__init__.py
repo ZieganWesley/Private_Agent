@@ -230,7 +230,7 @@ def _isolated_command(
             "--proc",
             "/proc",
             "--tmpfs",
-            "/tmp",
+            "/tmp",  # nosec B108 - container-internal mount point, not a host temp path
             "--tmpfs",
             "/home",
             "--tmpfs",
@@ -303,8 +303,8 @@ def _isolated_command(
     )
     environment = {
         "PATH": "/usr/local/bin:/usr/bin:/bin",
-        "HOME": "/tmp",
-        "TMPDIR": "/tmp",
+        "HOME": "/tmp",  # nosec B108 - sandbox-internal path
+        "TMPDIR": "/tmp",  # nosec B108 - sandbox-internal path
         "PYTHONDONTWRITEBYTECODE": "1",
         "LANG": os.environ.get("LANG", "C.UTF-8"),
     }

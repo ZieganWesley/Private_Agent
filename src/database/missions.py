@@ -190,7 +190,7 @@ class MissionMixin:
         params.append(limit)
         with self._lock:
             rows = self.conn.execute(
-                "SELECT mission_id FROM missions "
+                "SELECT mission_id FROM missions "  # nosec B608 - where is built from fixed clauses
                 f"{where} ORDER BY updated_at DESC LIMIT ?",
                 params,
             ).fetchall()
@@ -248,7 +248,7 @@ class MissionMixin:
             params.append(int(expected_revision))
         with self._lock, self._write_transaction():
             cursor = self.conn.execute(
-                f"UPDATE missions SET {', '.join(assignments)} WHERE {where}",
+                f"UPDATE missions SET {', '.join(assignments)} WHERE {where}",  # nosec B608 - column names are fixed; values are parameterized
                 params,
             )
             if cursor.rowcount == 0:
@@ -283,9 +283,7 @@ class MissionMixin:
                 (str(mission_id), str(event_type)[:80], self._json(payload or {})),
             )
 
-    def list_mission_events(
-        self, mission_id: str, *, limit: int = 100
-    ) -> list[dict]:
+    def list_mission_events(self, mission_id: str, *, limit: int = 100) -> list[dict]:
         self._ensure_mission_tables()
         limit = max(1, min(int(limit), 500))
         with self._lock:

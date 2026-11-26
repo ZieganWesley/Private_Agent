@@ -45,7 +45,15 @@ def _factory(client):
 
 def test_completions_returns_text_and_payload():
     client = FakeClient(
-        [FakeResponse({"choices": [{"text": "hello"}], "model": "m", "usage": {"total_tokens": 2}})]
+        [
+            FakeResponse(
+                {
+                    "choices": [{"text": "hello"}],
+                    "model": "m",
+                    "usage": {"total_tokens": 2},
+                }
+            )
+        ]
     )
     adapter = CompletionsClient(
         "http://127.0.0.1:8080/v1", client_factory=_factory(client)
@@ -105,9 +113,7 @@ def test_responses_reads_output_text():
 
 def test_responses_reads_output_content_blocks():
     body = {
-        "output": [
-            {"content": [{"type": "output_text", "text": "a"}, {"text": "b"}]}
-        ]
+        "output": [{"content": [{"type": "output_text", "text": "a"}, {"text": "b"}]}]
     }
     adapter = ResponsesClient(
         "http://127.0.0.1:8080/v1",

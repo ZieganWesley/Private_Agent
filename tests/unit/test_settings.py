@@ -503,3 +503,46 @@ def test_unknown_embedding_provider_falls_back_to_ollama():
 
     assert settings.embedding_provider == "ollama"
     assert settings.embedding_base_url == "http://127.0.0.1:1234/v1"
+
+
+def test_rerank_settings_expose_the_planned_config_surface():
+    settings = Settings.from_config({}, default_paths=DEFAULT_PATHS)
+
+    assert settings.rerank_mode == "auto"
+    assert settings.rerank_model == ""
+    assert settings.rerank_timeout_seconds == 2.5
+    assert settings.rerank_top_n == 20
+    assert settings.rerank_max_candidates == 50
+    assert settings.rerank_local_threshold == 20
+    assert settings.rerank_cache_entries == 128
+    assert settings.rerank_breaker_failures == 3
+    assert settings.rerank_breaker_cooldown_seconds == 60.0
+
+
+def test_rerank_settings_read_configured_values_and_guard_invalid_ones():
+    settings = Settings.from_config(
+        {
+            "rag": {
+                "rerank_mode": "LOCAL",
+                "rerank_model": "bge-reranker",
+                "rerank_timeout_seconds": 0,
+                "rerank_top_n": "8",
+                "rerank_max_candidates": 12,
+                "rerank_local_threshold": 0,
+                "rerank_cache_entries": 32,
+                "rerank_breaker_failures": 4,
+                "rerank_breaker_cooldown_seconds": 15.5,
+            }
+        },
+        default_paths=DEFAULT_PATHS,
+    )
+
+    assert settings.rerank_mode == "local"
+    assert settings.rerank_model == "bge-reranker"
+    assert settings.rerank_timeout_seconds == 2.5
+    assert settings.rerank_top_n == 8
+    assert settings.rerank_max_candidates == 12
+    assert settings.rerank_local_threshold == 0
+    assert settings.rerank_cache_entries == 32
+    assert settings.rerank_breaker_failures == 4
+    assert settings.rerank_breaker_cooldown_seconds == 15.5

@@ -49,7 +49,10 @@ def test_runner_advances_multiple_iterations_from_model_evidence(memory):
         "completed",
     ]
 
-    events = [event["event_type"] for event in memory.list_mission_events(mission["mission_id"])]
+    events = [
+        event["event_type"]
+        for event in memory.list_mission_events(mission["mission_id"])
+    ]
     assert events.count("iteration_started") == 2
     assert events.count("step_completed") == 2
     assert "completed" in events

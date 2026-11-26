@@ -184,9 +184,10 @@ def run_hooks(
         hook_timeout = _hook_timeout(hook, timeout)
         command = str(hook["command"])
         try:
+            # nosec B602 - hooks are user-configured shell commands by design.
             completed = subprocess.run(
                 command,
-                shell=True,
+                shell=True,  # nosec B602
                 cwd=str(workspace_root) if workspace_root is not None else None,
                 input=json.dumps(payload),
                 capture_output=True,

@@ -67,9 +67,7 @@ def prepare_context_request(
         ).to_dict()
         return messages, {"cache": cache, "telemetry": telemetry}
     prefix = policy.detect_cacheable_prefix(sources)
-    invalidation = policy.track_invalidation(
-        previous_hash, str(prefix["prefix_hash"])
-    )
+    invalidation = policy.track_invalidation(previous_hash, str(prefix["prefix_hash"]))
     cache = {
         **prefix,
         **invalidation,

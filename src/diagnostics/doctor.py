@@ -1,14 +1,18 @@
-"""Doctor: dependency, environment and machine-resource diagnostics."""
+"""Doctor: dependency, configuration, environment and resource diagnostics."""
 
 from __future__ import annotations
 
+import contextlib
+import json
 import os
 import platform
 import shutil
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 from rich.console import Console
 from rich.table import Table
 
@@ -21,6 +25,8 @@ from platform_support import (
 
 console = Console()
 
+ENDPOINT_PROBE_TIMEOUT_SECONDS = 0.75
+
 OPTIONAL_DEPENDENCIES = {
     "tree_sitter": "Repository intelligence parsing",
     "langchain_chroma": "Local RAG vector store",
@@ -28,7 +34,6 @@ OPTIONAL_DEPENDENCIES = {
     "cv2": "Webcam/image capture (media extra)",
     "sounddevice": "Microphone capture (media extra)",
     "PIL": "Image processing (media extra)",
-    "ollama": "Ollama Python client (ollama extra)",
 }
 
 REQUIRED_DEPENDENCIES = {
@@ -55,6 +60,142 @@ def check_dependencies() -> dict[str, list[str]]:
         except Exception:  # noqa: BLE001 - import probe
             missing_optional.append(f"{module} ({description})")
     return {"required": missing_required, "optional": missing_optional}
+
+
+@dataclass(frozen=True)
+class ConfigProblem:
+    """One problem found while validating the configuration file."""
+
+    severity: str  # "error" or "warning"
+    message: str
+
+
+def _config_path() -> Path:
+    from config import resolve_config_path
+
+    return resolve_config_path()
+
+
+def _type_label(value: Any) -> str:
+    if value is None:
+        return "null"
+    return type(value).__name__
+
+
+def _matches_default_type(value: Any, default: Any) -> bool:
+    """Return whether a configured value fits the type of its default."""
+    if isinstance(default, bool):
+        if isinstance(value, bool):
+            return True
+        # configured_bool() also accepts the usual textual spellings.
+        return isinstance(value, str) and value.strip().lower() in {
+            "true",
+            "false",
+            "1",
+            "0",
+            "yes",
+            "no",
+            "on",
+            "off",
+        }
+    if isinstance(default, int):
+        return isinstance(value, int) and not isinstance(value, bool)
+    if isinstance(default, float):
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if isinstance(default, str):
+        return isinstance(value, str)
+    if isinstance(default, list):
+        return isinstance(value, list)
+    if isinstance(default, dict):
+        return isinstance(value, dict)
+    return value is None or default is None
+
+
+def check_config_file(path: Path | None = None) -> list[ConfigProblem]:
+    """Validate the user's configuration file without loading it into the app.
+
+    Returns an empty list when the file is missing (it is created with defaults on
+    first run) or when it is structurally valid.
+    """
+    from config import DEFAULT_CONFIG
+
+    path = _config_path() if path is None else Path(path)
+    problems: list[ConfigProblem] = []
+    if not path.exists():
+        problems.append(
+            ConfigProblem(
+                "warning",
+                f"{path} does not exist yet; it will be created with defaults.",
+            )
+        )
+        return problems
+    if path.is_dir():
+        problems.append(ConfigProblem("error", f"{path} is a directory, not a file."))
+        return problems
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        problems.append(ConfigProblem("error", f"Cannot read {path}: {exc}"))
+        return problems
+    if not text.strip():
+        problems.append(
+            ConfigProblem("warning", f"{path} is empty; defaults are used.")
+        )
+        return problems
+    try:
+        config = json.loads(text)
+    except json.JSONDecodeError as exc:
+        problems.append(
+            ConfigProblem(
+                "error",
+                f"{path} is not valid JSON: {exc.msg} "
+                f"(line {exc.lineno}, column {exc.colno}).",
+            )
+        )
+        return problems
+    if not isinstance(config, dict):
+        problems.append(
+            ConfigProblem(
+                "error",
+                f"{path} must contain a JSON object, found {_type_label(config)}.",
+            )
+        )
+        return problems
+
+    for section, default_section in DEFAULT_CONFIG.items():
+        if section not in config:
+            continue
+        value = config[section]
+        if not isinstance(default_section, dict):
+            if not _matches_default_type(value, default_section):
+                problems.append(
+                    ConfigProblem(
+                        "error",
+                        f"{section} must be {_type_label(default_section)}, "
+                        f"found {_type_label(value)}.",
+                    )
+                )
+            continue
+        if not isinstance(value, dict):
+            problems.append(
+                ConfigProblem(
+                    "error",
+                    f"{section} must be a JSON object, found {_type_label(value)}.",
+                )
+            )
+            continue
+        for key, default_value in default_section.items():
+            if key not in value:
+                continue
+            if not _matches_default_type(value[key], default_value):
+                problems.append(
+                    ConfigProblem(
+                        "error",
+                        f"{section}.{key} must be {_type_label(default_value)}, "
+                        f"found {_type_label(value[key])}.",
+                    )
+                )
+    return problems
 
 
 def analyze_machine() -> dict[str, Any]:
@@ -109,26 +250,52 @@ def recommend_config(info: dict[str, Any]) -> dict[str, Any]:
     return {"profile": profile, "settings": profiles[profile]}
 
 
-def ollama_configuration_summary() -> tuple[list[str], bool]:
-    """Return configured Ollama endpoints and remote-host permission."""
+def probe_endpoint(
+    base_url: str,
+    *,
+    timeout: float = ENDPOINT_PROBE_TIMEOUT_SECONDS,
+    client_factory=None,
+) -> str:
+    """Return a short reachability label for one configured endpoint."""
+    factory = client_factory or (lambda **kwargs: httpx.Client(**kwargs))
+    client = None
     try:
-        from config import APP_CONFIG, OLLAMA_BASE_URLS
+        client = factory(timeout=timeout)
+        response = client.get(f"{base_url.rstrip('/')}/models")
+        if response.status_code == 200:
+            return "reachable"
+        return f"HTTP {response.status_code}"
+    except Exception as exc:  # noqa: BLE001 - doctor must not fail on a probe
+        return f"unreachable ({type(exc).__name__})"
+    finally:
+        if client is not None and hasattr(client, "close"):
+            with contextlib.suppress(Exception):
+                client.close()
+
+
+def configured_endpoints() -> list[dict[str, Any]]:
+    """Return the endpoints resolved from configuration, with live status."""
+    try:
+        from config import APP_CONFIG
+        from providers.endpoints import EndpointRegistry
     except Exception:  # noqa: BLE001 - doctor must not fail on config errors
-        return [], False
-    endpoints = [
-        str(url).strip() for url in (OLLAMA_BASE_URLS or []) if str(url).strip()
-    ]
-    allow_remote = False
-    if isinstance(APP_CONFIG, dict):
-        model_config = APP_CONFIG.get("models", {})
-        if isinstance(model_config, dict):
-            raw = model_config.get("allow_remote_hosts", False)
-            allow_remote = (
-                raw
-                if isinstance(raw, bool)
-                else str(raw).strip().lower() in {"true", "1", "yes", "on"}
-            )
-    return endpoints, allow_remote
+        return []
+    registry = EndpointRegistry.from_config(APP_CONFIG)
+    rows = []
+    for endpoint in registry.endpoints:
+        rows.append(
+            {
+                "name": endpoint.name,
+                "base_url": endpoint.base_url,
+                "roles": ", ".join(endpoint.roles),
+                "enabled": endpoint.enabled,
+                "models": len(endpoint.models),
+                "status": probe_endpoint(endpoint.base_url)
+                if endpoint.enabled
+                else "disabled",
+            }
+        )
+    return rows
 
 
 def missing_system_dependencies() -> list[dict[str, str | bool]]:
@@ -213,26 +380,29 @@ def run_doctor() -> int:
     if media_missing:
         console.print("[warning]Install optional media dependencies with:[/warning]")
         console.print('  python -m pip install -e ".[media]"', markup=False)
-    if any("ollama" in item for item in deps["optional"]):
-        console.print("[warning]Install optional Ollama dependencies with:[/warning]")
-        console.print('  python -m pip install -e ".[ollama]"', markup=False)
 
-    endpoints, allow_remote = ollama_configuration_summary()
-    ollama_table = Table(title="Ollama")
-    ollama_table.add_column("Field")
-    ollama_table.add_column("Value")
-    ollama_table.add_row(
-        "Configured endpoints",
-        ", ".join(endpoints) if endpoints else "none (default localhost:11434)",
-    )
-    ollama_table.add_row("Remote hosts allowed", "yes" if allow_remote else "no")
-    console.print(ollama_table)
-    if detect_platform().is_wsl:
-        console.print(
-            "[info][WSL][/info] Ollama inside WSL: http://localhost:11434. "
-            "Windows-side Ollama: use the WSL host gateway (commonly "
-            "172.x.x.1:11434) and set models.allow_remote_hosts to true."
+    endpoints = configured_endpoints()
+    endpoint_table = Table(title="Configured endpoints")
+    for column in ("Name", "Base URL", "Roles", "Models", "Status"):
+        endpoint_table.add_column(column)
+    if endpoints:
+        for endpoint in endpoints:
+            endpoint_table.add_row(
+                str(endpoint["name"]),
+                str(endpoint["base_url"]),
+                str(endpoint["roles"]),
+                str(endpoint["models"]),
+                str(endpoint["status"]),
+            )
+    else:
+        endpoint_table.add_row(
+            "none",
+            "-",
+            "-",
+            "-",
+            "add models.endpoints or models.local_openai_compatible_endpoints",
         )
+    console.print(endpoint_table)
 
     info = analyze_machine()
     mtable = Table(title="Machine")
@@ -242,13 +412,30 @@ def run_doctor() -> int:
         mtable.add_row(str(key), str(value))
     console.print(mtable)
 
-    console.print(
-        "[info]Configuration file path:[/info] "
-        f"{Path.home() / '.config' / 'private_agent' / 'conf'}"
-    )
+    console.print(f"[info]Configuration file path:[/info] {_config_path()}")
+
+    problems = check_config_file()
+    config_table = Table(title="Configuration")
+    config_table.add_column("Status")
+    config_table.add_column("Item")
+    if not problems:
+        config_table.add_row("[success]OK[/success]", "Configuration is valid")
+    for problem in problems:
+        if problem.severity == "error":
+            config_table.add_row("[error]ERROR[/error]", problem.message)
+        else:
+            config_table.add_row("[warning]WARNING[/warning]", problem.message)
+    console.print(config_table)
+
     if deps["required"]:
         console.print(
             "[error]Install missing required dependencies before running.[/error]"
+        )
+        return 1
+    if any(problem.severity == "error" for problem in problems):
+        console.print(
+            "[error]Fix the configuration errors above; the app is running on "
+            "defaults until they are resolved.[/error]"
         )
         return 1
     return 0
@@ -268,7 +455,7 @@ def doctor_interactive() -> int:
         console.print(
             "[warning]Manual config changes cannot be performed from the application. "
             "Please edit the configuration file directly at "
-            f"{Path.home() / '.config' / 'private_agent' / 'conf'}.[/warning]"
+            f"{_config_path()}.[/warning]"
         )
         return 0
     rec = recommend_config(info)
@@ -277,6 +464,6 @@ def doctor_interactive() -> int:
         console.print(f"  {key}: {value}")
     console.print(
         "[info]Apply these values under the appropriate sections of "
-        f"{Path.home() / '.config' / 'private_agent' / 'conf'}.[/info]"
+        f"{_config_path()}.[/info]"
     )
     return 0

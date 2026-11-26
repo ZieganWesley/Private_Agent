@@ -191,7 +191,8 @@ def _read_sqlite_pages(file_path: pathlib.Path) -> list:
         for table in tables:
             quoted = '"' + table.replace('"', '""') + '"'
             cursor = connection.execute(
-                f"SELECT * FROM {quoted} LIMIT ?", (RAG_SQLITE_MAX_ROWS_PER_TABLE,)
+                f"SELECT * FROM {quoted} LIMIT ?",  # nosec B608 - identifier is quoted, limit is bound
+                (RAG_SQLITE_MAX_ROWS_PER_TABLE,),
             )
             columns = [column[0] for column in cursor.description]
             batch = []

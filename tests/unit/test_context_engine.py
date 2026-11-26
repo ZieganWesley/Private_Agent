@@ -30,7 +30,9 @@ def test_enabled_allocation_sums_to_total():
 
 def test_profile_selection_in_allocation():
     eng = ce.ContextEngine(enabled=True, profile="auto")
-    alloc = eng.allocate(400, source_texts={"files": "f"}, request_text="implement code")
+    alloc = eng.allocate(
+        400, source_texts={"files": "f"}, request_text="implement code"
+    )
     assert alloc.profile == "coding"
 
 

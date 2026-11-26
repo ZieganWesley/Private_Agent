@@ -123,7 +123,9 @@ def test_allocation_log_is_redacted(caplog):
             {"prefix_hash": "abc", "qualifies": True},
         )
 
-    record = next(r for r in caplog.records if getattr(r, "event", "") == "context.allocation")
+    record = next(
+        r for r in caplog.records if getattr(r, "event", "") == "context.allocation"
+    )
     fields = record.event_fields
     assert fields["profile"] == "chat"
     assert fields["requested"] == {"rag": 90}

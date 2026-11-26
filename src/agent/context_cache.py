@@ -58,7 +58,7 @@ class ContextCachePolicy:
         if isinstance(sources, (list, tuple)):
             names = [str(s) for s in sources]
         elif isinstance(sources, dict):
-            names = [str(k) for k in sources.keys()]
+            names = [str(k) for k in sources]
         elif isinstance(sources, str):
             names = [sources]
         cacheable: list[str] = []
@@ -94,7 +94,9 @@ class ContextCachePolicy:
         cacheable, _ = self.classify_sources(sources)
         return cacheable
 
-    def compute_prefix_hash(self, prefix_texts: dict[str, str] | list | None = None, **kwargs: Any) -> str:
+    def compute_prefix_hash(
+        self, prefix_texts: dict[str, str] | list | None = None, **kwargs: Any
+    ) -> str:
         """Compute a stable hash for the cacheable prefix content."""
         if prefix_texts is None:
             prefix_texts = kwargs.get("texts", {}) or {}
@@ -126,7 +128,9 @@ class ContextCachePolicy:
         for name in cacheable_names:
             text = sources.get(name, "")
             prefix_tokens += max(0, len(str(text)) // 4)
-        prefix_hash = self.compute_prefix_hash({n: sources.get(n, "") for n in cacheable_names})
+        prefix_hash = self.compute_prefix_hash(
+            {n: sources.get(n, "") for n in cacheable_names}
+        )
         qualifies = self.enabled and prefix_tokens >= self.min_prefix_tokens
         return {
             "cacheable_sources": cacheable_names,
@@ -153,7 +157,11 @@ class ContextCachePolicy:
         current_hash: str | None,
         reason: str | None = None,
     ) -> dict[str, Any]:
-        computed = reason if reason is not None else self.invalidation_reason(previous_hash, current_hash)
+        computed = (
+            reason
+            if reason is not None
+            else self.invalidation_reason(previous_hash, current_hash)
+        )
         invalidated = computed is not None
         return {
             "previous_hash": previous_hash,
@@ -210,13 +218,17 @@ class ContextCachePolicy:
         }
 
 
-def detect_cacheable_prefix(sources: dict[str, str], policy: ContextCachePolicy | None = None) -> dict[str, Any]:
+def detect_cacheable_prefix(
+    sources: dict[str, str], policy: ContextCachePolicy | None = None
+) -> dict[str, Any]:
     if policy is None:
         policy = ContextCachePolicy()
     return policy.detect_cacheable_prefix(sources)
 
 
-def stable_ordering(sources: Any, policy: ContextCachePolicy | None = None) -> list[str]:
+def stable_ordering(
+    sources: Any, policy: ContextCachePolicy | None = None
+) -> list[str]:
     if policy is None:
         policy = ContextCachePolicy()
     return policy.stable_source_order(sources)

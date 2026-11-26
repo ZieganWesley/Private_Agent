@@ -1,10 +1,14 @@
-"""Provider adapters for local and online model runtimes.
+"""Provider adapters for configured OpenAI-compatible endpoints.
 
-Each provider type implements the :class:`ProviderAdapter` protocol so that
-discovery, capability detection, model construction and embeddings no longer
-depend on a single runtime (Ollama).
+Every endpoint speaks the same API, so discovery, capability detection, model
+construction and embeddings no longer depend on a named runtime vendor.
 """
 
+from .adapters import (
+    OpenAICompatibleAdapter,
+    ProviderAdapter,
+    ProviderRecord,
+)
 from .endpoints import (
     EndpointConfig,
     EndpointRegistry,
@@ -13,16 +17,6 @@ from .endpoints import (
     resolved_limits,
 )
 from .native import NativeClient, NativeProfile, detect_native
-from .transports import CompletionsClient, ResponsesClient, TransportResult
-from .adapters import (
-    OllamaAdapter,
-    OpenAICompatibleAdapter,
-    ProviderAdapter,
-    ProviderPreset,
-    ProviderRecord,
-    all_presets,
-    build_adapter,
-)
 from .selection import (
     load_last_provider,
     match_runtime,
@@ -31,6 +25,7 @@ from .selection import (
     requested_provider,
     save_last_provider,
 )
+from .transports import CompletionsClient, ResponsesClient, TransportResult
 
 __all__ = [
     "NativeClient",
@@ -46,11 +41,7 @@ __all__ = [
     "resolved_limits",
     "ProviderAdapter",
     "ProviderRecord",
-    "ProviderPreset",
-    "OllamaAdapter",
     "OpenAICompatibleAdapter",
-    "build_adapter",
-    "all_presets",
     "load_last_provider",
     "match_runtime",
     "pick_default_model",

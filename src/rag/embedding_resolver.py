@@ -89,9 +89,7 @@ def resolve_embedding_provider(
             "ollama", _embedding_models(runtime)[0], _base_url(runtime, base_url)
         )
     if ollama_runtimes:
-        return EmbeddingChoice(
-            "ollama", model, _base_url(ollama_runtimes[0], base_url)
-        )
+        return EmbeddingChoice("ollama", model, _base_url(ollama_runtimes[0], base_url))
     if openai_embedders:
         runtime = openai_embedders[0]
         return EmbeddingChoice(

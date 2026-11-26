@@ -138,7 +138,9 @@ def test_apply_template_and_infill_use_the_native_routes():
     assert client.calls[1][2]["input_prefix"] == "before "
 
 
-def test_raw_completions_utility_path_is_reachable_through_its_public_entry(monkeypatch):
+def test_raw_completions_utility_path_is_reachable_through_its_public_entry(
+    monkeypatch,
+):
     monkeypatch.setattr(utility, "raw_completions_enabled", lambda: True)
     client = FakeClient([FakeResponse({"choices": [{"text": "utility title"}]})])
 
@@ -173,7 +175,12 @@ def test_responses_tool_call_and_stream_are_usable_through_the_model():
                 "type": "response.completed",
                 "response": {
                     "output": [
-                        {"type": "function_call", "id": "fc", "name": "lookup", "arguments": '{"q":"x"}'}
+                        {
+                            "type": "function_call",
+                            "id": "fc",
+                            "name": "lookup",
+                            "arguments": '{"q":"x"}',
+                        }
                     ],
                     "usage": {"input_tokens": 1, "output_tokens": 2},
                 },
@@ -194,9 +201,7 @@ def test_responses_tool_call_and_stream_are_usable_through_the_model():
     chunks = asyncio.run(collect())
 
     assert "".join(chunk.content for chunk in chunks) == "checking"
-    args = "".join(
-        part["args"] for chunk in chunks for part in chunk.tool_call_chunks
-    )
+    args = "".join(part["args"] for chunk in chunks for part in chunk.tool_call_chunks)
     assert json.loads(args) == {"q": "x"}
     assert client.calls[0][2]["stream"] is True
     assert client.calls[0][2]["tools"][0]["name"] == "lookup"

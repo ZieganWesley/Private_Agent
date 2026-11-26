@@ -49,6 +49,7 @@ def resolve_shares(shares: Mapping[str, float] | None) -> dict[str, float]:
             resolved[name] = per_target
     return {name: float(value) for name, value in resolved.items()}
 
+
 # Sources considered stable/cacheable for KV-cache prefix purposes.
 CACHEABLE_SOURCES = {"system", "tool_definitions", "skills", "plan", "files"}
 
@@ -90,12 +91,20 @@ class ContextBudget:
     safety_margin: int = 0
 
     def _effective_total(self) -> int:
-        total = int(self.total_tokens) - int(self.output_reserve) - int(self.safety_margin)
+        total = (
+            int(self.total_tokens) - int(self.output_reserve) - int(self.safety_margin)
+        )
         return total if total > 0 else 0
 
     def _resolve(
         self, sources: Any = None
-    ) -> tuple[list[str], dict[str, float], dict[str, int], dict[str, int | None], dict[str, int]]:
+    ) -> tuple[
+        list[str],
+        dict[str, float],
+        dict[str, int],
+        dict[str, int | None],
+        dict[str, int],
+    ]:
         """Resolve source names and per-source constraints."""
         names: list[str] = []
         src_min: dict[str, int] = {}
@@ -150,7 +159,11 @@ class ContextBudget:
             names = list(self.shares.keys())
 
         for n in names:
-            if n not in src_shares or src_shares.get(n, 0.0) == 0.0 and n in self.shares:
+            if (
+                n not in src_shares
+                or src_shares.get(n, 0.0) == 0.0
+                and n in self.shares
+            ):
                 src_shares[n] = self.shares.get(n, 0.0)
             if n not in src_shares:
                 src_shares[n] = 0.0
@@ -249,7 +262,9 @@ class ContextBudget:
                 weight_sum = float(sum(1 for n in names if headroom[n] > 0))
                 weights = {n: (1.0 if headroom[n] > 0 else 0.0) for n in names}
             else:
-                weights = {n: (shares.get(n, 0.0) if headroom[n] > 0 else 0.0) for n in names}
+                weights = {
+                    n: (shares.get(n, 0.0) if headroom[n] > 0 else 0.0) for n in names
+                }
 
             # floor allocation
             extra: dict[str, int] = {n: 0 for n in names}
@@ -260,7 +275,9 @@ class ContextBudget:
                 if headroom[n] <= 0:
                     desired[n] = 0.0
                 else:
-                    desired[n] = remaining * (weights[n] / weight_sum) if weight_sum > 0 else 0.0
+                    desired[n] = (
+                        remaining * (weights[n] / weight_sum) if weight_sum > 0 else 0.0
+                    )
             for n in names:
                 extra[n] = min(headroom[n], int(desired[n] // 1))
                 allocated_extra += extra[n]
@@ -322,7 +339,7 @@ class ContextBudget:
         cur = sum(alloc.get(n, 0) for n in alloc)
         # remove excess if over
         if cur > T:
-            order = sorted(names, key=lambda x: (prios_sort_key(self, x)))
+            order = sorted(names, key=lambda x: prios_sort_key(self, x))
             # reduce from lowest priority
             reduce_order = sorted(names, key=lambda x: (self.priorities.get(x, 0), x))
             idx = 0
@@ -437,7 +454,6 @@ class ContextBudget:
 
     def _is_compressible(self, name: str) -> bool:
         return bool(self.compressible.get(name, True))
-
 
 
 def build_context(sources: dict[str, str], total_tokens: int) -> dict[str, str]:

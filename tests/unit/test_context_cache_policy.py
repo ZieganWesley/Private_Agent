@@ -38,7 +38,9 @@ def test_volatile_tail_changes_do_not_invalidate_the_prefix():
     _, first = _prepare(policy, user="hello")
 
     _, second = _prepare(
-        policy, user="a completely different question", previous_hash=first["cache"]["prefix_hash"]
+        policy,
+        user="a completely different question",
+        previous_hash=first["cache"]["prefix_hash"],
     )
 
     assert second["cache"]["prefix_hash"] == first["cache"]["prefix_hash"]
@@ -86,7 +88,10 @@ def test_candidates_are_deduped_and_capped_before_reranking():
     retriever.reranker = _RecordingReranker()
     retriever.vectorstore = None
     retriever.max_candidates = 5
-    documents = [_doc(i) for i in range(6)] + [_doc(99, duplicate=True), _doc(99, duplicate=True)]
+    documents = [_doc(i) for i in range(6)] + [
+        _doc(99, duplicate=True),
+        _doc(99, duplicate=True),
+    ]
 
     retriever._rerank("query", documents)
 

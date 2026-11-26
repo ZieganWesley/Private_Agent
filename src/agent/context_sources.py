@@ -126,59 +126,105 @@ def _docs_to_text(documents: Any) -> str:
 # ---------------------------------------------------------------------------
 
 
-def adapt_system(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("system", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+def adapt_system(
+    text: str = "", budget_tokens: int = 0, **kwargs: Any
+) -> ContextSource:
+    return _source(
+        "system", text or "", budget_tokens, trim_strategy="truncate", **kwargs
+    )
 
 
-def adapt_summary(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("summary", text or "", budget_tokens, trim_strategy="summarize", **kwargs)
+def adapt_summary(
+    text: str = "", budget_tokens: int = 0, **kwargs: Any
+) -> ContextSource:
+    return _source(
+        "summary", text or "", budget_tokens, trim_strategy="summarize", **kwargs
+    )
 
 
-def adapt_history(messages: Any = None, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+def adapt_history(
+    messages: Any = None, budget_tokens: int = 0, text: str = "", **kwargs: Any
+) -> ContextSource:
     src_text = text if text else _messages_to_text(messages)
-    return _source("history", src_text, budget_tokens, trim_strategy="compact", **kwargs)
+    return _source(
+        "history", src_text, budget_tokens, trim_strategy="compact", **kwargs
+    )
 
 
-def adapt_episodic(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("episodic", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+def adapt_episodic(
+    text: str = "", budget_tokens: int = 0, **kwargs: Any
+) -> ContextSource:
+    return _source(
+        "episodic", text or "", budget_tokens, trim_strategy="truncate", **kwargs
+    )
 
 
-def adapt_rag(documents: Any = None, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+def adapt_rag(
+    documents: Any = None, budget_tokens: int = 0, text: str = "", **kwargs: Any
+) -> ContextSource:
     src_text = text if text else _docs_to_text(documents)
     return _source("rag", src_text, budget_tokens, trim_strategy="truncate", **kwargs)
 
 
-def adapt_skills(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("skills", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+def adapt_skills(
+    text: str = "", budget_tokens: int = 0, **kwargs: Any
+) -> ContextSource:
+    return _source(
+        "skills", text or "", budget_tokens, trim_strategy="truncate", **kwargs
+    )
 
 
 def adapt_plan(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("plan", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+    return _source(
+        "plan", text or "", budget_tokens, trim_strategy="truncate", **kwargs
+    )
 
 
 def adapt_files(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("files", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+    return _source(
+        "files", text or "", budget_tokens, trim_strategy="truncate", **kwargs
+    )
 
 
-def adapt_tool_results(messages: Any = None, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+def adapt_tool_results(
+    messages: Any = None, budget_tokens: int = 0, text: str = "", **kwargs: Any
+) -> ContextSource:
     src_text = text if text else _messages_to_text(messages)
-    return _source("tool_results", src_text, budget_tokens, trim_strategy="summarize", **kwargs)
+    return _source(
+        "tool_results", src_text, budget_tokens, trim_strategy="summarize", **kwargs
+    )
 
 
 def adapt_user(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("user", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+    return _source(
+        "user", text or "", budget_tokens, trim_strategy="truncate", **kwargs
+    )
 
 
-def adapt_tool_definitions(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("tool_definitions", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+def adapt_tool_definitions(
+    text: str = "", budget_tokens: int = 0, **kwargs: Any
+) -> ContextSource:
+    return _source(
+        "tool_definitions",
+        text or "",
+        budget_tokens,
+        trim_strategy="truncate",
+        **kwargs,
+    )
 
 
-def adapt_memory(text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
-    return _source("memory", text or "", budget_tokens, trim_strategy="truncate", **kwargs)
+def adapt_memory(
+    text: str = "", budget_tokens: int = 0, **kwargs: Any
+) -> ContextSource:
+    return _source(
+        "memory", text or "", budget_tokens, trim_strategy="truncate", **kwargs
+    )
 
 
 # Generic adapter.
-def adapt_source(name: str, text: str = "", budget_tokens: int = 0, **kwargs: Any) -> ContextSource:
+def adapt_source(
+    name: str, text: str = "", budget_tokens: int = 0, **kwargs: Any
+) -> ContextSource:
     return _source(name, text or "", budget_tokens, **kwargs)
 
 
@@ -199,10 +245,17 @@ ADAPTERS: dict[str, Any] = {
 
 
 def get_adapter(name: str):
-    return ADAPTERS.get(name, lambda text="", budget_tokens=0, **kw: adapt_source(name, text, budget_tokens, **kw))
+    return ADAPTERS.get(
+        name,
+        lambda text="", budget_tokens=0, **kw: adapt_source(
+            name, text, budget_tokens, **kw
+        ),
+    )
 
 
-def build_source(name: str, *args: Any, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+def build_source(
+    name: str, *args: Any, budget_tokens: int = 0, text: str = "", **kwargs: Any
+) -> ContextSource:
     adapter = get_adapter(name)
     # Pass through kwargs; if text provided prefer it.
     try:
@@ -220,7 +273,9 @@ def build_source(name: str, *args: Any, budget_tokens: int = 0, text: str = "", 
 class SourceAdapter:
     name: str
 
-    def build(self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+    def build(
+        self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any
+    ) -> ContextSource:
         return adapt_source(self.name, text=text, budget_tokens=budget_tokens, **kwargs)
 
 
@@ -228,7 +283,9 @@ class SystemSourceAdapter(SourceAdapter):
     def __init__(self):
         super().__init__(name="system")
 
-    def build(self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+    def build(
+        self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any
+    ) -> ContextSource:
         return adapt_system(text=text, budget_tokens=budget_tokens, **kwargs)
 
 
@@ -236,23 +293,43 @@ class HistorySourceAdapter(SourceAdapter):
     def __init__(self):
         super().__init__(name="history")
 
-    def build(self, *, budget_tokens: int = 0, messages: Any = None, text: str = "", **kwargs: Any) -> ContextSource:
-        return adapt_history(messages=messages, text=text, budget_tokens=budget_tokens, **kwargs)
+    def build(
+        self,
+        *,
+        budget_tokens: int = 0,
+        messages: Any = None,
+        text: str = "",
+        **kwargs: Any,
+    ) -> ContextSource:
+        return adapt_history(
+            messages=messages, text=text, budget_tokens=budget_tokens, **kwargs
+        )
 
 
 class RagSourceAdapter(SourceAdapter):
     def __init__(self):
         super().__init__(name="rag")
 
-    def build(self, *, budget_tokens: int = 0, documents: Any = None, text: str = "", **kwargs: Any) -> ContextSource:
-        return adapt_rag(documents=documents, text=text, budget_tokens=budget_tokens, **kwargs)
+    def build(
+        self,
+        *,
+        budget_tokens: int = 0,
+        documents: Any = None,
+        text: str = "",
+        **kwargs: Any,
+    ) -> ContextSource:
+        return adapt_rag(
+            documents=documents, text=text, budget_tokens=budget_tokens, **kwargs
+        )
 
 
 class MemorySourceAdapter(SourceAdapter):
     def __init__(self):
         super().__init__(name="memory")
 
-    def build(self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+    def build(
+        self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any
+    ) -> ContextSource:
         return adapt_memory(text=text, budget_tokens=budget_tokens, **kwargs)
 
 
@@ -260,7 +337,9 @@ class SkillsSourceAdapter(SourceAdapter):
     def __init__(self):
         super().__init__(name="skills")
 
-    def build(self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+    def build(
+        self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any
+    ) -> ContextSource:
         return adapt_skills(text=text, budget_tokens=budget_tokens, **kwargs)
 
 
@@ -268,7 +347,9 @@ class PlanSourceAdapter(SourceAdapter):
     def __init__(self):
         super().__init__(name="plan")
 
-    def build(self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any) -> ContextSource:
+    def build(
+        self, *, budget_tokens: int = 0, text: str = "", **kwargs: Any
+    ) -> ContextSource:
         return adapt_plan(text=text, budget_tokens=budget_tokens, **kwargs)
 
 
@@ -276,8 +357,17 @@ class ToolResultsSourceAdapter(SourceAdapter):
     def __init__(self):
         super().__init__(name="tool_results")
 
-    def build(self, *, budget_tokens: int = 0, messages: Any = None, text: str = "", **kwargs: Any) -> ContextSource:
-        return adapt_tool_results(messages=messages, text=text, budget_tokens=budget_tokens, **kwargs)
+    def build(
+        self,
+        *,
+        budget_tokens: int = 0,
+        messages: Any = None,
+        text: str = "",
+        **kwargs: Any,
+    ) -> ContextSource:
+        return adapt_tool_results(
+            messages=messages, text=text, budget_tokens=budget_tokens, **kwargs
+        )
 
 
 # Aliases for alternate naming conventions.

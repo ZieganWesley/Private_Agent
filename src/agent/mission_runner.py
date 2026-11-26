@@ -11,9 +11,7 @@ class MissionAutoRunner:
     def __init__(self, controller: MissionController, owner: str):
         self.controller = controller
         self.owner = owner
-        if not controller.memory.acquire_mission_lease(
-            controller.mission_id, owner
-        ):
+        if not controller.memory.acquire_mission_lease(controller.mission_id, owner):
             raise MissionLeaseError(
                 "Another controller is already running this mission."
             )

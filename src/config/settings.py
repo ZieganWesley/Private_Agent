@@ -578,6 +578,25 @@ def resolve_config_values(
     RAG_RELEVANCE_THRESHOLD = configured_float(
         config, "rag", "relevance_threshold", 0.25
     )
+    RERANK_MODE = configured_choice(
+        config, "rag", "rerank_mode", "auto", ("api", "local", "auto")
+    )
+    RERANK_MODEL = configured_str(config, "rag", "rerank_model", "")
+    RERANK_TIMEOUT_SECONDS = configured_float(
+        config, "rag", "rerank_timeout_seconds", 2.5
+    )
+    RERANK_TOP_N = configured_int(config, "rag", "rerank_top_n", 20)
+    RERANK_MAX_CANDIDATES = configured_int(config, "rag", "rerank_max_candidates", 50)
+    RERANK_LOCAL_THRESHOLD = configured_nonnegative_int(
+        config, "rag", "rerank_local_threshold", 20
+    )
+    RERANK_CACHE_ENTRIES = configured_int(config, "rag", "rerank_cache_entries", 128)
+    RERANK_BREAKER_FAILURES = configured_int(
+        config, "rag", "rerank_breaker_failures", 3
+    )
+    RERANK_BREAKER_COOLDOWN_SECONDS = configured_float(
+        config, "rag", "rerank_breaker_cooldown_seconds", 60.0
+    )
     RAG_INCLUDE_CODING_GUIDANCE = configured_bool(
         config, "rag", "include_coding_guidance", True
     )
@@ -614,6 +633,7 @@ def resolve_config_values(
     CONTEXT_OUTPUT_RESERVE_RATIO = configured_float(
         config, "agent", "context_output_reserve_ratio", 0.33
     )
+
     # KV cache settings may live under agent, agent.context_cache, or a
     # top-level context_cache section.
     def _kv_raw(key, default):
@@ -828,6 +848,15 @@ class Settings:
     rag_documents_only: bool
     rag_relevance_threshold: float
     rag_include_coding_guidance: bool
+    rerank_mode: str
+    rerank_model: str
+    rerank_timeout_seconds: float
+    rerank_top_n: int
+    rerank_max_candidates: int
+    rerank_local_threshold: int
+    rerank_cache_entries: int
+    rerank_breaker_failures: int
+    rerank_breaker_cooldown_seconds: float
     summary_prompt_sentences: int
     context_compaction_threshold: float
     context_keep_recent_messages: int

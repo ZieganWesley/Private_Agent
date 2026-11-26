@@ -8,6 +8,7 @@ broken endpoint from adding a timeout to every retrieval.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import math
 import time
@@ -22,7 +23,10 @@ DEFAULT_RERANK_TIMEOUT_SECONDS = 5.0
 DEFAULT_RERANK_TOP_N = 20
 DEFAULT_FAILURE_THRESHOLD = 3
 DEFAULT_COOLDOWN_SECONDS = 60.0
-MAX_CACHE_ENTRIES = 128
+DEFAULT_CACHE_ENTRIES = 128
+DEFAULT_MAX_CANDIDATES = 50
+DEFAULT_LOCAL_THRESHOLD = 20
+RERANK_MODES = ("api", "local", "auto")
 
 
 @dataclass
@@ -95,6 +99,10 @@ class HttpReranker:
         client_factory: Callable[..., Any] | None = None,
         breaker: CircuitBreaker | None = None,
         enabled: bool = True,
+        mode: str = "api",
+        local_threshold: int = DEFAULT_LOCAL_THRESHOLD,
+        max_candidates: int = DEFAULT_MAX_CANDIDATES,
+        cache_entries: int = DEFAULT_CACHE_ENTRIES,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
@@ -105,6 +113,10 @@ class HttpReranker:
         self.client_factory = client_factory
         self.breaker = breaker or CircuitBreaker()
         self.enabled = enabled
+        self.mode = mode if mode in RERANK_MODES else "api"
+        self.local_threshold = max(0, int(local_threshold))
+        self.max_candidates = max(1, int(max_candidates))
+        self.cache_entries = max(1, int(cache_entries))
         self._cache: OrderedDict[str, list[int]] = OrderedDict()
 
     def _url(self) -> str:
@@ -129,7 +141,7 @@ class HttpReranker:
     def _remember(self, key: str, order: list[int]) -> None:
         self._cache[key] = order
         self._cache.move_to_end(key)
-        while len(self._cache) > MAX_CACHE_ENTRIES:
+        while len(self._cache) > self.cache_entries:
             self._cache.popitem(last=False)
 
     def rerank(
@@ -138,15 +150,20 @@ class HttpReranker:
         """Return documents in API order, or ``None`` when unavailable."""
         if not self.enabled or not documents or not self.breaker.allow():
             return None
-        limit = min(len(documents), max(1, int(top_n or self.top_n)))
-        cache_key = self._key(query, documents, limit)
+        if self.mode == "local":
+            return None
+        if self.mode == "auto" and len(documents) <= self.local_threshold:
+            return None
+        candidates = list(documents)[: self.max_candidates]
+        limit = min(len(candidates), max(1, int(top_n or self.top_n)))
+        cache_key = self._key(query, candidates, limit)
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return [documents[index] for index in cached]
+            return [candidates[index] for index in cached]
 
         payload: dict[str, Any] = {
             "query": query,
-            "documents": [_document_text(document) for document in documents],
+            "documents": [_document_text(document) for document in candidates],
             "top_n": limit,
         }
         if self.model:
@@ -169,13 +186,11 @@ class HttpReranker:
             seen: set[int] = set()
             for item in items:
                 index = item.get("index")
-                score = _score(
-                    item.get("relevance_score", item.get("score"))
-                )
+                score = _score(item.get("relevance_score", item.get("score")))
                 if (
                     isinstance(index, bool)
                     or not isinstance(index, int)
-                    or not 0 <= index < len(documents)
+                    or not 0 <= index < len(candidates)
                     or index in seen
                     or score is None
                 ):
@@ -189,16 +204,14 @@ class HttpReranker:
             order = [index for _, index in scored[:limit]]
             self._remember(cache_key, order)
             self.breaker.record_success()
-            return [documents[index] for index in order]
+            return [candidates[index] for index in order]
         except (httpx.HTTPError, ValueError, TypeError, OSError):
             self.breaker.record_failure()
             return None
         finally:
             if client is not None and hasattr(client, "close"):
-                try:
+                with contextlib.suppress(httpx.HTTPError, OSError):
                     client.close()
-                except (httpx.HTTPError, OSError):
-                    pass
 
 
 def local_cosine_rerank(
@@ -249,19 +262,46 @@ def reranker_from_config(config: Any) -> HttpReranker | None:
         return None
     rag = config.get("rag", {}) if isinstance(config, dict) else {}
     rag = rag if isinstance(rag, dict) else {}
+
+    def _number(key: str, default: float) -> float:
+        value = rag.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return default
+        return float(value) if value > 0 else default
+
+    def _integer(key: str, default: int) -> int:
+        value = rag.get(key, default)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            return default
+        return value
+
+    mode = str(rag.get("rerank_mode", "auto")).strip().lower()
+    if mode not in RERANK_MODES:
+        mode = "auto"
+    if not rag.get("rerank_enabled", True):
+        mode = "local"
     model = rag.get("rerank_model")
     if not isinstance(model, str) or not model.strip():
         model = endpoint.models[0] if endpoint.models else None
-    timeout = rag.get("rerank_timeout_seconds", DEFAULT_RERANK_TIMEOUT_SECONDS)
-    top_n = rag.get("rerank_top_n", DEFAULT_RERANK_TOP_N)
-    enabled = rag.get("rerank_enabled", True)
+    breaker = CircuitBreaker(
+        failure_threshold=_integer(
+            "rerank_breaker_failures", DEFAULT_FAILURE_THRESHOLD
+        ),
+        cooldown_seconds=_number(
+            "rerank_breaker_cooldown_seconds", DEFAULT_COOLDOWN_SECONDS
+        ),
+    )
     return HttpReranker(
         base_url=endpoint.base_url,
         model=model,
         headers=endpoint.headers(),
-        timeout=timeout if isinstance(timeout, (int, float)) else DEFAULT_RERANK_TIMEOUT_SECONDS,
-        top_n=top_n if isinstance(top_n, int) else DEFAULT_RERANK_TOP_N,
-        enabled=bool(enabled),
+        timeout=_number("rerank_timeout_seconds", DEFAULT_RERANK_TIMEOUT_SECONDS),
+        top_n=_integer("rerank_top_n", DEFAULT_RERANK_TOP_N),
+        breaker=breaker,
+        mode=mode,
+        local_threshold=_integer("rerank_local_threshold", DEFAULT_LOCAL_THRESHOLD),
+        max_candidates=_integer("rerank_max_candidates", DEFAULT_MAX_CANDIDATES),
+        cache_entries=_integer("rerank_cache_entries", DEFAULT_CACHE_ENTRIES),
     )
 
 
@@ -287,4 +327,5 @@ __all__ = [
     "local_cosine_rerank",
     "rerank_with_fallback",
     "reranker_from_config",
+    "RERANK_MODES",
 ]

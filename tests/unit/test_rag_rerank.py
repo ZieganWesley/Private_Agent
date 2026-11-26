@@ -104,9 +104,7 @@ def test_http_rerank_returns_none_on_invalid_body():
 
 def test_http_rerank_caches_identical_requests():
     docs = [Doc("a"), Doc("b")]
-    client = FakeClient(
-        [FakeResponse({"results": [{"index": 1, "score": 1.0}]})]
-    )
+    client = FakeClient([FakeResponse({"results": [{"index": 1, "score": 1.0}]})])
     reranker = HttpReranker(
         base_url="http://127.0.0.1:8080/v1",
         client_factory=_client_factory(client),
@@ -241,3 +239,146 @@ def test_rerank_with_fallback_uses_local_when_api_fails():
     )
 
     assert [doc.page_content for doc in result] == ["same", "orthogonal"]
+
+
+def test_local_mode_never_calls_the_api():
+    client = FakeClient(
+        [FakeResponse({"results": [{"index": 0, "relevance_score": 1.0}]})]
+    )
+    reranker = HttpReranker(
+        base_url="http://127.0.0.1:8080/v1",
+        client_factory=_client_factory(client),
+        mode="local",
+    )
+
+    assert reranker.rerank("q", [Doc("a"), Doc("b")]) is None
+    assert client.calls == []
+
+
+def test_auto_mode_skips_the_api_for_small_candidate_sets():
+    client = FakeClient(
+        [FakeResponse({"results": [{"index": 1, "relevance_score": 0.9}]})]
+    )
+    reranker = HttpReranker(
+        base_url="http://127.0.0.1:8080/v1",
+        client_factory=_client_factory(client),
+        mode="auto",
+        local_threshold=2,
+    )
+
+    assert reranker.rerank("q", [Doc("a"), Doc("b")]) is None
+    assert client.calls == []
+
+    result = reranker.rerank("q", [Doc("a"), Doc("b"), Doc("c")])
+
+    assert [doc.page_content for doc in result] == ["b"]
+    assert len(client.calls[0][1]["documents"]) == 3
+
+
+def test_max_candidates_bounds_what_is_sent_and_returned():
+    documents = [Doc(f"d{index}") for index in range(5)]
+    client = FakeClient(
+        [
+            FakeResponse(
+                {
+                    "results": [
+                        {"index": index, "relevance_score": 1.0 - index / 10}
+                        for index in range(3)
+                    ]
+                }
+            )
+        ]
+    )
+    reranker = HttpReranker(
+        base_url="http://127.0.0.1:8080/v1",
+        client_factory=_client_factory(client),
+        max_candidates=3,
+        top_n=3,
+    )
+
+    result = reranker.rerank("q", documents)
+
+    assert client.calls[0][1]["documents"] == ["d0", "d1", "d2"]
+    assert [doc.page_content for doc in result] == ["d0", "d1", "d2"]
+
+
+def test_cache_is_bounded_by_the_configured_entry_count():
+    client = FakeClient(
+        [
+            FakeResponse({"results": [{"index": 0, "relevance_score": 1.0}]}),
+            FakeResponse({"results": [{"index": 0, "relevance_score": 1.0}]}),
+        ]
+    )
+    reranker = HttpReranker(
+        base_url="http://127.0.0.1:8080/v1",
+        client_factory=_client_factory(client),
+        cache_entries=1,
+    )
+
+    reranker.rerank("first", [Doc("a")])
+    reranker.rerank("second", [Doc("a")])
+
+    assert len(reranker._cache) == 1
+
+
+def _rerank_config(**rag):
+    return {
+        "models": {
+            "endpoints": [
+                {
+                    "name": "ranker",
+                    "base_url": "http://127.0.0.1:9000/v1",
+                    "roles": ["rerank"],
+                    "models": ["bge-reranker"],
+                }
+            ]
+        },
+        "rag": rag,
+    }
+
+
+def test_reranker_from_config_reads_the_full_rerank_surface():
+    reranker = reranker_from_config(
+        _rerank_config(
+            rerank_mode="auto",
+            rerank_timeout_seconds=1.5,
+            rerank_top_n=7,
+            rerank_max_candidates=30,
+            rerank_local_threshold=4,
+            rerank_cache_entries=16,
+            rerank_breaker_failures=2,
+            rerank_breaker_cooldown_seconds=5,
+        )
+    )
+
+    assert reranker.mode == "auto"
+    assert reranker.timeout == 1.5
+    assert reranker.top_n == 7
+    assert reranker.max_candidates == 30
+    assert reranker.local_threshold == 4
+    assert reranker.cache_entries == 16
+    assert reranker.breaker.failure_threshold == 2
+    assert reranker.breaker.cooldown_seconds == 5
+
+
+def test_reranker_from_config_disables_the_api_in_local_mode():
+    reranker = reranker_from_config(_rerank_config(rerank_mode="local"))
+
+    assert reranker.mode == "local"
+    assert reranker.rerank("q", [Doc(f"d{index}") for index in range(30)]) is None
+
+
+def test_reranker_from_config_ignores_invalid_values():
+    reranker = reranker_from_config(
+        _rerank_config(
+            rerank_mode="cloud",
+            rerank_timeout_seconds="soon",
+            rerank_top_n=0,
+            rerank_cache_entries=-1,
+        )
+    )
+
+    assert reranker.mode == "auto"
+    assert reranker.timeout == 5.0
+    assert reranker.top_n == 20
+    assert reranker.cache_entries == 128

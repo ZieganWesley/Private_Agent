@@ -46,14 +46,6 @@ from .model_catalog import (
     modalities_from_entry,
 )
 
-CAPABILITY_FLAGS = (
-    "tools",
-    "function_calls",
-    "structured_output",
-    "thinking",
-    "vision",
-    "audio",
-)
 CAPABILITY_KEYS = (*CAPABILITY_FLAGS, "context_window")
 
 _TOOL_NAMES = frozenset({"tools", "tool_use", "tool_calling", "function_calling"})
@@ -342,7 +334,9 @@ def _record_with_declared_overrides(
         context_length=(
             context_length if context_length is not None else record.context_length
         ),
-        input_tokens=(input_tokens if input_tokens is not None else record.input_tokens),
+        input_tokens=(
+            input_tokens if input_tokens is not None else record.input_tokens
+        ),
         output_tokens=(
             output_tokens if output_tokens is not None else record.output_tokens
         ),
@@ -363,9 +357,7 @@ def _probe_model_record(
     lm_entry: dict | None = None
     listing_entry: dict | None = None
     try:
-        with client_factory(
-            headers={}, timeout=timeout, allow_loopback=True
-        ) as client:
+        with client_factory(headers={}, timeout=timeout, allow_loopback=True) as client:
             if _is_loopback_url(base_url):
                 props = _get_json(
                     client, f"{root}/props?model={quote(model_name, safe='')}"

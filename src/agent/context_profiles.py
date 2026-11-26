@@ -6,6 +6,7 @@ is deterministic and falls back to ``chat`` for unknown inputs.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,17 +37,53 @@ PROFILE_SHARE_OVERRIDES: dict[str, dict[str, float]] = {
 
 # Heuristic keyword sets.
 _CODING_KEYWORDS = {
-    "code", "coding", "implement", "refactor", "debug", "test", "function",
-    "class", "module", "file", "repository", "git", "build", "compile",
-    "python", "javascript", "typescript", "bug", "error", "stacktrace",
+    "code",
+    "coding",
+    "implement",
+    "refactor",
+    "debug",
+    "test",
+    "function",
+    "class",
+    "module",
+    "file",
+    "repository",
+    "git",
+    "build",
+    "compile",
+    "python",
+    "javascript",
+    "typescript",
+    "bug",
+    "error",
+    "stacktrace",
 }
 _RESEARCH_KEYWORDS = {
-    "research", "search", "find", "lookup", "documentation", "docs", "paper",
-    "article", "source", "reference", "investigate", "explore", "web",
+    "research",
+    "search",
+    "find",
+    "lookup",
+    "documentation",
+    "docs",
+    "paper",
+    "article",
+    "source",
+    "reference",
+    "investigate",
+    "explore",
+    "web",
 }
 _MEMORY_KEYWORDS = {
-    "remember", "recall", "memory", "previous", "earlier", "history",
-    "episode", "past", "summary", "context",
+    "remember",
+    "recall",
+    "memory",
+    "previous",
+    "earlier",
+    "history",
+    "episode",
+    "past",
+    "summary",
+    "context",
 }
 
 
@@ -109,7 +146,9 @@ def select_profile(request_text: str = "", explicit: str | None = None) -> str:
 
 
 def profile_shares(
-    profile: str, base: dict[str, float] | None = None, overrides: dict[str, Any] | None = None
+    profile: str,
+    base: dict[str, float] | None = None,
+    overrides: dict[str, Any] | None = None,
 ) -> dict[str, float]:
     """Return shares for a profile, applying optional config overrides."""
     if base is None:
@@ -118,17 +157,16 @@ def profile_shares(
     name = profile if profile in PROFILE_NAMES else "chat"
     result.update(resolve_shares(PROFILE_SHARE_OVERRIDES.get(name, {})))
     # config overrides: overrides may be {profile: {source: share}} or {source: share}
-    if overrides:
-        if isinstance(overrides, dict):
-            if name in overrides and isinstance(overrides[name], dict):
-                result.update(resolve_shares(overrides[name]))
-            else:
-                # treat as direct source overrides
-                result.update(
-                    resolve_shares(
-                        {k: v for k, v in overrides.items() if isinstance(v, (int, float))}
-                    )
+    if overrides and isinstance(overrides, dict):
+        if name in overrides and isinstance(overrides[name], dict):
+            result.update(resolve_shares(overrides[name]))
+        else:
+            # treat as direct source overrides
+            result.update(
+                resolve_shares(
+                    {k: v for k, v in overrides.items() if isinstance(v, (int, float))}
                 )
+            )
     # normalize
     total = sum(result.values())
     if total <= 0:
@@ -138,18 +176,23 @@ def profile_shares(
 
 def build_profile(profile: str = "chat", **kwargs: Any) -> ContextProfile:
     shares = profile_shares(profile, overrides=kwargs.get("overrides"))
-    return ContextProfile(name=profile if profile in PROFILE_NAMES else "chat", shares=shares)
+    return ContextProfile(
+        name=profile if profile in PROFILE_NAMES else "chat", shares=shares
+    )
 
 
-def apply_profile_to_budget(budget: Any, profile: str, request_text: str = "", overrides: dict[str, Any] | None = None) -> Any:
+def apply_profile_to_budget(
+    budget: Any,
+    profile: str,
+    request_text: str = "",
+    overrides: dict[str, Any] | None = None,
+) -> Any:
     """Mutate/return a ContextBudget with profile shares applied."""
     if profile == "auto":
         profile = select_profile(request_text)
     shares = profile_shares(profile, overrides=overrides)
-    try:
+    with contextlib.suppress(Exception):
         budget.shares = shares
-    except Exception:  # noqa: BLE001 - optional best-effort context feature
-        pass
     return budget
 
 
@@ -159,7 +202,11 @@ def load_profile_overrides(config: dict[str, Any] | None) -> dict[str, Any]:
         return {}
     # support agent.context_profiles
     agent = config.get("agent", {}) if isinstance(config.get("agent"), dict) else {}
-    cp = agent.get("context_profiles", {}) if isinstance(agent.get("context_profiles"), dict) else {}
+    cp = (
+        agent.get("context_profiles", {})
+        if isinstance(agent.get("context_profiles"), dict)
+        else {}
+    )
     # also top-level
     if not cp and isinstance(config.get("context_profiles"), dict):
         cp = config["context_profiles"]
@@ -179,7 +226,9 @@ def load_share_overrides(config: dict[str, Any] | None) -> dict[str, float]:
     cleaned = {
         str(key): float(value)
         for key, value in shares.items()
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
+        if isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value >= 0
     }
     return resolve_shares(cleaned)
 

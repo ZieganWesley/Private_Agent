@@ -61,7 +61,7 @@ class MissionController:
         tool_call_budget: int = 60,
         deadline: float | None = None,
         lease_owner: str | None = None,
-    ) -> "MissionController":
+    ) -> MissionController:
         normalized = []
         for index, step in enumerate(steps, start=1):
             if isinstance(step, MissionPlanStep):
@@ -80,9 +80,7 @@ class MissionController:
                     step_id=str(step.get("step_id") or f"step-{index}"),
                     description=description,
                     acceptance=tuple(
-                        str(item).strip()
-                        for item in acceptance
-                        if str(item).strip()
+                        str(item).strip() for item in acceptance if str(item).strip()
                     ),
                 ).to_dict()
             )
@@ -224,9 +222,7 @@ class MissionController:
             )
             return False
         if self._consecutive_failures >= self.max_consecutive_failures:
-            self.fail(
-                f"{self._consecutive_failures} consecutive tool failures."
-            )
+            self.fail(f"{self._consecutive_failures} consecutive tool failures.")
             return False
         return True
 
@@ -256,9 +252,7 @@ class MissionController:
             raise ValueError("Mission completion needs a summary and evidence.")
         steps = self._steps()
         incomplete = [
-            step.get("step_id")
-            for step in steps
-            if step.get("status") != "completed"
+            step.get("step_id") for step in steps if step.get("status") != "completed"
         ]
         if incomplete:
             raise ValueError(
@@ -311,9 +305,7 @@ class MissionController:
         return self.memory.release_mission_lease(self.mission_id, owner)
 
     def has_pending_steps(self) -> bool:
-        return any(
-            step.get("status") != "completed" for step in self._steps()
-        )
+        return any(step.get("status") != "completed" for step in self._steps())
 
 
 __all__ = [
