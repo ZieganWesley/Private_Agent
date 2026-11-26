@@ -9,6 +9,8 @@ instructions, code-task scope) goes into a second message after it.
 
 from __future__ import annotations
 
+import pathlib
+
 from langchain_core.messages import SystemMessage
 
 _STATIC_RULES = (
@@ -112,3 +114,19 @@ def build_system_messages(
     volatile += project_instructions_block
     messages.append(SystemMessage(content=volatile))
     return messages
+
+
+def project_instructions() -> str:
+    """Read the project instruction file for the active workspace root."""
+    from config import PROJECT_INSTRUCTIONS_FILE
+    from sandbox import SandboxManager
+
+    if not PROJECT_INSTRUCTIONS_FILE:
+        return ""
+    try:
+        path = pathlib.Path(SandboxManager.get_root()) / PROJECT_INSTRUCTIONS_FILE
+        if path.is_file():
+            return path.read_text(encoding="utf-8").strip()
+    except OSError, ValueError:
+        return ""
+    return ""

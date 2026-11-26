@@ -125,8 +125,10 @@ from .memory_context import (
     _build_startup_memory_context,
     _initialize_rag_for_docs,
     _is_coding_guidance_request,
+    _load_task,
     _prune_memory_retention,
     _retrieve_rag_documents,
+    _save_turn_messages,
     build_rag_context,
 )
 from .permissions import (
@@ -154,7 +156,7 @@ from .permissions import (
     tool_needs_permission as _tool_needs_permission,
 )
 from .project_paths import discover_project_resources
-from .prompt_prefix import build_system_messages
+from .prompt_prefix import build_system_messages, project_instructions
 from .prompts import (
     calculate_prompt_budgets,
     estimate_context_window,
@@ -629,11 +631,7 @@ async def _preflight_tool_calls(
         }:
             prior_references = []
             if call_name == "revise_task_plan":
-                active_plan = (
-                    memory.get_task(get_tool_context().task_id)
-                    if get_tool_context().task_id
-                    else None
-                )
+                active_plan = await _load_task(memory, get_tool_context().task_id)
                 if active_plan:
                     prior_references = active_plan["plan"].get(
                         "research_references",
@@ -1334,7 +1332,9 @@ async def _build_session_setup(
         )
     memory = PersistentMemory(db_path=DEFAULT_DB_PATH)
     _ACTIVE_MEMORY = memory
-    recovered_actions = memory.reconcile_task_actions_after_restart()
+    recovered_actions = await asyncio.to_thread(
+        memory.reconcile_task_actions_after_restart
+    )
     if recovered_actions:
         console.print(
             "[warning][Task recovery][/warning] Marked "
@@ -1342,10 +1342,10 @@ async def _build_session_setup(
             "Review and verify them before retrying."
         )
     if verbose_startup:
-        saved_messages = memory.count_conversation_messages()
-        saved_sessions = memory.count_conversation_sessions()
-        saved_episodes = memory.count_episodic_memories()
-        saved_skill_files = memory.count_registered_skill_files()
+        saved_messages = await asyncio.to_thread(memory.count_conversation_messages)
+        saved_sessions = await asyncio.to_thread(memory.count_conversation_sessions)
+        saved_episodes = await asyncio.to_thread(memory.count_episodic_memories)
+        saved_skill_files = await asyncio.to_thread(memory.count_registered_skill_files)
         if any((saved_messages, saved_sessions, saved_episodes, saved_skill_files)):
             console.print(
                 f"[info][SQLite memory][/info] File: {memory.db_path}; "
@@ -1354,7 +1354,9 @@ async def _build_session_setup(
                 f"{saved_episodes} episodic summary/summaries; "
                 f"{saved_skill_files} session-linked skill file(s)."
             )
-    stale_task_ids = memory.mark_stale_tasks(TASK_STALE_AFTER_DAYS)
+    stale_task_ids = await asyncio.to_thread(
+        memory.mark_stale_tasks, TASK_STALE_AFTER_DAYS
+    )
     if stale_task_ids:
         console.print(
             "[warning][Task recovery][/warning] Marked "
@@ -1362,7 +1364,9 @@ async def _build_session_setup(
             "old approvals. Nothing was deleted."
         )
     if verbose_startup:
-        task_plans, approved_task_plans = memory.count_task_plans()
+        task_plans, approved_task_plans = await asyncio.to_thread(
+            memory.count_task_plans
+        )
         if task_plans:
             console.print(
                 "[info][Saved plans][/info] "
@@ -2337,7 +2341,7 @@ async def _choose_provider(
     )
 
 
-def _store_turn_output(
+async def _store_turn_output(
     *,
     response,
     session_ui,
@@ -2378,8 +2382,14 @@ def _store_turn_output(
         verification = cleanup_code_task(finalize=True)
         session_ui.print_markup(verification_line(verification))
         full_output_content += f"\n\n[Code task verification]\n{verification}"
-    memory.save_message(session_id, "human", user_input, turn_id=turn_id)
-    memory.save_message(session_id, "ai", full_output_content, turn_id=turn_id)
+    await asyncio.to_thread(
+        _save_turn_messages,
+        memory,
+        session_id,
+        user_input,
+        full_output_content,
+        turn_id,
+    )
     _tool_context = get_tool_context()
     _tool_context.turn_id = None
     set_tool_context(_tool_context)
@@ -2899,7 +2909,7 @@ async def _run_agent_cli_session(
                         continue
                     if approved_task_id is None:
                         continue
-                    approved_task = memory.get_task(approved_task_id)
+                    approved_task = await _load_task(memory, approved_task_id)
                     if not (
                         approved_task
                         and approved_task["status"] == "active"
@@ -3090,9 +3100,7 @@ async def _run_agent_cli_session(
                 coding_task_requested = coding_mode_armed or _acs is not None
                 if planning_only:
                     active_task_id = get_tool_context().task_id
-                    active_task = (
-                        memory.get_task(active_task_id) if active_task_id else None
-                    )
+                    active_task = await _load_task(memory, active_task_id)
                     if (
                         active_task
                         and active_task["status"] == "active"
@@ -3233,7 +3241,8 @@ async def _run_agent_cli_session(
                         source_path = approved_coding_scope.get("source_path")
                     workspace_action_id = None
                     try:
-                        workspace_action_id = memory.begin_task_action(
+                        workspace_action_id = await asyncio.to_thread(
+                            memory.begin_task_action,
                             get_tool_context().task_id,
                             get_tool_context().runtime_owner_id,
                             f"runtime-workspace-{uuid.uuid4().hex}",
@@ -3269,7 +3278,8 @@ async def _run_agent_cli_session(
                         )
                     except Exception as exc:  # noqa: BLE001 - workspace creation mixes git/OS/library failures; resolve the action
                         try:
-                            memory.finish_task_action(
+                            await asyncio.to_thread(
+                                memory.finish_task_action,
                                 workspace_action_id,
                                 "outcome_unknown",
                             )
@@ -3287,7 +3297,8 @@ async def _run_agent_cli_session(
                         _tool_context.code_task = None
                         set_tool_context(_tool_context)
                         with contextlib.suppress(ValueError, sqlite3.Error, OSError):
-                            memory.set_task_status(
+                            await asyncio.to_thread(
+                                memory.set_task_status,
                                 _tool_context.task_id,
                                 "cancelled",
                                 owner_id=getattr(
@@ -3303,7 +3314,8 @@ async def _run_agent_cli_session(
                             ).encode("utf-8")
                         ).hexdigest()
                         try:
-                            memory.finish_task_action(
+                            await asyncio.to_thread(
+                                memory.finish_task_action,
                                 workspace_action_id,
                                 "outcome_observed",
                                 workspace_digest,
@@ -3674,9 +3686,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 active_task_instruction = ""
                 if include_private_context:
                     active_task_id = get_tool_context().task_id
-                    active_task = (
-                        memory.get_task(active_task_id) if active_task_id else None
-                    )
+                    active_task = await _load_task(memory, active_task_id)
                     if (
                         active_task
                         and active_task["status"] == "active"
@@ -3752,19 +3762,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     if tool_iteration_limit is not None and tool_call_limit is not None
                     else "Tool rounds and total tool-call count are uncapped. "
                 )
-                _project_instructions = ""
-                if PROJECT_INSTRUCTIONS_FILE:
-                    try:
-                        _instructions_path = (
-                            pathlib.Path(SandboxManager.get_root())
-                            / PROJECT_INSTRUCTIONS_FILE
-                        )
-                        if _instructions_path.is_file():
-                            _project_instructions = _instructions_path.read_text(
-                                encoding="utf-8"
-                            ).strip()
-                    except OSError, ValueError:
-                        _project_instructions = ""
+                _project_instructions = await asyncio.to_thread(project_instructions)
                 _project_instructions_block = (
                     f"\nProject instructions (from {PROJECT_INSTRUCTIONS_FILE}):\n"
                     f"{_project_instructions}\n"
@@ -4199,7 +4197,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     session_ui.turn_finished()
                 else:
                     session_ui._footer.turn_finished()
-                full_output_content = _store_turn_output(
+                full_output_content = await _store_turn_output(
                     response=response,
                     session_ui=session_ui,
                     chat_transcript=chat_transcript,

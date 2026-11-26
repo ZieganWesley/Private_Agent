@@ -1011,3 +1011,16 @@ async def _initialize_rag_for_docs(
         enabled=True,
     )
     return None, False, None, rag_task, time.monotonic()
+
+
+async def _load_task(memory, task_id):
+    """Read a task plan off the event loop; ``None`` when no task is active."""
+    if not task_id:
+        return None
+    return await asyncio.to_thread(memory.get_task, task_id)
+
+
+def _save_turn_messages(memory, session_id, user_input, output, turn_id) -> None:
+    """Persist the human/assistant pair for one turn in a worker thread."""
+    memory.save_message(session_id, "human", user_input, turn_id=turn_id)
+    memory.save_message(session_id, "ai", output, turn_id=turn_id)
