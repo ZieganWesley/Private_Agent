@@ -140,13 +140,16 @@ def build_runtime_context_report(
     system_prompts: Any,
     enriched_input: Any,
     user_input: Any,
+    allocation: Any = None,
 ) -> dict[str, Any] | None:
     """Build a structured per-turn context report (Phase 6).
 
-    Returns ``None`` when the base report cannot be constructed so the
-    caller can keep the previous report.  Allocation failures fall back to
-    the base report.
+    When the turn's ``ContextAllocation`` is supplied it is the single source
+    of truth, including overflow measured before trimming.  Returns ``None``
+    only when no report can be constructed.
     """
+    if allocation is not None and getattr(allocation, "telemetry", None):
+        return dict(allocation.telemetry)
     report = None
     try:
         from .prompts import estimate_context_window
@@ -169,10 +172,13 @@ def build_runtime_context_report(
     except Exception:  # noqa: BLE001 - best-effort reporting
         return None
     try:
-        from .context_engine import ContextEngine, is_enabled as _is_enabled
+        from .context_engine import ContextEngine
+        from .context_engine import is_enabled as _is_enabled
 
         if _is_enabled():
-            eng = ContextEngine.from_config()
+            from config import APP_CONFIG
+
+            eng = ContextEngine.from_config(APP_CONFIG)
             alloc = eng.allocate(
                 effective_context,
                 source_texts={

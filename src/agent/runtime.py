@@ -48,7 +48,6 @@ from config import (
     EPISODE_RETENTION_DAYS,
     MAX_CONTEXT_TOKENS,
     MAX_HISTORY_MESSAGES,
-    MAX_OUTPUT_TOKENS,
     MAX_TASK_SECONDS,
     MAX_TOOL_CALLS,
     MAX_TOOL_ITERATIONS,
@@ -105,6 +104,7 @@ from .context_engine import (
     ContextEngine,
     is_enabled as context_engine_is_enabled,
 )
+from .context_turn import build_turn_prompt, rag_budget_for, start_turn_context
 from .context_runtime import context_cache_policy, prepare_context_request
 from .context_telemetry import build_runtime_context_report
 from .console import console
@@ -148,12 +148,8 @@ from .permissions import (
 from .project_paths import discover_project_resources
 from .prompt_prefix import build_system_messages
 from .prompts import (
-    build_bounded_user_input as _build_bounded_user_input,
-)
-from .prompts import (
     calculate_prompt_budgets,
     estimate_context_window,
-    trim_history_to_context_budget,
 )
 from .prompts import (
     current_datetime_context as _current_datetime_context,
@@ -3509,29 +3505,22 @@ async def _run_agent_cli_session(
                             error_type=type(exc).__name__,
                             exc_info=True,
                         )
+                effective_context, _output_ceiling, _context_engine, _context_allocation = (
+                    start_turn_context(
+                        provider_type,
+                        selected_local_runtime,
+                        selected_model,
+                        capabilities,
+                        user_input,
+                    )
+                )
                 if vectorstore and include_private_context:
                     rag_search_started = time.monotonic()
                     try:
                         with console.status(
                             "[bold info]Searching local knowledge...[/bold info]"
                         ):
-                            _rag_budget = None
-                            if context_engine_is_enabled():
-                                try:
-                                    _ctx_engine = ContextEngine.from_config()
-                                    _alloc = _ctx_engine.allocate(
-                                        MAX_CONTEXT_TOKENS,
-                                        source_texts={
-                                            "system": "",
-                                            "rag": "",
-                                            "history": "",
-                                            "user": user_input,
-                                        },
-                                        request_text=user_input,
-                                    )
-                                    _rag_budget = _alloc.budgets.get("rag")
-                                except Exception:  # noqa: BLE001 - optional best-effort context feature
-                                    _rag_budget = None
+                            _rag_budget = rag_budget_for(_context_allocation)
                             relevant_docs = await _retrieve_rag_documents(
                                 vectorstore,
                                 user_input,
@@ -3746,11 +3735,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     system_prompts.append(
                         SystemMessage(content=active_skill.system_prompt)
                     )
-                _request_limits = request_limits_for_provider(
-                    provider_type, selected_local_runtime, selected_model, capabilities
-                )
-                effective_context = _request_limits.context
-                _output_ceiling = _request_limits.output_tokens
                 prompt_budget, output_budget = calculate_prompt_budgets(
                     system_prompts + [SystemMessage(content=context_summary)],
                     effective_context,
@@ -3808,21 +3792,28 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                         "increase agent.max_context_tokens.[/error]"
                     )
                     continue
-                enriched_input = _build_bounded_user_input(
-                    context_label,
-                    episodic_context,
-                    context_text,
-                    user_input,
-                    budget=prompt_budget,
+                _turn_prompt = build_turn_prompt(
+                    _context_engine,
+                    _context_allocation,
+                    context_label=context_label,
+                    system_prompts=system_prompts,
+                    tools_list=tools_list,
+                    active_skill=active_skill,
+                    active_task_instruction=active_task_instruction,
+                    attached_file_context=attached_file_context,
+                    context_summary=context_summary,
+                    episodic_context=episodic_context,
+                    context_text=context_text,
+                    user_input=user_input,
+                    chat_history=chat_history,
+                    prompt_budget=prompt_budget,
                 )
-                enriched_input = f_integration.trim_context(
-                    enriched_input, prompt_budget
-                )
-                prompt_history = trim_history_to_context_budget(
-                    chat_history,
-                    enriched_input,
-                    max_context_tokens=prompt_budget,
-                )
+                if _turn_prompt.system_text is not None:
+                    system_prompts = [
+                        SystemMessage(content=_turn_prompt.system_text)
+                    ]
+                enriched_input = _turn_prompt.enriched_input
+                prompt_history = _turn_prompt.prompt_history
                 context_stats = estimate_context_window(
                     prompt_history,
                     enriched_input,
@@ -3834,7 +3825,12 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 )
                 # Store a structured context report for inspection (Phase 6).
                 _report = build_runtime_context_report(
-                    effective_context, prompt_history, system_prompts, enriched_input, user_input
+                    effective_context,
+                    prompt_history,
+                    system_prompts,
+                    enriched_input,
+                    user_input,
+                    allocation=_context_allocation,
                 )
                 messages, _context_meta = prepare_context_request(
                     system_prompts=system_prompts,

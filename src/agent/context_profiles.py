@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .context_manager import DEFAULT_SHARES
+from .context_manager import DEFAULT_SHARES, resolve_shares
 
 PROFILE_NAMES: tuple[str, ...] = ("chat", "coding", "research", "memory")
 
@@ -17,19 +17,20 @@ PROFILE_NAMES: tuple[str, ...] = ("chat", "coding", "research", "memory")
 PROFILE_SHARE_OVERRIDES: dict[str, dict[str, float]] = {
     "chat": {},
     "coding": {
-        "files": 0.25,
-        "plan": 0.15,
-        "recent": 0.25,
+        "files": 0.24,
+        "plan": 0.14,
+        "history": 0.24,
     },
     "research": {
         "rag": 0.25,
-        "memory": 0.15,
-        "recent": 0.25,
+        "episodic": 0.09,
+        "summary": 0.06,
+        "history": 0.22,
     },
     "memory": {
-        "episodic": 0.20,
-        "summary": 0.15,
-        "recent": 0.25,
+        "episodic": 0.18,
+        "summary": 0.12,
+        "history": 0.22,
     },
 }
 
@@ -113,17 +114,21 @@ def profile_shares(
     """Return shares for a profile, applying optional config overrides."""
     if base is None:
         base = dict(DEFAULT_SHARES)
-    result = dict(base)
+    result = resolve_shares(base)
     name = profile if profile in PROFILE_NAMES else "chat"
-    result.update(PROFILE_SHARE_OVERRIDES.get(name, {}))
+    result.update(resolve_shares(PROFILE_SHARE_OVERRIDES.get(name, {})))
     # config overrides: overrides may be {profile: {source: share}} or {source: share}
     if overrides:
         if isinstance(overrides, dict):
             if name in overrides and isinstance(overrides[name], dict):
-                result.update(overrides[name])
+                result.update(resolve_shares(overrides[name]))
             else:
                 # treat as direct source overrides
-                result.update({k: v for k, v in overrides.items() if isinstance(v, (int, float))})
+                result.update(
+                    resolve_shares(
+                        {k: v for k, v in overrides.items() if isinstance(v, (int, float))}
+                    )
+                )
     # normalize
     total = sum(result.values())
     if total <= 0:
@@ -161,6 +166,24 @@ def load_profile_overrides(config: dict[str, Any] | None) -> dict[str, Any]:
     return cp if isinstance(cp, dict) else {}
 
 
+def load_share_overrides(config: dict[str, Any] | None) -> dict[str, float]:
+    """Read per-source share overrides from ``[agent.context_shares]``."""
+    if not isinstance(config, dict):
+        return {}
+    agent = config.get("agent") if isinstance(config.get("agent"), dict) else {}
+    shares = agent.get("context_shares", {}) if isinstance(agent, dict) else {}
+    if not shares and isinstance(config.get("context_shares"), dict):
+        shares = config["context_shares"]
+    if not isinstance(shares, dict):
+        return {}
+    cleaned = {
+        str(key): float(value)
+        for key, value in shares.items()
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0
+    }
+    return resolve_shares(cleaned)
+
+
 __all__ = [
     "PROFILE_NAMES",
     "PROFILE_SHARE_OVERRIDES",
@@ -170,4 +193,5 @@ __all__ = [
     "build_profile",
     "apply_profile_to_budget",
     "load_profile_overrides",
+    "load_share_overrides",
 ]

@@ -14,12 +14,40 @@ from typing import Any
 
 DEFAULT_SHARES = {
     "system": 0.15,
-    "recent": 0.35,
-    "plan": 0.10,
+    "tool_definitions": 0.04,
+    "skills": 0.02,
+    "plan": 0.09,
+    "files": 0.10,
+    "summary": 0.05,
+    "episodic": 0.05,
+    "history": 0.27,
     "rag": 0.15,
-    "memory": 0.10,
-    "files": 0.15,
+    "tool_results": 0.05,
+    "user": 0.03,
 }
+
+# Older profile files and callers used coarse names. Map them onto the real
+# source names so RAG no longer absorbs the unused history/memory share (C2).
+LEGACY_SHARE_ALIASES: dict[str, tuple[str, ...]] = {
+    "recent": ("history",),
+    "memory": ("episodic", "summary"),
+}
+
+
+def resolve_shares(shares: Mapping[str, float] | None) -> dict[str, float]:
+    """Return canonical per-source shares with legacy names expanded."""
+    resolved: dict[str, float] = dict(shares or {})
+    for legacy, targets in LEGACY_SHARE_ALIASES.items():
+        if legacy not in resolved:
+            continue
+        value = float(resolved.pop(legacy) or 0.0)
+        remaining = [name for name in targets if name not in resolved]
+        if not remaining:
+            continue
+        per_target = value / len(remaining)
+        for name in remaining:
+            resolved[name] = per_target
+    return {name: float(value) for name, value in resolved.items()}
 
 # Sources considered stable/cacheable for KV-cache prefix purposes.
 CACHEABLE_SOURCES = {"system", "tool_definitions", "skills", "plan", "files"}
@@ -57,6 +85,7 @@ class ContextBudget:
     priorities: dict[str, int] = field(default_factory=dict)
     min_tokens: dict[str, int] = field(default_factory=dict)
     max_tokens: dict[str, int | None] = field(default_factory=dict)
+    compressible: dict[str, bool] = field(default_factory=dict)
     output_reserve: int = 0
     safety_margin: int = 0
 
@@ -83,6 +112,7 @@ class ContextBudget:
                     src_min[s.name] = max(0, int(s.min_tokens))
                     src_max[s.name] = s.max_tokens
                     src_priority[s.name] = int(s.priority)
+                    self.compressible.setdefault(s.name, bool(s.compressible))
                     src_shares[s.name] = self.shares.get(s.name, 0.0)
                     if s.name not in self.shares:
                         src_shares[s.name] = 0.0
@@ -96,6 +126,7 @@ class ContextBudget:
                     src_min[key] = max(0, int(value.min_tokens))
                     src_max[key] = value.max_tokens
                     src_priority[key] = int(value.priority)
+                    self.compressible.setdefault(key, bool(value.compressible))
                     src_shares[key] = self.shares.get(key, 0.0)
                 elif isinstance(value, str):
                     names.append(key)
@@ -162,6 +193,7 @@ class ContextBudget:
             if "shares" in kwargs and isinstance(kwargs["shares"], dict):
                 self.shares = {**self.shares, **kwargs["shares"]}
 
+        self.shares = resolve_shares(self.shares)
         names, shares, mins, maxs, prios = self._resolve(sources)
         T = self._effective_total()
 
@@ -279,8 +311,9 @@ class ContextBudget:
         for n in names:
             result[n] = int(alloc.get(n, 0))
         # pad again across all keys if needed
-        self._pad_to_total(result, list(result.keys()), 
-                           {k: norm_max.get(k, T) for k in result}, T)
+        self._pad_to_total(
+            result, list(result.keys()), {k: norm_max.get(k, T) for k in result}, T
+        )
         return result
 
     def _pad_to_total(
@@ -357,7 +390,6 @@ class ContextBudget:
             key=lambda x: (-self.priorities.get(x, 0), x),
         )
         # add one at a time
-        i = 0
         guard = 0
         while unused > 0 and guard < T + 5:
             progressed = False
@@ -373,13 +405,38 @@ class ContextBudget:
             if not progressed:
                 break
             guard += 1
-        # ensure sum
-        self._pad_to_total(alloc, list(alloc.keys()), {k: (self.max_tokens.get(k) or T) for k in alloc}, T)
+        # Keep the total at T without taking budget back from sources that are
+        # not compressible (system prompts, the user request).
+        current = sum(alloc.values())
+        if current > T:
+            excess = current - T
+            reduce_order = sorted(
+                candidates, key=lambda x: (self.priorities.get(x, 0), x)
+            )
+            idx = 0
+            while excess > 0 and reduce_order:
+                name = reduce_order[idx % len(reduce_order)]
+                removable = max(0, alloc[name] - self.min_tokens.get(name, 0))
+                give_back = min(removable, excess)
+                alloc[name] -= give_back
+                excess -= give_back
+                idx += 1
+                if idx > len(reduce_order) * (T + 5):
+                    break
+        elif current < T:
+            deficit = T - current
+            for name in candidates:
+                if deficit <= 0:
+                    break
+                cap = self.max_tokens.get(name, None)
+                cap = T if cap is None else int(cap)
+                add = min(max(0, cap - alloc[name]), deficit)
+                alloc[name] += add
+                deficit -= add
         return alloc
 
     def _is_compressible(self, name: str) -> bool:
-        # default compressible True unless explicitly False in shares? We don't track per source here.
-        return True
+        return bool(self.compressible.get(name, True))
 
 
 
@@ -411,5 +468,5 @@ def build_context(sources: dict[str, str], total_tokens: int) -> dict[str, str]:
     return out
 
 
-def prios_sort_key(budget: "ContextBudget", name: str):
+def prios_sort_key(budget: ContextBudget, name: str):
     return (budget.priorities.get(name, 0), name)
