@@ -1510,50 +1510,33 @@ async def _build_session_setup(
     rag_embedding_provider = _rag_config.EMBEDDING_PROVIDER
     rag_embedding_model = _rag_config.EMBEDDING_MODEL
     rag_embedding_base_url = _rag_config.EMBEDDING_BASE_URL
-    ollama_runtimes = [
-        runtime
-        for runtime in local_runtimes
-        if getattr(runtime, "kind", "") == "ollama"
-    ]
-    openai_runtimes = [
-        runtime
-        for runtime in local_runtimes
-        if getattr(runtime, "kind", "") == "openai-compatible"
-    ]
-    if rag_embedding_provider == "ollama":
-        embedding_models = []
-        for runtime in ollama_runtimes:
-            embedding_models.extend(getattr(runtime, "embedding_models", ()) or ())
-        if embedding_models:
-            rag_embedding_model = str(embedding_models[0])
-        elif ollama_runtimes:
-            pass
-        elif openai_runtimes:
-            selected_runtime = None
-            selected_model = None
-            for runtime in openai_runtimes:
-                models = getattr(runtime, "embedding_models", ()) or ()
-                if models:
-                    selected_runtime = runtime
-                    selected_model = str(models[0])
-                    break
-            if selected_runtime is not None:
-                rag_embedding_provider = "openai-compatible"
-                rag_embedding_base_url = str(
-                    getattr(selected_runtime, "base_url", rag_embedding_base_url)
-                )
-                rag_embedding_model = selected_model
-                console.print(
-                    "[info][RAG][/info] Ollama is unavailable; using "
-                    f"{getattr(selected_runtime, 'name', 'local runtime')} "
-                    f"embeddings ({selected_model})."
-                )
-            elif local_runtimes:
-                rag_embedding_provider = "none"
-                console.print(
-                    "[warning][RAG][/warning] No embedding-capable runtime is "
-                    "available; continuing without local RAG."
-                )
+    from rag.embedding_resolver import resolve_embedding_provider
+
+    _embedding_choice = resolve_embedding_provider(
+        local_runtimes,
+        rag_embedding_provider,
+        rag_embedding_model,
+        rag_embedding_base_url,
+    )
+    if rag_embedding_provider == "ollama" and _embedding_choice.provider == (
+        "openai-compatible"
+    ):
+        console.print(
+            "[info][RAG][/info] Ollama is unavailable; using the local "
+            f"OpenAI-compatible endpoint for embeddings ({_embedding_choice.model})."
+        )
+    if (
+        _embedding_choice.provider == "none"
+        and local_runtimes
+        and rag_embedding_provider != "none"
+    ):
+        console.print(
+            "[warning][RAG][/warning] No embedding-capable runtime is "
+            "available; continuing without local RAG."
+        )
+    rag_embedding_provider = _embedding_choice.provider
+    rag_embedding_model = _embedding_choice.model
+    rag_embedding_base_url = _embedding_choice.base_url
 
     def _initialize_knowledge_base_with_embeddings(
         docs_path,
