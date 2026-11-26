@@ -7,11 +7,14 @@ routes is never called speculatively.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
+from .endpoint_telemetry import record_endpoint_request
 
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
@@ -65,6 +68,18 @@ class CompletionsClient:
     ) -> TransportResult | None:
         if not self.enabled:
             return None
+        started = time.perf_counter()
+
+        def _record(ok: bool, error: str | None = None, usage=None) -> None:
+            record_endpoint_request(
+                "completions",
+                self.base_url,
+                success=ok,
+                elapsed_seconds=time.perf_counter() - started,
+                error_type=error,
+                usage=usage,
+            )
+
         payload: dict[str, Any] = {
             "model": model,
             "prompt": prompt,
@@ -84,19 +99,23 @@ class CompletionsClient:
             body = response.json()
             choices = body.get("choices") if isinstance(body, dict) else None
             if not isinstance(choices, list) or not choices:
+                _record(False, "invalid_response")
                 return None
             first = choices[0]
             text = first.get("text") if isinstance(first, dict) else None
             if not isinstance(text, str):
+                _record(False, "invalid_response")
                 return None
             usage = body.get("usage") if isinstance(body, dict) else None
             model_name = body.get("model") if isinstance(body, dict) else None
+            _record(True, usage=usage if isinstance(usage, dict) else None)
             return TransportResult(
                 text=text,
                 model=model_name if isinstance(model_name, str) else model,
                 usage=usage if isinstance(usage, dict) else None,
             )
-        except (httpx.HTTPError, ValueError, TypeError, OSError):
+        except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
+            _record(False, type(exc).__name__)
             return None
         finally:
             if client is not None and hasattr(client, "close"):
@@ -159,6 +178,18 @@ class ResponsesClient:
     ) -> TransportResult | None:
         if not self.enabled:
             return None
+        started = time.perf_counter()
+
+        def _record(ok: bool, error: str | None = None, usage=None) -> None:
+            record_endpoint_request(
+                "responses",
+                self.base_url,
+                success=ok,
+                elapsed_seconds=time.perf_counter() - started,
+                error_type=error,
+                usage=usage,
+            )
+
         payload: dict[str, Any] = {
             "model": model,
             "input": input_text,
@@ -178,15 +209,18 @@ class ResponsesClient:
             body = response.json()
             text = self._text(body)
             if text is None:
+                _record(False, "invalid_response")
                 return None
             usage = body.get("usage") if isinstance(body, dict) else None
             model_name = body.get("model") if isinstance(body, dict) else None
+            _record(True, usage=usage if isinstance(usage, dict) else None)
             return TransportResult(
                 text=text,
                 model=model_name if isinstance(model_name, str) else model,
                 usage=usage if isinstance(usage, dict) else None,
             )
-        except (httpx.HTTPError, ValueError, TypeError, OSError):
+        except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
+            _record(False, type(exc).__name__)
             return None
         finally:
             if client is not None and hasattr(client, "close"):

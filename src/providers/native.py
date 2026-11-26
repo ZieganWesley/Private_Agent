@@ -10,11 +10,14 @@ raising, so callers can fall back without failing a turn.
 from __future__ import annotations
 
 import math
+import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+
+from .endpoint_telemetry import record_endpoint_request
 
 HEALTH_TIMEOUT_SECONDS = 0.75
 DEFAULT_TIMEOUT_SECONDS = 5.0
@@ -105,6 +108,7 @@ class NativeClient:
         if not allow_unsupported and operation in self.profile.unsupported:
             return None
         client = None
+        started = time.perf_counter()
         try:
             client = self.client_factory(
                 headers=self.headers,
@@ -113,12 +117,30 @@ class NativeClient:
             response = client.request(method, self._url(path), json=json)
             if response.status_code in UNSUPPORTED_STATUS:
                 self.profile.unsupported.add(operation)
+                record_endpoint_request(
+                    operation,
+                    self.base_url,
+                    success=False,
+                    elapsed_seconds=time.perf_counter() - started,
+                    error_type="unsupported",
+                )
                 return None
             response.raise_for_status()
-            if method.upper() == "GET" and path.strip("/") == "health":
-                return response
+            record_endpoint_request(
+                operation,
+                self.base_url,
+                success=True,
+                elapsed_seconds=time.perf_counter() - started,
+            )
             return response
-        except (httpx.HTTPError, ValueError, TypeError, OSError):
+        except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
+            record_endpoint_request(
+                operation,
+                self.base_url,
+                success=False,
+                elapsed_seconds=time.perf_counter() - started,
+                error_type=type(exc).__name__,
+            )
             return None
         finally:
             if client is not None and hasattr(client, "close"):
@@ -132,12 +154,20 @@ class NativeClient:
         if not self.enabled:
             return "absent"
         client = None
+        started = time.perf_counter()
         try:
             client = self.client_factory(
                 headers=self.headers,
                 timeout=self.health_timeout,
             )
             response = client.get(self._url("health"))
+            record_endpoint_request(
+                "health",
+                self.base_url,
+                success=response.status_code == 200,
+                elapsed_seconds=time.perf_counter() - started,
+                error_type=None if response.status_code == 200 else "not_ready",
+            )
             if response.status_code == 200:
                 self.profile.detected = True
                 self.profile.ready = True
@@ -151,7 +181,14 @@ class NativeClient:
             if response.status_code in UNSUPPORTED_STATUS:
                 self.profile.unsupported.add("health")
             return "absent"
-        except (httpx.HTTPError, ValueError, TypeError, OSError):
+        except (httpx.HTTPError, ValueError, TypeError, OSError) as exc:
+            record_endpoint_request(
+                "health",
+                self.base_url,
+                success=False,
+                elapsed_seconds=time.perf_counter() - started,
+                error_type=type(exc).__name__,
+            )
             return "absent"
         finally:
             if client is not None and hasattr(client, "close"):
