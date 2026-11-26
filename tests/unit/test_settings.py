@@ -546,3 +546,137 @@ def test_rerank_settings_read_configured_values_and_guard_invalid_ones():
     assert settings.rerank_cache_entries == 32
     assert settings.rerank_breaker_failures == 4
     assert settings.rerank_breaker_cooldown_seconds == 15.5
+
+
+# --------------------------------------------- sectioned vs legacy flat keys
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value", "field"),
+    [
+        ("agent", "max_tool_iterations", 99, "max_tool_iterations"),
+        ("agent", "max_tool_calls", 7, "max_tool_calls"),
+        ("agent", "max_task_seconds", 90, "max_task_seconds"),
+        ("agent", "max_tool_output_chars", 500, "max_tool_output_chars"),
+        ("agent", "max_history_messages", 4, "max_history_messages"),
+        ("agent", "max_context_tokens", 4321, "max_context_tokens"),
+        ("agent", "permission_mode", "manual", "agent_permission_mode"),
+        ("memory", "conversation_retention_days", 7, "conversation_retention_days"),
+        ("memory", "max_summary_chars", 55, "max_summary_chars"),
+        ("models", "embedding_model", "custom-embed", "embedding_model"),
+        ("models", "preferred_model", "m1", "preferred_model"),
+        ("models", "thinking_effort", "high", "thinking_effort_default"),
+        ("network", "max_concurrent_requests", 9, "max_network_concurrency"),
+        ("network", "request_timeout_seconds", 7, "network_request_timeout"),
+        ("network", "web_research_enabled", False, "enable_web_research"),
+        ("network", "web_research_consent", "never", "web_research_consent"),
+        ("network", "internet_check_host", "9.9.9.9", "internet_check_host"),
+        ("rag", "max_file_bytes", 1111, "rag_max_file_bytes"),
+        ("rag", "max_corpus_bytes", 2222, "rag_max_corpus_bytes"),
+        ("rag", "max_pdf_pages", 3, "rag_max_pdf_pages"),
+        ("rag", "max_documents", 4, "rag_max_documents"),
+        (
+            "skills",
+            "relevance_embedding_threshold",
+            0.9,
+            "skill_relevance_embedding_threshold",
+        ),
+        ("logging", "debug_enabled", 1, "debug_log_enabled"),
+    ],
+)
+def test_sectioned_keys_apply_to_typed_settings(section, key, value, field):
+    default = build()
+    settings = build({section: {key: value}})
+
+    assert getattr(settings, field) != getattr(default, field)
+    assert getattr(settings, field) == value
+
+
+def test_paths_section_drives_database_workspace_and_code_output():
+    settings = build(
+        {
+            "paths": {
+                "database": "~/custom/db.sqlite",
+                "workspace": "/tmp/ws",
+                "code_output": "/tmp/projects",
+            }
+        }
+    )
+
+    assert settings.default_db_path == str(
+        pathlib.Path("~/custom/db.sqlite").expanduser()
+    )
+    assert settings.workspace_root_default == "/tmp/ws"
+    assert settings.code_output_root == "/tmp/projects"
+
+
+def test_legacy_flat_keys_still_apply_when_the_section_is_absent():
+    settings = build(
+        {
+            "max_tool_iterations": 4,
+            "agent": {"max_output_tokens": 77},
+            "mcpServers": {"one": {"command": "run"}},
+            "mcp_auto_approve_tools": ["a"],
+        }
+    )
+
+    assert settings.max_tool_iterations == 4
+    assert settings.max_output_tokens == 77
+    assert settings.mcp_servers == {"one": {"command": "run"}}
+    assert settings.mcp_auto_approve_tools == {"a"}
+
+
+def test_sectioned_keys_win_over_legacy_flat_keys():
+    settings = build({"max_tool_iterations": 4, "agent": {"max_tool_iterations": 12}})
+
+    assert settings.max_tool_iterations == 12
+
+
+@pytest.mark.parametrize(
+    ("flag", "section_key", "alias_key"),
+    [
+        ("show_welcome_screen", "show_welcome_screen", "welcome_screen"),
+        ("informative_prompt", "informative_prompt", None),
+        ("show_turn_divider", "show_turn_divider", "turn_divider"),
+        ("show_turn_stats", "show_turn_stats", "turn_stats"),
+        ("grouped_help", "grouped_help", None),
+    ],
+)
+def test_explicit_false_disables_a_default_on_display_flag(
+    flag, section_key, alias_key
+):
+    default = build()
+    assert getattr(default, flag) is True
+
+    for raw in (
+        {"agent": {section_key: False}},
+        {"agent": {alias_key: False}} if alias_key else None,
+        {"ui": {section_key: False}},
+        {"ui": {alias_key: False}} if alias_key else None,
+    ):
+        if raw is None:
+            continue
+        assert getattr(build(raw), flag) is False
+
+
+def test_explicit_true_enables_a_default_off_display_flag():
+    assert build({"agent": {"status_bar": False}}).status_bar is False
+    assert build({"agent": {"verbose_timings": True}}).verbose_timings is True
+
+
+def test_sandbox_network_accepts_both_documented_spellings():
+    assert build({"permissions": {"sandbox_network": True}}).sandbox_network_default
+    assert build({"sandbox": {"network": True}}).sandbox_network_default
+    assert not build({"sandbox": {"network": False}}).sandbox_network_default
+
+
+def test_hardware_acceleration_reads_the_models_section():
+    assert (
+        build({"models": {"hardware_acceleration": "cpu"}}).hardware_acceleration_mode
+        == "cpu"
+    )
+    assert build({"hardware_acceleration": "cpu"}).hardware_acceleration_mode == "cpu"
+    assert (
+        build({"models": {"hardware_acceleration": "cuda"}}).hardware_acceleration_mode
+        == "auto"
+    )

@@ -58,6 +58,7 @@ DEFAULT_CONFIG = {
         "allow": [],
         "deny": [],
         "approved_extra_folders": [],
+        "sandbox_network": False,
     },
     "hooks": {},
     "models": {
@@ -124,6 +125,13 @@ DEFAULT_CONFIG = {
         "rag_documents_only": False,
         "streaming_output": True,
         "visible_reasoning": False,
+        "status_bar": True,
+        "verbose_timings": False,
+        "show_welcome_screen": True,
+        "informative_prompt": True,
+        "show_turn_divider": True,
+        "show_turn_stats": True,
+        "grouped_help": True,
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
         "project_instructions_file": "AGENTS.md",
     },
@@ -143,6 +151,8 @@ DEFAULT_CONFIG = {
         "default_episodic_summaries": 5,
     },
     "rag": {
+        "embedding_provider": "ollama",
+        "embedding_base_url": "http://127.0.0.1:1234/v1",
         "max_file_bytes": 5242880,
         "max_corpus_bytes": 26214400,
         "max_pdf_pages": 250,
@@ -229,6 +239,7 @@ DEFAULT_CONFIG = {
         "relevance_exact_match_score": 3.0,
         "relevance_prefix_match_score": 2.0,
         "relevance_word_match_score": 1.0,
+        "relevance_embedding_threshold": 0.55,
     },
     "context_cache": {
         "kv_cache_enabled": False,
@@ -290,7 +301,26 @@ def _merge_config(config: dict) -> dict:
     from endpoint_legacy import fold_legacy_ollama_endpoints
 
     merged["models"] = fold_legacy_ollama_endpoints(merged["models"])
+    # The agent section is the canonical home for context-cache settings; fold an
+    # explicitly configured legacy context_cache section into it so both spellings
+    # take effect instead of one silently shadowing the other.
+    merged["agent"] = _fold_legacy_context_cache(config, merged["agent"])
     return merged
+
+
+def _fold_legacy_context_cache(config: dict, agent: dict) -> dict:
+    """Mirror a legacy ``context_cache`` section into ``agent`` without overriding it."""
+    legacy = (config or {}).get("context_cache")
+    if not isinstance(legacy, dict):
+        return agent
+    explicit_agent = (config or {}).get("agent")
+    explicit_agent = explicit_agent if isinstance(explicit_agent, dict) else {}
+    folded = dict(agent)
+    for key, value in legacy.items():
+        if key in explicit_agent:
+            continue
+        folded[key] = value
+    return folded
 
 
 def _categorized_config_for_file(config: dict, merged: dict) -> dict:

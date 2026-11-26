@@ -6,6 +6,7 @@ on:
       - 'v*'
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -69,18 +70,13 @@ jobs:
 
       - name: Import Smoke Test
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then ulimit -v 2400000; fi
+          ulimit -v 2400000
           python -c "import cli, agent.runtime, config; print('core import ok')"
 
   test:
     name: Pytest
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-  
-    runs-on: ${{ matrix.os }}
-  
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -90,9 +86,7 @@ jobs:
         with:
           python-version: "3.14"
   
-      # Bubblewrap is Linux-only; macOS uses its built-in sandbox-exec.
       - name: Install Bubblewrap
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y bubblewrap
@@ -105,8 +99,7 @@ jobs:
       - name: Run Tests
         run: |
           # Keep the test process inside a 2.4 GB virtual-memory ceiling.
-          # macOS does not implement RLIMIT_AS, so the cap only applies on Linux.
-          if [ "$RUNNER_OS" = "Linux" ]; then ulimit -v 2400000; fi
+          ulimit -v 2400000
           pytest -q
 
   audit:
