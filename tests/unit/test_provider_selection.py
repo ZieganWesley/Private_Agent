@@ -72,6 +72,10 @@ def test_unwritable_state_does_not_raise(monkeypatch, tmp_path):
     )
 
 
+def test_installed_but_idle_does_not_probe_app_presets_by_default():
+    assert installed_but_idle([]) == []
+
+
 def test_installed_but_idle_lists_only_unreachable_installed_providers():
     running = [SimpleNamespace(name="Ollama")]
 
