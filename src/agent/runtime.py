@@ -101,6 +101,11 @@ from .compaction import (
     needs_history_compaction,
     summary_system_message,
 )
+from .context_engine import (
+    ContextEngine,
+    is_enabled as context_engine_is_enabled,
+)
+from .context_telemetry import build_runtime_context_report
 from .console import console
 from .lazy_imports import install_lazy_globals
 from .memory_context import (
@@ -194,6 +199,7 @@ from .undo import undo_last_turn
 _ALWAYS_ALLOWED_TOOLS: set[str] = set()
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _ACTIVE_RAG_TASK: Any | None = None
+_CONTEXT_REPORT_STATE: dict[str, Any] = {"value": {}}
 
 
 def initialize_knowledge_base(*args: Any, **kwargs: Any) -> Any:
@@ -2669,6 +2675,14 @@ async def _run_agent_cli_session(
                                 "online provider with your next prompt.[/warning]"
                             )
                     continue
+                if user_input.lower() in {"/context report", "/context stats", "/context usage"}:
+                    try:
+                        from .context_telemetry import format_context_report
+
+                        session_ui.print(format_context_report(_CONTEXT_REPORT_STATE.get("value", {}) or {}))
+                    except Exception as exc:  # noqa: BLE001 - optional best-effort context feature
+                        session_ui.print(f"[warning][Context] {exc}[/warning]")
+                    continue
                 if user_input.lower() == "/context clear":
                     pending_folder_context = ""
                     pending_folder_context_files = ()
@@ -3521,10 +3535,28 @@ async def _run_agent_cli_session(
                         with console.status(
                             "[bold info]Searching local knowledge...[/bold info]"
                         ):
+                            _rag_budget = None
+                            if context_engine_is_enabled():
+                                try:
+                                    _ctx_engine = ContextEngine.from_config()
+                                    _alloc = _ctx_engine.allocate(
+                                        MAX_CONTEXT_TOKENS,
+                                        source_texts={
+                                            "system": "",
+                                            "rag": "",
+                                            "history": "",
+                                            "user": user_input,
+                                        },
+                                        request_text=user_input,
+                                    )
+                                    _rag_budget = _alloc.budgets.get("rag")
+                                except Exception:  # noqa: BLE001 - optional best-effort context feature
+                                    _rag_budget = None
                             relevant_docs = await _retrieve_rag_documents(
                                 vectorstore,
                                 user_input,
                                 include_coding_guidance=code_related_request,
+                                budget_tokens=_rag_budget,
                             )
                         rag_search_elapsed = time.monotonic() - rag_search_started
                         if rag_search_elapsed >= 2:
@@ -3744,13 +3776,25 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     effective_context,
                     MAX_OUTPUT_TOKENS,
                 )
-                if needs_history_compaction(
+                _needs_compact = needs_history_compaction(
                     chat_history,
                     messages_tokens([HumanMessage(content=user_input)]),
                     prompt_budget,
                     CONTEXT_COMPACTION_THRESHOLD,
                     MAX_HISTORY_MESSAGES,
-                ):
+                )
+                if context_engine_is_enabled():
+                    try:
+                        _needs_compact = ContextEngine.from_config().needs_compaction(
+                            chat_history,
+                            messages_tokens([HumanMessage(content=user_input)]),
+                            prompt_budget,
+                            CONTEXT_COMPACTION_THRESHOLD,
+                            MAX_HISTORY_MESSAGES,
+                        )
+                    except Exception:  # noqa: BLE001 - optional best-effort context feature
+                        pass
+                if _needs_compact:
                     try:
                         chat_history, context_summary = await compact_history(
                             llm,
@@ -3808,6 +3852,12 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 usage = _print_context_state(
                     context_stats, output_budget, selected_model, turn_permission_mode
                 )
+                # Store a structured context report for inspection (Phase 6).
+                _report = build_runtime_context_report(
+                    effective_context, prompt_history, system_prompts, enriched_input, user_input
+                )
+                if _report is not None:
+                    _CONTEXT_REPORT_STATE["value"] = _report
                 messages = (
                     system_prompts
                     + prompt_history[-MAX_HISTORY_MESSAGES:]
@@ -4079,9 +4129,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 )
                 session_ui.set_context(*usage)
                 session_ui.turn_started(user_input)
-                with contextlib.suppress(Exception):  # noqa: BLE001
+                with contextlib.suppress(Exception):  # noqa: BLE001 - optional best-effort context feature
                     reset_internet_check_cache()
-                with contextlib.suppress(Exception):  # noqa: BLE001
+                with contextlib.suppress(Exception):  # noqa: BLE001 - optional best-effort context feature
                     reset_internet_check_for_turn()
                 try:
                     response = await _run_agent_turn(response)

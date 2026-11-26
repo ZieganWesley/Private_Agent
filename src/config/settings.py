@@ -588,6 +588,48 @@ def resolve_config_values(
     CONTEXT_SUMMARY_CHARS = configured_int(
         config, "agent", "context_summary_chars", 1500
     )
+    CONTEXT_ENGINE_ENABLED = configured_bool(
+        config, "agent", "context_engine_enabled", False
+    )
+    CONTEXT_ENGINE_PROFILE = configured_choice(
+        config,
+        "agent",
+        "context_engine_profile",
+        "auto",
+        ("auto", "chat", "coding", "research", "memory"),
+    )
+    CONTEXT_SAFETY_MARGIN_TOKENS = configured_nonnegative_int(
+        config, "agent", "context_safety_margin_tokens", 0
+    )
+    CONTEXT_OUTPUT_RESERVE_RATIO = configured_float(
+        config, "agent", "context_output_reserve_ratio", 0.33
+    )
+    # KV cache settings may live under agent, agent.context_cache, or a
+    # top-level context_cache section.
+    def _kv_raw(key, default):
+        agent_section = config_section(config, "agent")
+        if key in agent_section:
+            return agent_section.get(key, default)
+        nested = agent_section.get("context_cache", {})
+        if isinstance(nested, Mapping) and key in nested:
+            return nested.get(key, default)
+        top = config_section(config, "context_cache")
+        if key in top:
+            return top.get(key, default)
+        return default
+
+    _kv_enabled_raw = _kv_raw("kv_cache_enabled", False)
+    _kv_hints_raw = _kv_raw("kv_cache_provider_hints", "auto")
+    _kv_min_prefix_raw = _kv_raw("kv_cache_min_prefix_tokens", 1024)
+    CONTEXT_KV_CACHE_ENABLED = configured_bool(
+        {"_": {"v": _kv_enabled_raw}}, "_", "v", False
+    )
+    CONTEXT_KV_CACHE_PROVIDER_HINTS = configured_choice(
+        {"_": {"v": _kv_hints_raw}}, "_", "v", "auto", ("auto", "on", "off")
+    )
+    CONTEXT_KV_CACHE_MIN_PREFIX_TOKENS = configured_int(
+        {"_": {"v": _kv_min_prefix_raw}}, "_", "v", 1024
+    )
     CODE_TASK_GIT_TIMEOUT = configured_int(
         config, "code_tasks", "git_command_timeout_seconds", 30
     )
@@ -778,6 +820,13 @@ class Settings:
     context_compaction_threshold: float
     context_keep_recent_messages: int
     context_summary_chars: int
+    context_engine_enabled: bool
+    context_engine_profile: str
+    context_safety_margin_tokens: int
+    context_output_reserve_ratio: float
+    context_kv_cache_enabled: bool
+    context_kv_cache_provider_hints: str
+    context_kv_cache_min_prefix_tokens: int
     code_task_git_timeout: int
     code_task_test_timeout: int
     code_task_test_commands: list[list[str]]
