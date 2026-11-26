@@ -12,13 +12,12 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from langchain_core.messages import AIMessage, AIMessageChunk
-from rich.live import Live
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.text import Text
 
 from config import STREAMING_OUTPUT, VERBOSE_TIMINGS, VISIBLE_REASONING
 from ui.failure_panel import model_failure_panel
+from ui.markdown_view import MarkdownStream
 from ui.status_bar import get_active_footer
 from ui.turn import GenerationStats
 from utils.run_logging import RUN_LOGGER, log_event
@@ -265,7 +264,7 @@ async def _invoke_with_budget(
             emitted_header = False
             reasoning_open = False
             streamed_text = ""
-            live: Live | None = None
+            stream: MarkdownStream | None = None
             try:
                 async for chunk in stream_method(messages):
                     aggregate = chunk if aggregate is None else aggregate + chunk
@@ -310,20 +309,12 @@ async def _invoke_with_budget(
                             emitted_header = True
                         streamed_text += text
                         partial["text"] = streamed_text
-                        if live is None:
-                            live = Live(
-                                Markdown(streamed_text),
-                                console=console,
-                                refresh_per_second=8,
-                                transient=False,
-                            )
-                            live.start()
-                        else:
-                            live.update(Markdown(streamed_text))
+                        if stream is None:
+                            stream = MarkdownStream(console)
+                        stream.update(text)
             finally:
-                if live is not None:
-                    with contextlib.suppress(Exception):  # noqa: BLE001
-                        live.stop()
+                if stream is not None:
+                    stream.stop()
                 indicator.stop()
                 if reasoning_open:
                     console.print()

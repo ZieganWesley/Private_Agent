@@ -1404,7 +1404,9 @@ async def test_model_invocation_streams_and_aggregates_text(monkeypatch):
         def stop(self):
             return None
 
-    monkeypatch.setattr(streaming, "Live", FakeLive)
+    from ui import markdown_view
+
+    monkeypatch.setattr(markdown_view, "Live", FakeLive)
     response = await _invoke_with_budget(
         StreamingModel(),
         [],
@@ -1543,10 +1545,11 @@ def test_tool_result_preview_is_bounded_and_labeled(monkeypatch):
     panel = printed[0][0][0]
     assert isinstance(panel, tool_display.Panel)
     assert panel.title.plain == "✓ Tool output: search_workspace"
-    assert panel.renderable.plain.startswith(
-        "x" * tool_display.TOOL_RESULT_PREVIEW_CHARS
-    )
-    assert "Preview truncated" in panel.renderable.plain
+    rendered = _rendered(panel)
+    assert "x" * 40 in rendered
+    assert "lines · preview of" in rendered
+    assert "/expand" in rendered
+    assert "x" * (tool_display.TOOL_RESULT_PREVIEW_CHARS + 20) not in rendered
 
 
 @pytest.mark.asyncio
@@ -1708,7 +1711,9 @@ async def test_streaming_response_stops_the_spinner_before_rendering(monkeypatch
         def stop(self):
             return None
 
-    monkeypatch.setattr(streaming, "Live", FakeLive)
+    from ui import markdown_view
+
+    monkeypatch.setattr(markdown_view, "Live", FakeLive)
 
     response = await agent._invoke_with_status(
         StreamingModel(),

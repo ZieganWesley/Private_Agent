@@ -209,6 +209,28 @@ def run_ui_check(console: Any = None) -> int:
         short = _render(_tool_result_panel("read_file", "short"), 80)
         assert "/expand" not in short
 
+    def markdown_stream() -> None:
+        from .markdown_view import MarkdownStream, print_markdown
+
+        buffer = io.StringIO()
+        plain = Console(file=buffer, width=80, no_color=True)
+        print_markdown(plain, "```python\ndef answer():\n    return 42\n```")
+        rendered = buffer.getvalue()
+        assert "def answer()" in rendered, "complete reply was not rendered"
+        assert "```" not in rendered, "fence leaked into a complete reply"
+
+        stream_buffer = io.StringIO()
+        stream = MarkdownStream(
+            Console(file=stream_buffer, width=80, no_color=True), refresh_per_second=8
+        )
+        for chunk in ("```pyth", "on\ndef ans", "wer():\n    return 42\n", "```"):
+            stream.update(chunk)
+        assert stream.renders == 1, f"burst parsed {stream.renders} times"
+        stream.stop()
+        streamed = stream_buffer.getvalue()
+        assert "def answer()" in streamed, "streamed reply lost text"
+        assert "```" not in streamed, "fence leaked from the streamed reply"
+
     def failure_panel_render() -> None:
         from .failure_panel import model_failure_panel
 
@@ -256,6 +278,7 @@ def run_ui_check(console: Any = None) -> int:
         ("status_panel", status_panel_render),
         ("context_bars", context_bars),
         ("tool_result_footer", tool_result_footer),
+        ("markdown_stream", markdown_stream),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),

@@ -2360,10 +2360,12 @@ def _store_turn_output(
     )
     if not isinstance(response, AIMessageChunk):
         chat_transcript.add_message("assistant", full_output_content, echo=False)
-        for i in range(0, len(full_output_content), 120):
-            chat_transcript.stream_chunk("assistant", full_output_content[i : i + 120])
+        # One render of the whole reply: slicing it into 120-character chunks
+        # rendered every slice as its own Markdown document, which broke tables
+        # and code fences that straddled a boundary.
         if full_output_content:
-            chat_transcript.stream_chunk("assistant", "\n")
+            chat_transcript.stream_chunk("assistant", full_output_content)
+            chat_transcript.stream_chunk("assistant", "\n", markdown=False)
     elif not full_output_content and not getattr(response, "tool_calls", None):
         session_ui.print_markup(
             "[warning]The model returned no visible response text.[/warning]"
