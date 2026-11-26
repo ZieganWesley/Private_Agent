@@ -122,6 +122,7 @@ jobs:
       - name: Pip Audit
         run: |
           pip-audit
+
   performance:
     name: Performance Profile
     runs-on: ubuntu-latest
