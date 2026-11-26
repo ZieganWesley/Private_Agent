@@ -12,6 +12,10 @@ from pydantic import BaseModel, Field
 
 from config import (
     CODE_TASK_GIT_TIMEOUT,
+    CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES,
+    CODE_TASK_SANDBOX_CPU_SECONDS,
+    CODE_TASK_SANDBOX_FILE_SIZE_BYTES,
+    CODE_TASK_SANDBOX_PROCESS_COUNT,
 )
 from platform_support import detect_platform
 from ui.console import console
@@ -293,10 +297,10 @@ def _isolated_command(
     args.extend(
         [
             prlimit,
-            "--cpu=180",
-            "--as=2147483648",
-            "--nproc=128",
-            "--fsize=536870912",
+            f"--cpu={CODE_TASK_SANDBOX_CPU_SECONDS}",
+            f"--as={CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES}",
+            f"--nproc={CODE_TASK_SANDBOX_PROCESS_COUNT}",
+            f"--fsize={CODE_TASK_SANDBOX_FILE_SIZE_BYTES}",
             "--",
             *rewritten_command,
         ]

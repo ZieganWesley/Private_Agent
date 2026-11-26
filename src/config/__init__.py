@@ -252,6 +252,10 @@ DEFAULT_CONFIG = {
         "test_commands": [],
         "successful_test_output_chars": 6000,
         "failed_test_output_chars": 3000,
+        "sandbox_cpu_seconds": 180,
+        "sandbox_address_space_bytes": 4294967296,
+        "sandbox_process_count": 128,
+        "sandbox_file_size_bytes": 536870912,
     },
     "logging": {
         "debug_enabled": 0,
@@ -704,3 +708,7 @@ CODE_TASK_TEST_TIMEOUT = SETTINGS.code_task_test_timeout
 CODE_TASK_TEST_COMMANDS = SETTINGS.code_task_test_commands
 CODE_TASK_SUCCESS_OUTPUT_CHARS = SETTINGS.code_task_success_output_chars
 CODE_TASK_FAILURE_OUTPUT_CHARS = SETTINGS.code_task_failure_output_chars
+CODE_TASK_SANDBOX_CPU_SECONDS = SETTINGS.code_task_sandbox_cpu_seconds
+CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES = SETTINGS.code_task_sandbox_address_space_bytes
+CODE_TASK_SANDBOX_PROCESS_COUNT = SETTINGS.code_task_sandbox_process_count
+CODE_TASK_SANDBOX_FILE_SIZE_BYTES = SETTINGS.code_task_sandbox_file_size_bytes
