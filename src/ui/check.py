@@ -9,16 +9,32 @@ REMOVE BEFORE PRODUCTION.
 
 from __future__ import annotations
 
+import io
 import os
 from typing import Any
 
+from rich.console import Console
+
 from .chat_ui import ChatTranscript
 from .console import build_console
-from .ribbon import status_ribbon
+from .ribbon import ribbon_text, status_ribbon
 from .session_ui import SessionUI
 from .spinner import StatusIndicator
 from .state import StatusState, context_bar, context_state_line
-from .theme import ACCESSIBLE_ENV
+from .theme import ACCESSIBLE_ENV, build_theme
+
+
+def _render(renderable: Any, width: int) -> str:
+    """Render one renderable to plain text at ``width``, without a terminal."""
+    buffer = io.StringIO()
+    Console(
+        theme=build_theme(),
+        file=buffer,
+        width=width,
+        no_color=True,
+        force_terminal=False,
+    ).print(renderable)
+    return buffer.getvalue()
 
 
 def run_ui_check(console: Any = None) -> int:
@@ -62,6 +78,62 @@ def run_ui_check(console: Any = None) -> int:
         rendered = indicator._render()
         assert "(thinking)" in rendered, rendered
 
+    def ribbon_spans() -> None:
+        state = StatusState(
+            model="test-model",
+            context_tokens=9,
+            context_maximum=10,
+            permission_mode="full",
+        )
+        styled = ribbon_text(state)
+        assert styled.spans, "ribbon rendered without any styled span"
+        assert styled.plain == status_ribbon(state)
+        assert "\x1b[" not in _render(styled, 80)
+
+    def help_tree_widths() -> None:
+        from agent.interactive import SLASH_COMMANDS, help_renderable
+
+        for width in (40, 80, 120):
+            rendered = _render(help_renderable(), width)
+            assert "\x1b[" not in rendered, f"markup leaked at width {width}"
+            overlong = [line for line in rendered.splitlines() if len(line) > width]
+            assert not overlong, f"width {width} produced {overlong[:1]}"
+            missing = [command for command in SLASH_COMMANDS if command not in rendered]
+            assert not missing, f"width {width} dropped {missing[:3]}"
+
+    def tool_request_panel() -> None:
+        from agent.tool_display import _tool_request_renderable
+
+        rendered = _render(
+            _tool_request_renderable(
+                {
+                    "name": "read_file",
+                    "args": {"path": "src/app.py", "api_key": "secret-value"},
+                }
+            ),
+            80,
+        )
+        assert "[Tool Request] read_file" in rendered
+        assert "api_key" in rendered
+        assert "[REDACTED]" in rendered
+        assert "secret-value" not in rendered
+
+    def failure_panel_render() -> None:
+        from .failure_panel import model_failure_panel
+
+        rendered = _render(
+            model_failure_panel(
+                "The request did not complete.",
+                reference_id="deadbeef",
+                model_name="test-model",
+                error_type="RuntimeError",
+                hints=("`/retry` resends the previous request.",),
+            ),
+            80,
+        )
+        for expected in ("deadbeef", "test-model", "RuntimeError", "/retry"):
+            assert expected in rendered, expected
+
     def transcript() -> None:
         chat = ChatTranscript(console=target)
         chat.add_message("user", "hello", echo=True)
@@ -85,6 +157,10 @@ def run_ui_check(console: Any = None) -> int:
     for name, fn in (
         ("message_levels", message_levels),
         ("ribbon", ribbon),
+        ("ribbon_spans", ribbon_spans),
+        ("help_tree", help_tree_widths),
+        ("tool_request", tool_request_panel),
+        ("failure_panel", failure_panel_render),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),

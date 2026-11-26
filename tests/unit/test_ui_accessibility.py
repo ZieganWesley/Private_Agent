@@ -179,3 +179,22 @@ def test_model_failure_panel_shows_reference_and_never_the_exception_text():
     assert "RuntimeError" in rendered
     assert "/retry" in rendered
     assert "The request did not complete." in rendered
+
+
+def test_ui_check_covers_every_component_and_passes(capsys):
+    from ui.check import run_ui_check
+
+    assert run_ui_check() == 0
+    assert "All UI components rendered successfully" in capsys.readouterr().out
+
+
+def test_ui_check_reports_a_component_failure(monkeypatch, capsys):
+    from ui import check
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(check, "status_ribbon", boom)
+
+    assert check.run_ui_check() == 1
+    assert "render exploded" in capsys.readouterr().out
