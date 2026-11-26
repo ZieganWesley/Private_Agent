@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from config import MAX_CONTEXT_TOKENS
+from config import MAX_CONTEXT_TOKENS, TOKENIZER_ENCODING
 from utils.run_logging import RUN_LOGGER, log_event
 
 _TOKENIZER_FALLBACKS_REPORTED: set[str] = set()
@@ -54,7 +54,7 @@ def _get_tokenizer():
         import tiktoken
 
         os.environ["TIKTOKEN_CACHE_DIR"] = str(_BUNDLED_TIKTOKEN_DIR)
-        return tiktoken.get_encoding("cl100k_base")
+        return tiktoken.get_encoding(TOKENIZER_ENCODING)
     except ImportError as exc:
         _report_tokenizer_fallback("load", exc)
         return None

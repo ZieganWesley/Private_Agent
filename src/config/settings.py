@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
+import urllib.parse
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -585,6 +587,54 @@ def resolve_config_values(
         ("auto", "searxng", "duckduckgo"),
     )
     SEARXNG_URL = configured_str(config, "network", "searxng_url", "")
+
+    def _https_url(value: object, default: str) -> str:
+        url = str(value or "").strip()
+        parsed = urllib.parse.urlsplit(url)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return url
+        return default
+
+    _network_values = config_section(config, "network")
+    GEOCODING_URL = _https_url(
+        _network_values.get("geocoding_url"),
+        "https://geocoding-api.open-meteo.com/v1/search",
+    )
+    FORECAST_URL = _https_url(
+        _network_values.get("forecast_url"), "https://api.open-meteo.com/v1/forecast"
+    )
+    ARCHIVE_URL = _https_url(
+        _network_values.get("archive_url"),
+        "https://archive-api.open-meteo.com/v1/archive",
+    )
+    _raw_ip_services = _network_values.get("ip_geolocation_urls", [])
+    IP_GEOLOCATION_URLS = []
+    if isinstance(_raw_ip_services, list):
+        for _candidate in _raw_ip_services[:5]:
+            _url = _https_url(_candidate, "")
+            if _url:
+                IP_GEOLOCATION_URLS.append(_url)
+    if not IP_GEOLOCATION_URLS:
+        IP_GEOLOCATION_URLS = ["https://ipwho.is/", "https://ipapi.co/json/"]
+    LOCATION_MAX_RESPONSE_BYTES = configured_int_range(
+        config,
+        "network",
+        "location_max_response_bytes",
+        1048576,
+        65536,
+        16 * 1024 * 1024,
+    )
+    WEATHER_MAX_DAYS = configured_int_range(
+        config, "network", "weather_max_days", 16, 1, 16
+    )
+    WEATHER_PAST_DAYS = configured_int_range(
+        config, "network", "weather_past_days", 90, 0, 366
+    )
+    TOKENIZER_ENCODING = configured_str(
+        config, "models", "tokenizer_encoding", "cl100k_base"
+    )
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", TOKENIZER_ENCODING):
+        TOKENIZER_ENCODING = "cl100k_base"
     SEARCH_FALLBACK = configured_bool(config, "network", "search_fallback", True)
     MAX_FETCHED_WEBPAGE_CHARS = configured_int(
         config, "network", "max_fetched_webpage_chars", 12000
@@ -904,6 +954,14 @@ class Settings:
     max_search_results: int
     search_provider: str
     searxng_url: str
+    geocoding_url: str
+    forecast_url: str
+    archive_url: str
+    ip_geolocation_urls: list[str]
+    location_max_response_bytes: int
+    weather_max_days: int
+    weather_past_days: int
+    tokenizer_encoding: str
     search_fallback: bool
     max_fetched_webpage_chars: int
     max_read_file_bytes: int
