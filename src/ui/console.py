@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from rich.console import Console
+from rich.style import Style
 
-from .theme import MESSAGE_SYMBOLS, build_theme
+from .theme import MESSAGE_SYMBOLS, build_theme, fallback_style
 
 
 class ThemedConsole(Console):
@@ -43,6 +44,15 @@ def build_console(light: bool | None = None) -> ThemedConsole:
     return ThemedConsole(theme=build_theme(light))
 
 
+def resolve_style(name: str) -> Style:
+    """Resolve a semantic style name against the shared theme.
+
+    Returns a concrete ``Style`` so a renderable still works on a console that
+    does not carry the application theme (tests, embedded tools).
+    """
+    return console.get_style(name, default=fallback_style(name))
+
+
 def apply_theme(light: bool | None = None) -> None:
     """Re-theme the shared console in place (used after ``--light`` is parsed).
 
@@ -76,6 +86,7 @@ __all__ = [
     "print_info",
     "print_success",
     "print_warning",
+    "resolve_style",
     "success",
     "warning",
 ]

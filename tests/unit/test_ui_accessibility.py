@@ -98,8 +98,17 @@ def test_cli_error_and_warning_tags_resolve_against_the_shared_theme():
         assert style.color.name
 
 
+def _ribbon_colours(text):
+    return {
+        span.style.color.name
+        for span in text.spans
+        if getattr(span.style, "color", None)
+    }
+
+
 def test_ribbon_text_styles_each_segment_by_meaning():
     from ui.ribbon import ribbon_text
+    from ui.theme import DARK_STYLES
 
     state = StatusState(
         model="m",
@@ -110,15 +119,16 @@ def test_ribbon_text_styles_each_segment_by_meaning():
         background_processes=0,
     )
     text = ribbon_text(state)
-    styles = {span.style for span in text.spans}
+    colours = _ribbon_colours(text)
     assert text.plain == status_ribbon(state)
-    assert "ribbon.model" in styles
-    assert "ribbon.context.high" in styles
-    assert "ribbon.permission.auto" in styles
+    assert DARK_STYLES["ribbon.model"] in colours
+    assert DARK_STYLES["ribbon.context.high"] in colours
+    assert DARK_STYLES["ribbon.permission.auto"] in colours
 
 
 def test_ribbon_text_colours_context_and_permission_levels():
     from ui.ribbon import ribbon_text
+    from ui.theme import DARK_STYLES
 
     low = StatusState(
         model="m",
@@ -126,12 +136,12 @@ def test_ribbon_text_colours_context_and_permission_levels():
         context_maximum=10,
         permission_mode="readonly",
     )
-    low_styles = {span.style for span in ribbon_text(low).spans}
-    assert "ribbon.context.ok" in low_styles
-    assert "ribbon.permission.readonly" in low_styles
+    low_colours = _ribbon_colours(ribbon_text(low))
+    assert DARK_STYLES["ribbon.context.ok"] in low_colours
+    assert DARK_STYLES["ribbon.permission.readonly"] in low_colours
 
     mid = StatusState(model="m", context_tokens=6, context_maximum=10)
-    assert "ribbon.context.warn" in {span.style for span in ribbon_text(mid).spans}
+    assert DARK_STYLES["ribbon.context.warn"] in _ribbon_colours(ribbon_text(mid))
 
 
 def test_ribbon_text_keeps_the_same_words_without_colour():

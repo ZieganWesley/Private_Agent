@@ -99,6 +99,22 @@ LIGHT_MESSAGE_LEVELS: dict[str, str] = {
 }
 
 
+def fallback_style(name: str) -> str:
+    """Return a concrete style for a semantic name, for consoles without a theme.
+
+    Renderables are occasionally printed by a console the application does not
+    own (tests, embedded tools). Those consoles do not know the theme names, and
+    rich raises ``MissingStyle`` for an unknown name, so every lookup carries
+    this dark-palette fallback.
+    """
+    if name in DARK_STYLES:
+        return DARK_STYLES[name]
+    level = MESSAGE_LEVELS.get(name)
+    if level is not None:
+        return level[0]
+    return "default"
+
+
 def light_requested(light: bool | None = None) -> bool:
     """Return whether the light palette should be used.
 

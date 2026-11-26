@@ -9,14 +9,17 @@ from rich.console import Console
 
 from agent import interactive, learning, memory_context, task_commands
 from agent.interactive import (
+    SESSION_COMMANDS,
     SLASH_COMMANDS,
     AgentCompleter,
     format_help,
+    help_renderable,
     include_file_context,
     include_folder_context,
     prompt_user_input,
 )
 from database import PersistentMemory
+from ui.theme import build_theme
 
 
 def _enable_interactive_task_controls(runtime, monkeypatch):
@@ -52,7 +55,9 @@ def test_help_lists_all_slash_and_session_commands():
 
 def test_help_renders_without_color_in_narrow_terminal():
     output = io.StringIO()
-    console = Console(file=output, no_color=True, width=40, force_terminal=False)
+    console = Console(
+        theme=build_theme(), file=output, no_color=True, width=40, force_terminal=False
+    )
 
     console.print(format_help())
 
@@ -2064,3 +2069,64 @@ def test_arrow_select_treats_cancel_and_errors_as_no_choice(monkeypatch):
 
     monkeypatch.setattr(Application, "run", broken)
     assert interactive.arrow_select("Pick", [("1", "one")]) is None
+
+
+def test_help_tree_shows_every_command_once_under_its_group():
+    import io
+
+    from rich.console import Console
+
+    output = io.StringIO()
+    console = Console(
+        theme=build_theme(), file=output, no_color=True, width=200, force_terminal=False
+    )
+
+    console.print(help_renderable())
+
+    rendered = output.getvalue()
+    assert "Commands" in rendered
+    assert "Chat" in rendered
+    assert "Files" in rendered
+    for command in SLASH_COMMANDS:
+        assert rendered.count(command) >= 1, command
+    for description in SLASH_COMMANDS.values():
+        assert description in rendered, description
+    for command in SLASH_COMMANDS:
+        assert rendered.count(f"{command} —") == 1, command
+
+
+def test_help_tree_wraps_at_narrow_width_without_markup():
+    import io
+
+    from rich.console import Console
+
+    output = io.StringIO()
+    console = Console(
+        theme=build_theme(), file=output, no_color=True, width=40, force_terminal=False
+    )
+
+    console.print(help_renderable())
+
+    rendered = output.getvalue()
+    assert "\x1b[" not in rendered
+    assert "/list_tools" in rendered
+    assert "@<workspace-relative-path>" in rendered.replace("\n", "").replace(" ", "")
+    assert all(len(line) <= 40 for line in rendered.splitlines())
+
+
+def test_help_renderable_without_groups_lists_commands_flat():
+    import io
+
+    from rich.console import Console
+
+    output = io.StringIO()
+    console = Console(
+        theme=build_theme(), file=output, no_color=True, width=200, force_terminal=False
+    )
+
+    console.print(help_renderable(grouped=False))
+
+    rendered = output.getvalue()
+    for command in list(SLASH_COMMANDS) + list(SESSION_COMMANDS):
+        assert rendered.count(command) >= 1, command
+    assert "Chat" not in rendered

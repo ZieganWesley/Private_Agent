@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from rich.text import Text
 
+from .console import resolve_style
 from .state import StatusState
 from .theme import SEGMENT_SEPARATOR
 
@@ -81,10 +82,10 @@ def ribbon_text(
     pairs = state.segment_pairs(width=width, accessible=accessible)
     for index, (key, value) in enumerate(pairs):
         if index:
-            text.append(SEGMENT_SEPARATOR, style="ribbon.dim")
-        style = _segment_style(key, state)
+            text.append(SEGMENT_SEPARATOR, style=resolve_style("ribbon.dim"))
+        style = resolve_style(_segment_style(key, state))
         if key:
-            text.append(f"{key}=", style="ribbon.meta")
+            text.append(f"{key}=", style=resolve_style("ribbon.meta"))
         text.append(value, style=style)
     return text
 

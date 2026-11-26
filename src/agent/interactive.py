@@ -91,8 +91,9 @@ _FOLDER_CONTEXT_EXTENSIONS = frozenset(
 )
 
 
-def format_help(grouped: bool = True) -> str:
-    groups = {
+def _help_groups() -> dict[str, list[str]]:
+    """Command groups shared by the string help and the rich tree help."""
+    return {
         "Chat": [
             "/plan",
             "/code",
@@ -115,19 +116,55 @@ def format_help(grouped: bool = True) -> str:
         "Model": ["/thinking", "/effort", "/hardware-status", "switch"],
         "Session": ["exit", "switch"],
     }
+
+
+def _help_descriptions() -> dict[str, str]:
+    """Every documented command, slash commands first."""
+    return {**SLASH_COMMANDS, **SESSION_COMMANDS}
+
+
+def _help_footer(*, include_notes: bool = True) -> list[str]:
+    """The file-context syntax lines that close both help modes."""
+    lines = [
+        "  [info]@<workspace-relative-path>[/info] — Include a UTF-8 text file "
+        "in this request (for example: @src/app.py explain this file).",
+        "  [info]/add <workspace-relative-folder>[/info] — Include supported "
+        "UTF-8 text files from a folder in the next request only.",
+    ]
+    if include_notes:
+        lines.append(
+            "  File context is read-only and limited to the workspace and configured "
+            f"{MAX_READ_FILE_BYTES}-byte total limit. `/context` reviews queued "
+            "folder files; `/context clear` removes them before sending. Attached "
+            "contents are sent to the selected model and are not stored in chat history."
+        )
+    return lines
+
+
+def help_renderable(grouped: bool = True):
+    """Return the command help as a rich tree renderable.
+
+    The tree keeps the groups, re-wraps at any terminal width, and styles
+    command names with the shared theme instead of embedding markup.
+    """
+    from ui.help_view import help_renderable as _render_help
+
+    return _render_help(
+        _help_groups(),
+        _help_descriptions(),
+        footer=_help_footer(),
+        flat=not grouped,
+    )
+
+
+def format_help(grouped: bool = True) -> str:
+    groups = _help_groups()
     lines = ["[bold info]Commands[/bold info]"]
     if not grouped:
         for command in list(SLASH_COMMANDS) + list(SESSION_COMMANDS):
             description = SLASH_COMMANDS.get(command) or SESSION_COMMANDS.get(command)
             lines.append(f"  [info]{command}[/info] — {description}")
-        lines.extend(
-            [
-                "  [info]@<workspace-relative-path>[/info] — Include a UTF-8 text file "
-                "in this request (for example: @src/app.py explain this file).",
-                "  [info]/add <workspace-relative-folder>[/info] — Include supported "
-                "UTF-8 text files from a folder in the next request only.",
-            ]
-        )
+        lines.extend(_help_footer(include_notes=False))
         return "\n".join(lines)
     printed = set()
     for group_name, command_names in groups.items():
@@ -152,18 +189,7 @@ def format_help(grouped: bool = True) -> str:
         for command in leftover:
             description = SLASH_COMMANDS.get(command) or SESSION_COMMANDS.get(command)
             lines.append(f"  [info]{command}[/info] — {description}")
-    lines.extend(
-        [
-            "  [info]@<workspace-relative-path>[/info] — Include a UTF-8 text file "
-            "in this request (for example: @src/app.py explain this file).",
-            "  [info]/add <workspace-relative-folder>[/info] — Include supported "
-            "UTF-8 text files from a folder in the next request only.",
-            "  File context is read-only and limited to the workspace and configured "
-            f"{MAX_READ_FILE_BYTES}-byte total limit. `/context` reviews queued "
-            "folder files; `/context clear` removes them before sending. Attached "
-            "contents are sent to the selected model and are not stored in chat history.",
-        ]
-    )
+    lines.extend(_help_footer())
     return "\n".join(lines)
 
 
