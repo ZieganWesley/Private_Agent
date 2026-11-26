@@ -2237,3 +2237,40 @@ def test_help_renderable_without_groups_lists_commands_flat():
     for command in list(SLASH_COMMANDS) + list(SESSION_COMMANDS):
         assert rendered.count(command) >= 1, command
     assert "Chat" not in rendered
+
+
+def test_print_help_prints_the_tree_once_when_not_a_terminal(monkeypatch):
+    from agent.commands.help import print_help
+
+    printed = []
+    console = Console(record=True, width=120, force_terminal=False)
+    ui = SimpleNamespace(console=console, print=lambda *a, **k: printed.append((a, k)))
+    monkeypatch.setattr("sys.stdin", SimpleNamespace(isatty=lambda: False))
+
+    print_help(ui, console=console)
+
+    from rich.console import Group
+
+    assert len(printed) == 1, "a piped session must get the whole block once"
+    assert isinstance(printed[0][0][0], Group), "the single print is the help tree"
+
+
+def test_print_help_pages_rendered_lines_on_a_terminal(monkeypatch):
+    from agent.commands.help import print_help
+
+    printed, pauses = [], []
+    console = Console(record=True, width=80, force_terminal=True)
+    ui = SimpleNamespace(console=console, print=lambda *a, **k: printed.append((a, k)))
+    monkeypatch.setattr("sys.stdin", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(interactive, "help_page_lines", lambda default=20: 5)
+    monkeypatch.setattr(
+        interactive,
+        "wait_for_next_help_page",
+        lambda index, total: pauses.append((index, total)) or True,
+    )
+
+    print_help(ui, console=console)
+
+    assert len(printed) > 1, "a long help tree must be split into pages"
+    assert all(kwargs.get("markup") is False for _args, kwargs in printed)
+    assert pauses, "the reader must be asked before the next page"

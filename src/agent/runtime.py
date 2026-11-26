@@ -2658,9 +2658,14 @@ async def _run_agent_cli_session(
                 if _handled and _cont:
                     continue
                 if user_input.lower() in {"/help", "/commands"}:
-                    from .interactive import help_renderable
+                    from .commands.help import print_help
 
-                    session_ui.print(help_renderable(GROUPED_HELP))
+                    print_help(
+                        session_ui,
+                        grouped=GROUPED_HELP,
+                        non_interactive=non_interactive,
+                        console=console,
+                    )
                     continue
                 _mission_input = _mission_slash_command(
                     user_input, memory, session_id, session_ui
