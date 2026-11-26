@@ -123,6 +123,14 @@ _LAZY_SPECS: dict[str, tuple[str, str]] = {
         "agent.model_selection",
         "inspect_openai_compatible_model_capabilities",
     ),
+    "request_limits_for_model": (
+        "agent.model_selection",
+        "request_limits_for_model",
+    ),
+    "request_limits_for_provider": (
+        "agent.model_selection",
+        "request_limits_for_provider",
+    ),
     "select_online_model": ("agent.model_selection", "select_online_model"),
     "_display_tool_error": ("agent.tool_display", "_display_tool_error"),
     "_display_tool_request": ("agent.tool_display", "_display_tool_request"),

@@ -3746,15 +3746,15 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     system_prompts.append(
                         SystemMessage(content=active_skill.system_prompt)
                     )
-                effective_context = (
-                    _effective_context_window(capabilities)
-                    if provider_type == "local"
-                    else MAX_CONTEXT_TOKENS
+                _request_limits = request_limits_for_provider(
+                    provider_type, selected_local_runtime, selected_model, capabilities
                 )
+                effective_context = _request_limits.context
+                _output_ceiling = _request_limits.output_tokens
                 prompt_budget, output_budget = calculate_prompt_budgets(
                     system_prompts + [SystemMessage(content=context_summary)],
                     effective_context,
-                    MAX_OUTPUT_TOKENS,
+                    _output_ceiling,
                 )
                 _needs_compact = needs_history_compaction(
                     chat_history,
@@ -3799,7 +3799,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     prompt_budget, output_budget = calculate_prompt_budgets(
                         system_prompts,
                         effective_context,
-                        MAX_OUTPUT_TOKENS,
+                        _output_ceiling,
                     )
                 if prompt_budget < 1:
                     console.print(
@@ -4397,6 +4397,8 @@ _LAZY_MODEL_SELECTION_NAMES = {
     "_effective_context_window",
     "_make_selected_local_chat_model",
     "inspect_openai_compatible_model_capabilities",
+    "request_limits_for_model",
+    "request_limits_for_provider",
     "select_online_model",
 }
 _LAZY_TASK_COMMAND_NAMES = {"_run_task_management"}
