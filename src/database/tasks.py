@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 
 from config import (
     MAX_SUMMARY_CHARS,
+    TASK_CITATION_BUDGET_CHARS,
 )
 
 _LOGGER = logging.getLogger("private_agent.database.memory")
@@ -121,9 +122,10 @@ class TaskMixin:
                 )
             total_chars += len(reference)
             references.append(reference)
-        if total_chars > 10000:
+        if total_chars > TASK_CITATION_BUDGET_CHARS:
             raise ValueError(
-                "Research citations exceed the 10000-character plan budget."
+                "Research citations exceed the "
+                f"{TASK_CITATION_BUDGET_CHARS}-character plan budget."
             )
         return references
 
