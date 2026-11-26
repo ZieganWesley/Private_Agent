@@ -83,7 +83,7 @@ class MissionMixin:
             return default
         try:
             return json.loads(text)
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        except json.JSONDecodeError, TypeError, UnicodeDecodeError:
             return default
 
     def _mission_from_row(self, row: tuple) -> dict:

@@ -35,7 +35,7 @@ class PlatformInfo:
 def _read_text(path: object) -> str:
     try:
         return Path(path).read_text(encoding="utf-8", errors="replace")
-    except (OSError, TypeError, ValueError):
+    except OSError, TypeError, ValueError:
         return ""
 
 
@@ -138,7 +138,7 @@ def is_windows_mount_path(path: object) -> bool:
     """Return whether a path is under a WSL Windows drive mount."""
     try:
         parts = Path(str(path)).parts
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return False
     return (
         len(parts) >= 3

@@ -131,7 +131,7 @@ class StatusIndicator:
             tokens, maximum = self.context_usage
             try:
                 percent = round((int(tokens) / int(maximum)) * 100)
-            except (TypeError, ValueError, ZeroDivisionError):
+            except TypeError, ValueError, ZeroDivisionError:
                 percent = 0
             text += f" ({percent}%)"
         if os.environ.get(ACCESSIBLE_ENV):
@@ -162,7 +162,7 @@ class StatusIndicator:
             self._used_footer = True
             try:
                 footer.set_busy(self._render(), self.phase)
-            except (ValueError, OSError, RuntimeError):
+            except ValueError, OSError, RuntimeError:
                 self._footer = None
                 self._used_footer = False
             else:
@@ -174,7 +174,7 @@ class StatusIndicator:
                 self._render(), spinner=spinner, spinner_style=style
             )
             status.start()
-        except (ValueError, OSError, RuntimeError):
+        except ValueError, OSError, RuntimeError:
             self._status = None
             return self
         self._status = status
@@ -190,7 +190,7 @@ class StatusIndicator:
         if self._used_footer and self._footer is not None:
             try:
                 self._footer.set_busy(self._render(), self.phase)
-            except (ValueError, OSError, RuntimeError):
+            except ValueError, OSError, RuntimeError:
                 self._footer = None
                 self._used_footer = False
                 self._status = None
@@ -200,7 +200,7 @@ class StatusIndicator:
         spinner, style = phase_spinner(self.phase)
         try:
             self._status.update(self._render(), spinner=spinner, spinner_style=style)
-        except (ValueError, OSError, RuntimeError):
+        except ValueError, OSError, RuntimeError:
             self._status = None
 
     def stop(self) -> None:
@@ -219,7 +219,7 @@ class StatusIndicator:
             return
         try:
             status.stop()
-        except (ValueError, OSError, RuntimeError):
+        except ValueError, OSError, RuntimeError:
             return
 
     def __enter__(self) -> StatusIndicator:

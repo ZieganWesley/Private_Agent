@@ -197,7 +197,7 @@ async def _run_with_cancel(
         await task
     with contextlib.suppress(asyncio.CancelledError):
         await cancel_task
-    raise asyncio.TimeoutError("Model invocation deadline reached.")
+    raise TimeoutError("Model invocation deadline reached.")
 
 
 def _interrupted_response(partial_text: str = "") -> AIMessageChunk:
@@ -453,7 +453,7 @@ async def _invoke_with_budget(
                 ),
             )
             return aggregate if aggregate is not None else AIMessageChunk(content="")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             log_event(
                 RUN_LOGGER,
                 "model.invoke.timeout",
@@ -464,7 +464,7 @@ async def _invoke_with_budget(
                 exc_info=True,
             )
             raise
-        except (ValueError, OSError):
+        except ValueError, OSError:
             log_event(
                 RUN_LOGGER,
                 "model.invoke.failed",
@@ -484,7 +484,7 @@ async def _invoke_with_budget(
         )
         if interrupted:
             return _interrupted_response()
-    except (ValueError, OSError):
+    except ValueError, OSError:
         log_event(
             RUN_LOGGER,
             "model.invoke.failed",

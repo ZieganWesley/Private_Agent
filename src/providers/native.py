@@ -57,7 +57,7 @@ def _number(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return number if math.isfinite(number) else None
 
@@ -200,7 +200,7 @@ class NativeClient:
             return None
         try:
             body = response.json()
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
         if not isinstance(body, dict):
             return None
@@ -249,7 +249,7 @@ class NativeClient:
             return None
         try:
             return self._token_list(response.json())
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     def detokenize(self, tokens: Iterable[int]) -> str | None:
@@ -261,7 +261,7 @@ class NativeClient:
             return None
         try:
             body = response.json()
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
         if isinstance(body, dict) and isinstance(body.get("content"), str):
             return body["content"]
@@ -302,7 +302,7 @@ class NativeClient:
             return None
         try:
             body = response.json()
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
         if isinstance(body, dict) and isinstance(body.get("content"), str):
             return body["content"]
@@ -327,7 +327,7 @@ class NativeClient:
             return None
         try:
             body = response.json()
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
         if isinstance(body, dict) and isinstance(body.get("prompt"), str):
             return body["prompt"]
@@ -366,7 +366,7 @@ class NativeClient:
             return None
         try:
             body = response.json()
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
         if isinstance(body, dict) and isinstance(body.get("content"), str):
             return body["content"]
@@ -378,7 +378,7 @@ class NativeClient:
             return None
         try:
             body = response.json()
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
         if isinstance(body, list):
             return [slot for slot in body if isinstance(slot, dict)]
@@ -435,7 +435,7 @@ class NativeClient:
             return None
         try:
             return self._adapters(response.json())
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     def set_lora(self, adapter_id: int, scale: float) -> bool:

@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -41,7 +41,7 @@ def test_model_contracts_keep_unknown_capabilities_explicit():
 
 
 def test_memory_and_evidence_contracts_preserve_provenance():
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     evidence = Evidence(
         source="README.md",
         retrieved_at=timestamp,

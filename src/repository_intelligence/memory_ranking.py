@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 MEMORY_TYPES = (
@@ -34,10 +34,10 @@ def classify_memory(text: str, *, tags: list[str] | None = None) -> str:
 def _recency_score(created_at: Any) -> float:
     try:
         if isinstance(created_at, (int, float)):
-            dt = datetime.fromtimestamp(float(created_at), tz=timezone.utc)
+            dt = datetime.fromtimestamp(float(created_at), tz=UTC)
         else:
             dt = datetime.fromisoformat(str(created_at))
-        age_days = (datetime.now(timezone.utc) - dt).days
+        age_days = (datetime.now(UTC) - dt).days
         return max(0.0, 1.0 - (age_days / 30.0))
     except Exception:  # noqa: BLE001 - timestamp parsing may fail
         return 0.5

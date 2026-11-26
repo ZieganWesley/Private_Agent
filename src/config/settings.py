@@ -68,7 +68,7 @@ def positive_int(config: Mapping[str, Any], key: str, default: int) -> int:
     try:
         value = int(config.get(key, default))
         return value if value > 0 else default
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 
@@ -76,7 +76,7 @@ def positive_float(config: Mapping[str, Any], key: str, default: float) -> float
     try:
         value = float(config.get(key, default))
         return value if value > 0 else default
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 
@@ -86,7 +86,7 @@ def configured_int(
     try:
         value = int(config_section(config, section).get(key, default))
         return value if value > 0 else default
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         return default
 
 
@@ -96,7 +96,7 @@ def configured_nonnegative_int(
     try:
         value = int(config_section(config, section).get(key, default))
         return value if value >= 0 else default
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         return default
 
 
@@ -132,7 +132,7 @@ def configured_float(
     try:
         value = float(config_section(config, section).get(key, default))
         return value if value > 0 else default
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         return default
 
 
@@ -607,7 +607,7 @@ def resolve_config_values(
         CONTEXT_COMPACTION_THRESHOLD = float(
             config_section(config, "agent").get("context_compaction_threshold", 0.8)
         )
-    except (AttributeError, TypeError, ValueError):
+    except AttributeError, TypeError, ValueError:
         CONTEXT_COMPACTION_THRESHOLD = 0.8
     if not 0 <= CONTEXT_COMPACTION_THRESHOLD <= 1:
         CONTEXT_COMPACTION_THRESHOLD = 0.8

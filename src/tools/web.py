@@ -114,7 +114,7 @@ def download_web_file(url: str, save_path: str) -> str:
                 temporary_path = output.name
                 output.write(body)
             os.replace(temporary_path, target)
-        except (ValueError, OSError):
+        except ValueError, OSError:
             if temporary_path:
                 with contextlib.suppress(FileNotFoundError):
                     os.unlink(temporary_path)

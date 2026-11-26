@@ -30,7 +30,7 @@ def next_local_provider(*, exclude_name, discover=None):
     """Return ``(runtime, model, capabilities)`` for another reachable provider."""
     try:
         runtimes = (discover or _discover_available_local_runtimes)()
-    except (OSError, RuntimeError):
+    except OSError, RuntimeError:
         return None
     excluded = str(exclude_name or "").strip().lower()
     for runtime in runtimes:
@@ -92,7 +92,7 @@ async def _recover_on_another_provider(
         answer = ask(
             f"[info]Retry this turn on {runtime.name} · {model}? [y/N]: [/info]"
         )
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         return None
     if str(answer).strip().lower() not in {"y", "yes"}:
         return None

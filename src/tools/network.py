@@ -154,7 +154,7 @@ async def _getaddrinfo_async_with_timeout(host: str, port: int, timeout: float):
             ),
             timeout=timeout,
         )
-    except asyncio.TimeoutError as exc:
+    except TimeoutError as exc:
         raise httpcore.ConnectTimeout("Outbound DNS resolution timed out.") from exc
     except (socket.gaierror, OSError) as exc:
         raise OSError("Outbound hostname could not be resolved.") from exc

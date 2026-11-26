@@ -38,7 +38,7 @@ def budget_bar(
     try:
         used_value = int(used or 0)
         budget_value = int(budget or 0)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         used_value = budget_value = 0
     total = max(budget_value, 1)
     completed = min(max(used_value, 0), total)

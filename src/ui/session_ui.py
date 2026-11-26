@@ -82,11 +82,11 @@ class SessionUI:
     def set_context(self, used: Any, maximum: Any) -> None:
         try:
             self._context_used = int(used)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             self._context_used = 0
         try:
             self._context_max = int(maximum)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             self._context_max = 0
         self._footer.update(self._current_state())
 
@@ -103,14 +103,14 @@ class SessionUI:
         if width is None:
             try:
                 width = int(getattr(self.console, "width", 0) or 0)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 width = 0
         if not width:
             try:
                 import shutil
 
                 width = shutil.get_terminal_size().columns
-            except (OSError, ValueError):
+            except OSError, ValueError:
                 width = 80
         return status_ribbon(self._current_state(), width=width, accessible=accessible)
 

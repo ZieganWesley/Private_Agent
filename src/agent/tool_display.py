@@ -166,7 +166,7 @@ def file_uri(value: str) -> str | None:
         if not path.is_file():
             return None
         return path.resolve().as_uri()
-    except (OSError, RuntimeError, ValueError):
+    except OSError, RuntimeError, ValueError:
         return None
 
 

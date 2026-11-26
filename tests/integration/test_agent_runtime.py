@@ -513,11 +513,14 @@ async def test_cli_uses_configured_rag_path_or_explicit_project_override(
         "prompt_user_input",
         AsyncMock(return_value="exit"),
     )
-    printed = []
+    # The startup summary is a rich renderable, so capture rendered text rather
+    # than the objects handed to ``console.print``.
+    buffer = StringIO()
+    capture = Console(file=buffer, width=120, no_color=True)
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **_kwargs: printed.append(" ".join(map(str, values))),
+        lambda *values, **kwargs: capture.print(*values, **kwargs),
     )
     inputs.side_effect = [rag_input, "", "", "1", ""]
 
@@ -525,7 +528,7 @@ async def test_cli_uses_configured_rag_path_or_explicit_project_override(
 
     initialize.assert_called_once()
     assert initialize.call_args.args == (expected_path,)
-    assert "/configured/rag" in "\n".join(printed)
+    assert "/configured/rag" in buffer.getvalue()
 
 
 @pytest.mark.asyncio
@@ -2185,8 +2188,7 @@ async def test_cli_retention_prunes_old_messages_and_summaries_end_to_end(
             "UPDATE chat_history SET timestamp = ? WHERE session_id = 'expired'",
             (
                 (
-                    datetime.datetime.now(datetime.timezone.utc)
-                    - datetime.timedelta(days=60)
+                    datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=60)
                 ).strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )

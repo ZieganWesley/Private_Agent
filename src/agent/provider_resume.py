@@ -189,7 +189,7 @@ def provider_loss_guidance(*, runtime_name, session_id, discover):
             for runtime in discover()
             if str(getattr(runtime, "name", "")) != str(runtime_name)
         ]
-    except (OSError, RuntimeError):
+    except OSError, RuntimeError:
         reachable = []
     lines = [
         f"[warning][Provider lost][/warning] {runtime_name} stopped answering; "

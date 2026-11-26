@@ -8,7 +8,7 @@ import stat as stat_module
 import tempfile
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from urllib.parse import quote
 
 from langchain_core.documents import Document
@@ -327,7 +327,7 @@ def _write_index_state_atomic(state_path: pathlib.Path, state: dict) -> None:
 
 def _preserve_corrupt_index(index_path: pathlib.Path) -> pathlib.Path:
     backup_path = index_path.with_name(
-        f"{index_path.name}.backup-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex}"
+        f"{index_path.name}.backup-{datetime.now(UTC):%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex}"
     )
     os.replace(index_path, backup_path)
     index_path.mkdir(parents=True, exist_ok=False)
@@ -643,14 +643,14 @@ def initialize_knowledge_base(
                                     data = archive.read(member).decode(
                                         "utf-8", errors="ignore"
                                     )
-                                except (OSError, KeyError, RuntimeError):
+                                except OSError, KeyError, RuntimeError:
                                     continue
                                 text = _re.sub(r"<[^>]+>", " ", data)
                                 text = _html.unescape(text)
                                 if text.strip():
                                     texts.append(text)
                     pages = [("\n".join(texts), None)] if texts else []
-                except (OSError, RuntimeError, ValueError, zipfile.BadZipFile):
+                except OSError, RuntimeError, ValueError, zipfile.BadZipFile:
                     pages = []
             else:
                 pages = [(file_path.read_text(encoding="utf-8", errors="ignore"), None)]

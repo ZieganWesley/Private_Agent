@@ -406,6 +406,8 @@ def test_workspace_image_input_validates_path_and_size(temp_workspace, monkeypat
 def test_workspace_image_input_normalizes_and_consumes_single_use_image(
     temp_workspace, monkeypatch
 ):
+    # cv2 and PIL are faked below, but the tool still imports real numpy.
+    pytest.importorskip("numpy")
     from tools import load_workspace_image, media
 
     image_path = temp_workspace / "source.png"

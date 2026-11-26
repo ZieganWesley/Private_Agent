@@ -26,7 +26,7 @@ def ask_user(question: str, options: list[str] | None = None) -> str:
         )
     try:
         answer = console.input("Answer: ").strip()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError, KeyboardInterrupt:
         return "The user did not answer the question."
     if not answer:
         return "The user did not provide an answer."

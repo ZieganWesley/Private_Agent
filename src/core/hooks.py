@@ -39,7 +39,7 @@ def _normalize_one(item: Any, matcher: str | None = None) -> dict[str, Any] | No
     timeout = item.get("timeout", item.get("timeout_seconds"))
     try:
         timeout = int(timeout) if timeout is not None else None
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         timeout = None
     return {
         "command": str(command),
@@ -120,7 +120,7 @@ def _hook_timeout(hook: dict[str, Any], default: int) -> int:
         return default
     try:
         value = int(timeout)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
     return value if value > 0 else default
 
@@ -131,7 +131,7 @@ def _parse_decision(stdout: str) -> tuple[bool, str]:
         return False, ""
     try:
         data = json.loads(text)
-    except (json.JSONDecodeError, ValueError):
+    except json.JSONDecodeError, ValueError:
         return False, ""
     if not isinstance(data, dict):
         return False, ""

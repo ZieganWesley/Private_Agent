@@ -268,7 +268,7 @@ def _open_workspace_parent(file_path: str, *, create: bool = False):
             os.close(parent_fd)
             parent_fd = child_fd
         return parent_fd, relative.name
-    except (ValueError, OSError):
+    except ValueError, OSError:
         os.close(parent_fd)
         raise
 
@@ -286,7 +286,7 @@ def _open_workspace_file(file_path: str):
             os.close(file_fd)
             raise ValueError("Only regular workspace files can be modified.")
         return parent_fd, name, file_fd, file_stat
-    except (ValueError, OSError):
+    except ValueError, OSError:
         os.close(parent_fd)
         raise
 
@@ -347,7 +347,7 @@ def _snapshot_file_descriptor(
                     or current_stat.st_ctime_ns != source_stat.st_ctime_ns
                 ):
                     raise OSError("Workspace file changed while creating its snapshot.")
-            except (ValueError, OSError):
+            except ValueError, OSError:
                 os.close(backup_fd)
                 backup_fd_closed = True
                 os.unlink(snapshot_name, dir_fd=snapshot_fd)
@@ -445,7 +445,7 @@ def _write_workspace_replacement(
             written = os.write(temporary_fd, view)
             view = view[written:]
         os.fsync(temporary_fd)
-    except (ValueError, OSError):
+    except ValueError, OSError:
         os.close(temporary_fd)
         os.unlink(temporary_name, dir_fd=parent_fd)
         raise
@@ -490,7 +490,7 @@ def _write_workspace_replacement(
                 src_dir_fd=parent_fd,
                 dst_dir_fd=parent_fd,
             )
-    except (ValueError, OSError):
+    except ValueError, OSError:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(temporary_name, dir_fd=parent_fd)
         raise
@@ -647,7 +647,7 @@ def _rename_workspace_file_safely(source_path: str, destination_path: str) -> st
             ) != (source_stat.st_dev, source_stat.st_ino):
                 raise OSError("Source file changed during the rename.")
             os.unlink(source_name, dir_fd=source_parent_fd)
-        except (ValueError, OSError):
+        except ValueError, OSError:
             os.unlink(destination_name, dir_fd=destination_parent_fd)
             raise
         _record_edit_snapshot(source_path, backup)

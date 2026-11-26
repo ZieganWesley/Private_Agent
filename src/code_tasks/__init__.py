@@ -160,7 +160,7 @@ def _isolated_command(
     for argument in command:
         try:
             is_active_interpreter = Path(argument).resolve() == interpreter_path
-        except (OSError, RuntimeError):
+        except OSError, RuntimeError:
             is_active_interpreter = False
         if is_active_interpreter and interpreter_in_base:
             relative_interpreter = interpreter_path.relative_to(interpreter_base)

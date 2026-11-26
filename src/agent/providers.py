@@ -280,7 +280,7 @@ def online_request_failure(exc: Exception) -> str:
     if status_code is not None:
         try:
             status_code = int(status_code)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             status_code = None
     if status_code is None:
         return (

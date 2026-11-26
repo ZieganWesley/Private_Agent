@@ -5,7 +5,7 @@ import json
 import logging
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from config import (
     MAX_SUMMARY_CHARS,
@@ -36,7 +36,7 @@ class TaskMixin:
             return None
         try:
             plan = json.loads(plan_json)
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError):
+        except json.JSONDecodeError, TypeError, UnicodeDecodeError:
             _LOGGER.warning(
                 "Skipping malformed structured episode plan id=%s", episode_id
             )
@@ -410,9 +410,9 @@ class TaskMixin:
         stale_after_days = max(0, int(stale_after_days))
         if not stale_after_days:
             return []
-        cutoff = (
-            datetime.now(timezone.utc) - timedelta(days=stale_after_days)
-        ).strftime("%Y-%m-%d %H:%M:%S")
+        cutoff = (datetime.now(UTC) - timedelta(days=stale_after_days)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
         now = time.time()
         with self._lock, self._write_transaction():
             rows = self.conn.execute(

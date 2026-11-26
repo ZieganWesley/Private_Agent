@@ -9,7 +9,7 @@ import traceback
 import uuid
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any
 
@@ -90,7 +90,7 @@ class JsonLineFormatter(logging.Formatter):
         payload: dict[str, Any] = {
             "timestamp": datetime.fromtimestamp(
                 record.created,
-                tz=timezone.utc,
+                tz=UTC,
             ).isoformat(timespec="milliseconds"),
             "level": record.levelname,
             "logger": record.name,

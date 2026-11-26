@@ -154,7 +154,7 @@ def _build_startup_memory_context(
                 or skill_path.stat().st_size > MAX_SKILL_INSTRUCTION_CHARS
             ):
                 continue
-        except (OSError, UnicodeDecodeError, ValueError):
+        except OSError, UnicodeDecodeError, ValueError:
             RUN_LOGGER.warning(
                 "Skipping unavailable registered skill file id=%s",
                 skill.get("id"),
@@ -307,7 +307,7 @@ def trim_rag_documents_to_budget(documents: Any, budget_tokens: int | None) -> l
         return list(documents or [])
     try:
         budget = int(budget_tokens)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return list(documents or [])
     if budget <= 0:
         return []
@@ -353,7 +353,7 @@ def rag_result_limit(budget_tokens: int | None) -> int:
         return RAG_CONTEXT_RESULTS
     try:
         budget = int(budget_tokens)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return RAG_CONTEXT_RESULTS
     if budget <= 0:
         return 0
@@ -410,7 +410,7 @@ def build_rag_context(
         return (_format_rag_context(kept) if kept else "", kept)
     try:
         budget = int(budget_tokens)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return _format_rag_context(kept), kept
     text = _format_rag_context(kept)
     while kept and _token_count(text) > budget:
