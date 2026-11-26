@@ -336,3 +336,23 @@ def test_ui_check_restores_the_accessible_flag_even_on_failure(monkeypatch):
     monkeypatch.setattr(check, "status_ribbon", boom)
     assert check.run_ui_check() == 1
     assert os.environ[ACCESSIBLE_ENV] == "1"
+
+
+def test_ui_check_exercises_every_colour_depth(monkeypatch, capsys):
+    from rich.console import Console as RealConsole
+
+    import ui.check as check
+
+    depths = []
+
+    class RecordingConsole(RealConsole):
+        def __init__(self, *args, **kwargs):
+            depths.append(kwargs.get("color_system"))
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(check, "Console", RecordingConsole)
+
+    assert check.run_ui_check() == 0
+    capsys.readouterr()
+    assert {"truecolor", "256", "standard"} <= set(depths)
+    assert None in depths

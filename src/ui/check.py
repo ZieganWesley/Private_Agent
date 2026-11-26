@@ -23,7 +23,7 @@ from .ribbon import ribbon_text, status_ribbon
 from .session_ui import SessionUI
 from .spinner import StatusIndicator
 from .state import StatusState, context_bar, context_state_line
-from .theme import ACCESSIBLE_ENV, build_theme
+from .theme import ACCESSIBLE_ENV, NO_COLOR_ENV, build_theme
 
 
 @contextmanager
@@ -89,6 +89,50 @@ def run_ui_check(console: Any = None) -> int:
         target.print(status_ribbon(state))
         target.print(context_bar(3, 10))
         target.print(context_state_line({"tokens": 3, "max": 10}, 128))
+
+    def colour_depths() -> None:
+        """Themed renderables must survive every colour depth and no colour.
+
+        Terminals range from truecolor to ``TERM=dumb``, and renderables are
+        sometimes printed by consoles that do not know the theme names; none
+        of those may crash, drop text, or leak markup.
+        """
+        from .markup import assistant_header
+
+        state = StatusState(
+            model="test-model",
+            context_tokens=3,
+            context_maximum=10,
+            permission_mode="auto",
+        )
+        for depth in ("truecolor", "256", "standard"):
+            for themed in (True, False):
+                buffer = io.StringIO()
+                depth_console = Console(
+                    theme=build_theme() if themed else None,
+                    file=buffer,
+                    width=100,
+                    color_system=depth,
+                    force_terminal=True,
+                )
+                depth_console.print(status_ribbon(state))
+                depth_console.print(assistant_header("test-model"))
+                rendered = buffer.getvalue()
+                label = f"{depth}{' themed' if themed else ''}"
+                assert "\x1b[" in rendered, f"{label} emitted no escapes"
+                assert "test-model" in rendered, f"{label} lost the model name"
+                assert "[bold" not in rendered, f"{label} leaked markup"
+                assert "[/" not in rendered, f"{label} leaked a closing tag"
+
+        with _temporary_env(**{NO_COLOR_ENV: "1"}):
+            buffer = io.StringIO()
+            Console(file=buffer, width=100, color_system=None).print(
+                status_ribbon(state)
+            )
+            rendered = buffer.getvalue()
+        assert "\x1b[" not in rendered, "no-colour terminal received escapes"
+        assert "test-model" in rendered, "no-colour terminal lost the model name"
+        assert "[bold" not in rendered, "no-colour terminal leaked markup"
 
     def accessible() -> None:
         with _temporary_env(**{ACCESSIBLE_ENV: "1"}):
@@ -312,6 +356,7 @@ def run_ui_check(console: Any = None) -> int:
         ("tool_result_footer", tool_result_footer),
         ("markdown_stream", markdown_stream),
         ("markup_escapes", markup_escapes),
+        ("colour_depths", colour_depths),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),
