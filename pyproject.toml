@@ -3,8 +3,10 @@ name = "private-agent"
 version = "0.1.0"
 description = "Local-first private AI assistant with Ollama, local memory, RAG, and tools"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 classifiers = [
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3 :: Only",
     "Operating System :: POSIX",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
@@ -41,7 +43,6 @@ dev = [
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "ruff==0.16.10",
-    "tomli>=2.0.1; python_version < '3.11'",
 ]
 ollama = [
     "langchain-ollama==1.1.0",
@@ -91,7 +92,7 @@ resources = ["*.md", "tiktoken/*"]
 
 [tool.ruff]
 line-length = 88
-target-version = "py310"
+target-version = "py314"
 extend-exclude = ["improvements"]
 
 [tool.ruff.lint]
@@ -103,3 +104,6 @@ ignore = ["E501"]
 "src/tools/__init__.py" = ["E402"]
 # Tests may assert on arbitrary failure, so blind catches there are deliberate.
 "tests/**" = ["BLE001"]
+
+[tool.mypy]
+python_version = "3.14"
