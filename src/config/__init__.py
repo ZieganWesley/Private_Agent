@@ -172,6 +172,7 @@ DEFAULT_CONFIG = {
         "rerank_breaker_cooldown_seconds": 60,
         "include_coding_guidance": True,
         "sqlite_max_rows_per_table": 5000,
+        "excluded_file_types": [],
         "auto_refresh_seconds": 30,
     },
     "chunking": {
@@ -245,6 +246,10 @@ DEFAULT_CONFIG = {
         "kv_cache_enabled": False,
         "kv_cache_provider_hints": "auto",
         "kv_cache_min_prefix_tokens": 1024,
+    },
+    "sandbox": {
+        "extra_risky_programs": [],
+        "extra_system_paths": [],
     },
     "code_tasks": {
         "git_command_timeout_seconds": 30,
@@ -623,6 +628,9 @@ INTERNET_CHECK_HOST = SETTINGS.internet_check_host
 INTERNET_CHECK_PORT = SETTINGS.internet_check_port
 INTERNET_CHECK_TIMEOUT = SETTINGS.internet_check_timeout
 OVERRIDE_TOOL_LIST = SETTINGS.override_tool_list
+SANDBOX_EXTRA_RISKY_PROGRAMS = SETTINGS.sandbox_extra_risky_programs
+SANDBOX_EXTRA_SYSTEM_PATHS = SETTINGS.sandbox_extra_system_paths
+RAG_EXCLUDED_FILE_TYPES = SETTINGS.rag_excluded_file_types
 THINKING_TOGGLE_DEFAULT = SETTINGS.thinking_toggle_default
 THINKING_EFFORT_DEFAULT = SETTINGS.thinking_effort_default
 AGENT_PERMISSION_MODE = SETTINGS.agent_permission_mode

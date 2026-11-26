@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import pathlib
+import posixpath
+import re
 import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -485,6 +487,36 @@ def resolve_config_values(
         _network_section, "internet_check_timeout_seconds", 3.0
     )
 
+    _sandbox_section = config_section(config, "sandbox")
+    SANDBOX_EXTRA_RISKY_PROGRAMS = []
+    _raw_extra_programs = _sandbox_section.get("extra_risky_programs", [])
+    if isinstance(_raw_extra_programs, list):
+        for _name in _raw_extra_programs[:100]:
+            if not isinstance(_name, str):
+                continue
+            _candidate = _name.strip().lower()
+            if re.fullmatch(r"[a-z0-9._+-]{1,64}", _candidate):
+                SANDBOX_EXTRA_RISKY_PROGRAMS.append(_candidate)
+    SANDBOX_EXTRA_SYSTEM_PATHS = []
+    _raw_extra_paths = _sandbox_section.get("extra_system_paths", [])
+    if isinstance(_raw_extra_paths, list):
+        for _path in _raw_extra_paths[:50]:
+            if not isinstance(_path, str):
+                continue
+            _candidate = posixpath.normpath(_path.strip())
+            if _candidate.startswith("/") and ".." not in _candidate:
+                SANDBOX_EXTRA_SYSTEM_PATHS.append(_candidate)
+    RAG_EXCLUDED_FILE_TYPES = []
+    _raw_excluded_types = config_section(config, "rag").get("excluded_file_types", [])
+    if isinstance(_raw_excluded_types, list):
+        for _suffix in _raw_excluded_types[:50]:
+            if not isinstance(_suffix, str):
+                continue
+            _normalized = _suffix.strip().lower()
+            if _normalized and not _normalized.startswith("."):
+                _normalized = f".{_normalized}"
+            if 2 <= len(_normalized) <= 16:
+                RAG_EXCLUDED_FILE_TYPES.append(_normalized)
     _raw_override_tool_list = config_section(config, "tools").get(
         "override_tool_list", []
     )
@@ -883,6 +915,9 @@ class Settings:
     internet_check_port: int
     internet_check_timeout: float
     override_tool_list: frozenset[str]
+    sandbox_extra_risky_programs: list[str]
+    sandbox_extra_system_paths: list[str]
+    rag_excluded_file_types: list[str]
     thinking_toggle_default: bool
     thinking_effort_default: str
     agent_permission_mode: str
