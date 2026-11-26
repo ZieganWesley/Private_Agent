@@ -141,6 +141,40 @@ def run_ui_check(console: Any = None) -> int:
             assert "test-model" in welcome, f"welcome lost the model at {width}"
             assert "Workspace" in welcome, f"welcome lost the workspace at {width}"
 
+    def status_panel_render() -> None:
+        from .status_view import StatusSection, status_panel
+
+        panel = status_panel(
+            "Session Status",
+            (
+                StatusSection(
+                    "Session",
+                    (
+                        ("Provider kind", "Local"),
+                        ("Model", "test-model"),
+                        ("Workspace", "/home/example/workspace"),
+                    ),
+                    ("Setting", "Value"),
+                ),
+                StatusSection(
+                    "Context",
+                    (("Window", "4096 tokens"), ("Used last turn", "512 tokens")),
+                    ("Measure", "Value"),
+                ),
+            ),
+        )
+        for width in (40, 80, 120):
+            rendered = _render(panel, width)
+            for expected in (
+                "Session Status",
+                "Provider kind",
+                "test-model",
+                "Context",
+            ):
+                assert expected in rendered, f"width {width} lost {expected}"
+            overlong = [line for line in rendered.splitlines() if len(line) > width]
+            assert not overlong, f"width {width} produced {overlong[:1]}"
+
     def failure_panel_render() -> None:
         from .failure_panel import model_failure_panel
 
@@ -185,6 +219,7 @@ def run_ui_check(console: Any = None) -> int:
         ("tool_request", tool_request_panel),
         ("failure_panel", failure_panel_render),
         ("startup_summary", startup_summary),
+        ("status_panel", status_panel_render),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),

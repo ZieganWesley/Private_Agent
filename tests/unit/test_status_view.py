@@ -1,0 +1,96 @@
+"""The shared status panel used by ``/status`` and ``--doctor``."""
+
+from __future__ import annotations
+
+import io
+
+from rich.console import Console
+
+from ui.status_view import StatusSection, status_panel, status_table
+
+
+def _render(renderable, width: int = 80) -> str:
+    buffer = io.StringIO()
+    Console(file=buffer, width=width, no_color=True).print(renderable)
+    return buffer.getvalue()
+
+
+def _panel() -> object:
+    return status_panel(
+        "Session Status",
+        (
+            StatusSection(
+                "Session",
+                (
+                    ("Provider kind", "Local"),
+                    ("Model", "qwen2.5-coder:7b"),
+                    ("Workspace", "/home/example/workspace"),
+                ),
+                ("Setting", "Value"),
+            ),
+            StatusSection(
+                "Context",
+                (("Window", "4096 tokens"), ("Used last turn", "512 tokens (12.5%)")),
+                ("Measure", "Value"),
+            ),
+        ),
+    )
+
+
+def test_panel_carries_every_section_and_value():
+    rendered = _render(_panel())
+    for expected in (
+        "Session Status",
+        "Session",
+        "Context",
+        "Provider kind",
+        "qwen2.5-coder:7b",
+        "/home/example/workspace",
+        "4096 tokens",
+        "512 tokens (12.5%)",
+    ):
+        assert expected in rendered, expected
+
+
+def test_values_are_literal_text_not_markup():
+    rendered = _render(
+        status_panel(
+            "Session Status",
+            (StatusSection("Session", (("Model", "[bold]evil[/bold]"),)),),
+        )
+    )
+    assert "[bold]evil[/bold]" in rendered
+    assert "\x1b[" not in rendered
+
+
+def test_sections_with_headers_render_the_header_row():
+    rendered = _render(
+        status_panel(
+            "Doctor",
+            (
+                StatusSection(
+                    "Dependencies",
+                    (("OK", "httpx"),),
+                    ("Status", "Item"),
+                    header=True,
+                    justify_first="left",
+                ),
+            ),
+        )
+    )
+    assert "Status" in rendered
+    assert "Item" in rendered
+    assert "httpx" in rendered
+
+
+def test_panel_fits_the_requested_width():
+    for width in (40, 80, 120):
+        rendered = _render(_panel(), width)
+        overlong = [line for line in rendered.splitlines() if len(line) > width]
+        assert not overlong, f"width {width} produced {overlong[:1]}"
+        assert "\u2026" not in rendered
+
+
+def test_panel_renders_on_a_console_without_the_theme():
+    table = status_table(StatusSection("Session", (("Model", "m"),), ("Key", "Value")))
+    assert "Model" in _render(table)
