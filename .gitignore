@@ -8,3 +8,6 @@ __pycache__/
 .venv/
 *.py[cod]
 .venv314/
+
+# Local benchmark output and pytest logs
+artifacts/
