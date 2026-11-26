@@ -413,6 +413,21 @@ def test_isolated_command_shares_network_only_when_explicitly_enabled(
     assert "--share-net" in connected
 
 
+def _expected_library_path():
+    """Mirror the production remap rule for the active interpreter."""
+    base = pathlib.Path(sys.base_prefix).resolve()
+    remapped = base != pathlib.Path("/usr") and pathlib.Path(
+        sys.executable
+    ).resolve().is_relative_to(base)
+    if not remapped:
+        return ""
+    return os.pathsep.join(
+        f"/opt/private-agent-python/{name}"
+        for name in ("lib", "lib64")
+        if (base / name).is_dir()
+    )
+
+
 def test_isolated_command_keeps_interpreter_shared_libraries(monkeypatch, tmp_path):
     import code_tasks
 
@@ -425,12 +440,65 @@ def test_isolated_command_keeps_interpreter_shared_libraries(monkeypatch, tmp_pa
 
     _, environment = code_tasks._isolated_command(["python", "-V"], tmp_path)
 
-    expected = [
-        f"/opt/private-agent-python/{name}"
-        for name in ("lib", "lib64")
-        if (pathlib.Path(sys.base_prefix) / name).is_dir()
-    ]
-    assert environment.get("LD_LIBRARY_PATH", "") == os.pathsep.join(expected)
+    assert environment.get("LD_LIBRARY_PATH", "") == _expected_library_path()
+
+
+def test_isolated_command_points_loader_at_a_remapped_interpreter(
+    monkeypatch, tmp_path
+):
+    import code_tasks
+
+    base = tmp_path / "python"
+    (base / "bin").mkdir(parents=True)
+    (base / "lib").mkdir()
+    (base / "lib64").mkdir()
+    executable = base / "bin" / "python3"
+    executable.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(code_tasks.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        code_tasks.shutil,
+        "which",
+        lambda name: f"/usr/bin/{name}",
+    )
+    monkeypatch.setattr(code_tasks.sys, "base_prefix", str(base))
+    monkeypatch.setattr(code_tasks.sys, "prefix", str(base))
+    monkeypatch.setattr(code_tasks.sys, "executable", str(executable))
+
+    args, environment = code_tasks._isolated_command([str(executable), "-V"], tmp_path)
+
+    assert environment["PYTHONHOME"] == "/opt/private-agent-python"
+    assert environment["LD_LIBRARY_PATH"] == os.pathsep.join(
+        [
+            "/opt/private-agent-python/lib",
+            "/opt/private-agent-python/lib64",
+        ]
+    )
+    assert "/opt/private-agent-python/bin/python3" in args
+
+
+def test_isolated_command_leaves_a_system_interpreter_loader_alone(
+    monkeypatch, tmp_path
+):
+    import code_tasks
+
+    monkeypatch.setattr(code_tasks.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(
+        code_tasks.shutil,
+        "which",
+        lambda name: f"/usr/bin/{name}",
+    )
+    monkeypatch.setattr(code_tasks.sys, "base_prefix", "/usr")
+    monkeypatch.setattr(code_tasks.sys, "prefix", "/usr")
+    monkeypatch.setattr(code_tasks.sys, "executable", "/usr/bin/python3")
+
+    args, environment = code_tasks._isolated_command(
+        ["/usr/bin/python3", "-V"], tmp_path
+    )
+
+    assert "LD_LIBRARY_PATH" not in environment
+    assert "PYTHONHOME" not in environment
+    assert "/usr/bin/python3" in args
 
 
 @pytest.mark.skipif(
