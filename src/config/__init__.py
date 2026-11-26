@@ -174,6 +174,29 @@ DEFAULT_CONFIG = {
         "rerank_breaker_failures": 3,
         "rerank_breaker_cooldown_seconds": 60,
         "include_coding_guidance": True,
+        "file_types": [
+            ".pdf",
+            ".txt",
+            ".md",
+            ".py",
+            ".json",
+            ".csv",
+            ".rs",
+            ".js",
+            ".ts",
+            ".html",
+            ".htm",
+            ".docx",
+            ".xlsx",
+            ".pptx",
+            ".epub",
+            ".db",
+            ".sqlite",
+            ".sqlite3",
+            ".db3",
+        ],
+        "sqlite_rows_per_chunk": 10,
+        "sqlite_max_cell_chars": 200,
         "sqlite_max_rows_per_table": 5000,
         "auto_refresh_seconds": 30,
     },
@@ -627,6 +650,9 @@ CHUNKING_SEMANTIC_BUFFER = SETTINGS.chunking_semantic_buffer
 CHUNKING_SEMANTIC_MAX_SENTENCES = SETTINGS.chunking_semantic_max_sentences
 RAG_SIMILARITY_RESULTS = SETTINGS.rag_similarity_results
 RAG_SQLITE_MAX_ROWS_PER_TABLE = SETTINGS.rag_sqlite_max_rows_per_table
+RAG_FILE_TYPES = SETTINGS.rag_file_types
+RAG_SQLITE_ROWS_PER_CHUNK = SETTINGS.rag_sqlite_rows_per_chunk
+RAG_SQLITE_MAX_CELL_CHARS = SETTINGS.rag_sqlite_max_cell_chars
 RAG_AUTO_REFRESH_SECONDS = SETTINGS.rag_auto_refresh_seconds
 ENABLE_WEB_RESEARCH = SETTINGS.enable_web_research
 WEB_RESEARCH_CONSENT = SETTINGS.web_research_consent
