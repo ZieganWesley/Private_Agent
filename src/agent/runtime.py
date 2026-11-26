@@ -2184,7 +2184,7 @@ async def _choose_provider(
         )
     else:
         console.print(
-            f"[error]Select a provider from 1 to {last_choice}.[/error]"  # nosec B608 - UI message
+            f"[error]Choose a provider number between 1 and {last_choice}.[/error]"
         )
         return None
     if provider_type == "local":
@@ -2332,6 +2332,60 @@ async def _choose_provider(
         session_summary_saved=session_summary_saved,
         available_models=available_models,
     )
+
+
+def _store_turn_output(
+    *,
+    response,
+    session_ui,
+    chat_transcript,
+    retrieved_citations,
+    active_code_workspace,
+    cleanup_code_task,
+    memory,
+    session_id,
+    user_input,
+    turn_id,
+    chat_history,
+) -> str:
+    """Print, verify and persist the assistant output of one completed turn."""
+    content = response.content
+    full_output_content = (
+        _visible_chunk_text(content)
+        if isinstance(content, list)
+        else str(content or "")
+    )
+    if not isinstance(response, AIMessageChunk):
+        chat_transcript.add_message("assistant", full_output_content, echo=False)
+        for i in range(0, len(full_output_content), 120):
+            chat_transcript.stream_chunk("assistant", full_output_content[i : i + 120])
+        if full_output_content:
+            chat_transcript.stream_chunk("assistant", "\n")
+    elif not full_output_content and not getattr(response, "tool_calls", None):
+        session_ui.print_markup(
+            "[warning]The model returned no visible response text.[/warning]"
+        )
+    if retrieved_citations:
+        session_ui.print_markup("[bold info][Retrieved Sources][/bold info]")
+        for citation in retrieved_citations:
+            session_ui.print_markup(f"  - {citation}")
+    if active_code_workspace is not None:
+        verification = cleanup_code_task(finalize=True)
+        session_ui.print_markup(f"[info][Code Task Verification][/info] {verification}")
+        full_output_content += f"\n\n[Code task verification]\n{verification}"
+    memory.save_message(session_id, "human", user_input, turn_id=turn_id)
+    memory.save_message(session_id, "ai", full_output_content, turn_id=turn_id)
+    _tool_context = get_tool_context()
+    _tool_context.turn_id = None
+    set_tool_context(_tool_context)
+    chat_history.append(HumanMessage(content=user_input))
+    stored_output = (
+        full_output_content[: MAX_CONTEXT_TOKENS * 4] + "\n[truncated for memory]"
+        if len(full_output_content) > MAX_CONTEXT_TOKENS * 4
+        else full_output_content
+    )
+    chat_history.append(AIMessage(content=stored_output))
+    return full_output_content
 
 
 async def _run_agent_cli_session(
@@ -3910,7 +3964,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     _f_state=_f_state,
                     _turn_control=_turn_control,
                     _steering_channel=_steering_channel,
-                ) -> Any:
+                ) -> Any:  # noqa: B008 - defaults bind the per-turn controls
                     nonlocal tools_list, llm_with_tools
                     iteration = 0
                     tool_call_count = 0
@@ -4153,58 +4207,19 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     session_ui.turn_finished()
                 else:
                     session_ui._footer.turn_finished()
-                content = response.content
-                full_output_content = (
-                    _visible_chunk_text(content)
-                    if isinstance(content, list)
-                    else str(content or "")
+                full_output_content = _store_turn_output(
+                    response=response,
+                    session_ui=session_ui,
+                    chat_transcript=chat_transcript,
+                    retrieved_citations=retrieved_citations,
+                    active_code_workspace=active_code_workspace,
+                    cleanup_code_task=cleanup_code_task,
+                    memory=memory,
+                    session_id=session_id,
+                    user_input=user_input,
+                    turn_id=turn_id,
+                    chat_history=chat_history,
                 )
-                if not isinstance(response, AIMessageChunk):
-                    chat_transcript.add_message(
-                        "assistant", full_output_content, echo=False
-                    )
-                    for i in range(0, len(full_output_content), 120):
-                        chat_transcript.stream_chunk(
-                            "assistant", full_output_content[i : i + 120]
-                        )
-                    if full_output_content:
-                        chat_transcript.stream_chunk("assistant", "\n")
-                elif not full_output_content and not getattr(
-                    response, "tool_calls", None
-                ):
-                    session_ui.print_markup(
-                        "[warning]The model returned no visible response text.[/warning]"
-                    )
-                if retrieved_citations:
-                    session_ui.print_markup(
-                        "[bold info][Retrieved Sources][/bold info]"
-                    )
-                    for citation in retrieved_citations:
-                        session_ui.print_markup(f"  - {citation}")
-                # Per-turn summary is emitted by session_ui.turn_finished() above.
-                if active_code_workspace is not None:
-                    verification = cleanup_code_task(finalize=True)
-                    session_ui.print_markup(
-                        f"[info][Code Task Verification][/info] {verification}"
-                    )
-                    full_output_content += (
-                        f"\n\n[Code task verification]\n{verification}"
-                    )
-                memory.save_message(session_id, "human", user_input, turn_id=turn_id)
-                memory.save_message(
-                    session_id, "ai", full_output_content, turn_id=turn_id
-                )
-                _tool_context = get_tool_context()
-                _tool_context.turn_id = None
-                set_tool_context(_tool_context)
-                chat_history.append(HumanMessage(content=user_input))
-                stored_output = (
-                    full_output_content[: MAX_CONTEXT_TOKENS * 4]
-                    + "\n[truncated for memory]"
-                    if len(full_output_content) > MAX_CONTEXT_TOKENS * 4
-                    else full_output_content
-                )
-                chat_history.append(AIMessage(content=stored_output))
                 if non_interactive:
                     _LAST_HEADLESS_RESPONSE = full_output_content
                 session_summary_saved = False
