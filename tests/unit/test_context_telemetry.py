@@ -1,5 +1,6 @@
 from agent.context_telemetry import (
     build_context_telemetry,
+    configured_context_telemetry,
     format_context_report,
 )
 from agent.prompts import token_count as _tc
@@ -19,6 +20,25 @@ def test_context_telemetry_sums_correctly():
     # no content leaked
     report = format_context_report(data)
     assert "a" * 40 not in report
+
+
+def test_configured_plan_uses_the_whole_prompt_budget():
+    plan = configured_context_telemetry()
+
+    assert plan is not None
+    assert plan["sum_budgets"] > 0
+    assert plan["sum_budgets"] <= plan["total_tokens"]
+    assert plan["sum_used"] == 0
+    assert {"system", "history", "user"} <= set(plan["budgets"])
+
+
+def test_configured_plan_respects_an_explicit_window():
+    small = configured_context_telemetry(window=4096)
+    large = configured_context_telemetry(window=32768)
+
+    assert small is not None and large is not None
+    assert small["total_tokens"] == 4096
+    assert small["sum_budgets"] < large["sum_budgets"]
 
 
 def test_context_telemetry_overflow_tracked():
