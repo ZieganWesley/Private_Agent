@@ -31,6 +31,7 @@ class SessionUI:
         self._model: Any = None
         self._permission: str = "auto"
         self._output_tokens: Any = None
+        self._provider_mode: str = ""
         self._context_used: int = 0
         self._context_max: int = 0
         self._bg: int = 0
@@ -48,6 +49,7 @@ class SessionUI:
             permission_mode=self._permission,
             output_tokens=self._output_tokens,
             background_processes=self._bg,
+            provider_mode=self._provider_mode,
         )
 
     def bind(
@@ -56,6 +58,7 @@ class SessionUI:
         model: Any = None,
         permission: str | None = None,
         output_tokens: Any = None,
+        provider_mode: str | None = None,
     ) -> None:
         if model is not None:
             self._model = model
@@ -63,6 +66,8 @@ class SessionUI:
             self._permission = permission
         if output_tokens is not None:
             self._output_tokens = output_tokens
+        if provider_mode is not None:
+            self._provider_mode = str(provider_mode)
         self._footer.update(self._current_state())
         self._footer.start()
         if self._footer.mode == "B" and self._footer.started:

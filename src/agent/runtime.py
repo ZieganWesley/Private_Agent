@@ -2522,7 +2522,11 @@ async def _run_agent_cli_session(
             console=console,
             status_bar=STATUS_BAR,
         )
-        session_ui.bind(model=selected_model, permission=permission_mode)
+        session_ui.bind(
+            model=selected_model,
+            permission=permission_mode,
+            provider_mode=provider_type,
+        )
         if SHOW_WELCOME_SCREEN and not non_interactive:
             from rich.panel import Panel
 
@@ -4128,6 +4132,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     model=selected_model,
                     permission=turn_permission_mode,
                     output_tokens=output_budget,
+                    provider_mode=provider_type,  # noqa: B023
                 )
                 session_ui.set_context(*usage)
                 session_ui.turn_started(user_input)

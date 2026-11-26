@@ -95,3 +95,25 @@ def test_reduced_motion_off_by_default(monkeypatch):
     from ui.spinner import motion_reduced
 
     assert motion_reduced() is False
+
+
+def test_provider_mode_segment_is_shown_when_bound():
+    bound = StatusState(
+        model="m",
+        context_tokens=1,
+        context_maximum=2,
+        permission_mode="auto",
+        provider_mode="local",
+    )
+    assert "mode=local" in bound.segments()
+    assert not any(s.startswith("mode=") for s in StatusState().segments())
+
+
+def test_session_ui_ribbon_reports_provider_mode():
+    console = Console(record=True, width=120)
+    ui = SessionUI(console=console)
+    ui.bind(model="m", permission="ask", provider_mode="online")
+    ui.set_context(1, 4)
+    ribbon = ui.ribbon_text(width=120)
+    assert "mode=online" in ribbon
+    assert "permission=ask" in ribbon

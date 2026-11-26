@@ -100,6 +100,7 @@ class StatusState:
     permission_mode: str = "auto"
     output_tokens: Any = None
     background_processes: int = 0
+    provider_mode: str = ""
 
     def percent(self) -> float:
         return context_percent(self.context_tokens, self.context_maximum)
@@ -114,6 +115,8 @@ class StatusState:
             f"context={self.percent()}%",
             f"permission={self.permission_mode}",
         ]
+        if self.provider_mode:
+            segs.append(f"mode={escape(str(self.provider_mode))}")
         if accessible and self.context_maximum:
             _used, limit, _fraction = _context_use(
                 self.context_tokens, self.context_maximum
