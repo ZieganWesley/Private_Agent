@@ -52,9 +52,7 @@ def test_rag_cutoff_rejects_zero_budget():
 
 
 def test_rag_cutoff_requires_minimum_results():
-    result = apply_rag_cutoff(
-        [Doc("a", {})], budget_tokens=100, min_results=2
-    )
+    result = apply_rag_cutoff([Doc("a", {})], budget_tokens=100, min_results=2)
 
     assert result.use_rag is False
     assert result.reason == "below_min_results"

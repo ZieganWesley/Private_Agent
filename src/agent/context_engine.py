@@ -119,7 +119,11 @@ class ContextEngine:
         # config override for explicit profile
         configured = None
         try:
-            configured = self.config.get("context_engine_profile") if isinstance(self.config, dict) else None
+            configured = (
+                self.config.get("context_engine_profile")
+                if isinstance(self.config, dict)
+                else None
+            )
         except Exception:  # noqa: BLE001 - optional best-effort context feature
             configured = None
         if configured and configured != "auto":
@@ -147,9 +151,7 @@ class ContextEngine:
             for name, text in source_texts.items()
         }
 
-    def _raw_sources(
-        self, source_texts: dict[str, Any]
-    ) -> dict[str, ContextSource]:
+    def _raw_sources(self, source_texts: dict[str, Any]) -> dict[str, ContextSource]:
         """Build unbounded sources so adapters can contribute constraints."""
         raw: dict[str, ContextSource] = {}
         for name, text in source_texts.items():
@@ -187,7 +189,9 @@ class ContextEngine:
             else:
                 source = self._build_source(name, text, budget)
             allocation.sources[name] = source
-        previous = allocation.telemetry.get("requested", {}) if allocation.telemetry else {}
+        previous = (
+            allocation.telemetry.get("requested", {}) if allocation.telemetry else {}
+        )
         allocation.telemetry = build_context_telemetry(
             profile=allocation.profile,
             total_tokens=allocation.total_tokens,
@@ -237,16 +241,12 @@ class ContextEngine:
             merged = {**budget.shares, **share_overrides}
             total_share = sum(merged.values())
             if total_share > 0:
-                merged = {
-                    name: value / total_share for name, value in merged.items()
-                }
+                merged = {name: value / total_share for name, value in merged.items()}
             budget.shares = merged
         raw_sources = self._raw_sources(source_texts or {})
-        budgets = budget.allocate(
-            list(raw_sources.values()) if raw_sources else None
-        )
+        budgets = budget.allocate(list(raw_sources.values()) if raw_sources else None)
         # Ensure all source texts have budgets.
-        for name in (source_texts or {}):
+        for name in source_texts or {}:
             if name not in budgets:
                 budgets[name] = 0
         sources = self.build_sources(source_texts, budgets)
@@ -381,8 +381,7 @@ def assemble_owned_prompt(
                 str(getattr(message, "content", "")) for message in system_prompts
             ),
             "tool_definitions": "\n".join(
-                f"{getattr(tool, 'name', '')}: "
-                f"{getattr(tool, 'description', '')}"
+                f"{getattr(tool, 'name', '')}: {getattr(tool, 'description', '')}"
                 for tool in (tools_list or [])
             ),
             "skills": active_skill.system_prompt if active_skill else "",

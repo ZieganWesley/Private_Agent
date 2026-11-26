@@ -8,6 +8,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from agent.model_capabilities import (
+    capabilities_with_limits,
+    detect_openai_compatible_model_record,
+)
 from agent.model_catalog import (
     DEFAULT_CATALOG_TTL_SECONDS,
     PROVENANCE_DECLARED,
@@ -21,10 +25,6 @@ from agent.model_catalog import (
     classify_role,
     default_model_record,
     record_from_listing_entry,
-)
-from agent.model_capabilities import (
-    capabilities_with_limits,
-    detect_openai_compatible_model_record,
 )
 
 BASE_URL = "http://127.0.0.1:1234/v1"
@@ -148,7 +148,9 @@ def test_expired_record_is_refreshed_lazily_on_lookup():
     refreshed = catalog.lookup(
         "m",
         BASE_URL,
-        probe=lambda: calls.append("probe") or _record(context=8192, ttl=10, now=now[0]),
+        probe=lambda: (
+            calls.append("probe") or _record(context=8192, ttl=10, now=now[0])
+        ),
     )
     assert refreshed.context_length == 8192
     assert calls == ["probe"]
@@ -218,7 +220,9 @@ def test_inflight_probe_for_one_key_does_not_block_another_key():
         return _record("fast", context=1024, ttl=60)
 
     thread = threading.Thread(
-        target=lambda: results.append(catalog.lookup("slow", BASE_URL, probe=slow_probe))
+        target=lambda: results.append(
+            catalog.lookup("slow", BASE_URL, probe=slow_probe)
+        )
     )
     thread.start()
     assert blocked.wait(2)

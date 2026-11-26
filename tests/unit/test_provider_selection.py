@@ -131,5 +131,3 @@ def test_provider_loss_guidance_survives_a_failing_discovery():
     )
 
     assert "No other local provider is reachable" in message
-
-

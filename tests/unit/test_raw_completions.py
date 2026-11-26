@@ -117,7 +117,11 @@ def test_disabled_raw_completions_never_requests_and_uses_chat(monkeypatch):
 
 @pytest.mark.parametrize(
     "response",
-    [FakeResponse({}, 500), FakeResponse({"choices": []}), FakeResponse({"choices": [{"text": 3}]})],
+    [
+        FakeResponse({}, 500),
+        FakeResponse({"choices": []}),
+        FakeResponse({"choices": [{"text": 3}]}),
+    ],
 )
 def test_transport_failure_or_bad_shape_degrades_to_chat(monkeypatch, response):
     monkeypatch.setattr(utility, "raw_completions_enabled", lambda: True)
@@ -164,7 +168,5 @@ def test_session_summary_uses_raw_completion_when_available(tmp_path, monkeypatc
     )
 
     assert saved is True
-    assert memory.get_all_episodic_summaries(session_id="s1") == [
-        "raw session summary"
-    ]
+    assert memory.get_all_episodic_summaries(session_id="s1") == ["raw session summary"]
     assert llm.calls == 0

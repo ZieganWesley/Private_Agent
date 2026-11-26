@@ -85,7 +85,7 @@ class ProviderRecordMixin:
     ) -> None:
         with self._lock, self.conn:
             self.conn.execute(
-                f"INSERT INTO {table} "
+                f"INSERT INTO {table} "  # nosec B608 - table/column names come from internal callers
                 f"({key_column}, adapter_type, display_name, base_url, model, "
                 "needs_tools, needs_vision, context_window, updated_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) "
@@ -109,7 +109,7 @@ class ProviderRecordMixin:
             return None
         try:
             row = self.conn.execute(
-                "SELECT adapter_type, display_name, base_url, model, "
+                "SELECT adapter_type, display_name, base_url, model, "  # nosec B608 - internal table names
                 f"needs_tools, needs_vision, context_window FROM {table} "
                 f"WHERE {key_column} = ?",
                 (key,),

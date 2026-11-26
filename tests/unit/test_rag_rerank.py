@@ -104,9 +104,7 @@ def test_http_rerank_returns_none_on_invalid_body():
 
 def test_http_rerank_caches_identical_requests():
     docs = [Doc("a"), Doc("b")]
-    client = FakeClient(
-        [FakeResponse({"results": [{"index": 1, "score": 1.0}]})]
-    )
+    client = FakeClient([FakeResponse({"results": [{"index": 1, "score": 1.0}]})])
     reranker = HttpReranker(
         base_url="http://127.0.0.1:8080/v1",
         client_factory=_client_factory(client),

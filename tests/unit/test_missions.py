@@ -85,9 +85,7 @@ def test_list_missions_filters_by_session_and_status(memory):
     memory.create_mission("session-b", "two")
     memory.update_mission(first["mission_id"], status="active")
 
-    assert [m["goal"] for m in memory.list_missions(session_id="session-a")] == [
-        "one"
-    ]
+    assert [m["goal"] for m in memory.list_missions(session_id="session-a")] == ["one"]
     assert [m["goal"] for m in memory.list_missions(status="active")] == ["one"]
 
 

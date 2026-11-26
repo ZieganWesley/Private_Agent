@@ -32,8 +32,8 @@ class InputChannel:
         self._read_line = read_line
         self._is_tty = sys.stdin.isatty() if is_tty is None else bool(is_tty)
         self._fd = self._stdin_fd() if read_line is None else None
-        self._enabled = enabled and self._is_tty and (
-            read_line is not None or self._fd is not None
+        self._enabled = (
+            enabled and self._is_tty and (read_line is not None or self._fd is not None)
         )
         self._paused = threading.Event()
         self._stop = threading.Event()

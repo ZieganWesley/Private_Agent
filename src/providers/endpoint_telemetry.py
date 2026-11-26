@@ -99,7 +99,9 @@ class EndpointTelemetry:
                 counters.failures += 1
                 counters.last_error_type = str(error_type or "unknown")
             if len(self._counters) > MAX_ENDPOINTS:
-                for oldest in list(self._counters)[: len(self._counters) - MAX_ENDPOINTS]:
+                for oldest in list(self._counters)[
+                    : len(self._counters) - MAX_ENDPOINTS
+                ]:
                     self._counters.pop(oldest, None)
             self._events.append(
                 {

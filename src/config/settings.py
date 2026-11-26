@@ -614,6 +614,7 @@ def resolve_config_values(
     CONTEXT_OUTPUT_RESERVE_RATIO = configured_float(
         config, "agent", "context_output_reserve_ratio", 0.33
     )
+
     # KV cache settings may live under agent, agent.context_cache, or a
     # top-level context_cache section.
     def _kv_raw(key, default):

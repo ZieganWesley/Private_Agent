@@ -9,6 +9,7 @@ raising, so callers can fall back without failing a turn.
 
 from __future__ import annotations
 
+import contextlib
 import math
 import time
 from collections.abc import Callable, Iterable, Mapping
@@ -144,10 +145,8 @@ class NativeClient:
             return None
         finally:
             if client is not None and hasattr(client, "close"):
-                try:
+                with contextlib.suppress(httpx.HTTPError, OSError):
                     client.close()
-                except (httpx.HTTPError, OSError):
-                    pass
 
     def health(self) -> str:
         """Return ``ready``, ``loading``, or ``absent``."""
@@ -192,10 +191,8 @@ class NativeClient:
             return "absent"
         finally:
             if client is not None and hasattr(client, "close"):
-                try:
+                with contextlib.suppress(httpx.HTTPError, OSError):
                     client.close()
-                except (httpx.HTTPError, OSError):
-                    pass
 
     def props(self) -> dict[str, Any] | None:
         response = self._request("GET", "props")
@@ -424,7 +421,9 @@ class NativeClient:
             result.append(
                 {
                     "id": adapter_id,
-                    "path": item.get("path") if isinstance(item.get("path"), str) else "",
+                    "path": item.get("path")
+                    if isinstance(item.get("path"), str)
+                    else "",
                     "scale": _number(item.get("scale")),
                 }
             )

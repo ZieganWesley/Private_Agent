@@ -7,8 +7,9 @@ without a live endpoint.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 DEFAULT_TOOL_PARAMETERS: dict[str, Any] = {"type": "object", "properties": {}}
 
@@ -20,7 +21,9 @@ def tool_definitions(tools: Iterable[Any] | None) -> list[dict[str, Any]]:
         name = description = None
         parameters: Any = None
         if isinstance(tool, dict):
-            source = tool.get("function") if isinstance(tool.get("function"), dict) else tool
+            source = (
+                tool.get("function") if isinstance(tool.get("function"), dict) else tool
+            )
             name = source.get("name")
             description = source.get("description")
             parameters = (

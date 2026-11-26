@@ -186,4 +186,3 @@ def test_persisting_a_weaker_provider_warns_about_the_lost_capabilities(tmp_path
     assert any("tool calling" in message for message in printed)
     assert any("context window shrank" in message for message in printed)
     memory.close()
-
