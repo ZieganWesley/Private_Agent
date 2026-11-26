@@ -195,6 +195,20 @@ def run_ui_check(console: Any = None) -> int:
             overlong = [line for line in rendered.splitlines() if len(line) > width]
             assert not overlong, f"width {width} produced {overlong[:1]}"
 
+    def tool_result_footer() -> None:
+        from agent.tool_display import TOOL_RESULT_PREVIEW_CHARS, _tool_result_panel
+
+        long_body = "line of output\n" * (TOOL_RESULT_PREVIEW_CHARS // 5)
+        for width in (60, 80, 120):
+            rendered = _render(_tool_result_panel("read_file", long_body), width)
+            assert "Tool output: read_file" in rendered
+            assert "lines \u00b7 preview of" in rendered
+            assert "/expand" in rendered
+            overlong = [line for line in rendered.splitlines() if len(line) > width]
+            assert not overlong, f"width {width} produced {overlong[:1]}"
+        short = _render(_tool_result_panel("read_file", "short"), 80)
+        assert "/expand" not in short
+
     def failure_panel_render() -> None:
         from .failure_panel import model_failure_panel
 
@@ -241,6 +255,7 @@ def run_ui_check(console: Any = None) -> int:
         ("startup_summary", startup_summary),
         ("status_panel", status_panel_render),
         ("context_bars", context_bars),
+        ("tool_result_footer", tool_result_footer),
         ("accessible", accessible),
         ("transcript", transcript),
         ("turn", turn),

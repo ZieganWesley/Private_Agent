@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from langchain_core.messages import ToolMessage
+from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
@@ -169,22 +170,38 @@ def _render_tool_result_text(result: str) -> Text:
     return text
 
 
-def _display_tool_result(tool_name: str, result: str) -> None:
+def _result_footer(result: str, shown: int) -> Text:
+    """Return the footer line for a truncated result."""
+    lines = max(len(result.splitlines()), 1)
+    footer = Text(overflow="fold", style=resolve_style("muted"))
+    footer.append(
+        f"{lines:,} lines \u00b7 preview of {shown:,} of {len(result):,} characters \u00b7 "
+    )
+    footer.append("/expand", style=resolve_style("accent"))
+    footer.append(" shows the full result")
+    return footer
+
+
+def _tool_result_panel(tool_name: str, result: str) -> Panel:
+    """Build the tool-result panel, with a footer only when it was truncated."""
     preview = result[:TOOL_RESULT_PREVIEW_CHARS]
     truncated = len(result) > TOOL_RESULT_PREVIEW_CHARS
-    if truncated:
-        preview += "\n[Preview truncated; full result was sent to the model.]"
     if not preview.strip():
         preview = "(Tool completed with no textual output.)"
+    body: object = _render_tool_result_text(preview)
+    if truncated:
+        body = Group(body, _result_footer(result, len(preview)))
     symbol = "\u2713" if not _tool_result_is_error(result) else "\u2717"
     style = resolve_style("success" if symbol == "\u2713" else "error")
-    console.print(
-        Panel(
-            _render_tool_result_text(preview),
-            title=Text(f"{symbol} Tool output: {tool_name}", style=style),
-            border_style=resolve_style("border"),
-        )
+    return Panel(
+        body,
+        title=Text(f"{symbol} Tool output: {tool_name}", style=style),
+        border_style=resolve_style("border"),
     )
+
+
+def _display_tool_result(tool_name: str, result: str) -> None:
+    console.print(_tool_result_panel(tool_name, result))
     record_tool_result(tool_name, result)
 
 
