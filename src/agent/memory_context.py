@@ -323,11 +323,54 @@ def trim_rag_documents_to_budget(documents: Any, budget_tokens: int | None) -> l
     return out
 
 
+# Bounds for deriving the retrieval depth from the turn's RAG token budget.
+RAG_MIN_RESULTS = max(1, RAG_CONTEXT_RESULTS // 2)
+RAG_MAX_RESULTS = max(RAG_CONTEXT_RESULTS, RAG_CONTEXT_RESULTS * 4)
+RAG_AVG_CHUNK_TOKENS = 160
+
+
+def _document_score(document: Any) -> float | None:
+    """Return an explicit relevance score when the backend supplied one."""
+    metadata = getattr(document, "metadata", None) or {}
+    for key in ("relevance_score", "score", "_relevance_score"):
+        value = metadata.get(key) if isinstance(metadata, dict) else None
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+    for attribute in ("relevance_score", "score"):
+        value = getattr(document, attribute, None)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+    return None
+
+
+def rag_result_limit(budget_tokens: int | None) -> int:
+    """Derive retrieval depth from the RAG token budget, within bounds."""
+    if budget_tokens is None:
+        return RAG_CONTEXT_RESULTS
+    try:
+        budget = int(budget_tokens)
+    except (TypeError, ValueError):
+        return RAG_CONTEXT_RESULTS
+    if budget <= 0:
+        return 0
+    estimated = max(1, budget // RAG_AVG_CHUNK_TOKENS)
+    return min(RAG_MAX_RESULTS, max(RAG_MIN_RESULTS, estimated))
+
+
 def filter_weak_rag_documents(
     documents: Any, relevance_threshold: float | None = None
 ) -> list:
-    """Drop empty/weak documents based on an optional relevance threshold."""
-    threshold = RAG_RELEVANCE_THRESHOLD if relevance_threshold is None else relevance_threshold
+    """Drop empty documents and explicitly low-scored retrievals.
+
+    ``HybridRAGRetriever`` already applies the threshold when a backend
+    exposes scores, so documents without a score are kept as long as they
+    are non-empty instead of being filtered twice.
+    """
+    threshold = (
+        RAG_RELEVANCE_THRESHOLD
+        if relevance_threshold is None
+        else relevance_threshold
+    )
     out: list = []
     for doc in documents or []:
         content = getattr(doc, "page_content", None)
@@ -336,12 +379,42 @@ def filter_weak_rag_documents(
         text = str(content or "").strip()
         if not text:
             continue
-        # Without scores, apply a conservative length floor derived from threshold.
-        if threshold and _token_count(text) < max(1, int(threshold)):
-            # threshold is a fraction of tokens; keep unless extremely tiny.
-            pass
+        score = _document_score(doc)
+        if score is not None and threshold and score < float(threshold):
+            continue
         out.append(doc)
     return out
+
+
+def _format_rag_context(documents: Any) -> str:
+    return "\n".join(
+        f"[Source: {getattr(doc, 'metadata', {}).get('source', 'local knowledge base')}"
+        f"{', chunk ' + str(doc.metadata['chunk']) if 'chunk' in getattr(doc, 'metadata', {}) else ''}]\n"
+        f"{getattr(doc, 'page_content', '')}"
+        for doc in documents or []
+    )
+
+
+def build_rag_context(
+    documents: Any,
+    budget_tokens: int | None = None,
+    relevance_threshold: float | None = None,
+) -> tuple[str, list]:
+    """Format whole RAG chunks without exceeding the allocation budget."""
+    kept = dedupe_rag_documents(documents)
+    kept = filter_weak_rag_documents(kept, relevance_threshold)
+    kept = trim_rag_documents_to_budget(kept, budget_tokens)
+    if not kept or budget_tokens is None:
+        return (_format_rag_context(kept) if kept else "", kept)
+    try:
+        budget = int(budget_tokens)
+    except (TypeError, ValueError):
+        return _format_rag_context(kept), kept
+    text = _format_rag_context(kept)
+    while kept and _token_count(text) > budget:
+        kept.pop()
+        text = _format_rag_context(kept)
+    return text, kept
 
 
 async def _retrieve_rag_documents(
@@ -365,10 +438,13 @@ async def _retrieve_rag_documents(
     ):
         query = f"{previous_query} {query}"
     _LAST_RAG_QUERY = original_query
+    result_limit = rag_result_limit(budget_tokens)
+    if result_limit <= 0:
+        return []
     documents = await asyncio.to_thread(
         vectorstore.similarity_search,
         query,
-        k=RAG_CONTEXT_RESULTS,
+        k=result_limit,
     )
     documents = filter_weak_rag_documents(
         dedupe_rag_documents(documents), relevance_threshold
@@ -383,7 +459,7 @@ async def _retrieve_rag_documents(
                 "secure coding, code review, unit testing, production readiness, "
                 "and engineering guidelines"
             ),
-            k=RAG_CONTEXT_RESULTS,
+            k=result_limit,
         )
     except (ValueError, RuntimeError) as exc:
         console.print(
