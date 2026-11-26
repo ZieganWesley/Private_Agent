@@ -14,6 +14,7 @@ from urllib.parse import quote
 from langchain_core.documents import Document
 
 from config import (
+    APP_CONFIG,
     CHUNKING_MIN_CHUNK_CHARS,
     CHUNKING_OVERLAP,
     CHUNKING_SEMANTIC_BUFFER,
@@ -763,9 +764,14 @@ def initialize_knowledge_base(
             )
 
         # Return Hybrid RAG retriever wrapper
+        from .rerank import reranker_from_config
         from .retrieval import HybridRAGRetriever
 
-        return HybridRAGRetriever(vectorstore, all_parsed_docs)
+        return HybridRAGRetriever(
+            vectorstore,
+            all_parsed_docs,
+            reranker=reranker_from_config(APP_CONFIG),
+        )
     except (ValueError, OSError, RuntimeError) as e:
         if (
             db_exists
@@ -796,9 +802,14 @@ def initialize_knowledge_base(
                         embedding_function=embeddings,
                     )
                 _write_index_state_atomic(state_file_path, updated_state)
+                from .rerank import reranker_from_config
                 from .retrieval import HybridRAGRetriever
 
-                return HybridRAGRetriever(vectorstore, all_parsed_docs)
+                return HybridRAGRetriever(
+                    vectorstore,
+                    all_parsed_docs,
+                    reranker=reranker_from_config(APP_CONFIG),
+                )
             except (ValueError, OSError, RuntimeError) as recovery_error:
                 console.print(
                     f"[error][RAG recovery error] Rebuild failed after preserving "
