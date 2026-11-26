@@ -18,11 +18,12 @@ from rich.panel import Panel
 from rich.text import Text
 
 from config import STREAMING_OUTPUT, VERBOSE_TIMINGS, VISIBLE_REASONING
+from ui.failure_panel import model_failure_panel
 from ui.status_bar import get_active_footer
 from ui.turn import GenerationStats
 from utils.run_logging import RUN_LOGGER, log_event
 
-from .console import console
+from .console import console, resolve_style
 from .prompts import token_count as _token_count
 from .session_state import SESSION_STATS as _SESSION_STATS
 from .status import (
@@ -154,7 +155,7 @@ def _display_visible_reasoning(response: Any) -> None:
             Panel(
                 Text(summary),
                 title=Text("Model rationale summary"),
-                border_style="magenta",
+                border_style=resolve_style("accent_alt"),
             )
         )
 
@@ -581,6 +582,36 @@ async def _invoke_with_budget(
     return response
 
 
+def _report_model_failure(exc: BaseException, *, model_name: str | None) -> None:
+    """Log a model failure and show one actionable panel.
+
+    Only the exception type reaches the screen; the message may contain
+    endpoint details, so it stays in the run log.
+    """
+    reference_id = uuid.uuid4().hex[:8]
+    log_event(
+        RUN_LOGGER,
+        "ui.model_operation_failed",
+        level=logging.ERROR,
+        reference_id=reference_id,
+        model=model_name,
+        error_type=type(exc).__name__,
+    )
+    console.print(
+        model_failure_panel(
+            "The request did not complete. This session is still open and "
+            "accepts another turn.",
+            reference_id=reference_id,
+            model_name=model_name,
+            error_type=type(exc).__name__,
+            hints=(
+                "`/retry` resends the previous request; `switch` picks another "
+                "provider. The reference above identifies this failure in the log.",
+            ),
+        )
+    )
+
+
 async def _invoke_with_status(
     model: Any,
     messages: list,
@@ -610,20 +641,7 @@ async def _invoke_with_status(
                 cancel_event=cancel_event,
             )
         except (ValueError, OSError, RuntimeError) as exc:
-            reference_id = uuid.uuid4().hex[:8]
-            log_event(
-                RUN_LOGGER,
-                "ui.model_operation_failed",
-                level=logging.ERROR,
-                reference_id=reference_id,
-                model=model_name,
-                error_type=type(exc).__name__,
-            )
-            console.print(
-                "[error][Model request][/error] Failed "
-                f"(reference {reference_id}). Retry or use `switch` to choose "
-                "another provider."
-            )
+            _report_model_failure(exc, model_name=model_name)
             raise
     else:
         _loading_phase = local_model and first_local_turn
@@ -655,20 +673,7 @@ async def _invoke_with_status(
                     cancel_event=cancel_event,
                 )
         except (ValueError, OSError, RuntimeError) as exc:
-            reference_id = uuid.uuid4().hex[:8]
-            log_event(
-                RUN_LOGGER,
-                "ui.model_operation_failed",
-                level=logging.ERROR,
-                reference_id=reference_id,
-                model=model_name,
-                error_type=type(exc).__name__,
-            )
-            console.print(
-                "[error][Model request][/error] Failed "
-                f"(reference {reference_id}). Retry or use `switch` to choose "
-                "another provider."
-            )
+            _report_model_failure(exc, model_name=model_name)
             raise
     elapsed = time.monotonic() - started
     if elapsed >= 2 and VERBOSE_TIMINGS:

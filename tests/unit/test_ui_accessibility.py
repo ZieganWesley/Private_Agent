@@ -155,3 +155,27 @@ def test_ribbon_text_keeps_the_same_words_without_colour():
     rendered = console.export_text()
     assert rendered.strip() == status_ribbon(state)
     assert "\x1b[" not in rendered
+
+
+def test_model_failure_panel_shows_reference_and_never_the_exception_text():
+    import io
+
+    from ui.failure_panel import model_failure_panel
+
+    panel = model_failure_panel(
+        "The request did not complete.",
+        reference_id="deadbeef",
+        model_name="local-model",
+        error_type="RuntimeError",
+        hints=("`/retry` resends the previous request.",),
+    )
+    output = io.StringIO()
+    Console(file=output, width=100, no_color=True).print(panel)
+    rendered = output.getvalue()
+
+    assert "Model request failed" in rendered
+    assert "deadbeef" in rendered
+    assert "local-model" in rendered
+    assert "RuntimeError" in rendered
+    assert "/retry" in rendered
+    assert "The request did not complete." in rendered

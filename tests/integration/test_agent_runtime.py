@@ -28,6 +28,16 @@ from agent import (
 from database import PersistentMemory
 from sandbox import SandboxManager
 
+
+def _rendered(*values) -> str:
+    """Render captured console arguments as plain text for assertions."""
+    output = StringIO()
+    console = Console(file=output, width=100, no_color=True)
+    for value in values:
+        console.print(value)
+    return output.getvalue()
+
+
 try:
     from agent import get_robust_chat_model
 except ImportError:
@@ -1805,8 +1815,8 @@ async def test_model_failure_shows_reference_without_exposing_exception(
             status_message="Generating",
         )
 
-    output = " ".join(map(str, printed))
-    reference = re.search(r"reference ([a-f0-9]{8})", output)
+    output = _rendered(*printed)
+    reference = re.search(r"reference\s+([a-f0-9]{8})", output)
     assert reference
     assert "private endpoint details" not in output
     assert events[0]["reference_id"] == reference.group(1)
