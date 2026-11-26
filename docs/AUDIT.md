@@ -16,7 +16,7 @@
 ## UI / Accessibility
 - **Medium** Accessible mode supported via `PRIVATE_AGENT_ACCESSIBLE=1` and `NO_COLOR=1`.
 - **Low** Live status bar provides real-time updates (`src/ui/status.py`).
-- **Low** Developer-only UI trigger exists and is marked for removal (`src/ui/check.py`).
+- **Low** Developer-only UI self-check runs as `python -m ui.check`; the shipped `--ui-check` flag was removed (`src/ui/check.py`).
 
 ## Code Quality
 - **Low** Ruff checks and formatting pass.
