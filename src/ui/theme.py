@@ -21,6 +21,9 @@ NO_COLOR_ENV = "NO_COLOR"
 # Environment variable that requests screen-reader-friendly, text-only gauges.
 ACCESSIBLE_ENV = "PRIVATE_AGENT_ACCESSIBLE"
 
+# Environment variable that requests no animated status indicators.
+REDUCED_MOTION_ENV = "PRIVATE_AGENT_REDUCED_MOTION"
+
 # Named message levels: one colour and one symbol each.
 MESSAGE_LEVELS: dict[str, tuple[str, str]] = {
     "info": ("cyan", "ℹ"),

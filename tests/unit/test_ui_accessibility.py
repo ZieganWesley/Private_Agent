@@ -70,3 +70,28 @@ def test_segments_never_drop_below_three():
     )
     for width in (1, 5, 10, 20):
         assert len(state.segments(width=width)) >= 3
+
+
+def test_reduced_motion_prints_one_static_status_line(monkeypatch):
+    monkeypatch.setenv("PRIVATE_AGENT_REDUCED_MOTION", "1")
+    from ui.spinner import StatusIndicator, motion_reduced
+
+    assert motion_reduced() is True
+    console = Console(record=True, width=80)
+    indicator = StatusIndicator("Waiting for llama", phase="loading", console=console)
+    indicator.start()
+    assert indicator.active is True
+    # Updates do not redraw, so nothing moves on screen.
+    indicator.update(phase="thinking", message="Thinking")
+    indicator.stop()
+    text = console.export_text()
+    assert "Waiting for llama" in text
+    assert "Thinking" not in text
+    assert indicator.active is False
+
+
+def test_reduced_motion_off_by_default(monkeypatch):
+    monkeypatch.delenv("PRIVATE_AGENT_REDUCED_MOTION", raising=False)
+    from ui.spinner import motion_reduced
+
+    assert motion_reduced() is False
