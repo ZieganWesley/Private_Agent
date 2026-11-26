@@ -105,6 +105,7 @@ from .context_engine import (
     ContextEngine,
     is_enabled as context_engine_is_enabled,
 )
+from .context_runtime import context_cache_policy, prepare_context_request
 from .context_telemetry import build_runtime_context_report
 from .console import console
 from .commands import mission_runtime as _mission_runtime
@@ -200,6 +201,10 @@ _ALWAYS_ALLOWED_TOOLS: set[str] = set()
 _ACTIVE_MEMORY: PersistentMemory | None = None
 _ACTIVE_RAG_TASK: Any | None = None
 _CONTEXT_REPORT_STATE: dict[str, Any] = {"value": {}}
+_CONTEXT_CACHE_STATE: dict[str, Any] = {
+    "policy": context_cache_policy(),
+    "prefix_hash": None,
+}
 
 
 def initialize_knowledge_base(*args: Any, **kwargs: Any) -> Any:
@@ -3831,13 +3836,16 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _report = build_runtime_context_report(
                     effective_context, prompt_history, system_prompts, enriched_input, user_input
                 )
-                if _report is not None:
-                    _CONTEXT_REPORT_STATE["value"] = _report
-                messages = (
-                    system_prompts
-                    + prompt_history[-MAX_HISTORY_MESSAGES:]
-                    + [HumanMessage(content=enriched_input)]
+                messages, _context_meta = prepare_context_request(
+                    system_prompts=system_prompts,
+                    prompt_history=prompt_history[-MAX_HISTORY_MESSAGES:],
+                    user_message=HumanMessage(content=enriched_input),
+                    policy=_CONTEXT_CACHE_STATE["policy"], provider=provider_type,
+                    previous_hash=_CONTEXT_CACHE_STATE["prefix_hash"],
                 )
+                if _report is not None:
+                    _report.update(_context_meta); _CONTEXT_REPORT_STATE["value"] = _report
+                _CONTEXT_CACHE_STATE["prefix_hash"] = _context_meta["cache"]["prefix_hash"]
                 turn_id = uuid.uuid4().hex
                 _f_state = f_integration.begin_turn(
                     turn_id, user_input, effective_context, non_interactive
