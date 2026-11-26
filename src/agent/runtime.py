@@ -107,6 +107,7 @@ from .context_engine import (
 )
 from .context_telemetry import build_runtime_context_report
 from .console import console
+from .turn_control import TurnController
 from .lazy_imports import install_lazy_globals
 from .memory_context import (
     _build_learned_context,
@@ -3870,6 +3871,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _tool_context = get_tool_context()
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
+                _turn_control = TurnController()
+                _turn_control.begin_turn()
                 start_time = time.monotonic()
                 chat_transcript = ChatTranscript(console=console)
                 chat_transcript.add_message("user", user_input, echo=False)
@@ -4010,8 +4013,12 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                                 user_input,  # noqa: B023
                                 llm,  # noqa: B023
                             )
-                        if stop:
+                        if stop or _turn_control.stop_requested:
                             break
+                        for steer in _turn_control.drain():
+                            messages.append(  # noqa: B023
+                                HumanMessage(content=steer.prompt_text)
+                            )
                         await compact_loop_messages(
                             llm,  # noqa: B023
                             messages,  # noqa: B023
@@ -4136,6 +4143,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 try:
                     response = await _run_agent_turn(response)
                 finally:
+                    _turn_control.finish_turn()
                     f_integration.finish_turn(_f_state)
                     session_ui.set_generation(
                         getattr(response, "generation_stats", None)
