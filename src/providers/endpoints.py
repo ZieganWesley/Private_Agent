@@ -4,9 +4,10 @@ Every model request is addressed by URL.  An endpoint advertises one or more
 roles (chat, embedding, rerank, native) so a session can use one server for
 chat and another for embeddings without knowing which application is running.
 
-The registry also converts the legacy ``models.local_openai_compatible_endpoints``
-and ``models.ollama_base_url(s)`` keys into the same representation.  Legacy
-keys are read once at startup and never used by request paths.
+The registry converts the legacy ``models.local_openai_compatible_endpoints``
+list into the same representation, and mirrors ``models.ollama_base_url(s)`` into
+that list so a locally hosted Ollama server is described like any other local
+endpoint.
 """
 
 from __future__ import annotations
@@ -19,7 +20,12 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlsplit
 
-VALID_ROLES = ("chat", "embedding", "rerank", "native")
+from endpoint_legacy import (
+    VALID_ROLES,
+    fold_legacy_ollama_endpoints,
+    with_v1,
+)
+
 DEFAULT_ROLES = ("chat",)
 DEFAULT_TIMEOUT_SECONDS = 30.0
 DEFAULT_PROBE_TTL_SECONDS = 300.0
@@ -80,12 +86,6 @@ def is_loopback_url(url: str) -> bool:
         return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
     except ValueError:
         return False
-
-
-def with_v1(url: str) -> str:
-    """Append ``/v1`` to a legacy server URL that has no API prefix."""
-    normalized = url.rstrip("/")
-    return normalized if normalized.endswith("/v1") else f"{normalized}/v1"
 
 
 @dataclass(frozen=True)
@@ -255,6 +255,7 @@ class EndpointRegistry:
         config = config if isinstance(config, Mapping) else {}
         models = config.get("models")
         models = models if isinstance(models, Mapping) else {}
+        models = fold_legacy_ollama_endpoints(models)
 
         entries: list[EndpointConfig] = []
         warnings: list[str] = []
@@ -305,29 +306,6 @@ class EndpointRegistry:
             warnings.append(
                 "Ignoring local_openai_compatible_endpoints: expected an array."
             )
-
-        raw_ollama = models.get("ollama_base_urls", models.get("ollama_base_url"))
-        if isinstance(raw_ollama, str):
-            raw_ollama = [raw_ollama]
-        if isinstance(raw_ollama, list):
-            for index, value in enumerate(raw_ollama):
-                if not isinstance(value, str) or not value.strip():
-                    continue
-                endpoint = _endpoint_from_mapping(
-                    {
-                        "name": ("Ollama" if index == 0 else f"Ollama {index + 1}"),
-                        "base_url": value,
-                        "roles": list(VALID_ROLES),
-                    },
-                    index=index,
-                    source="legacy.ollama_base_url",
-                    default_roles=VALID_ROLES,
-                    force_v1=True,
-                )
-                if endpoint is None:
-                    warnings.append("Ignoring legacy ollama_base_url: invalid URL.")
-                    continue
-                entries.append(endpoint)
 
         deduped: list[EndpointConfig] = []
         seen: set[str] = set()

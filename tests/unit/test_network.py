@@ -1095,3 +1095,30 @@ def test_real_request_failure_marks_internet_unavailable(monkeypatch):
         assert len(calls) == 1
     finally:
         tools.reset_internet_check_cache()
+
+
+def test_online_selection_uses_the_preferred_configured_endpoint(monkeypatch):
+    agent, seen = _configured_online_setup(monkeypatch, ["", "n", "n"])
+    model_selection.APP_CONFIG = {
+        "models": {
+            "preferred_online_endpoint": "gateway",
+            "online_endpoints": [
+                {
+                    "name": "primary",
+                    "base_url": "https://primary.example.test/v1",
+                    "api_key": "primary-key",
+                },
+                {
+                    "name": "gateway",
+                    "base_url": "https://gateway.example.test/v1",
+                    "api_key": "gateway-key",
+                },
+            ],
+        }
+    }
+
+    selected = agent.select_online_model(True)
+
+    assert selected["model"] == "online-model"
+    assert seen["url"] == "https://gateway.example.test/v1/models"
+    assert seen["headers"]["Authorization"] == "Bearer gateway-key"

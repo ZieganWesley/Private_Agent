@@ -218,3 +218,34 @@ def test_registry_ttl_default_and_override():
         {"models": {"endpoint_probe_ttl_seconds": 10}}
     )
     assert registry.probe_ttl_seconds == 10
+
+
+def test_registry_keeps_legacy_ollama_endpoint_with_v1_roles():
+    registry = EndpointRegistry.from_config(
+        {"models": {"ollama_base_url": "http://127.0.0.1:11434"}}
+    )
+
+    endpoint = registry.endpoints[0]
+    assert endpoint.base_url == "http://127.0.0.1:11434/v1"
+    assert endpoint.name == "Ollama"
+    assert set(endpoint.roles) == {"chat", "embedding", "rerank", "native"}
+
+
+def test_registry_does_not_duplicate_an_ollama_entry_that_is_already_listed():
+    registry = EndpointRegistry.from_config(
+        {
+            "models": {
+                "ollama_base_url": "http://127.0.0.1:11434",
+                "local_openai_compatible_endpoints": [
+                    {
+                        "name": "Ollama",
+                        "base_url": "http://127.0.0.1:11434/v1",
+                        "roles": ["chat", "embedding"],
+                    }
+                ],
+            }
+        }
+    )
+
+    assert [endpoint.name for endpoint in registry.endpoints] == ["Ollama"]
+    assert registry.warnings == ()
