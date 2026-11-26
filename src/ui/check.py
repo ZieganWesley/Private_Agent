@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import io
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from rich.console import Console
@@ -22,6 +24,26 @@ from .session_ui import SessionUI
 from .spinner import StatusIndicator
 from .state import StatusState, context_bar, context_state_line
 from .theme import ACCESSIBLE_ENV, build_theme
+
+
+@contextmanager
+def _temporary_env(**values: str) -> Iterator[None]:
+    """Set environment variables for one check and restore them afterwards.
+
+    ``run_ui_check`` runs in the same process as the caller (and the test
+    suite), so leaving ``PRIVATE_AGENT_ACCESSIBLE`` behind would silently
+    change every later render.
+    """
+    previous = {name: os.environ.get(name) for name in values}
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
 
 
 def _render(renderable: Any, width: int) -> str:
@@ -69,14 +91,14 @@ def run_ui_check(console: Any = None) -> int:
         target.print(context_state_line({"tokens": 3, "max": 10}, 128))
 
     def accessible() -> None:
-        os.environ[ACCESSIBLE_ENV] = "1"
-        state = StatusState(
-            model="m", context_tokens=3, context_maximum=10, permission_mode="auto"
-        )
-        target.print(status_ribbon(state, accessible=True))
-        indicator = StatusIndicator("Waiting", phase="thinking", console=target)
-        rendered = indicator._render()
-        assert "(thinking)" in rendered, rendered
+        with _temporary_env(**{ACCESSIBLE_ENV: "1"}):
+            state = StatusState(
+                model="m", context_tokens=3, context_maximum=10, permission_mode="auto"
+            )
+            target.print(status_ribbon(state, accessible=True))
+            indicator = StatusIndicator("Waiting", phase="thinking", console=target)
+            rendered = indicator._render()
+            assert "(thinking)" in rendered, rendered
 
     def ribbon_spans() -> None:
         state = StatusState(

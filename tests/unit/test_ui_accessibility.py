@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from rich.console import Console
 
 from ui import SessionUI
@@ -268,3 +270,27 @@ def test_ui_check_reports_a_component_failure(monkeypatch, capsys):
 
     assert check.run_ui_check() == 1
     assert "render exploded" in capsys.readouterr().out
+
+
+def test_ui_check_does_not_leak_the_accessible_flag(monkeypatch):
+    """Probing accessible mode must not change later renders in this process."""
+    from ui.check import run_ui_check
+    from ui.theme import ACCESSIBLE_ENV
+
+    monkeypatch.delenv(ACCESSIBLE_ENV, raising=False)
+    assert run_ui_check() == 0
+    assert ACCESSIBLE_ENV not in os.environ
+
+
+def test_ui_check_restores_the_accessible_flag_even_on_failure(monkeypatch):
+    from ui import check
+    from ui.theme import ACCESSIBLE_ENV
+
+    monkeypatch.setenv(ACCESSIBLE_ENV, "1")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("render exploded")
+
+    monkeypatch.setattr(check, "status_ribbon", boom)
+    assert check.run_ui_check() == 1
+    assert os.environ[ACCESSIBLE_ENV] == "1"
