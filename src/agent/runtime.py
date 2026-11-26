@@ -165,9 +165,6 @@ from .provider_resume import (
     persist_provider_choice,
     provider_record_for_resume,
 )
-from .provider_resume import (
-    offer_provider_start as _offer_provider_start,
-)
 from .providers import (
     has_saved_online_config as _has_saved_online_config,
 )
@@ -1785,7 +1782,6 @@ async def _choose_provider(
     available_models: list = []
     console.print("\n[bold underline]Model Provider[/bold underline]")
     from providers.selection import (
-        installed_but_idle,
         load_last_provider,
         match_runtime,
         optional_dependency_hint,
@@ -1795,41 +1791,11 @@ async def _choose_provider(
     )
 
     last_used = load_last_provider() or {}
-    idle_providers = installed_but_idle(local_runtimes)
-    for idle in idle_providers:
-        console.print(
-            f"  [warning]–[/warning] {idle.preset.name} is installed but not running "
-            f"— {idle.start_hint}"
-        )
-    if (
-        (resumed_record := provider_record_for_resume(memory, session_id)) is None
-        and interactive
-        and idle_providers
-    ):
-        local_runtimes[:], _ = _offer_provider_start(
-            console=console,
-            record=None,
-            idle_providers=idle_providers,
-            runtimes=local_runtimes,
-            refresh=_discover_available_local_runtimes,
-            input_fn=_input,
-            interactive=interactive,
-        )
     resumed_runtime = None
-    if resumed_record is not None:
+    if resumed_record := provider_record_for_resume(memory, session_id):
         resumed_runtime = match_runtime(
             resumed_record.display_name, local_runtimes
         ) or match_runtime_by_address(resumed_record.base_url, local_runtimes)
-        if resumed_runtime is None:
-            local_runtimes[:], resumed_runtime = _offer_provider_start(
-                console=console,
-                record=resumed_record,
-                idle_providers=idle_providers,
-                runtimes=local_runtimes,
-                refresh=_discover_available_local_runtimes,
-                input_fn=_input,
-                interactive=interactive,
-            )
     online_options: list[tuple[int, str, bool]] = []
     next_choice = len(local_runtimes) + 1
     if preference.online_preference is not None:
