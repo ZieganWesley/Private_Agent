@@ -13,16 +13,16 @@ from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
 
-from .console import console, resolve_style
+from config import (
+    TOOL_ARGUMENT_PREVIEW_CHARS,
+    TOOL_RESULT_PREVIEW_CHARS,
+)
 
-TOOL_RESULT_PREVIEW_CHARS = 500
+from .console import console, resolve_style
 
 # Absolute paths printed in a tool result: they become terminal hyperlinks.
 _PATH_TOKEN = re.compile(r"(?<![\w./~-])(~/[^\s\"'<>|]+|/[^\s\"'<>|]+)")
 _TRAILING_PATH_PUNCTUATION = ".,;:)]}\"'"
-
-# Longest argument value shown in a tool-request grid row before eliding.
-TOOL_ARGUMENT_PREVIEW_CHARS = 200
 
 _RECENT_TOOL_RESULTS: list[tuple[str, str]] = []
 _MAX_RECENT_TOOL_RESULTS = 20

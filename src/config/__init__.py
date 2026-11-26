@@ -114,6 +114,9 @@ DEFAULT_CONFIG = {
         "context_compaction_threshold": 0.8,
         "context_keep_recent_messages": 6,
         "context_summary_chars": 1500,
+        "compaction_source_tokens": 0,
+        "tool_result_preview_chars": 500,
+        "tool_argument_preview_chars": 200,
         "context_engine_enabled": False,
         "context_engine_profile": "auto",
         "context_safety_margin_tokens": 0,
@@ -211,6 +214,10 @@ DEFAULT_CONFIG = {
         "shell_command_timeout_seconds": 30,
         "default_history_read_limit": 20,
         "override_tool_list": [],
+        "search_max_files": 10000,
+        "search_max_bytes": 16777216,
+        "search_output_chars": 12000,
+        "task_citation_budget_chars": 10000,
     },
     "media": {
         "max_captured_image_bytes": 2097152,
@@ -704,3 +711,10 @@ CODE_TASK_TEST_TIMEOUT = SETTINGS.code_task_test_timeout
 CODE_TASK_TEST_COMMANDS = SETTINGS.code_task_test_commands
 CODE_TASK_SUCCESS_OUTPUT_CHARS = SETTINGS.code_task_success_output_chars
 CODE_TASK_FAILURE_OUTPUT_CHARS = SETTINGS.code_task_failure_output_chars
+CONTEXT_COMPACTION_SOURCE_TOKENS = SETTINGS.context_compaction_source_tokens
+TOOL_RESULT_PREVIEW_CHARS = SETTINGS.tool_result_preview_chars
+TOOL_ARGUMENT_PREVIEW_CHARS = SETTINGS.tool_argument_preview_chars
+SEARCH_MAX_FILES = SETTINGS.search_max_files
+SEARCH_MAX_BYTES = SETTINGS.search_max_bytes
+SEARCH_OUTPUT_CHARS = SETTINGS.search_output_chars
+TASK_CITATION_BUDGET_CHARS = SETTINGS.task_citation_budget_chars

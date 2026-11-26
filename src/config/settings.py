@@ -299,6 +299,31 @@ def resolve_config_values(
     MAX_TOOL_OUTPUT_CHARS = positive_int(_agent_section, "max_tool_output_chars", 12000)
     MAX_HISTORY_MESSAGES = positive_int(_agent_section, "max_history_messages", 20)
     MAX_CONTEXT_TOKENS = positive_int(_agent_section, "max_context_tokens", 12000)
+    CONTEXT_COMPACTION_SOURCE_TOKENS = configured_nonnegative_int(
+        config, "agent", "compaction_source_tokens", 0
+    )
+    if not CONTEXT_COMPACTION_SOURCE_TOKENS:
+        # Derive the transcript cap from the context window; a fixed cap wastes
+        # large windows and overflows small ones.
+        CONTEXT_COMPACTION_SOURCE_TOKENS = max(1000, MAX_CONTEXT_TOKENS // 2)
+    TOOL_RESULT_PREVIEW_CHARS = configured_int_range(
+        config, "agent", "tool_result_preview_chars", 500, 100, 20000
+    )
+    TOOL_ARGUMENT_PREVIEW_CHARS = configured_int_range(
+        config, "agent", "tool_argument_preview_chars", 200, 50, 2000
+    )
+    SEARCH_MAX_FILES = configured_int_range(
+        config, "tools", "search_max_files", 10000, 100, 100000
+    )
+    SEARCH_MAX_BYTES = configured_int_range(
+        config, "tools", "search_max_bytes", 16 * 1024 * 1024, 1024**2, 256 * 1024**2
+    )
+    SEARCH_OUTPUT_CHARS = configured_int_range(
+        config, "tools", "search_output_chars", 12000, 1000, 100000
+    )
+    TASK_CITATION_BUDGET_CHARS = configured_int_range(
+        config, "tools", "task_citation_budget_chars", 10000, 1000, 50000
+    )
     MAX_OUTPUT_TOKENS = configured_int_range(
         config, "agent", "max_output_tokens", 2048, 1, 32768
     )
@@ -966,6 +991,13 @@ class Settings:
     code_task_test_commands: list[list[str]]
     code_task_success_output_chars: int
     code_task_failure_output_chars: int
+    context_compaction_source_tokens: int
+    tool_result_preview_chars: int
+    tool_argument_preview_chars: int
+    search_max_files: int
+    search_max_bytes: int
+    search_output_chars: int
+    task_citation_budget_chars: int
 
     @classmethod
     def from_config(

@@ -8,13 +8,14 @@ from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 
+from config import CONTEXT_COMPACTION_SOURCE_TOKENS
+
 from .prompts import _truncate_to_tokens, token_count
 from .status import SUMMARIZING, StatusIndicator, summarizing_message
 
 logger = logging.getLogger(__name__)
 
 SUMMARY_HEADER = "Condensed summary of the earlier part of this session"
-_MAX_SOURCE_TOKENS = 6000
 
 
 def message_text(message: Any) -> str:
@@ -80,7 +81,9 @@ async def _summarize(
     return text[:max_chars]
 
 
-def _transcript(messages: list[Any], token_limit: int = _MAX_SOURCE_TOKENS) -> str:
+def _transcript(messages: list[Any], token_limit: int | None = None) -> str:
+    if token_limit is None:
+        token_limit = CONTEXT_COMPACTION_SOURCE_TOKENS
     lines = []
     for message in messages:
         role = "User" if isinstance(message, HumanMessage) else "Assistant"
@@ -137,7 +140,7 @@ async def compact_history(
     *,
     keep_recent: int,
     max_chars: int,
-    source_token_limit: int = _MAX_SOURCE_TOKENS,
+    source_token_limit: int | None = None,
     notify: Callable[[str], None] | None = None,
     model_name: str = "model",
 ) -> tuple[list[Any], str]:
@@ -226,7 +229,7 @@ async def compact_loop_messages(
             )
         transcript = _truncate_to_tokens(
             "\n\n".join(f"Tool result: {message_text(m)}" for m in older),
-            max(100, min(_MAX_SOURCE_TOKENS, limit_tokens // 2)),
+            max(100, min(CONTEXT_COMPACTION_SOURCE_TOKENS, limit_tokens // 2)),
         )
         try:
             digest = await _summarize(
