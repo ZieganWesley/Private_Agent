@@ -1991,11 +1991,13 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
 
     # The resumed session now restores its recorded provider and model, so the
     # provider and model menus are no longer part of this script.
-    def resumed_input(prompt=""):
+    def resumed_input(prompt="", **kwargs):
         text = str(prompt)
         if "Resume latest session" in text:
             return "y"
         if "User:" in text:
+            # The input prompt is printed literally, never parsed as markup.
+            assert kwargs.get("markup") is False
             return "exit"
         return ""
 
