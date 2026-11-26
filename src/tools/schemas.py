@@ -1,14 +1,25 @@
 """Argument schemas for built-in tool calls."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from config import (
     DEFAULT_HISTORY_READ_LIMIT,
     MAX_SKILL_DESCRIPTION_CHARS,
     MAX_SKILL_INSTRUCTION_CHARS,
     MAX_SKILL_NAME_CHARS,
+)
+from plan_limits import (
+    PLAN_MAX_CITATION_CHARS,
+    PLAN_MAX_CITATIONS,
+    PLAN_MAX_GOAL_CHARS,
+    PLAN_MAX_REFERENCE_CHARS,
+    PLAN_MAX_STEP_DEPENDENCIES,
+    PLAN_MAX_STEP_DESCRIPTION_CHARS,
+    PLAN_MAX_STEP_ID_CHARS,
+    PLAN_MAX_STEPS,
+    PLAN_MAX_TEXT_ITEMS,
 )
 
 
@@ -251,28 +262,55 @@ class DeleteSqliteHistoryEntryInput(BaseModel):
     session_id: str = Field(..., min_length=1, max_length=200)
 
 
+ResearchReference = Annotated[
+    str, StringConstraints(min_length=1, max_length=PLAN_MAX_REFERENCE_CHARS)
+]
+
+
 class TaskPlanStepInput(BaseModel):
-    step_id: str = Field(..., min_length=1, max_length=64)
-    description: str = Field(..., min_length=1, max_length=1000)
-    dependencies: list[str] = Field(default_factory=list, max_length=20)
-    validation: list[str] = Field(default_factory=list, max_length=10)
-    proof: list[str] = Field(default_factory=list, max_length=10)
-    risks: list[str] = Field(default_factory=list, max_length=10)
-    edge_cases: list[str] = Field(default_factory=list, max_length=10)
+    step_id: str = Field(..., min_length=1, max_length=PLAN_MAX_STEP_ID_CHARS)
+    description: str = Field(
+        ..., min_length=1, max_length=PLAN_MAX_STEP_DESCRIPTION_CHARS
+    )
+    dependencies: list[str] = Field(
+        default_factory=list, max_length=PLAN_MAX_STEP_DEPENDENCIES
+    )
+    validation: list[str] = Field(default_factory=list, max_length=PLAN_MAX_TEXT_ITEMS)
+    proof: list[str] = Field(default_factory=list, max_length=PLAN_MAX_TEXT_ITEMS)
+    risks: list[str] = Field(default_factory=list, max_length=PLAN_MAX_TEXT_ITEMS)
+    edge_cases: list[str] = Field(default_factory=list, max_length=PLAN_MAX_TEXT_ITEMS)
 
 
-class CreateTaskPlanInput(BaseModel):
-    goal: str = Field(..., min_length=1, max_length=2000)
+class TaskPlanInput(BaseModel):
+    """Fields shared by plan creation and revision; limits live in plan_limits."""
+
+    goal: str = Field(..., min_length=1, max_length=PLAN_MAX_GOAL_CHARS)
     task_type: Literal["research", "coding", "other"]
-    steps: list[TaskPlanStepInput] = Field(..., min_length=1, max_length=20)
-    assumptions: list[str] = Field(default_factory=list, max_length=10)
-    constraints: list[str] = Field(default_factory=list, max_length=10)
-    research_questions: list[str] = Field(default_factory=list, max_length=10)
-    research_references: list[str] = Field(
+    steps: list[TaskPlanStepInput] = Field(..., min_length=1, max_length=PLAN_MAX_STEPS)
+    assumptions: list[str] = Field(default_factory=list, max_length=PLAN_MAX_TEXT_ITEMS)
+    constraints: list[str] = Field(default_factory=list, max_length=PLAN_MAX_TEXT_ITEMS)
+    research_questions: list[str] = Field(
+        default_factory=list, max_length=PLAN_MAX_TEXT_ITEMS
+    )
+    research_references: list[ResearchReference] = Field(
         default_factory=list,
-        max_length=10,
+        max_length=PLAN_MAX_CITATIONS,
         description="Runtime-injected citations from consented planning searches; do not invent.",
     )
+
+    @field_validator("research_references")
+    @classmethod
+    def _check_citation_budget(cls, references: list[str]) -> list[str]:
+        if sum(len(reference) for reference in references) > PLAN_MAX_CITATION_CHARS:
+            raise ValueError(
+                "Research citations exceed the "
+                f"{PLAN_MAX_CITATION_CHARS}-character plan budget."
+            )
+        return references
+
+
+class CreateTaskPlanInput(TaskPlanInput):
+    pass
 
 
 class ReadTableSchemaInput(BaseModel):
@@ -302,19 +340,8 @@ class UpdateTodoStepInput(BaseModel):
     evidence: str = Field(default="", max_length=2000)
 
 
-class ReviseTaskPlanInput(BaseModel):
-    goal: str = Field(..., min_length=1, max_length=2000)
-    task_type: Literal["research", "coding", "other"]
+class ReviseTaskPlanInput(TaskPlanInput):
     expected_revision: int = Field(..., ge=1)
-    steps: list[TaskPlanStepInput] = Field(..., min_length=1, max_length=20)
-    assumptions: list[str] = Field(default_factory=list, max_length=10)
-    constraints: list[str] = Field(default_factory=list, max_length=10)
-    research_questions: list[str] = Field(default_factory=list, max_length=10)
-    research_references: list[str] = Field(
-        default_factory=list,
-        max_length=10,
-        description="Runtime-injected citations from consented planning searches; do not invent.",
-    )
 
 
 class CreateSkillInput(BaseModel):

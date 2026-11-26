@@ -9,7 +9,18 @@ from datetime import UTC, datetime, timedelta
 
 from config import (
     MAX_SUMMARY_CHARS,
-    TASK_CITATION_BUDGET_CHARS,
+)
+from plan_limits import (
+    PLAN_MAX_CITATION_CHARS,
+    PLAN_MAX_CITATIONS,
+    PLAN_MAX_GOAL_CHARS,
+    PLAN_MAX_REFERENCE_CHARS,
+    PLAN_MAX_STEP_DEPENDENCIES,
+    PLAN_MAX_STEP_DESCRIPTION_CHARS,
+    PLAN_MAX_STEP_ID_CHARS,
+    PLAN_MAX_STEPS,
+    PLAN_MAX_TEXT_ITEM_CHARS,
+    PLAN_MAX_TEXT_ITEMS,
 )
 
 _LOGGER = logging.getLogger("private_agent.database.memory")
@@ -88,16 +99,17 @@ class TaskMixin:
             return []
         if not isinstance(value, list):
             raise TypeError(f"{label} must be a list of text items.")
-        if len(value) > 10:
-            raise ValueError(f"{label} must contain at most 10 text items.")
+        if len(value) > PLAN_MAX_TEXT_ITEMS:
+            raise ValueError(f"{label} allows at most {PLAN_MAX_TEXT_ITEMS} items.")
         normalized = []
         for index, item in enumerate(value, start=1):
             if not isinstance(item, str):
                 raise TypeError(f"{label} item {index} must be text.")
             text = item.strip()
-            if not text or len(text) > 500:
+            if not text or len(text) > PLAN_MAX_TEXT_ITEM_CHARS:
                 raise ValueError(
-                    f"{label} item {index} must contain 1 to 500 characters."
+                    f"{label} item {index} must contain 1 to "
+                    f"{PLAN_MAX_TEXT_ITEM_CHARS} characters."
                 )
             normalized.append(text)
         return normalized
@@ -108,31 +120,34 @@ class TaskMixin:
             return []
         if not isinstance(value, list):
             raise TypeError("Research references must be a list of text citations.")
-        if len(value) > 10:
-            raise ValueError("Research references must contain at most 10 citations.")
+        if len(value) > PLAN_MAX_CITATIONS:
+            raise ValueError(f"At most {PLAN_MAX_CITATIONS} research references.")
         references = []
         total_chars = 0
         for index, item in enumerate(value, start=1):
             if not isinstance(item, str):
                 raise TypeError(f"Research reference {index} must be text.")
             reference = item.strip()
-            if not reference or len(reference) > 1500:
+            if not reference or len(reference) > PLAN_MAX_REFERENCE_CHARS:
                 raise ValueError(
-                    f"Research reference {index} must contain 1 to 1500 characters."
+                    f"Research reference {index} must contain 1 to "
+                    f"{PLAN_MAX_REFERENCE_CHARS} characters."
                 )
             total_chars += len(reference)
             references.append(reference)
-        if total_chars > TASK_CITATION_BUDGET_CHARS:
+        if total_chars > PLAN_MAX_CITATION_CHARS:
             raise ValueError(
                 "Research citations exceed the "
-                f"{TASK_CITATION_BUDGET_CHARS}-character plan budget."
+                f"{PLAN_MAX_CITATION_CHARS}-character plan budget."
             )
         return references
 
     @classmethod
     def _normalize_plan_steps(cls, steps: list[dict]) -> list[dict]:
-        if not steps or len(steps) > 20:
-            raise ValueError("A plan must contain between 1 and 20 steps.")
+        if not steps or len(steps) > PLAN_MAX_STEPS:
+            raise ValueError(
+                f"A plan must contain between 1 and {PLAN_MAX_STEPS} steps."
+            )
         normalized = []
         for index, step in enumerate(steps, start=1):
             step_data = (
@@ -143,22 +158,29 @@ class TaskMixin:
                 else {}
             )
             description = str(step_data.get("description", "")).strip()
-            if not description or len(description) > 1000:
+            if not description or len(description) > PLAN_MAX_STEP_DESCRIPTION_CHARS:
                 raise ValueError(
-                    f"Plan step {index} must contain 1 to 1000 characters."
+                    f"Plan step {index} must contain 1 to "
+                    f"{PLAN_MAX_STEP_DESCRIPTION_CHARS} characters."
                 )
             step_id = str(step_data.get("step_id") or f"step-{index}").strip()
-            if len(step_id) > 64 or not step_id:
+            if len(step_id) > PLAN_MAX_STEP_ID_CHARS or not step_id:
                 raise ValueError(f"Plan step {index} has an invalid ID.")
             dependencies = step_data.get("dependencies", [])
-            if not isinstance(dependencies, list) or len(dependencies) > 20:
+            if (
+                not isinstance(dependencies, list)
+                or len(dependencies) > PLAN_MAX_STEP_DEPENDENCIES
+            ):
                 raise ValueError(
                     f"Plan step {index} dependencies must be a list of step IDs."
                 )
             if any(not isinstance(item, str) for item in dependencies):
                 raise ValueError(f"Plan step {index} dependency IDs must be text.")
             dependency_ids = [item.strip() for item in dependencies]
-            if any(not item or len(item) > 64 for item in dependency_ids):
+            if any(
+                not item or len(item) > PLAN_MAX_STEP_ID_CHARS
+                for item in dependency_ids
+            ):
                 raise ValueError(f"Plan step {index} has an invalid dependency ID.")
             if len(set(dependency_ids)) != len(dependency_ids):
                 raise ValueError(f"Plan step {index} has duplicate dependencies.")
@@ -234,8 +256,10 @@ class TaskMixin:
         """Persist a new task and its first immutable plan revision."""
         goal = str(goal).strip()
         task_type = str(task_type).strip().lower()
-        if not session_id or not goal or len(goal) > 2000:
-            raise ValueError("Task goal must contain 1 to 2000 characters.")
+        if not session_id or not goal or len(goal) > PLAN_MAX_GOAL_CHARS:
+            raise ValueError(
+                f"Task goal must contain 1 to {PLAN_MAX_GOAL_CHARS} characters."
+            )
         if task_type not in {"research", "coding", "other"}:
             raise ValueError("Task type must be research, coding, or other.")
         normalized_steps = self._normalize_plan_steps(steps)
@@ -301,8 +325,10 @@ class TaskMixin:
         """Append an immutable revision and invalidate any previous approval."""
         goal = str(goal).strip()
         task_type = str(task_type).strip().lower()
-        if not goal or len(goal) > 2000:
-            raise ValueError("Task goal must contain 1 to 2000 characters.")
+        if not goal or len(goal) > PLAN_MAX_GOAL_CHARS:
+            raise ValueError(
+                f"Task goal must contain 1 to {PLAN_MAX_GOAL_CHARS} characters."
+            )
         if task_type not in {"research", "coding", "other"}:
             raise ValueError("Task type must be research, coding, or other.")
         normalized_steps = self._normalize_plan_steps(steps)
