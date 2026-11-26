@@ -37,7 +37,16 @@ from providers.endpoints import EndpointRegistry, is_loopback_url, remote_allowe
 
 from .console import console
 from .local_runtimes import LocalRuntime, _is_loopback_url, discover_local_runtimes
-from .model_capabilities import detect_openai_compatible_capabilities
+from .model_catalog import (
+    DEFAULT_CATALOG_TTL_SECONDS,
+    ModelCatalog,
+    ModelRecord,
+    RequestLimits,
+)
+from .model_capabilities import (
+    detect_openai_compatible_capabilities,
+    detect_openai_compatible_model_record,
+)
 from .providers import (
     create_openai_compatible_chat_model as _create_openai_compatible_chat_model,
 )
@@ -47,7 +56,20 @@ from .providers import validate_online_base_url as _validate_online_base_url
 from providers.transport_model import TransportChatModel
 from .session_state import SESSION_STATS as _SESSION_STATS
 
+
+def _configured_probe_ttl() -> float:
+    models = APP_CONFIG.get("models", {}) if isinstance(APP_CONFIG, dict) else {}
+    raw = models.get("endpoint_probe_ttl_seconds") if isinstance(models, dict) else None
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw > 0:
+        return float(raw)
+    return DEFAULT_CATALOG_TTL_SECONDS
+
+
 _MODEL_CAPABILITIES_CACHE: dict[tuple[str, ...], dict[str, bool | None | int]] = {}
+_MODEL_CATALOG = ModelCatalog(
+    ttl_seconds=_configured_probe_ttl(),
+    max_entries=MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
+)
 _MODEL_CONSTRUCTION_COUNT: int = 0
 
 
@@ -99,14 +121,82 @@ def inspect_openai_compatible_model_capabilities(
         capability_cache=_MODEL_CAPABILITIES_CACHE,
         max_cache_entries=MAX_MODEL_CAPABILITY_CACHE_ENTRIES,
         overrides=_local_endpoint_capability_overrides(runtime.base_url),
+        catalog=_MODEL_CATALOG,
     )
 
 
-def _effective_context_window(capabilities: dict) -> int:
+def inspect_openai_compatible_model_record(
+    runtime: LocalRuntime, model_name: str
+) -> ModelRecord:
+    """Return the catalog record (limits, role, modalities) for a model."""
+    for record in getattr(runtime, "records", ()) or ():
+        _MODEL_CATALOG.put(record)
+    return detect_openai_compatible_model_record(
+        model_name,
+        base_url=runtime.base_url,
+        client_factory=public_only_sync_client,
+        catalog=_MODEL_CATALOG,
+        overrides=_local_endpoint_capability_overrides(runtime.base_url),
+    )
+
+
+def _effective_context_window(
+    capabilities: dict, record: ModelRecord | None = None
+) -> int:
+    if isinstance(record, ModelRecord):
+        return record.effective_limits(
+            ceiling_context=MAX_CONTEXT_TOKENS,
+            ceiling_output=MAX_OUTPUT_TOKENS,
+        ).context
     declared = capabilities.get("context_window")
     if isinstance(declared, int) and not isinstance(declared, bool) and declared > 0:
         return min(MAX_CONTEXT_TOKENS, declared)
     return MAX_CONTEXT_TOKENS
+
+
+def request_limits_for_provider(
+    provider_type: str,
+    runtime: LocalRuntime | None,
+    model_name: str,
+    capabilities: dict,
+) -> RequestLimits:
+    """Resolve limits for the selected provider (catalog-aware for local)."""
+    if provider_type == "local" and runtime is not None:
+        return request_limits_for_model(runtime, model_name, capabilities)
+    return RequestLimits(
+        context=MAX_CONTEXT_TOKENS,
+        input_tokens=MAX_CONTEXT_TOKENS,
+        output_tokens=MAX_OUTPUT_TOKENS,
+    )
+
+
+def request_limits_for_model(
+    runtime: LocalRuntime,
+    model_name: str,
+    capabilities: dict,
+) -> RequestLimits:
+    """Resolve request limits for a local model from the catalog."""
+    record = _MODEL_CATALOG.get(model_name, runtime.base_url)
+    if record is None:
+        record = next(
+            (
+                candidate
+                for candidate in (getattr(runtime, "records", ()) or ())
+                if candidate.model_id == model_name
+            ),
+            None,
+        )
+    if record is not None:
+        return record.effective_limits(
+            ceiling_context=MAX_CONTEXT_TOKENS,
+            ceiling_output=MAX_OUTPUT_TOKENS,
+        )
+    context = _effective_context_window(capabilities)
+    return RequestLimits(
+        context=context,
+        input_tokens=context,
+        output_tokens=min(MAX_OUTPUT_TOKENS, context),
+    )
 
 
 def get_robust_chat_model(
@@ -254,6 +344,7 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
                     base_url=runtime.base_url,
                     models=configured_models,
                     embedding_models=runtime.embedding_models,
+                    records=runtime.records,
                 )
             )
         else:
@@ -264,6 +355,7 @@ def _discover_available_local_runtimes() -> list[LocalRuntime]:
                     base_url=runtime.base_url,
                     models=runtime.models,
                     embedding_models=runtime.embedding_models,
+                    records=runtime.records,
                 )
             )
     return result

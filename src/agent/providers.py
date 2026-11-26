@@ -7,11 +7,8 @@ from urllib.parse import urlsplit, urlunsplit
 
 from utils.run_logging import RUN_LOGGER, log_event
 
-from .model_capabilities import (
-    capabilities_from_model_entry,
-    find_model_entry,
-    merge_capabilities,
-)
+from .model_capabilities import find_model_entry, merge_capabilities
+from .model_catalog import record_from_listing_entry
 
 
 def _response_field(response: Any, key: str, default: Any = None) -> Any:
@@ -589,6 +586,12 @@ def select_online_model(
             "check the endpoint, model, and key. Key details were not logged.[/error]"
         )
         return None
+    listing_entry = find_model_entry(model_listing, model_name)
+    listing_capabilities = (
+        record_from_listing_entry(listing_entry, base_url=base_url).capabilities()
+        if listing_entry is not None
+        else None
+    )
     return {
         "model": model,
         "model_name": model_name,
@@ -598,7 +601,7 @@ def select_online_model(
         "enforce_tool_call_limits": enforce_tool_call_limits,
         "capabilities": merge_capabilities(
             online_capabilities(model, allow_tools),
-            capabilities_from_model_entry(find_model_entry(model_listing, model_name)),
+            listing_capabilities,
         ),
     }
 

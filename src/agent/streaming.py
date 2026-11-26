@@ -176,7 +176,7 @@ async def _run_with_cancel(
             timeout=timeout,
             return_when=asyncio.FIRST_COMPLETED,
         )
-    except BaseException:
+    except BaseException:  # noqa: BLE001 - cancellation must still close both tasks
         task.cancel()
         cancel_task.cancel()
         raise
