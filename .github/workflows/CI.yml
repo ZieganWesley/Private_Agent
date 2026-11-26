@@ -31,12 +31,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bubblewrap
 
-      - name: Install macOS Dependencies
-        if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install bubblewrap
-          
       - name: Install Python Dependencies
         run: |
           python -m pip install --upgrade pip
@@ -96,17 +90,12 @@ jobs:
         with:
           python-version: "3.14"
   
+      # Bubblewrap is Linux-only; macOS uses its built-in sandbox-exec.
       - name: Install Bubblewrap
+        if: runner.os == 'Linux'
         run: |
-          case "$RUNNER_OS" in
-            Linux)
-              sudo apt-get update
-              sudo apt-get install -y bubblewrap
-              ;;
-            macOS)
-              brew install bubblewrap
-              ;;
-          esac
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
   
       - name: Install Dependencies
         run: |
@@ -177,9 +166,11 @@ jobs:
 
       - name: Generate Flame Graph
         run: |
+          # Keep the target alive long enough for py-spy to attach and sample;
+          # `private-agent --help` exits before the profiler can read it.
           py-spy record \
             -o flamegraph.svg \
-            -- private-agent --help
+            -- python -c "import time, agent.runtime; time.sleep(3)"
 
       - name: Upload Profiling Artifacts
         uses: actions/upload-artifact@v4
