@@ -1,7 +1,8 @@
 """The /status panel, built from the session's live state.
 
 Keeping the assembly here leaves the session loop with one call and lets
-``--ui-check`` and tests build the same panel without a running session.
+the UI self-check (``python -m ui.check``) and tests build the same panel
+without a running session.
 """
 
 from __future__ import annotations

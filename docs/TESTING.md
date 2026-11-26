@@ -6,7 +6,7 @@ pytest -q
 
 UI-only:
 ```bash
-private-agent --ui-check
+python -m ui.check
 ```
 
 Notes:

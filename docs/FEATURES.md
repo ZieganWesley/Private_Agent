@@ -16,7 +16,7 @@
 - Accessible mode via `PRIVATE_AGENT_ACCESSIBLE=1`.
 - NO_COLOR support.
 - Context gauge and turn summaries.
-- UI-only check trigger (`--ui-check`).
+- UI-only check trigger (`python -m ui.check`).
 
 ## Security
 - Workspace boundary enforcement.

@@ -178,11 +178,6 @@ def main():
         help="Run dependency, environment and machine-resource diagnostics.",
     )
     parser.add_argument(
-        "--ui-check",
-        action="store_true",
-        help="Run the manual UI self-check and exit (remove before production).",
-    )
-    parser.add_argument(
         "--debug",
         action="store_true",
         help="Enable a redacted per-session JSONL debug log under "
@@ -214,11 +209,6 @@ def main():
         from diagnostics.doctor import doctor_interactive
 
         raise SystemExit(doctor_interactive())
-    if args.ui_check or os.environ.get("PRIVATE_AGENT_UI_CHECK"):
-        # REMOVE BEFORE PRODUCTION: manual UI trigger point.
-        from ui.check import run_ui_check
-
-        raise SystemExit(run_ui_check())
     originals = []
     exit_code = 0
     from config import DEBUG_LOG_ENABLED
