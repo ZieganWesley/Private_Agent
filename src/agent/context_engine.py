@@ -118,6 +118,11 @@ class ContextEngine:
         """Update an allocation's source text without changing its budgets."""
         if not allocation.enabled:
             return allocation
+        requested = {
+            name: token_count(str(text or ""))
+            for name, text in source_texts.items()
+            if name in allocation.budgets
+        }
         for name, text in source_texts.items():
             if name not in allocation.budgets:
                 continue
@@ -131,11 +136,13 @@ class ContextEngine:
             else:
                 source = self._build_source(name, text, budget)
             allocation.sources[name] = source
+        previous = allocation.telemetry.get("requested", {}) if allocation.telemetry else {}
         allocation.telemetry = build_context_telemetry(
             profile=allocation.profile,
             total_tokens=allocation.total_tokens,
             budgets=allocation.budgets,
             sources=allocation.sources,
+            requested={**previous, **requested},
         ).to_dict()
         return allocation
 
@@ -192,11 +199,16 @@ class ContextEngine:
             if name not in budgets:
                 budgets[name] = 0
         sources = self.build_sources(source_texts, budgets)
+        requested = {
+            name: token_count(str(text or ""))
+            for name, text in (source_texts or {}).items()
+        }
         telemetry = build_context_telemetry(
             profile=prof,
             total_tokens=total_tokens,
             budgets=budgets,
             sources=sources,
+            requested=requested,
         ).to_dict()
         return ContextAllocation(
             profile=prof,

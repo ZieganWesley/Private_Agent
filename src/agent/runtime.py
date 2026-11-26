@@ -106,7 +106,10 @@ from .context_engine import (
 )
 from .context_turn import build_turn_prompt, rag_budget_for, start_turn_context
 from .context_runtime import context_cache_policy, prepare_context_request
-from .context_telemetry import build_runtime_context_report
+from .context_telemetry import (
+    build_runtime_context_report,
+    log_context_allocation,
+)
 from .console import console
 from .commands import mission_runtime as _mission_runtime
 from .commands.mission_runtime import mission_slash_command as _mission_slash_command
@@ -1538,6 +1541,11 @@ async def _build_session_setup(
     rag_embedding_provider = _embedding_choice.provider
     rag_embedding_model = _embedding_choice.model
     rag_embedding_base_url = _embedding_choice.base_url
+    from .provider_report import record_embedding_route
+
+    record_embedding_route(
+        rag_embedding_provider, rag_embedding_model, rag_embedding_base_url
+    )
 
     def _initialize_knowledge_base_with_embeddings(
         docs_path,
@@ -2636,12 +2644,13 @@ async def _run_agent_cli_session(
                             )
                     continue
                 if user_input.lower() in {"/context report", "/context stats", "/context usage"}:
-                    try:
-                        from .context_telemetry import format_context_report
+                    from .context_telemetry import print_context_usage
 
-                        session_ui.print(format_context_report(_CONTEXT_REPORT_STATE.get("value", {}) or {}))
-                    except Exception as exc:  # noqa: BLE001 - optional best-effort context feature
-                        session_ui.print(f"[warning][Context] {exc}[/warning]")
+                    print_context_usage(_CONTEXT_REPORT_STATE.get("value", {}) or {}, session_ui.print)
+                    continue
+                from .provider_report import handle_provider_command
+
+                if handle_provider_command(user_input, session_ui.print):
                     continue
                 if user_input.lower() == "/context clear":
                     pending_folder_context = ""
@@ -3821,7 +3830,9 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                     previous_hash=_CONTEXT_CACHE_STATE["prefix_hash"],
                 )
                 if _report is not None:
-                    _report.update(_context_meta); _CONTEXT_REPORT_STATE["value"] = _report
+                    _report.update(_context_meta)
+                    _CONTEXT_REPORT_STATE["value"] = _report
+                    log_context_allocation(_report, _context_meta.get("cache"))
                 _CONTEXT_CACHE_STATE["prefix_hash"] = _context_meta["cache"]["prefix_hash"]
                 turn_id = uuid.uuid4().hex
                 _f_state = f_integration.begin_turn(
