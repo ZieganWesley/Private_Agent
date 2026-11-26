@@ -29,6 +29,7 @@ from config import (
     EMBEDDING_PROVIDER,
     HARDWARE_ACCELERATION_MODE,
     OLLAMA_BASE_URL,
+    RAG_EXCLUDED_FILE_TYPES,
     RAG_FILE_TYPES,
     RAG_INDEX_PATH,
     RAG_MAX_CORPUS_BYTES,
@@ -45,7 +46,9 @@ from ui.console import console
 from .chunking import ChunkingSettings, split_text
 
 SQLITE_EXTENSIONS = frozenset({".db", ".sqlite", ".sqlite3", ".db3"})
-SUPPORTED_EXTENSIONS = frozenset(RAG_FILE_TYPES) | SQLITE_EXTENSIONS
+SUPPORTED_EXTENSIONS = (
+    frozenset(RAG_FILE_TYPES) | SQLITE_EXTENSIONS
+) - frozenset(RAG_EXCLUDED_FILE_TYPES)
 _SQLITE_HEADER = b"SQLite format 3\x00"
 _SQLITE_ROWS_PER_CHUNK = RAG_SQLITE_ROWS_PER_CHUNK
 _SQLITE_MAX_CELL_CHARS = RAG_SQLITE_MAX_CELL_CHARS

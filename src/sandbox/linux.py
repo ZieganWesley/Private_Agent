@@ -9,6 +9,7 @@ import threading
 import uuid
 
 from code_tasks.snapshots import SnapshotError, record_snapshot
+from config import SANDBOX_EXTRA_RISKY_PROGRAMS, SANDBOX_EXTRA_SYSTEM_PATHS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -198,6 +199,8 @@ def _record_snapshot_for_undo(
         )
 
 
+# Config may only add programs here, never remove the built-in ones.
+_EXTRA_RISKY_PROGRAMS = frozenset(SANDBOX_EXTRA_RISKY_PROGRAMS)
 _ELEVATED_PROGRAMS = frozenset({"sudo", "su", "doas", "pkexec", "runuser"})
 _DESTRUCTIVE_PROGRAMS = frozenset({"mkfs", "dd", "shred", "wipefs", "fdisk", "parted"})
 _OWNERSHIP_PROGRAMS = frozenset({"chown", "chgrp"})
@@ -227,7 +230,7 @@ _SYSTEM_PATHS = (
     "/sys",
     "/proc",
     "/dev",
-)
+) + tuple(SANDBOX_EXTRA_SYSTEM_PATHS)
 _FORK_BOMB = ":(){:|:&};:"
 # Builtins that do nothing useful (or fail) when run as a standalone program.
 _SHELL_BUILTINS = frozenset(
@@ -319,6 +322,8 @@ def _is_system_path(arg: str) -> bool:
 
 
 def _is_risky_simple_command(program: str, args: list[str]) -> bool:
+    if program in _EXTRA_RISKY_PROGRAMS:
+        return True
     if program in _ELEVATED_PROGRAMS:
         return True
     if program in _DESTRUCTIVE_PROGRAMS or program.startswith("mkfs."):
