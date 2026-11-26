@@ -96,3 +96,52 @@ def test_cli_error_and_warning_tags_resolve_against_the_shared_theme():
         style = shared.get_style(level)
         assert style.color is not None, level
         assert style.color.name
+
+
+def test_ribbon_text_styles_each_segment_by_meaning():
+    from ui.ribbon import ribbon_text
+
+    state = StatusState(
+        model="m",
+        context_tokens=9,
+        context_maximum=10,
+        permission_mode="auto",
+        output_tokens=5,
+        background_processes=0,
+    )
+    text = ribbon_text(state)
+    styles = {span.style for span in text.spans}
+    assert text.plain == status_ribbon(state)
+    assert "ribbon.model" in styles
+    assert "ribbon.context.high" in styles
+    assert "ribbon.permission.auto" in styles
+
+
+def test_ribbon_text_colours_context_and_permission_levels():
+    from ui.ribbon import ribbon_text
+
+    low = StatusState(
+        model="m",
+        context_tokens=1,
+        context_maximum=10,
+        permission_mode="readonly",
+    )
+    low_styles = {span.style for span in ribbon_text(low).spans}
+    assert "ribbon.context.ok" in low_styles
+    assert "ribbon.permission.readonly" in low_styles
+
+    mid = StatusState(model="m", context_tokens=6, context_maximum=10)
+    assert "ribbon.context.warn" in {span.style for span in ribbon_text(mid).spans}
+
+
+def test_ribbon_text_keeps_the_same_words_without_colour():
+    from ui.ribbon import ribbon_text
+
+    console = Console(record=True, no_color=True, width=100)
+    state = StatusState(
+        model="m", context_tokens=3, context_maximum=10, permission_mode="auto"
+    )
+    console.print(ribbon_text(state))
+    rendered = console.export_text()
+    assert rendered.strip() == status_ribbon(state)
+    assert "\x1b[" not in rendered

@@ -13,7 +13,7 @@ from .console import (
     success,
     warning,
 )
-from .ribbon import status_ribbon
+from .ribbon import ribbon_text, status_ribbon
 from .spinner import (
     LOADING,
     PROCESSING,
@@ -94,6 +94,7 @@ __all__ = [
     "phase_spinner",
     "processing_message",
     "reasoning_text",
+    "ribbon_text",
     "status_ribbon",
     "summarizing_message",
     "thinking_message",
