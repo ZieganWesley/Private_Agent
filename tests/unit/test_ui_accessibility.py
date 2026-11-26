@@ -70,3 +70,29 @@ def test_segments_never_drop_below_three():
     )
     for width in (1, 5, 10, 20):
         assert len(state.segments(width=width)) >= 3
+
+
+def test_light_palette_follows_argument_then_environment(monkeypatch):
+    from ui.theme import DARK_STYLES, LIGHT_STYLES, build_theme
+
+    monkeypatch.delenv("PRIVATE_AGENT_LIGHT", raising=False)
+    dark = build_theme(light=False)
+    light = build_theme(light=True)
+    assert dark.styles["accent"].color.name == DARK_STYLES["accent"]
+    assert light.styles["accent"].color.name == LIGHT_STYLES["accent"]
+    assert dark.styles["value"].color.name == DARK_STYLES["value"]
+
+    monkeypatch.setenv("PRIVATE_AGENT_LIGHT", "1")
+    assert build_theme().styles["value"].color.name == LIGHT_STYLES["value"]
+    assert build_theme(light=False).styles["value"].color.name == DARK_STYLES["value"]
+
+
+def test_cli_error_and_warning_tags_resolve_against_the_shared_theme():
+    import cli
+    from ui.console import console as shared
+
+    assert cli.console is shared
+    for level in ("info", "success", "warning", "error"):
+        style = shared.get_style(level)
+        assert style.color is not None, level
+        assert style.color.name

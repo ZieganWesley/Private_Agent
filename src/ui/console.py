@@ -5,9 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from rich.console import Console
-from rich.theme import Theme
 
-from .theme import MESSAGE_SYMBOLS, THEME
+from .theme import MESSAGE_SYMBOLS, build_theme
 
 
 class ThemedConsole(Console):
@@ -34,16 +33,24 @@ class ThemedConsole(Console):
 
 
 def build_console(light: bool | None = None) -> ThemedConsole:
-    """Return the shared console.
+    """Return a console with the named theme for the requested palette.
 
-    A named theme provides one style per message level. Rich still honours
-    ``NO_COLOR`` and terminal capability detection.
+    A named theme provides one style per message level and every semantic
+    colour used by rich renderables. Rich still honours ``NO_COLOR`` and
+    terminal capability detection. ``light`` overrides ``PRIVATE_AGENT_LIGHT``.
     """
 
-    theme = Theme(THEME.styles if hasattr(THEME, "styles") else {}, inherit=True)
-    # Prefer the module-level theme object, which already contains the levels.
-    theme = THEME
-    return ThemedConsole(theme=theme)
+    return ThemedConsole(theme=build_theme(light))
+
+
+def apply_theme(light: bool | None = None) -> None:
+    """Re-theme the shared console in place (used after ``--light`` is parsed).
+
+    The console object is imported all over the application, so the palette is
+    pushed onto it rather than rebuilt.
+    """
+
+    console.push_theme(build_theme(light))
 
 
 def _level_function(level: str):
@@ -56,6 +63,22 @@ def _level_function(level: str):
 
 console = build_console()
 console_global = console
+
+__all__ = [
+    "ThemedConsole",
+    "apply_theme",
+    "build_console",
+    "console",
+    "console_global",
+    "error",
+    "info",
+    "print_error",
+    "print_info",
+    "print_success",
+    "print_warning",
+    "success",
+    "warning",
+]
 
 info = _level_function("info")
 success = _level_function("success")
