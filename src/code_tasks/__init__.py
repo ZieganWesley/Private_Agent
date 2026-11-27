@@ -7,6 +7,11 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+try:
+    import resource
+except ImportError:  # pragma: no cover - Windows has no resource module
+    resource = None
+
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
@@ -242,6 +247,37 @@ def _sandboxed_environment() -> dict[str, str]:
     }
 
 
+def _host_resource_limit(resource_name: str) -> int | None:
+    """Return this process's hard limit, or ``None`` when it is unlimited."""
+    if resource is None:  # pragma: no cover - Windows
+        return None
+    limit_id = getattr(resource, resource_name, None)
+    if limit_id is None:  # pragma: no cover - platform dependent
+        return None
+    try:
+        _soft, hard = resource.getrlimit(limit_id)
+    except OSError:  # pragma: no cover - platform dependent
+        return None
+    except ValueError:  # pragma: no cover - platform dependent
+        return None
+    if hard is None or hard == resource.RLIM_INFINITY:
+        return None
+    return int(hard)
+
+
+def _sandbox_limit(resource_name: str, requested: int) -> int:
+    """Fit a sandbox limit inside the hard limit inherited from our parent.
+
+    A parent that already capped a resource (``ulimit -v`` in CI, for example)
+    makes ``prlimit`` fail with EPERM when the sandbox asks for more than the
+    parent allows, so the tighter of the two limits wins.
+    """
+    hard = _host_resource_limit(resource_name)
+    if hard is None:
+        return requested
+    return min(requested, hard)
+
+
 def _isolated_command(
     command: Sequence[str],
     root: Path,
@@ -424,10 +460,13 @@ def _isolated_command(
     args.extend(
         [
             prlimit,
-            f"--cpu={CODE_TASK_SANDBOX_CPU_SECONDS}",
-            f"--as={CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES}",
-            f"--nproc={CODE_TASK_SANDBOX_PROCESS_COUNT}",
-            f"--fsize={CODE_TASK_SANDBOX_FILE_SIZE_BYTES}",
+            f"--cpu={_sandbox_limit('RLIMIT_CPU', CODE_TASK_SANDBOX_CPU_SECONDS)}",
+            "--as="
+            f"{_sandbox_limit('RLIMIT_AS', CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES)}",
+            "--nproc="
+            f"{_sandbox_limit('RLIMIT_NPROC', CODE_TASK_SANDBOX_PROCESS_COUNT)}",
+            "--fsize="
+            f"{_sandbox_limit('RLIMIT_FSIZE', CODE_TASK_SANDBOX_FILE_SIZE_BYTES)}",
             "--",
             *rewritten_command,
         ]

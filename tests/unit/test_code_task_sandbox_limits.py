@@ -101,11 +101,91 @@ def test_module_constants_mirror_settings() -> None:
     )
 
 
-def test_isolated_command_renders_configured_limits(monkeypatch, tmp_path) -> None:
+class _FakeResource:
+    RLIM_INFINITY = -1
+    RLIMIT_CPU = 1
+    RLIMIT_AS = 2
+    RLIMIT_NPROC = 3
+    RLIMIT_FSIZE = 4
+
+    def __init__(self, limits: dict[int, tuple[int, int]]) -> None:
+        self._limits = limits
+
+    def getrlimit(self, limit_id: int) -> tuple[int, int]:
+        return self._limits[limit_id]
+
+
+def _linux_sandbox(monkeypatch, resource_limits):
     import code_tasks
 
     monkeypatch.setattr(code_tasks.platform, "system", lambda: "Linux")
     monkeypatch.setattr(code_tasks.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(code_tasks, "resource", _FakeResource(resource_limits))
+    return code_tasks
+
+
+def test_isolated_command_clamps_limits_to_inherited_hard_limits(
+    monkeypatch, tmp_path
+) -> None:
+    code_tasks = _linux_sandbox(
+        monkeypatch,
+        {
+            _FakeResource.RLIMIT_CPU: (42, 42),
+            _FakeResource.RLIMIT_AS: (2400000 * 1024, 2400000 * 1024),
+            _FakeResource.RLIMIT_NPROC: (256, 256),
+            _FakeResource.RLIMIT_FSIZE: (MIB, MIB),
+        },
+    )
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_CPU_SECONDS", 180)
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES", 4 * GIB)
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_PROCESS_COUNT", 512)
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_FILE_SIZE_BYTES", 512 * MIB)
+
+    isolated, _ = code_tasks._isolated_command(["python", "-V"], tmp_path)
+
+    assert "--cpu=42" in isolated
+    assert f"--as={2400000 * 1024}" in isolated
+    assert "--nproc=256" in isolated
+    assert f"--fsize={MIB}" in isolated
+
+
+def test_isolated_command_keeps_limits_when_hard_limits_are_unlimited(
+    monkeypatch, tmp_path
+) -> None:
+    unlimited = _FakeResource.RLIM_INFINITY
+    code_tasks = _linux_sandbox(
+        monkeypatch,
+        {
+            _FakeResource.RLIMIT_CPU: (unlimited, unlimited),
+            _FakeResource.RLIMIT_AS: (unlimited, unlimited),
+            _FakeResource.RLIMIT_NPROC: (unlimited, unlimited),
+            _FakeResource.RLIMIT_FSIZE: (unlimited, unlimited),
+        },
+    )
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_CPU_SECONDS", 180)
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES", 4 * GIB)
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_PROCESS_COUNT", 128)
+    monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_FILE_SIZE_BYTES", 512 * MIB)
+
+    isolated, _ = code_tasks._isolated_command(["python", "-V"], tmp_path)
+
+    assert "--cpu=180" in isolated
+    assert f"--as={4 * GIB}" in isolated
+    assert "--nproc=128" in isolated
+    assert f"--fsize={512 * MIB}" in isolated
+
+
+def test_isolated_command_renders_configured_limits(monkeypatch, tmp_path) -> None:
+    unlimited = _FakeResource.RLIM_INFINITY
+    code_tasks = _linux_sandbox(
+        monkeypatch,
+        {
+            _FakeResource.RLIMIT_CPU: (unlimited, unlimited),
+            _FakeResource.RLIMIT_AS: (unlimited, unlimited),
+            _FakeResource.RLIMIT_NPROC: (unlimited, unlimited),
+            _FakeResource.RLIMIT_FSIZE: (unlimited, unlimited),
+        },
+    )
     monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_CPU_SECONDS", 42)
     monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_ADDRESS_SPACE_BYTES", 6 * GIB)
     monkeypatch.setattr(code_tasks, "CODE_TASK_SANDBOX_PROCESS_COUNT", 256)
