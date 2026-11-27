@@ -2883,6 +2883,8 @@ async def test_mcp_tool_timeout_is_returned_without_claiming_completion(
     def answer_prompt(prompt):
         if "Choose permission mode" in prompt:
             return "3"
+        if "Type 'yes'" in prompt:
+            return "yes"
         if "Choose provider" in prompt:
             return "1"
         if "Select model choice" in prompt:
@@ -3888,6 +3890,8 @@ async def test_online_tool_failure_redacts_sensitive_args_and_keeps_only_approve
     def answer_prompt(prompt):
         if "permission mode" in prompt:
             return "3"
+        if "Type 'yes'" in prompt:
+            return "yes"
         if "Resume latest session" in prompt:
             return "n"
         if "Choose provider" in prompt:
