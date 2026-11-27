@@ -249,8 +249,15 @@ def local_cosine_rerank(
     return [document for document, _ in scored]
 
 
-def reranker_from_config(config: Any) -> HttpReranker | None:
-    """Build a reranker for the endpoint that advertises the rerank role."""
+def reranker_from_config(
+    config: Any, *, preferred_model: str | None = None
+) -> HttpReranker | None:
+    """Build a reranker for the endpoint that advertises the rerank role.
+
+    ``preferred_model`` is the remembered choice. It is reused when the
+    endpoint still advertises it, so the router does not silently switch
+    models between launches.
+    """
     try:
         from providers.endpoints import EndpointRegistry
 
@@ -282,7 +289,11 @@ def reranker_from_config(config: Any) -> HttpReranker | None:
         mode = "local"
     model = rag.get("rerank_model")
     if not isinstance(model, str) or not model.strip():
-        model = endpoint.models[0] if endpoint.models else None
+        remembered = str(preferred_model or "").strip()
+        if remembered and (not endpoint.models or remembered in endpoint.models):
+            model = remembered
+        else:
+            model = endpoint.models[0] if endpoint.models else None
     breaker = CircuitBreaker(
         failure_threshold=_integer(
             "rerank_breaker_failures", DEFAULT_FAILURE_THRESHOLD

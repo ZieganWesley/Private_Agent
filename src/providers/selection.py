@@ -38,21 +38,9 @@ def load_last_provider() -> dict[str, Any] | None:
     return raw if isinstance(raw, dict) else None
 
 
-def save_last_provider(
-    *,
-    adapter_type: str,
-    display_name: str,
-    base_url: str,
-    model: str,
-) -> None:
-    """Remember the provider and model used by this session (best effort)."""
+def _write_state(payload: dict[str, Any]) -> None:
+    """Write the remembered state, preserving every section (best effort)."""
     path = state_path()
-    payload = {
-        "adapter_type": str(adapter_type),
-        "display_name": str(display_name),
-        "base_url": str(base_url),
-        "model": str(model),
-    }
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -63,6 +51,73 @@ def save_last_provider(
             level=logging.WARNING,
             error_type=type(exc).__name__,
         )
+
+
+def _load_route(key: str) -> dict[str, str] | None:
+    """Read one remembered model route, or None when absent or malformed."""
+    state = load_last_provider() or {}
+    route = state.get(key)
+    if not isinstance(route, dict):
+        return None
+    values = {}
+    for field in ("provider", "model", "base_url"):
+        value = route.get(field, "")
+        values[field] = value.strip() if isinstance(value, str) else ""
+    if not values["provider"] or not values["model"]:
+        return None
+    return values
+
+
+def save_last_provider(
+    *,
+    adapter_type: str,
+    display_name: str,
+    base_url: str,
+    model: str,
+) -> None:
+    """Remember the provider and model used by this session (best effort)."""
+    state = load_last_provider() or {}
+    state.update(
+        {
+            "adapter_type": str(adapter_type),
+            "display_name": str(display_name),
+            "base_url": str(base_url),
+            "model": str(model),
+        }
+    )
+    _write_state(state)
+
+
+def load_embedding_choice() -> dict[str, str] | None:
+    """Read the remembered RAG embedding route, if one was saved."""
+    return _load_route("embedding")
+
+
+def save_embedding_choice(*, provider: str, model: str, base_url: str) -> None:
+    """Remember the RAG embedding route so auto-selection stays stable."""
+    state = load_last_provider() or {}
+    state["embedding"] = {
+        "provider": str(provider),
+        "model": str(model),
+        "base_url": str(base_url),
+    }
+    _write_state(state)
+
+
+def load_reranker_choice() -> dict[str, str] | None:
+    """Read the remembered RAG reranker route, if one was saved."""
+    return _load_route("reranker")
+
+
+def save_reranker_choice(*, model: str, base_url: str) -> None:
+    """Remember the resolved reranker endpoint and model."""
+    state = load_last_provider() or {}
+    state["reranker"] = {
+        "provider": "rerank",
+        "model": str(model),
+        "base_url": str(base_url),
+    }
+    _write_state(state)
 
 
 OLLAMA_EXTRA_HINT = (

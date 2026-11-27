@@ -3,12 +3,16 @@
 from types import SimpleNamespace
 
 from providers.selection import (
+    load_embedding_choice,
     load_last_provider,
+    load_reranker_choice,
     match_runtime,
     pick_default_model,
     requested_model,
     requested_provider,
+    save_embedding_choice,
     save_last_provider,
+    save_reranker_choice,
     state_path,
 )
 
@@ -36,6 +40,47 @@ def test_last_provider_round_trips(monkeypatch, tmp_path):
         "base_url": "http://127.0.0.1:11434",
         "model": "qwen3:8b",
     }
+
+
+def test_rag_routes_round_trip_and_survive_a_provider_save(monkeypatch, tmp_path):
+    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "state.json"))
+
+    save_embedding_choice(
+        provider="openai-compatible",
+        model="bge",
+        base_url="http://127.0.0.1:1234/v1",
+    )
+    save_reranker_choice(model="bge-reranker", base_url="http://127.0.0.1:9000/v1")
+    save_last_provider(
+        adapter_type="ollama",
+        display_name="Ollama",
+        base_url="http://127.0.0.1:11434",
+        model="qwen3:8b",
+    )
+
+    assert load_embedding_choice() == {
+        "provider": "openai-compatible",
+        "model": "bge",
+        "base_url": "http://127.0.0.1:1234/v1",
+    }
+    assert load_reranker_choice() == {
+        "provider": "rerank",
+        "model": "bge-reranker",
+        "base_url": "http://127.0.0.1:9000/v1",
+    }
+    assert load_last_provider()["embedding"]["model"] == "bge"
+
+
+def test_malformed_rag_routes_are_ignored(monkeypatch, tmp_path):
+    target = tmp_path / "state.json"
+    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(target))
+    target.write_text(
+        '{"embedding": {"provider": "ollama"}, "reranker": "bge"}',
+        encoding="utf-8",
+    )
+
+    assert load_embedding_choice() is None
+    assert load_reranker_choice() is None
 
 
 def test_last_provider_is_none_for_missing_or_malformed_state(monkeypatch, tmp_path):

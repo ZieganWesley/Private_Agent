@@ -208,6 +208,30 @@ def test_reranker_from_config_uses_the_rerank_endpoint():
     assert reranker.top_n == 5
 
 
+def test_reranker_from_config_reuses_a_remembered_model_when_advertised():
+    config = {
+        "models": {
+            "endpoints": [
+                {
+                    "name": "ranker",
+                    "base_url": "http://127.0.0.1:9000/v1",
+                    "roles": ["rerank"],
+                    "models": ["bge-reranker", "other-reranker"],
+                }
+            ]
+        },
+        "rag": {},
+    }
+
+    reranker = reranker_from_config(config, preferred_model="other-reranker")
+    assert reranker is not None
+    assert reranker.model == "other-reranker"
+
+    fallback = reranker_from_config(config, preferred_model="gone")
+    assert fallback is not None
+    assert fallback.model == "bge-reranker"
+
+
 def test_reranker_from_config_returns_none_without_rerank_role():
     assert (
         reranker_from_config(

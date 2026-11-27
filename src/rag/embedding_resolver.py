@@ -33,6 +33,33 @@ def _provider_for(runtime: Any) -> str:
     return "ollama" if _kind(runtime) == "ollama" else "openai-compatible"
 
 
+def stored_embedding_choice(
+    stored: dict[str, str] | None,
+    runtimes: Iterable[Any] | None,
+) -> EmbeddingChoice | None:
+    """Return the remembered route when a discovered runtime still offers it.
+
+    A remembered route keeps ``auto`` from flipping between two reachable
+    embedding runtimes (and re-embedding the whole index) on every launch.
+    """
+    if not stored:
+        return None
+    provider = str(stored.get("provider") or "").strip().lower()
+    model = str(stored.get("model") or "").strip()
+    if provider not in ("ollama", "openai-compatible") or not model:
+        return None
+    for runtime in runtimes or ():
+        if _provider_for(runtime) != provider:
+            continue
+        if model in _embedding_models(runtime):
+            return EmbeddingChoice(
+                provider,
+                model,
+                _base_url(runtime, str(stored.get("base_url") or "")),
+            )
+    return None
+
+
 def resolve_embedding_provider(
     runtimes: Iterable[Any] | None,
     provider: str = "ollama",
@@ -102,4 +129,9 @@ def resolve_embedding_provider(
     return EmbeddingChoice("ollama", model, base_url)
 
 
-__all__ = ["EmbeddingChoice", "VALID_PROVIDERS", "resolve_embedding_provider"]
+__all__ = [
+    "EmbeddingChoice",
+    "VALID_PROVIDERS",
+    "resolve_embedding_provider",
+    "stored_embedding_choice",
+]
