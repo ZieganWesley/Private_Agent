@@ -133,6 +133,7 @@ def run_project_tests(
                 timeout=timeout,
                 check=False,
                 env=environment,
+                cwd=str(workspace.root),
             )
         except subprocess.TimeoutExpired:
             failures.append(f"{' '.join(command)} timed out after {timeout} seconds")

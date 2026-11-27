@@ -53,20 +53,28 @@ def _sandbox_network_allowed() -> bool:
         return False
 
 
+def _workspace_path(sandbox_root: Path) -> str:
+    """Return the directory sandboxed shells see as the workspace root."""
+    import code_tasks
+
+    return code_tasks.sandbox_workspace_path(sandbox_root)
+
+
 def _current_shell_cwd(sandbox_root: Path) -> str:
     """Return the sandbox path used as the starting directory for shell calls."""
     global _SHELL_CWD
+    workspace = _workspace_path(sandbox_root)
     with _SHELL_CWD_LOCK:
         candidate = _SHELL_CWD
-    if not isinstance(candidate, str) or not candidate.startswith(_SANDBOX_WORKSPACE):
-        candidate = _SANDBOX_WORKSPACE
-    relative = candidate[len(_SANDBOX_WORKSPACE) :].lstrip("/")
+    if not isinstance(candidate, str) or not candidate.startswith(workspace):
+        candidate = workspace
+    relative = candidate[len(workspace) :].lstrip("/")
     host_dir = sandbox_root / relative if relative else sandbox_root
     try:
         if not host_dir.is_dir():
-            candidate = _SANDBOX_WORKSPACE
+            candidate = workspace
     except OSError:
-        candidate = _SANDBOX_WORKSPACE
+        candidate = workspace
     with _SHELL_CWD_LOCK:
         _SHELL_CWD = candidate
     return candidate
@@ -84,6 +92,8 @@ def _sandbox_shell_script(command: str, root: Path) -> str:
         "_sandbox_shell_script called with command length=" + str(len(command))
     )
     """Point host workspace paths in a shell script at the sandbox mount."""
+    if _workspace_path(root) != _SANDBOX_WORKSPACE:
+        return command
     host_root = re.escape(str(root.resolve()))
     return re.sub(rf"{host_root}(?=/|[\s;&|)'\"]|$)", _SANDBOX_WORKSPACE, command)
 
@@ -175,13 +185,15 @@ def run_shell_command(command: str, timeout: int | None = None) -> str:
             text=True,
             timeout=effective_timeout,
             env=environment,
+            cwd=str(sandbox_root),
         )
         stdout = result.stdout
         cwd_match = re.search(r"\n__PA_CWD__:(.+?)(?:\n|$)", stdout)
         if cwd_match:
             new_cwd = cwd_match.group(1).strip()
-            if new_cwd.startswith(_SANDBOX_WORKSPACE):
-                relative = new_cwd[len(_SANDBOX_WORKSPACE) :].lstrip("/")
+            workspace = _workspace_path(sandbox_root)
+            if new_cwd.startswith(workspace):
+                relative = new_cwd[len(workspace) :].lstrip("/")
                 host_dir = sandbox_root / relative if relative else sandbox_root
                 try:
                     if host_dir.is_dir():
@@ -287,6 +299,7 @@ def start_background_process(command: str, timeout: int | None = None) -> str:
             stderr=subprocess.STDOUT,
             text=True,
             env=environment,
+            cwd=str(sandbox_root),
             start_new_session=True,
         )
         started_at = time.time()

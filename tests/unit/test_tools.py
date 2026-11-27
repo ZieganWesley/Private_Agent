@@ -2,6 +2,7 @@ import asyncio
 import subprocess
 import sys
 import types
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from agent import (
     execute_tool_call,
     model_selection,
 )
+from platform_support import detect_platform
 from sandbox import SandboxManager, evaluate_shell_command
 from tools import (
     close_mcp_sandbox_dirs,
@@ -1565,7 +1567,11 @@ def test_shell_compound_command_in_real_sandbox(temp_workspace):
         )
     assert "Exit Code: 0" in res
     assert "HELLO" in res
-    assert (temp_workspace / "where.txt").read_text().strip() == "/workspace/sub"
+    reported_cwd = Path((temp_workspace / "where.txt").read_text().strip())
+    if detect_platform().is_linux:
+        assert reported_cwd == Path("/workspace/sub")
+    else:
+        assert reported_cwd.resolve() == (temp_workspace / "sub").resolve()
 
 
 @patch("mcp.client.stdio.stdio_client")

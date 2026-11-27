@@ -79,6 +79,10 @@ def _run_git(
         timeout=timeout,
         check=False,
         env=environment,
+        # Start inside the sandboxed tree: outside a mount namespace the child
+        # inherits this cwd, and resolving a host directory the profile denies
+        # makes git fail before it reads -C.
+        cwd=str(root),
     )
 
 
@@ -284,6 +288,21 @@ def _sandbox_limit(resource_name: str, requested: int) -> int:
     if hard is None:
         return requested
     return min(requested, hard)
+
+
+SANDBOX_WORKSPACE_MOUNT = "/workspace"
+
+
+def sandbox_workspace_path(root: Path | str) -> str:
+    """Return the path a sandboxed child should use to reach ``root``.
+
+    Bubblewrap bind-mounts the workspace at ``/workspace`` inside the sandbox.
+    The macOS Seatbelt sandbox has no mount namespace, so commands keep the
+    real host path.
+    """
+    if detect_platform().is_linux:
+        return SANDBOX_WORKSPACE_MOUNT
+    return str(Path(root).resolve())
 
 
 def _isolated_command(
