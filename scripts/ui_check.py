@@ -1,10 +1,8 @@
-"""Manual UI self-check entry point.
+"""Manual UI self-check entry point, kept outside the shipped package.
 
-This module exists only to exercise the terminal UI in isolation, without
-starting the agent. Run it with ``python -m ui.check``; it stays out of the
-``private-agent`` flag surface so the CLI keeps only shipped options.
-
-REMOVE BEFORE PRODUCTION.
+This script exercises the terminal UI in isolation, without starting the
+agent. Run it with ``python scripts/ui_check.py``. It is not part of the
+``private-agent`` wheel, so no development-only entry point ships to users.
 """
 
 from __future__ import annotations
@@ -17,13 +15,13 @@ from typing import Any
 
 from rich.console import Console
 
-from .chat_ui import ChatTranscript
-from .console import build_console
-from .ribbon import ribbon_text, status_ribbon
-from .session_ui import SessionUI
-from .spinner import StatusIndicator
-from .state import StatusState, context_bar, context_state_line
-from .theme import ACCESSIBLE_ENV, NO_COLOR_ENV, build_theme
+from ui.chat_ui import ChatTranscript
+from ui.console import build_console
+from ui.ribbon import ribbon_text, status_ribbon
+from ui.session_ui import SessionUI
+from ui.spinner import StatusIndicator
+from ui.state import StatusState, context_bar, context_state_line
+from ui.theme import ACCESSIBLE_ENV, NO_COLOR_ENV, build_theme
 
 
 @contextmanager
@@ -97,7 +95,7 @@ def run_ui_check(console: Any = None) -> int:
         sometimes printed by consoles that do not know the theme names; none
         of those may crash, drop text, or leak markup.
         """
-        from .markup import assistant_header
+        from ui.markup import assistant_header
 
         state = StatusState(
             model="test-model",
@@ -185,7 +183,7 @@ def run_ui_check(console: Any = None) -> int:
         assert "secret-value" not in rendered
 
     def startup_summary() -> None:
-        from .startup import startup_section, welcome_panel
+        from ui.startup import startup_section, welcome_panel
 
         pairs = (
             ("Config file", "/home/example/private_config.json"),
@@ -208,7 +206,7 @@ def run_ui_check(console: Any = None) -> int:
             assert "Workspace" in welcome, f"welcome lost the workspace at {width}"
 
     def status_panel_render() -> None:
-        from .status_view import StatusSection, status_panel
+        from ui.status_view import StatusSection, status_panel
 
         panel = status_panel(
             "Session Status",
@@ -243,8 +241,7 @@ def run_ui_check(console: Any = None) -> int:
 
     def context_bars() -> None:
         from agent.context_telemetry import build_context_telemetry
-
-        from .context_view import context_report_panel
+        from ui.context_view import context_report_panel
 
         telemetry = build_context_telemetry(
             profile="chat",
@@ -276,7 +273,7 @@ def run_ui_check(console: Any = None) -> int:
         assert "/expand" not in short
 
     def markdown_stream() -> None:
-        from .markdown_view import MarkdownStream, print_markdown
+        from ui.markdown_view import MarkdownStream, print_markdown
 
         buffer = io.StringIO()
         plain = Console(file=buffer, width=80, no_color=True)
@@ -298,7 +295,7 @@ def run_ui_check(console: Any = None) -> int:
         assert "```" not in streamed, "fence leaked from the streamed reply"
 
     def markup_escapes() -> None:
-        from .markup import assistant_header, plan_line
+        from ui.markup import assistant_header, plan_line
 
         hostile = "see [bold]b[/bold] and [/] plus [not-a-style]"
         rendered = _render(plan_line(hostile), 80)
@@ -308,7 +305,7 @@ def run_ui_check(console: Any = None) -> int:
         assert "AI (see [bold]b[/bold]" in header, "model name was escaped wrongly"
 
     def failure_panel_render() -> None:
-        from .failure_panel import model_failure_panel
+        from ui.failure_panel import model_failure_panel
 
         rendered = _render(
             model_failure_panel(
@@ -376,7 +373,7 @@ def run_ui_check(console: Any = None) -> int:
 
 
 def main() -> int:
-    """Run the self-check for ``python -m ui.check``."""
+    """Run the self-check for ``python scripts/ui_check.py``."""
     return run_ui_check()
 
 

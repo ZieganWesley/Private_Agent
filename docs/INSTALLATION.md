@@ -23,7 +23,7 @@ private-agent --doctor
 
 ## UI Check (developer only)
 ```bash
-python -m ui.check
+python scripts/ui_check.py
 ```
 Remove this entry point before production.
 

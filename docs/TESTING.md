@@ -6,7 +6,7 @@ pytest -q
 
 UI-only:
 ```bash
-python -m ui.check
+python scripts/ui_check.py
 ```
 
 Notes:
