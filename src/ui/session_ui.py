@@ -12,7 +12,7 @@ import time
 from typing import Any
 
 from .console import console as _shared_console
-from .ribbon import ribbon_text, status_ribbon
+from .ribbon import status_ribbon
 from .state import StatusState
 from .status_bar import StatusBar
 from .theme import ACCESSIBLE_ENV
@@ -69,15 +69,9 @@ class SessionUI:
         if provider_mode is not None:
             self._provider_mode = str(provider_mode)
         self._footer.update(self._current_state())
+        # The footer owns the ribbon: Mode A paints it live and Mode B prints
+        # it as each turn's closing line, so no copy is printed here.
         self._footer.start()
-        if self._footer.mode == "B" and self._footer.started:
-            with contextlib.suppress(Exception):
-                self.console.print(
-                    ribbon_text(
-                        self._current_state(),
-                        accessible=bool(os.environ.get(ACCESSIBLE_ENV)),
-                    )
-                )
 
     def set_context(self, used: Any, maximum: Any) -> None:
         try:

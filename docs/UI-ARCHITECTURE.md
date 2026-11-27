@@ -54,7 +54,8 @@ Methods the runtime uses:
 - **Mode A** (interactive TTY, colour on): a one-line `rich.live.Live` footer
   repainted on `update()`. `start()` opens it, `stop()` closes it.
 - **Mode B** (non-TTY / `NO_COLOR` / dumb terminal): no live region;
-  `stop()` reprints the canonical ribbon as the final line of the turn.
+  `turn_finished()` prints the canonical ribbon as the final line of the turn,
+  carrying that turn's context numbers.
 - **Disabled** (`status_bar=False`): `start`/`stop`/`update` are no-ops.
 
 Call sites never branch on the mode; the mode is an internal detail of

@@ -60,5 +60,8 @@ def test_scripted_turn_prints_one_turn_line_with_ribbon_last(monkeypatch):
     assert "Working" not in text
     lines = [line for line in text.splitlines() if line.strip()]
     assert lines, "no output produced"
-    assert "[Turn]" in lines[-1], f"turn summary not last: {lines[-1]!r}"
-    assert any("Model: m" in line for line in lines), "startup ribbon missing"
+    assert any("[Turn]" in line for line in lines), "turn summary missing"
+    # One ribbon per turn, and it closes the turn (Mode B contract).
+    ribbons = [line for line in lines if "Model: m" in line]
+    assert len(ribbons) == 1, f"expected one ribbon per turn: {ribbons}"
+    assert ribbons[0] in lines[-1], f"ribbon not last: {lines[-1]!r}"

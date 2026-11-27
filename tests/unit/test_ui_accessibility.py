@@ -141,6 +141,62 @@ def test_session_ui_ribbon_reports_provider_mode():
     assert "Permission: ask" in ribbon
 
 
+def test_mode_b_prints_the_ribbon_as_the_turn_closing_line(monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+    console = Console(record=True, width=120)
+    ui = SessionUI(console=console)
+    ui.bind(model="m", permission="auto", output_tokens=10)
+
+    ui.set_context(1, 10)
+    ui.turn_finished(ui.turn_started("first"))
+    ui.set_context(9, 10)
+    ui.turn_finished(ui.turn_started("second"))
+    ui.close()
+
+    lines = [line for line in console.export_text().splitlines() if line.strip()]
+    ribbons = [line for line in lines if "Model: m" in line]
+    # One closing ribbon per turn, carrying that turn's context numbers rather
+    # than the values frozen at startup.
+    contexts = [ribbon.split("|")[1].strip() for ribbon in ribbons]
+    assert contexts == ["Context: 10.0%", "Context: 90.0%"], contexts
+    assert ribbons[-1] in lines[-1], f"ribbon not last: {lines[-1]!r}"
+
+
+def test_context_state_line_is_silent_while_a_footer_shows_the_ribbon(monkeypatch):
+    from agent import session_summary
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    console = Console(record=True, width=120)
+    monkeypatch.setattr(session_summary, "console", console)
+    ui = SessionUI(console=console)
+    ui.bind(model="m", permission="auto")
+
+    usage = session_summary._print_context_state(
+        {"tokens": 5, "max": 10}, 64, "m", "auto"
+    )
+    ui.close()
+
+    assert usage == (5, 10)
+    assert console.export_text().strip() == "", "duplicate ribbon printed"
+
+
+def test_context_state_line_prints_when_no_footer_presents_the_ribbon(monkeypatch):
+    from agent import session_summary
+    from ui.status_bar import unregister_active_footer
+
+    console = Console(record=True, width=120)
+    unregister_active_footer(console)  # drop any stale entry for this id
+    monkeypatch.setattr(session_summary, "console", console)
+    ui = SessionUI(console=console, status_bar=False)
+    ui.bind(model="m", permission="auto")
+
+    session_summary._print_context_state({"tokens": 5, "max": 10}, 64, "m", "auto")
+    ui.close()
+
+    # With the status bar off, the runtime line is the only ribbon left.
+    assert "Model: m" in console.export_text()
+
+
 def test_ribbon_segments_use_human_labels():
     state = StatusState(
         model="qwen",

@@ -178,15 +178,32 @@ class StatusBar:
                 self._live.update(self._render())
 
     def turn_finished(self) -> None:
-        """End-of-turn handling that keeps a TTY footer alive."""
+        """End-of-turn handling: repaint Mode A, close Mode B with the ribbon."""
         if not self._enabled or not self._started:
             return
         if self._mode == "A":
             with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
                 self.update()
             return
-        # Mode B: the ribbon was printed once at startup; do not reprint it
-        # on every turn.
+        # Mode B has no live region, so the ribbon is the turn's closing line.
+        # It is built from the provider here rather than reused from startup
+        # so it carries this turn's context numbers instead of frozen ones.
+        with contextlib.suppress(Exception):  # noqa: BLE001 - best effort
+            self.console.print(
+                ribbon_text(
+                    self._current_state(),
+                    accessible=bool(os.environ.get(ACCESSIBLE_ENV)),
+                )
+            )
+
+    @property
+    def presents_ribbon(self) -> bool:
+        """Whether this footer is itself responsible for showing the ribbon.
+
+        Call sites use it to avoid printing a second copy: Mode A paints it in
+        the live region and Mode B prints it as the final line of the turn.
+        """
+        return self._enabled
 
     def stop(self) -> None:
         if not self._enabled or not self._started:

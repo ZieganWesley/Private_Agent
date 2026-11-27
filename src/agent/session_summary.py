@@ -13,6 +13,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from config import MAX_SUMMARY_CHARS, SUMMARY_PROMPT_SENTENCES
 from database import PersistentMemory
+from ui.status_bar import get_active_footer
 from utils.run_logging import RUN_LOGGER, log_event
 
 from .console import console
@@ -60,8 +61,13 @@ def _print_context_state(
         output_tokens=output_tokens,
         background_processes=background_processes,
     )
-    status_text = status_ribbon(state)
-    console.print(f"[dim]{status_text}[/dim]")
+    # The status footer owns the ribbon: Mode A paints it live and Mode B
+    # prints it as the turn's closing line. Printing it here as well left a
+    # second, never-updated ribbon in the transcript every turn, so it is only
+    # emitted when no footer is presenting one (status bar disabled or off).
+    footer = get_active_footer(console)
+    if footer is None or not footer.presents_ribbon:
+        console.print(f"[dim]{status_ribbon(state)}[/dim]")
     used = context_tokens
     try:
         used = int(context_tokens)
