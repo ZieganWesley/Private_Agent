@@ -247,7 +247,7 @@ def test_startup_banner_prints(monkeypatch, capsys):
 
     cli.main()
 
-    assert "Private Agent" in capsys.readouterr().out
+    assert "Local Inference & Tool Runtime" in capsys.readouterr().out
 
 
 def test_ui_check_flag_is_retired(monkeypatch, capsys):
