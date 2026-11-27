@@ -431,16 +431,21 @@ async def test_preferred_local_model_is_listed_first_and_marked(
     monkeypatch.setattr(agent, "PREFERRED_MODEL", "pref")
     monkeypatch.setattr(agent, "prompt_user_input", AsyncMock(side_effect=["exit"]))
     inputs.side_effect = ["", "", "", "1", "1", "1", "n", ""]
-    printed = []
+    rendered = StringIO()
+    capture = Console(file=rendered, width=120, no_color=True)
     monkeypatch.setattr(
         agent.console,
         "print",
-        lambda *values, **_kwargs: printed.append(" ".join(map(str, values))),
+        lambda *values, **kwargs: capture.print(*values, **kwargs),
     )
 
     await run_agent_cli_async()
 
-    listing = [line for line in printed if "1." in line and "pref" in line]
+    listing = [
+        line
+        for line in rendered.getvalue().splitlines()
+        if "[1]" in line and "pref" in line
+    ]
     assert listing and "(configured, preferred)" in listing[0]
 
 

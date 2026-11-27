@@ -424,6 +424,19 @@ def _run_task_management(
         "delete",
         "done",
     ]
+    needs_task_id = {
+        "view",
+        "approve",
+        "resume",
+        "pause",
+        "cancel",
+        "verify",
+        "validate",
+        "reconcile",
+        "complete",
+        "discard",
+        "delete",
+    }
     while True:
         command = ""
         try:
@@ -438,27 +451,28 @@ def _run_task_management(
             _chosen_action = None
         if _chosen_action is not None:
             command = _chosen_action.strip()
-            if command.lower() in {
-                "view",
-                "approve",
-                "resume",
-                "pause",
-                "cancel",
-                "verify",
-                "validate",
-                "reconcile",
-                "complete",
-                "discard",
-                "delete",
-            }:
+            if command.lower() in needs_task_id:
                 _tid = console.input("[info]Task id: [/info]").strip()
                 if _tid:
                     command = f"{command} {_tid}"
         if not command:
-            command = console.input(
-                "[info]Tasks[/info] [list/view/approve/resume/pause/cancel/"
-                "verify/validate/reconcile/complete/discard/delete/done]: "
-            ).strip()
+            from ui.menu import select_menu
+
+            command = (
+                select_menu(
+                    "Task action",
+                    [(action, action) for action in _task_actions],
+                    console=console,
+                    default="done",
+                    prompt="Tasks",
+                    allow_custom=True,
+                )
+                or ""
+            )
+            if command.lower() in needs_task_id:
+                _tid = console.input("[info]Task id: [/info]").strip()
+                if _tid:
+                    command = f"{command} {_tid}"
         if command.lower() in {"done", "exit", "back", "q"}:
             break
         if command.lower() == "list":

@@ -60,12 +60,19 @@ def choose_route(
         except IndexError, TypeError, ValueError:
             return routes[default]
 
-    console.print(f"[bold info][RAG][/bold info] Multiple {role} models are available:")
-    for index, route in enumerate(routes, 1):
-        console.print(f"  {index}. {route.label} · {route.model}")
-    answer = console.input(f"Select {role} model [1-{len(routes)}]: ").strip()
-    if not answer:
-        return routes[default]
+    from ui.menu import select_menu
+
+    answer = select_menu(
+        title,
+        [
+            (str(index), f"{route.label} · {route.model}")
+            for index, route in enumerate(routes, 1)
+        ],
+        console=console,
+        default=str(default + 1),
+        prompt=f"Select {role} model",
+        subtitle=f"Multiple {role} models are available",
+    )
     try:
         return routes[int(answer) - 1]
     except IndexError, TypeError, ValueError:

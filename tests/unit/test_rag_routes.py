@@ -21,7 +21,13 @@ class _Console:
         self.prompts: list[str] = []
 
     def print(self, message: str) -> None:
-        self.lines.append(str(message))
+        from io import StringIO
+
+        from rich.console import Console
+
+        buffer = StringIO()
+        Console(file=buffer, width=100, no_color=True).print(message)
+        self.lines.append(buffer.getvalue())
 
     def input(self, prompt: str = "") -> str:
         self.prompts.append(prompt)
