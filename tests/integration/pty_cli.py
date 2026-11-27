@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 if sys.platform != "win32":
@@ -28,16 +28,35 @@ sys.path.insert(0, os.environ["PA_SRC"])
 
 import agent.runtime as runtime
 from agent.session_types import ProviderSelection, SessionSetup
+from types import SimpleNamespace
 from database import PersistentMemory
+from langchain_core.messages import AIMessage
 from sandbox import SandboxManager
 
 
 class _FakeLLM:
+    def __init__(self):
+        self.calls = 0
+
     def bind_tools(self, tools):
         return self
 
     async def ainvoke(self, _messages):
-        raise RuntimeError("the PTY test must not call the model")
+        if not os.environ.get("PA_PTY_TOOL_CALL"):
+            raise RuntimeError("the PTY test must not call the model")
+        self.calls += 1
+        if self.calls == 1:
+            return AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "web_search",
+                        "args": {"query": "release notes for the local runtime"},
+                        "id": "pty-network-call",
+                    }
+                ],
+            )
+        return AIMessage(content="network request declined")
 
 
 async def _prepare_session(**_kwargs):
@@ -80,7 +99,9 @@ async def _choose_provider(**_kwargs):
         llm=model,
         llm_with_tools=model,
         tools_list=[],
-        selected_local_runtime=None,
+        selected_local_runtime=SimpleNamespace(
+            name="pty-local", models=["pty-model"], base_url="http://127.0.0.1:1"
+        ),
         include_private_context=False,
         startup_memory_context="",
         chat_history=[],
@@ -103,6 +124,20 @@ runtime.prompt_user_input = _prompt_user_input
 runtime.SHOW_WELCOME_SCREEN = False
 runtime.SHOW_TURN_DIVIDER = False
 runtime.STATUS_BAR = True
+
+if os.environ.get("PA_TOOL_MARKER"):
+    from tools import AVAILABLE_TOOLS
+
+    class _MarkerTool:
+        async def ainvoke(self, args):
+            with open(os.environ["PA_TOOL_MARKER"], "w", encoding="utf-8") as handle:
+                handle.write(str(args))
+            return "searched"
+
+    AVAILABLE_TOOLS["web_search"] = _MarkerTool()
+    runtime.ENABLE_WEB_RESEARCH = True
+    runtime.WEB_RESEARCH_CONSENT = "ask"
+    runtime.has_internet_connection = lambda: True
 
 from cli import main
 
@@ -203,6 +238,8 @@ def run_cli_in_pty(
     tmp_path: Path,
     *,
     replies: Sequence[tuple[bytes, bytes]] = ((b"User:", b"exit\n"),),
+    extra_env: dict[str, str] | None = None,
+    before_reply: Callable[[bytes], None] | None = None,
 ) -> tuple[str, bytes]:
     """Run the CLI under a PTY and send each reply when its marker appears."""
     repository = Path(__file__).resolve().parents[2]
@@ -225,6 +262,8 @@ def run_cli_in_pty(
             "LINES": "30",
         }
     )
+    if extra_env:
+        environment.update(extra_env)
     environment.pop("NO_COLOR", None)
     environment.pop("PRIVATE_AGENT_ACCESSIBLE", None)
 
@@ -257,6 +296,8 @@ def run_cli_in_pty(
             if found < 0:
                 break
             cursor = found + len(marker)
+            if before_reply is not None:
+                before_reply(marker)
             os.write(master, reply)
             pending.popleft()
 
