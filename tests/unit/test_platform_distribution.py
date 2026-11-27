@@ -7,7 +7,13 @@ from platform_support import (
 )
 
 
-def test_detect_distribution_from_os_release(tmp_path):
+def _fake_linux(monkeypatch):
+    """Force the Linux code path so os-release parsing is tested on any host."""
+    monkeypatch.setattr("platform_support.sys.platform", "linux")
+
+
+def test_detect_distribution_from_os_release(tmp_path, monkeypatch):
+    _fake_linux(monkeypatch)
     os_release = tmp_path / "os-release"
     os_release.write_text(
         'ID=ubuntu\nNAME="Ubuntu"\nVERSION_ID="24.04"\nID_LIKE="debian"\n',
@@ -23,6 +29,7 @@ def test_detect_distribution_from_os_release(tmp_path):
 
 
 def test_detect_distribution_fedora_uses_dnf(tmp_path, monkeypatch):
+    _fake_linux(monkeypatch)
     os_release = tmp_path / "os-release"
     os_release.write_text(
         'ID=fedora\nNAME="Fedora"\nVERSION_ID="40"\n', encoding="utf-8"

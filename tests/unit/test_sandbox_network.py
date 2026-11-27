@@ -57,7 +57,11 @@ def test_isolated_command_network_egress_follows_permission(
         text=True,
         timeout=10,
     )
-    assert "--share-net" not in denied_command
+    if code_tasks.detect_platform().is_linux:
+        assert "--share-net" not in denied_command
+    else:
+        # macOS confines networking in the Seatbelt profile instead of argv flags.
+        assert "(deny network*)" in " ".join(denied_command)
     assert denied.returncode != 0
     assert "sandbox-network-ok" not in denied.stdout
 
@@ -73,7 +77,10 @@ def test_isolated_command_network_egress_follows_permission(
         text=True,
         timeout=10,
     )
-    assert "--share-net" in allowed_command
+    if code_tasks.detect_platform().is_linux:
+        assert "--share-net" in allowed_command
+    else:
+        assert "(allow network*)" in " ".join(allowed_command)
     assert allowed.returncode == 0
     assert "sandbox-network-ok" in allowed.stdout
 
