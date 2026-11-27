@@ -31,6 +31,39 @@ def test_cli_pty_erases_the_ribbon_after_goodbye(tmp_path):
     assert lines[last_goodbye + 1] == ""
 
 
+def test_cli_pty_network_consent_waits_and_blocks_the_tool(tmp_path):
+    tool_marker = tmp_path / "tool-ran.txt"
+
+    def assert_tool_has_not_run(marker):
+        if b"Full permission mode does not include internet access" in marker:
+            assert not tool_marker.exists(), "the tool ran before consent was answered"
+
+    raw, _ = run_cli_in_pty(
+        tmp_path,
+        replies=(
+            (b"User:", b"search for the runtime release notes\n"),
+            (b"Full permission mode does not include internet access", b"n\n"),
+            (b"User:", b"exit\n"),
+        ),
+        extra_env={
+            "PA_PTY_TOOL_CALL": "1",
+            "PA_TOOL_MARKER": str(tool_marker),
+        },
+        before_reply=assert_tool_has_not_run,
+    )
+    plain = plain_text(raw)
+    screen = ansi_screen(raw)
+
+    assert "Full permission mode does not include internet access" in plain, plain
+    assert "Full permission mode does not include internet access" in screen, screen
+    assert "web_search" in plain
+    assert "release notes for the local runtime" in plain
+    assert "[y/N]" in plain
+    assert "network request declined" in plain, plain
+    assert not tool_marker.exists(), "the declined tool must not run"
+    assert "Goodbye." in plain, plain
+
+
 def test_cli_pty_answers_the_doctor_confirmation_prompt(tmp_path):
     raw, _ = run_cli_in_pty(
         tmp_path,
