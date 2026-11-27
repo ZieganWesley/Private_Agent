@@ -90,6 +90,18 @@ def test_prompt_text_has_steering_prefix():
     assert message.prompt_text == f"{STEERING_PREFIX}use the other file"
 
 
+def test_clear_stop_keeps_the_interrupt_requested_by_resume():
+    controller = TurnController()
+    controller.begin_turn()
+    controller.request_stop()
+
+    controller.clear_stop()
+    controller.queue_message("resume mission", mode="interrupt")
+
+    assert controller.stop_requested is False
+    assert controller.interrupt_requested is True
+
+
 def test_finish_turn_clears_cancel_flags():
     controller = TurnController()
     controller.begin_turn()
@@ -100,6 +112,121 @@ def test_finish_turn_clears_cancel_flags():
     assert controller.state == "idle"
     assert controller.interrupt_requested is False
     assert controller.stop_requested is False
+
+
+class _MissionUI:
+    def __init__(self):
+        self.messages = []
+
+    def print(self, text):
+        self.messages.append(text)
+
+
+class _MissionController:
+    mission_id = "mission-1"
+
+    def __init__(self):
+        self.status = "active"
+        self.steered = []
+        self.released = False
+
+    def pause(self):
+        self.status = "paused"
+
+    def resume(self):
+        self.status = "active"
+
+    def stop(self):
+        self.status = "stopped"
+
+    def steer(self, text):
+        self.steered.append(text)
+
+    def release_lease(self, _owner):
+        self.released = True
+
+    def mission(self):
+        return {"status": self.status}
+
+
+class _MissionRunner:
+    owner = "owner-1"
+
+    def __init__(self):
+        self.controller = _MissionController()
+
+
+def _mission_channel(monkeypatch, controller):
+    from agent.commands import mission_runtime
+
+    runner = _MissionRunner()
+    monkeypatch.setattr(mission_runtime, "_ACTIVE_RUNNER", runner)
+    turn = TurnController()
+    turn.begin_turn()
+    ui = _MissionUI()
+    channel = InputChannel(turn, is_tty=False, enabled=False, session_ui=ui)
+    return channel, turn, runner, ui
+
+
+def test_input_channel_pauses_an_active_mission_without_steering(monkeypatch):
+    channel, turn, runner, ui = _mission_channel(monkeypatch, None)
+
+    channel.submit("/pause")
+
+    assert runner.controller.status == "paused"
+    assert turn.stop_requested is True
+    assert turn.queued_count == 0
+    assert any("Mission paused" in message for message in ui.messages)
+
+
+def test_input_channel_resumes_a_paused_mission_with_a_steering_prompt(monkeypatch):
+    channel, turn, runner, _ui = _mission_channel(monkeypatch, None)
+    runner.controller.status = "paused"
+    turn.request_stop()
+
+    channel.submit("/resume")
+
+    assert runner.controller.status == "active"
+    assert turn.stop_requested is False
+    messages = turn.drain()
+    assert [message.mode for message in messages] == ["interrupt"]
+    assert "Mission resumed" in messages[0].text
+
+
+def test_input_channel_stops_the_mission_and_releases_its_lease(monkeypatch):
+    channel, turn, runner, _ui = _mission_channel(monkeypatch, None)
+
+    channel.submit("/stop")
+
+    assert runner.controller.status == "stopped"
+    assert runner.controller.released is True
+    assert turn.stop_requested is True
+    assert turn.queued_count == 0
+
+
+def test_input_channel_records_mission_steering_and_queues_it(monkeypatch):
+    channel, turn, runner, _ui = _mission_channel(monkeypatch, None)
+
+    channel.submit("/steer focus on the failing test")
+
+    assert runner.controller.steered == ["focus on the failing test"]
+    messages = turn.drain()
+    assert [message.text for message in messages] == ["focus on the failing test"]
+
+
+def test_input_channel_consumes_pause_without_an_active_mission(monkeypatch):
+    from agent.commands import mission_runtime
+
+    monkeypatch.setattr(mission_runtime, "_ACTIVE_RUNNER", None)
+    turn = TurnController()
+    turn.begin_turn()
+    ui = _MissionUI()
+    channel = InputChannel(turn, is_tty=False, enabled=False, session_ui=ui)
+
+    channel.submit("/pause")
+
+    assert turn.queued_count == 0
+    assert any("No active mission" in message for message in ui.messages)
 
 
 def test_input_channel_routes_stop():

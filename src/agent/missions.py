@@ -272,6 +272,12 @@ class MissionController:
         )
         return mission
 
+    def steer(self, text: str) -> None:
+        """Record a user instruction without changing mission state."""
+        instruction = str(text or "").strip()
+        if instruction:
+            self._record("steered", {"text": instruction[:500]})
+
     def pause(self, reason: str = "Paused by the user.") -> dict:
         mission = self.memory.update_mission(
             self.mission_id, status="paused", last_error=reason

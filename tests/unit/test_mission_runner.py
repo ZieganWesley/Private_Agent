@@ -81,6 +81,22 @@ def test_interrupted_turn_is_not_completion_evidence(memory):
     assert controller.mission()["plan"]["steps"][0]["status"] == "active"
 
 
+def test_pause_keeps_the_lease_and_resume_returns_the_current_step(memory):
+    controller = _controller(memory)
+    runner = MissionAutoRunner(controller, "owner-1")
+    assert runner.next_prompt() is not None
+
+    controller.pause()
+    assert runner.observe("partial", had_tool_calls=False) is None
+    assert memory.mission_lease_active(controller.mission_id) is True
+
+    controller.resume()
+    prompt = runner.resume_prompt()
+
+    assert prompt is not None and "s1" in prompt
+    assert controller.mission()["status"] == "active"
+
+
 def test_stopped_mission_stops_prompting_and_releases_its_lease(memory):
     controller = _controller(memory)
     runner = MissionAutoRunner(controller, "owner-1")

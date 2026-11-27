@@ -9,21 +9,26 @@ from .turn_control import TurnController
 
 
 def begin_steering_turn(
-    *, interactive: bool
+    *, interactive: bool, session_ui: object | None = None
 ) -> tuple[TurnController, InputChannel | None]:
     """Create and start a fresh turn controller and optional TTY reader."""
     controller = TurnController()
     controller.begin_turn()
-    return controller, start_steering_channel(controller, interactive=interactive)
+    return controller, start_steering_channel(
+        controller, interactive=interactive, session_ui=session_ui
+    )
 
 
 def start_steering_channel(
-    controller: TurnController, *, interactive: bool
+    controller: TurnController,
+    *,
+    interactive: bool,
+    session_ui: object | None = None,
 ) -> InputChannel | None:
     """Return a running TTY reader, or None for non-interactive sessions."""
     if not interactive or not sys.stdin.isatty():
         return None
-    channel = InputChannel(controller)
+    channel = InputChannel(controller, session_ui=session_ui)
     channel.start()
     if not channel.running:
         channel.stop()

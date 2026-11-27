@@ -27,8 +27,10 @@ class InputChannel:
         read_line: Callable[[], str] | None = None,
         is_tty: bool | None = None,
         enabled: bool = True,
+        session_ui: object | None = None,
     ):
         self.controller = controller
+        self._session_ui = session_ui
         self._read_line = read_line
         self._is_tty = sys.stdin.isatty() if is_tty is None else bool(is_tty)
         self._fd = self._stdin_fd() if read_line is None else None
@@ -116,15 +118,38 @@ class InputChannel:
         if not cleaned:
             return
         lowered = cleaned.lower()
-        if lowered == "/stop":
-            self.controller.request_stop()
-            return
-        if lowered.startswith("/steer"):
-            instruction = cleaned[len("/steer") :].strip()
-            if instruction:
-                self.controller.queue_message(instruction, mode="interrupt")
+        command, _, argument = (
+            lowered[1:].partition(" ") if lowered.startswith("/") else ("", "", "")
+        )
+        if command in {"pause", "resume", "stop", "steer"}:
+            from .commands.mission_runtime import control_active_mission
+
+            live_argument = cleaned[1:].partition(" ")[2].strip()
+            controlled = control_active_mission(
+                command,
+                live_argument,
+                turn_control=self.controller,
+                session_ui=self._session_ui,
+            )
+            if command == "pause":
+                if not controlled:
+                    self._notice("No active mission to pause.")
+                return
+            if command == "resume":
+                if not controlled:
+                    self._notice("No active mission to resume.")
+                return
+            if command == "stop":
+                self.controller.request_stop()
+                return
+            if live_argument:
+                self.controller.queue_message(live_argument, mode="interrupt")
             return
         self.controller.queue_message(cleaned, mode="queue", source="input")
+
+    def _notice(self, text: str) -> None:
+        if self._session_ui is not None and hasattr(self._session_ui, "print"):
+            self._session_ui.print(f"[info][Mission][/info] {text}")
 
     def stop(self) -> None:
         self._stop.set()

@@ -117,6 +117,54 @@ def test_pause_resume_stop(memory):
     assert stopped["mission"]["status"] == "stopped"
 
 
+def test_prompt_control_pauses_and_resumes_the_active_mission(memory, monkeypatch):
+    from agent.commands import mission_runtime
+    from agent.mission_runner import MissionAutoRunner
+
+    started = handle_mission_command(
+        memory=memory,
+        session_id="s",
+        argument="start goal",
+        session_ui=FakeUI(),
+    )
+    runner = MissionAutoRunner(started["controller"], "owner-1")
+    assert runner.next_prompt() is not None
+    monkeypatch.setattr(mission_runtime, "_ACTIVE_RUNNER", runner)
+    ui = FakeUI()
+    try:
+        assert mission_runtime.mission_slash_command("/pause", memory, "s", ui) is None
+        assert runner.controller.mission()["status"] == "paused"
+
+        resume_prompt = mission_runtime.mission_slash_command(
+            "/resume", memory, "s", ui
+        )
+
+        assert resume_prompt is not None and "step-1" in resume_prompt
+        assert runner.controller.mission()["status"] == "active"
+        assert any("Mission paused" in message for message in ui.messages)
+    finally:
+        runner.controller.release_lease(runner.owner)
+
+
+def test_mission_start_announces_live_controls(memory, monkeypatch):
+    from agent.commands import mission_runtime
+
+    monkeypatch.setattr(mission_runtime, "_ACTIVE_RUNNER", None)
+    ui = FakeUI()
+
+    prompt = mission_runtime.mission_slash_command(
+        "/mission start goal", memory, "s", ui
+    )
+
+    assert prompt is not None and "step-1" in prompt
+    assert any("Mission controls" in message for message in ui.messages)
+    assert any("/pause" in message and "/stop" in message for message in ui.messages)
+    runner = mission_runtime._ACTIVE_RUNNER
+    if runner is not None:
+        runner.controller.release_lease(runner.owner)
+    monkeypatch.setattr(mission_runtime, "_ACTIVE_RUNNER", None)
+
+
 def test_unknown_action(memory):
     ui = FakeUI()
 

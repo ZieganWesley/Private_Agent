@@ -3871,7 +3871,7 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 _tool_context.turn_id = turn_id
                 set_tool_context(_tool_context)
                 _turn_control, _steering_channel = begin_steering_turn(
-                    interactive=interactive
+                    interactive=interactive, session_ui=session_ui
                 )
                 start_time = time.monotonic()
                 chat_transcript = ChatTranscript(console=console)
