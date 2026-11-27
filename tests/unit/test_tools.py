@@ -1513,9 +1513,12 @@ def _run_shell_with_fake_sandbox(command):
 
 
 def test_shell_compound_command_runs_through_bash_in_sandbox(temp_workspace):
+    import code_tasks
+
+    workspace = code_tasks.sandbox_workspace_path(SandboxManager.root_dir)
     command = "cd src && source venv/bin/activate && python --version"
     wrapped = (
-        "cd /workspace && " + command + "; __pa_status=$?; "
+        f"cd {workspace} && " + command + "; __pa_status=$?; "
         "printf '\\n__PA_CWD__:%s\\n' \"$(pwd)\"; exit $__pa_status"
     )
     result, isolated, run = _run_shell_with_fake_sandbox(command)
