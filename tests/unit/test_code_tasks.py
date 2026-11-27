@@ -388,6 +388,82 @@ def test_isolated_command_uses_seatbelt_on_macos(monkeypatch, tmp_path):
     assert isinstance(env, dict)
 
 
+def test_seatbelt_profile_denies_by_default_and_scopes_the_workspace(tmp_path):
+    import code_tasks
+
+    profile = code_tasks._seatbelt_profile(tmp_path, allow_network=False)
+    rules = [line for line in profile.splitlines() if line.strip()]
+
+    assert rules[0] == "(version 1)"
+    assert rules[1] == "(deny default)"
+    assert "(allow default)" not in profile
+    assert "(deny network*)" in rules
+    assert f'(allow file-write* (subpath "{tmp_path.resolve()}")' not in profile
+    write_rule = next(line for line in rules if line.startswith("(allow file-write*"))
+    assert f'(subpath "{tmp_path.resolve()}")' in write_rule
+    read_rule = next(line for line in rules if line.startswith("(allow file-read*"))
+    assert f'(subpath "{tmp_path.resolve()}")' in read_rule
+    # System libraries and the active interpreter stay readable so tools run.
+    assert '(subpath "/usr")' in read_rule
+    assert f'(subpath "{os.path.realpath(sys.base_prefix)}")' in read_rule
+    # The host home directory is not readable wholesale.
+    assert f'(subpath "{os.path.expanduser("~")}")' not in profile
+
+    connected = code_tasks._seatbelt_profile(tmp_path, allow_network=True)
+    assert "(allow network*)" in connected.splitlines()
+    assert "(deny default)" in connected.splitlines()
+
+
+def test_isolated_command_scrubs_secrets_from_the_macos_child_environment(
+    monkeypatch, tmp_path
+):
+    import code_tasks
+
+    monkeypatch.setattr(code_tasks.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(
+        code_tasks.shutil,
+        "which",
+        lambda name: "/usr/bin/sandbox-exec" if name == "sandbox-exec" else None,
+    )
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-do-not-leak")
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp-do-not-leak")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-do-not-leak")
+    monkeypatch.setenv("PRIVATE_AGENT_DB_KEY", "agent-do-not-leak")
+    monkeypatch.setenv("PRIVATE_AGENT_HOME", "/host/private-agent")
+    monkeypatch.setenv("LANG", "en_US.UTF-8")
+    monkeypatch.setenv("LC_ALL", "en_US.UTF-8")
+
+    _, environment = code_tasks._isolated_command(["echo", "hi"], tmp_path)
+
+    assert "OPENAI_API_KEY" not in environment
+    assert "GITHUB_TOKEN" not in environment
+    assert "AWS_SECRET_ACCESS_KEY" not in environment
+    assert not any(name.startswith("PRIVATE_AGENT") for name in environment)
+    assert environment["LANG"] == "en_US.UTF-8"
+    assert environment["LC_ALL"] == "en_US.UTF-8"
+    assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert not any("do-not-leak" in value for value in environment.values()), (
+        environment
+    )
+
+
+def test_isolated_command_scrubs_secrets_from_the_linux_child_environment(
+    monkeypatch, tmp_path
+):
+    import code_tasks
+
+    monkeypatch.setattr(code_tasks.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(code_tasks.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-do-not-leak")
+    monkeypatch.setenv("PRIVATE_AGENT_API_TOKEN", "agent-do-not-leak")
+
+    _, environment = code_tasks._isolated_command(["python", "-V"], tmp_path)
+
+    assert "OPENAI_API_KEY" not in environment
+    assert not any(name.startswith("PRIVATE_AGENT") for name in environment)
+    assert not any("do-not-leak" in value for value in environment.values())
+
+
 def test_isolated_command_shares_network_only_when_explicitly_enabled(
     monkeypatch, tmp_path
 ):
