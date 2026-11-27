@@ -128,6 +128,20 @@ def test_every_blind_exception_handler_carries_a_written_justification():
     assert offenders == []
 
 
+def test_every_top_level_source_module_is_shipped():
+    """A top-level module missing from ``py-modules`` breaks the installed wheel."""
+    import tomllib
+
+    pyproject = pathlib.Path("pyproject.toml")
+    declared = set(
+        tomllib.loads(pyproject.read_text(encoding="utf-8"))["tool"]["setuptools"][
+            "py-modules"
+        ]
+    )
+    modules = {path.stem for path in SOURCE_ROOT.glob("*.py")}
+    assert modules - declared == set()
+
+
 def test_log_event_never_uses_a_string_level():
     """log_event passes ``level`` to logging, so it must be an int (Part I)."""
     offenders = []

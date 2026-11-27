@@ -80,7 +80,13 @@ build-backend = "setuptools.build_meta"
 pythonpath = ["src", "."]
 
 [tool.setuptools]
-py-modules = ["cli", "__main__", "endpoint_legacy", "platform_support"]
+py-modules = [
+    "cli",
+    "__main__",
+    "endpoint_legacy",
+    "plan_limits",
+    "platform_support",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
