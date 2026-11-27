@@ -1,5 +1,3 @@
-from unittest.mock import MagicMock, patch
-
 from rich.console import Console
 
 try:
@@ -26,9 +24,6 @@ from hardware import (
     inspect_ollama_hardware,
     normalize_acceleration_mode,
     ollama_acceleration_options,
-)
-from rag import (
-    initialize_knowledge_base,
 )
 
 console = Console()
@@ -96,17 +91,3 @@ def test_hardware_status_handles_unavailable_ollama_server():
     )
     assert status["placement"] == "unknown"
     assert "Could not query Ollama runtime status" in status["error"]
-
-
-def test_rag_embeddings_receive_cpu_acceleration_policy(tmp_path, monkeypatch):
-    docs = tmp_path / "docs"
-    docs.mkdir()
-    (docs / "notes.txt").write_text("Local hardware policy test.", encoding="utf-8")
-    monkeypatch.setattr("rag.indexing.HARDWARE_ACCELERATION_MODE", "cpu")
-    with (
-        patch("rag.indexing.OllamaEmbeddings") as embeddings,
-        patch("rag.indexing.Chroma") as chroma,
-    ):
-        chroma.from_documents.return_value = MagicMock()
-        assert initialize_knowledge_base(str(docs)) is not None
-    assert embeddings.call_args.kwargs["num_gpu"] == 0

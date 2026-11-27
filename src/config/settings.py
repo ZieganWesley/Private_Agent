@@ -248,7 +248,7 @@ def resolve_config_values(
         "rag",
         "embedding_provider",
         default_for("rag", "embedding_provider"),
-        ("ollama", "openai-compatible", "auto", "none"),
+        ("auto", "none"),
     )
     EMBEDDING_BASE_URL = str(
         config_section(config, "rag").get(

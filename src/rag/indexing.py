@@ -9,12 +9,12 @@ import tempfile
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 from urllib.parse import quote
 
 from langchain_core.documents import Document
 
 from config import (
-    APP_CONFIG,
     CHUNKING_MIN_CHUNK_CHARS,
     CHUNKING_OVERLAP,
     CHUNKING_SEMANTIC_BUFFER,
@@ -27,8 +27,6 @@ from config import (
     EMBEDDING_BASE_URL,
     EMBEDDING_MODEL,
     EMBEDDING_PROVIDER,
-    HARDWARE_ACCELERATION_MODE,
-    OLLAMA_BASE_URL,
     RAG_EXCLUDED_FILE_TYPES,
     RAG_FILE_TYPES,
     RAG_INDEX_PATH,
@@ -40,7 +38,6 @@ from config import (
     RAG_SQLITE_MAX_ROWS_PER_TABLE,
     RAG_SQLITE_ROWS_PER_CHUNK,
 )
-from hardware import ollama_acceleration_options
 from ui.console import console
 
 from .chunking import ChunkingSettings, split_text
@@ -104,11 +101,9 @@ def embedding_signature(
     base_url = (
         embedding_base_url if embedding_base_url is not None else EMBEDDING_BASE_URL
     )
-    if provider == "ollama":
-        return f"ollama:{model}"
     if provider == "none":
         return "none"
-    return f"{provider}:{model}@{base_url.rstrip('/')}"
+    return f"{model}@{base_url.rstrip('/')}"
 
 
 def _source_fingerprint(file_path: pathlib.Path, file_stat) -> dict:
@@ -320,7 +315,7 @@ def _preserve_corrupt_index(index_path: pathlib.Path) -> pathlib.Path:
 
 
 def _ensure_rag_dependencies():
-    global Chroma, OllamaEmbeddings
+    global Chroma
     if Chroma is None:
         try:
             from langchain_chroma import Chroma as _Chroma
@@ -328,17 +323,9 @@ def _ensure_rag_dependencies():
             Chroma = _Chroma
         except ImportError:  # noqa: BLE001 - optional dependency
             Chroma = None
-    if OllamaEmbeddings is None:
-        try:
-            from langchain_ollama import OllamaEmbeddings as _OllamaEmbeddings
-
-            OllamaEmbeddings = _OllamaEmbeddings
-        except Exception:  # noqa: BLE001 - optional dependency
-            OllamaEmbeddings = None
 
 
 Chroma = None
-OllamaEmbeddings = None
 
 
 _CHUNK_CACHE: dict[str, tuple[dict, list]] = {}
@@ -357,8 +344,7 @@ def initialize_knowledge_base(
     embedding_provider: str | None = None,
     embedding_model: str | None = None,
     embedding_base_url: str | None = None,
-    rerank_model: str | None = None,
-    on_reranker_resolved: Callable[[str, str], None] | None = None,
+    reranker: Any | None = None,
 ):
     _ensure_rag_dependencies()
     """Initializes the Chroma vector store exclusively when an explicit, valid knowledge base folder path is provided."""
@@ -457,44 +443,30 @@ def initialize_knowledge_base(
             f"{_embedding_provider}...[/info]"
         )
         try:
-            if _embedding_provider == "ollama":
-                from tools import (
-                    ollama_langchain_client_kwargs,
-                    track_ollama_http_clients,
-                )
+            from agent.local_runtimes import _is_loopback_url
+            from providers.adapters import OpenAICompatibleAdapter
 
-                embeddings = OllamaEmbeddings(
-                    model=_embedding_model,
-                    base_url=OLLAMA_BASE_URL,
-                    **ollama_langchain_client_kwargs(),
-                    **ollama_acceleration_options(HARDWARE_ACCELERATION_MODE),
+            if not _is_loopback_url(_embedding_base_url):
+                console.print(
+                    f"[warning][Remote host][/warning] {_embedding_base_url} is not "
+                    "on this machine; document chunks leave the local device."
                 )
-                track_ollama_http_clients(embeddings)
-            else:
-                from agent.local_runtimes import _is_loopback_url
-                from providers.adapters import OpenAICompatibleAdapter
-
-                if not _is_loopback_url(_embedding_base_url):
-                    console.print(
-                        f"[warning][Remote host][/warning] {_embedding_base_url} is not "
-                        "on this machine; document chunks leave the local device."
-                    )
-                embeddings = OpenAICompatibleAdapter().embeddings(
-                    _embedding_model, base_url=_embedding_base_url
+            embeddings = OpenAICompatibleAdapter().embeddings(
+                _embedding_model, base_url=_embedding_base_url
+            )
+            if embeddings is None:
+                console.print(
+                    "[error][Error] Could not create the embedding client for "
+                    f"'{_embedding_base_url}'.[/error]"
                 )
-                if embeddings is None:
-                    console.print(
-                        "[error][Error] Could not create the embedding client for "
-                        f"'{_embedding_base_url}'.[/error]"
-                    )
-                    return None
+                return None
         except (ValueError, OSError, TypeError, RuntimeError) as e:  # noqa: BLE001 - optional dependency boundary
             console.print(f"[error][Error] Could not bind embedding model: {e}[/error]")
             return None
 
         # Verify the embedding runtime is actually reachable before indexing, so a
-        # configured-but-absent runtime (for example Ollama on a llama.cpp-only
-        # machine) disables RAG instead of failing on every later search.
+        # configured-but-absent endpoint disables RAG instead of failing on every
+        # later search.
         if hasattr(embeddings, "embed_query"):
             try:
                 embeddings.embed_query("embedding availability check")
@@ -752,12 +724,8 @@ def initialize_knowledge_base(
             )
 
         # Return Hybrid RAG retriever wrapper
-        from .rerank import reranker_from_config
         from .retrieval import HybridRAGRetriever
 
-        reranker = reranker_from_config(APP_CONFIG, preferred_model=rerank_model)
-        if reranker is not None and on_reranker_resolved is not None:
-            on_reranker_resolved(reranker.model, reranker.base_url)
         return HybridRAGRetriever(
             vectorstore,
             all_parsed_docs,
@@ -793,14 +761,8 @@ def initialize_knowledge_base(
                         embedding_function=embeddings,
                     )
                 _write_index_state_atomic(state_file_path, updated_state)
-                from .rerank import reranker_from_config
                 from .retrieval import HybridRAGRetriever
 
-                reranker = reranker_from_config(
-                    APP_CONFIG, preferred_model=rerank_model
-                )
-                if reranker is not None and on_reranker_resolved is not None:
-                    on_reranker_resolved(reranker.model, reranker.base_url)
                 return HybridRAGRetriever(
                     vectorstore,
                     all_parsed_docs,
