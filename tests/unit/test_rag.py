@@ -222,7 +222,7 @@ def test_local_data_reset_clears_both_stores_after_confirmation(monkeypatch, tmp
     memory.close()
 
 
-@patch("rag.indexing.OllamaEmbeddings")
+@patch("providers.adapters.OpenAICompatibleAdapter.embeddings")
 @patch("rag.indexing.Chroma")
 def test_rag_initialization_mocked(mock_chroma_class, mock_embeddings_class, tmp_path):
     doc_dir = tmp_path / "docs"
@@ -247,7 +247,7 @@ def test_rag_initialization_with_invalid_or_empty_paths():
 
 
 @patch(
-    "rag.indexing.OllamaEmbeddings",
+    "providers.adapters.OpenAICompatibleAdapter.embeddings",
     side_effect=Exception("Connection refused"),
 )
 def test_rag_embedding_failure_fallback(mock_embeddings_class):
@@ -262,7 +262,7 @@ def test_rag_corrupt_index_state_fails_closed_before_embedding(tmp_path):
     index.mkdir()
     state_path = index / ".index_state.json"
     state_path.write_text("{broken", encoding="utf-8")
-    with patch("rag.indexing.OllamaEmbeddings") as embeddings:
+    with patch("providers.adapters.OpenAICompatibleAdapter.embeddings") as embeddings:
         assert initialize_knowledge_base(str(docs), index_path=str(index)) is None
     embeddings.assert_not_called()
     assert state_path.read_text(encoding="utf-8") == "{broken"
@@ -276,7 +276,10 @@ def test_rag_guided_recovery_preserves_corrupt_index(tmp_path, monkeypatch):
     index.mkdir()
     (index / ".index_state.json").write_text("{bad", encoding="utf-8")
     (index / "chroma.sqlite3").write_text("preserve", encoding="utf-8")
-    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     vectorstore = MagicMock()
     monkeypatch.setattr("rag.indexing.Chroma", MagicMock())
     monkeypatch.setattr(
@@ -307,7 +310,10 @@ def test_rag_limits_file_size_and_keeps_state_write_atomic(tmp_path, monkeypatch
         def __init__(self, **kwargs):
             pass
 
-    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr("rag.indexing.Chroma", EmptyVectorStore)
     retriever = initialize_knowledge_base(str(docs), index_path=str(index))
     assert retriever is not None
@@ -348,7 +354,10 @@ def test_rag_vector_failure_does_not_advance_index_state(tmp_path, monkeypatch):
         def add_documents(self, documents, ids):
             raise RuntimeError("embedding write failed")
 
-    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr("rag.indexing.Chroma", FailingVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is None
     assert _read_index_state(state_path) == old_state
@@ -390,7 +399,10 @@ def test_rag_modified_and_removed_sources_update_vector_store_and_state(
             self.deleted.append({"ids": ids, "where": where})
 
     store = ExistingVectorStore()
-    monkeypatch.setattr(indexing, "OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr(indexing, "Chroma", lambda **kwargs: store)
 
     retriever = initialize_knowledge_base(str(docs), index_path=str(index))
@@ -420,7 +432,10 @@ def test_rag_corrupt_vector_database_fails_closed_without_advancing_state(
     old_state = {str(source.resolve()): {"mtime_ns": 1, "size": 1}}
     state_path.write_text(json.dumps(old_state), encoding="utf-8")
 
-    monkeypatch.setattr(indexing, "OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
 
     def corrupt_vector_store(**kwargs):
         raise RuntimeError("database is corrupt")
@@ -461,7 +476,10 @@ def test_rag_corrupt_vector_database_can_be_explicitly_preserved_and_rebuilt(
             assert len(documents) == 1
             return vectorstore
 
-    monkeypatch.setattr(indexing, "OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr(indexing, "Chroma", RecoveringChroma)
 
     retriever = initialize_knowledge_base(
@@ -531,7 +549,10 @@ def test_rag_partial_vector_update_requires_confirmation_then_rebuilds(
             assert len(documents) == 1
             return rebuilt
 
-    monkeypatch.setattr(indexing, "OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr(indexing, "Chroma", RecoveringChroma)
 
     refused = initialize_knowledge_base(
@@ -572,7 +593,10 @@ def test_rag_enforces_corpus_byte_limit(tmp_path, monkeypatch):
             cls.sources = {doc.metadata["source"] for doc in documents}
             return cls()
 
-    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr("rag.indexing.Chroma", RecordingVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is not None
     assert RecordingVectorStore.sources == {str(first.resolve())}
@@ -602,7 +626,10 @@ def test_rag_enforces_pdf_page_and_document_chunk_limits(tmp_path, monkeypatch):
         def get(self, where):
             return {"ids": []}
 
-    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr("rag.indexing.Chroma", EmptyVectorStore)
     assert initialize_knowledge_base(str(docs), index_path=str(index)) is not None
     assert _read_index_state(index / ".index_state.json") == {}
@@ -688,7 +715,10 @@ def _capture_indexing(monkeypatch):
             captured.extend(docs)
             return MagicMock()
 
-    monkeypatch.setattr("rag.indexing.OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr("rag.indexing.Chroma", RecordingStore)
     return captured
 
@@ -809,19 +839,21 @@ def test_initialize_knowledge_base_creates_missing_folder(tmp_path):
 def test_embedding_signature_records_provider_model_and_endpoint(monkeypatch):
     from rag import indexing
 
-    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "ollama")
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "auto")
     monkeypatch.setattr(indexing, "EMBEDDING_MODEL", "nomic-embed-text")
-    assert indexing.embedding_signature() == "ollama:nomic-embed-text"
+    monkeypatch.setattr(indexing, "EMBEDDING_BASE_URL", "http://127.0.0.1:11434/v1")
+    assert (
+        indexing.embedding_signature() == "nomic-embed-text@http://127.0.0.1:11434/v1"
+    )
 
     monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "none")
     assert indexing.embedding_signature() == "none"
 
-    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "openai-compatible")
+    monkeypatch.setattr(indexing, "EMBEDDING_PROVIDER", "auto")
     monkeypatch.setattr(indexing, "EMBEDDING_MODEL", "text-embedding-bge")
     monkeypatch.setattr(indexing, "EMBEDDING_BASE_URL", "http://127.0.0.1:1234/v1/")
     assert (
-        indexing.embedding_signature()
-        == "openai-compatible:text-embedding-bge@http://127.0.0.1:1234/v1"
+        indexing.embedding_signature() == "text-embedding-bge@http://127.0.0.1:1234/v1"
     )
 
 
@@ -864,7 +896,10 @@ def test_changing_the_embedder_rebuilds_the_whole_index(tmp_path, monkeypatch, c
         def delete(self, *, ids=None, where=None):
             return None
 
-    monkeypatch.setattr(indexing, "OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     monkeypatch.setattr(indexing, "Chroma", lambda **kwargs: ExistingVectorStore())
 
     retriever = initialize_knowledge_base(str(docs), index_path=str(index))

@@ -115,7 +115,7 @@ DEFAULT_CONFIG = {
         "default_episodic_summaries": 5,
     },
     "rag": {
-        "embedding_provider": "ollama",
+        "embedding_provider": "auto",
         "embedding_base_url": "http://127.0.0.1:1234/v1",
         "max_file_bytes": 5242880,
         "max_corpus_bytes": 26214400,

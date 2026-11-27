@@ -480,28 +480,21 @@ def test_config_compatibility_wrappers_read_the_current_module_config(monkeypatc
     assert config._configured_path("~/x", "/tmp").endswith(str(pathlib.Path("x")))
 
 
-def test_embedding_provider_accepts_an_openai_compatible_endpoint():
+def test_embedding_provider_accepts_an_explicit_disable():
     settings = Settings.from_config(
-        {
-            "rag": {
-                "embedding_provider": "openai-compatible",
-                "embedding_base_url": "http://127.0.0.1:8000/v1/",
-            }
-        },
-        default_paths=DEFAULT_PATHS,
+        {"rag": {"embedding_provider": "none"}}, default_paths=DEFAULT_PATHS
     )
 
-    assert settings.embedding_provider == "openai-compatible"
-    assert settings.embedding_base_url == "http://127.0.0.1:8000/v1/"
+    assert settings.embedding_provider == "none"
 
 
-def test_unknown_embedding_provider_falls_back_to_ollama():
+def test_unknown_embedding_provider_falls_back_to_discovery():
     settings = Settings.from_config(
         {"rag": {"embedding_provider": "some-cloud"}},
         default_paths=DEFAULT_PATHS,
     )
 
-    assert settings.embedding_provider == "ollama"
+    assert settings.embedding_provider == "auto"
     assert settings.embedding_base_url == "http://127.0.0.1:1234/v1"
 
 

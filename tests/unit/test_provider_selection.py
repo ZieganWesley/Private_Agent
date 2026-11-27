@@ -50,7 +50,11 @@ def test_rag_routes_round_trip_and_survive_a_provider_save(monkeypatch, tmp_path
         model="bge",
         base_url="http://127.0.0.1:1234/v1",
     )
-    save_reranker_choice(model="bge-reranker", base_url="http://127.0.0.1:9000/v1")
+    save_reranker_choice(
+        label="ranker",
+        model="bge-reranker",
+        base_url="http://127.0.0.1:9000/v1",
+    )
     save_last_provider(
         adapter_type="ollama",
         display_name="Ollama",
@@ -64,7 +68,7 @@ def test_rag_routes_round_trip_and_survive_a_provider_save(monkeypatch, tmp_path
         "base_url": "http://127.0.0.1:1234/v1",
     }
     assert load_reranker_choice() == {
-        "provider": "rerank",
+        "provider": "ranker",
         "model": "bge-reranker",
         "base_url": "http://127.0.0.1:9000/v1",
     }

@@ -249,71 +249,81 @@ def local_cosine_rerank(
     return [document for document, _ in scored]
 
 
+def _rag_settings(config: Any) -> dict[str, Any]:
+    rag = config.get("rag", {}) if isinstance(config, dict) else {}
+    return rag if isinstance(rag, dict) else {}
+
+
+def _number(rag: dict[str, Any], key: str, default: float) -> float:
+    value = rag.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return float(value) if value > 0 else default
+
+
+def _integer(rag: dict[str, Any], key: str, default: int) -> int:
+    value = rag.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return default
+    return value
+
+
+def reranker_for_route(route: Any, config: Any) -> HttpReranker:
+    """Build a reranker for one selected ``(model, endpoint)`` route."""
+    try:
+        from providers.endpoints import EndpointRegistry
+
+        endpoint = EndpointRegistry.from_config(config).for_base_url(route.base_url)
+    except Exception:  # noqa: BLE001 - optional feature boundary
+        endpoint = None
+    rag = _rag_settings(config)
+    return HttpReranker(
+        base_url=route.base_url,
+        model=route.model,
+        headers=endpoint.headers() if endpoint is not None else {},
+        timeout=_number(rag, "rerank_timeout_seconds", DEFAULT_RERANK_TIMEOUT_SECONDS),
+        top_n=_integer(rag, "rerank_top_n", DEFAULT_RERANK_TOP_N),
+        breaker=CircuitBreaker(
+            failure_threshold=_integer(
+                rag, "rerank_breaker_failures", DEFAULT_FAILURE_THRESHOLD
+            ),
+            cooldown_seconds=_number(
+                rag, "rerank_breaker_cooldown_seconds", DEFAULT_COOLDOWN_SECONDS
+            ),
+        ),
+        mode="api",
+        local_threshold=_integer(
+            rag, "rerank_local_threshold", DEFAULT_LOCAL_THRESHOLD
+        ),
+        max_candidates=_integer(rag, "rerank_max_candidates", DEFAULT_MAX_CANDIDATES),
+        cache_entries=_integer(rag, "rerank_cache_entries", DEFAULT_CACHE_ENTRIES),
+    )
+
+
 def reranker_from_config(
     config: Any, *, preferred_model: str | None = None
 ) -> HttpReranker | None:
-    """Build a reranker for the endpoint that advertises the rerank role.
+    """Build a reranker from the first discovered route (compatibility helper)."""
+    rag = _rag_settings(config)
+    if not rag.get("rerank_enabled", True):
+        return None
+    mode = str(rag.get("rerank_mode", "auto")).strip().lower()
+    if mode == "local":
+        return None
+    from .embedding_resolver import rerank_routes
 
-    ``preferred_model`` is the remembered choice. It is reused when the
-    endpoint still advertises it, so the router does not silently switch
-    models between launches.
-    """
     try:
         from providers.endpoints import EndpointRegistry
 
         registry = EndpointRegistry.from_config(config)
     except Exception:  # noqa: BLE001 - optional feature boundary
         return None
-    endpoint = registry.resolve("rerank")
-    if endpoint is None:
+    routes = rerank_routes(registry=registry)
+    if not routes:
         return None
-    rag = config.get("rag", {}) if isinstance(config, dict) else {}
-    rag = rag if isinstance(rag, dict) else {}
-
-    def _number(key: str, default: float) -> float:
-        value = rag.get(key, default)
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
-            return default
-        return float(value) if value > 0 else default
-
-    def _integer(key: str, default: int) -> int:
-        value = rag.get(key, default)
-        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-            return default
-        return value
-
-    mode = str(rag.get("rerank_mode", "auto")).strip().lower()
-    if mode not in RERANK_MODES:
-        mode = "auto"
-    if not rag.get("rerank_enabled", True):
-        mode = "local"
-    model = rag.get("rerank_model")
-    if not isinstance(model, str) or not model.strip():
-        remembered = str(preferred_model or "").strip()
-        if remembered and (not endpoint.models or remembered in endpoint.models):
-            model = remembered
-        else:
-            model = endpoint.models[0] if endpoint.models else None
-    breaker = CircuitBreaker(
-        failure_threshold=_integer(
-            "rerank_breaker_failures", DEFAULT_FAILURE_THRESHOLD
-        ),
-        cooldown_seconds=_number(
-            "rerank_breaker_cooldown_seconds", DEFAULT_COOLDOWN_SECONDS
-        ),
-    )
-    return HttpReranker(
-        base_url=endpoint.base_url,
-        model=model,
-        headers=endpoint.headers(),
-        timeout=_number("rerank_timeout_seconds", DEFAULT_RERANK_TIMEOUT_SECONDS),
-        top_n=_integer("rerank_top_n", DEFAULT_RERANK_TOP_N),
-        breaker=breaker,
-        mode=mode,
-        local_threshold=_integer("rerank_local_threshold", DEFAULT_LOCAL_THRESHOLD),
-        max_candidates=_integer("rerank_max_candidates", DEFAULT_MAX_CANDIDATES),
-        cache_entries=_integer("rerank_cache_entries", DEFAULT_CACHE_ENTRIES),
-    )
+    remembered = str(preferred_model or "").strip()
+    route = next((item for item in routes if item.model == remembered), routes[0])
+    return reranker_for_route(route, config)
 
 
 def rerank_with_fallback(

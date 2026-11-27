@@ -375,7 +375,7 @@ def test_reranker_from_config_reads_the_full_rerank_surface():
         )
     )
 
-    assert reranker.mode == "auto"
+    assert reranker.mode == "api"
     assert reranker.timeout == 1.5
     assert reranker.top_n == 7
     assert reranker.max_candidates == 30
@@ -385,11 +385,8 @@ def test_reranker_from_config_reads_the_full_rerank_surface():
     assert reranker.breaker.cooldown_seconds == 5
 
 
-def test_reranker_from_config_disables_the_api_in_local_mode():
-    reranker = reranker_from_config(_rerank_config(rerank_mode="local"))
-
-    assert reranker.mode == "local"
-    assert reranker.rerank("q", [Doc(f"d{index}") for index in range(30)]) is None
+def test_reranker_from_config_disables_reranking_in_local_mode():
+    assert reranker_from_config(_rerank_config(rerank_mode="local")) is None
 
 
 def test_reranker_from_config_ignores_invalid_values():
@@ -402,7 +399,7 @@ def test_reranker_from_config_ignores_invalid_values():
         )
     )
 
-    assert reranker.mode == "auto"
+    assert reranker.mode == "api"
     assert reranker.timeout == 5.0
     assert reranker.top_n == 20
     assert reranker.cache_entries == 128

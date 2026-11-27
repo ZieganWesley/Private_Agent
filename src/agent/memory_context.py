@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from config import (
+    APP_CONFIG,
     DEFAULT_EPISODIC_SUMMARIES,
     MAX_MEMORY_CONTEXT_TOKENS,
     MAX_RELEVANT_EPISODES,
@@ -681,6 +682,32 @@ async def _run_memory_maintenance(
                     console.print("[warning]RAG reindex cancelled.[/warning]")
                     continue
                 try:
+                    from .rag_routes import (
+                        remembered_embedding_route,
+                        remembered_rerank_route,
+                    )
+
+                    embedding = remembered_embedding_route()
+                    rerank = remembered_rerank_route()
+                    reindex_options = (
+                        {
+                            "embedding_provider": "none",
+                            "embedding_model": "",
+                            "embedding_base_url": "",
+                        }
+                        if embedding is None
+                        else {
+                            "embedding_provider": embedding.label,
+                            "embedding_model": embedding.model,
+                            "embedding_base_url": embedding.base_url,
+                        }
+                    )
+                    if rerank is not None:
+                        from rag.rerank import reranker_for_route
+
+                        reindex_options["reranker"] = reranker_for_route(
+                            rerank, APP_CONFIG
+                        )
                     vectorstore = initialize_knowledge_base(
                         rag_docs_path,
                         index_path=RAG_INDEX_PATH,
@@ -691,6 +718,7 @@ async def _run_memory_maintenance(
                             ).strip()
                             == "REBUILD"
                         ),
+                        **reindex_options,
                     )
                     if vectorstore is None:
                         console.print(

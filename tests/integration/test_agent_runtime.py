@@ -109,6 +109,7 @@ def scripted_local_cli(monkeypatch, tmp_path):
                     "ollama",
                     model_selection.OLLAMA_BASE_URL,
                     tuple(model_selection.fetch_local_chat_models()),
+                    embedding_models=("local-embed",),
                 )
             ]
             if model_selection.fetch_local_chat_models()
@@ -2222,7 +2223,10 @@ async def test_cli_requires_rebuild_confirmation_before_preserving_corrupt_rag_i
     state.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(agent, "RAG_INDEX_PATH", str(index))
     monkeypatch.setattr(agent, "initialize_knowledge_base", initialize_knowledge_base)
-    monkeypatch.setattr(indexing, "OllamaEmbeddings", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "providers.adapters.OpenAICompatibleAdapter.embeddings",
+        lambda self, model, *, base_url: object(),
+    )
     open_attempts = []
     vectorstore = MagicMock()
     vectorstore.similarity_search.return_value = []

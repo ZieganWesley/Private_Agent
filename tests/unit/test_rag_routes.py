@@ -1,107 +1,127 @@
-"""RAG routes are resolved once and reused while still available."""
+"""Selection and persistence of embedding and reranker routes."""
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from agent.rag_routes import (
-    remembered_reranker_model,
-    resolve_embedding_route,
-    save_reranker_route,
+    choose_embedding_route,
+    choose_rerank_route,
+    choose_route,
 )
-from providers.selection import (
-    load_embedding_choice,
-    save_embedding_choice,
-)
+from providers.selection import load_embedding_choice, load_reranker_choice
+from rag.embedding_resolver import ModelRoute
 
 
 class _Console:
-    def __init__(self) -> None:
+    def __init__(self, answer: str = "") -> None:
+        self.answer = answer
         self.lines: list[str] = []
+        self.prompts: list[str] = []
 
     def print(self, message: str) -> None:
         self.lines.append(str(message))
 
+    def input(self, prompt: str = "") -> str:
+        self.prompts.append(prompt)
+        return self.answer
 
-def _runtime(kind: str, base_url: str, embeddings: tuple[str, ...]):
-    return SimpleNamespace(
-        kind=kind,
-        base_url=base_url,
-        embedding_models=embeddings,
+
+def _route(model: str, base_url: str = "http://127.0.0.1:1111/v1", label="local"):
+    return ModelRoute("embedding", label, model, base_url)
+
+
+def test_a_single_route_is_used_without_a_prompt():
+    console = _Console()
+    route = _route("only")
+
+    assert (
+        choose_route((route,), role="embedding", console=console, interactive=True)
+        == route
+    )
+    assert console.prompts == []
+
+
+def test_multiple_routes_prompt_for_a_choice():
+    console = _Console(answer="2")
+    routes = (_route("first"), _route("second"))
+
+    assert (
+        choose_route(routes, role="embedding", console=console, interactive=True)
+        == routes[1]
+    )
+    assert "Multiple embedding models are available" in "\n".join(console.lines)
+    assert console.prompts
+
+
+def test_an_invalid_choice_uses_the_remembered_default():
+    console = _Console(answer="not-a-number")
+    routes = (_route("first"), _route("second"))
+    remembered = {"model": "second", "base_url": "http://127.0.0.1:1111/v1"}
+
+    assert (
+        choose_route(
+            routes,
+            role="embedding",
+            console=console,
+            interactive=True,
+            remembered=remembered,
+        )
+        == routes[1]
     )
 
 
-def _run(
-    *,
-    console: _Console,
-    provider: str,
-    model: str,
-    runtimes,
-):
-    return resolve_embedding_route(
-        configured_provider=provider,
-        configured_model=model,
-        configured_base_url="http://configured/v1",
-        runtimes=runtimes,
-        console=console,
+def test_non_interactive_sessions_use_the_remembered_or_first_route():
+    routes = (_route("first"), _route("second"))
+
+    assert (
+        choose_route(routes, role="embedding", console=_Console(), interactive=False)
+        == routes[0]
+    )
+    assert (
+        choose_route(
+            routes,
+            role="embedding",
+            console=_Console(),
+            interactive=False,
+            remembered={"model": "second", "base_url": "http://127.0.0.1:1111/v1"},
+        )
+        == routes[1]
     )
 
 
-def test_auto_reuses_the_remembered_embedding_route(monkeypatch, tmp_path):
+def test_absent_routes_disable_the_capability():
+    assert (
+        choose_route((), role="embedding", console=_Console(), interactive=True) is None
+    )
+
+
+def test_a_disabled_embedding_route_is_remembered(monkeypatch, tmp_path):
     monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "state.json"))
-    save_embedding_choice(
-        provider="openai-compatible",
-        model="bge",
-        base_url="http://127.0.0.1:1234/v1",
-    )
+
+    assert choose_embedding_route((), console=_Console(), interactive=True) is None
+    assert load_embedding_choice()["provider"] == "none"
+
+
+def test_embedding_and_rerank_choices_are_remembered(monkeypatch, tmp_path):
+    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "state.json"))
     console = _Console()
 
-    choice = _run(
+    embedding = choose_embedding_route(
+        (_route("embed", label="endpoint-a"),), console=console, interactive=True
+    )
+    rerank = choose_rerank_route(
+        (ModelRoute("rerank", "endpoint-b", "rank", "http://127.0.0.1:2222/v1"),),
         console=console,
-        provider="auto",
-        model="nomic",
-        runtimes=[
-            _runtime("ollama", "http://127.0.0.1:11434", ("nomic",)),
-            _runtime("openai-compatible", "http://127.0.0.1:1234/v1", ("bge",)),
-        ],
+        interactive=True,
     )
 
-    assert (choice.provider, choice.model) == ("openai-compatible", "bge")
-    assert any("remembered embedding route" in line for line in console.lines)
-
-
-def test_a_missing_remembered_route_is_resolved_and_saved(monkeypatch, tmp_path):
-    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "state.json"))
-    console = _Console()
-
-    choice = _run(
-        console=console,
-        provider="auto",
-        model="nomic",
-        runtimes=[_runtime("ollama", "http://127.0.0.1:11434", ("nomic",))],
-    )
-
-    assert (choice.provider, choice.model) == ("ollama", "nomic")
+    assert embedding is not None and rerank is not None
     assert load_embedding_choice() == {
-        "provider": "ollama",
-        "model": "nomic",
-        "base_url": "http://127.0.0.1:11434",
+        "provider": "endpoint-a",
+        "model": "embed",
+        "base_url": "http://127.0.0.1:1111/v1",
     }
-
-
-def test_a_disabled_embedding_route_is_never_saved(monkeypatch, tmp_path):
-    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "state.json"))
-
-    choice = _run(console=_Console(), provider="none", model="m", runtimes=[])
-
-    assert choice.provider == "none"
-    assert load_embedding_choice() is None
-
-
-def test_the_remembered_reranker_model_is_read_and_written(monkeypatch, tmp_path):
-    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "state.json"))
-    assert remembered_reranker_model() is None
-
-    save_reranker_route("bge-reranker", "http://127.0.0.1:9000/v1")
-
-    assert remembered_reranker_model() == "bge-reranker"
+    assert load_reranker_choice() == {
+        "provider": "endpoint-b",
+        "model": "rank",
+        "base_url": "http://127.0.0.1:2222/v1",
+    }

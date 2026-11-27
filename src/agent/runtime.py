@@ -1513,29 +1513,37 @@ async def _build_session_setup(
     rag_embedding_provider = _rag_config.EMBEDDING_PROVIDER
     rag_embedding_model = _rag_config.EMBEDDING_MODEL
     rag_embedding_base_url = _rag_config.EMBEDDING_BASE_URL
-    from .rag_routes import (
-        remembered_reranker_model,
-        resolve_embedding_route,
-        save_reranker_route,
-    )
+    from providers.endpoints import EndpointRegistry
+    from rag.rerank import reranker_for_route
 
-    _embedding_choice = resolve_embedding_route(
-        configured_provider=rag_embedding_provider,
-        configured_model=rag_embedding_model,
-        configured_base_url=rag_embedding_base_url,
+    from .rag_routes import resolve_rag_routes
+
+    _embedding_route, _rerank_route = resolve_rag_routes(
         runtimes=local_runtimes,
+        registry=EndpointRegistry.from_config(APP_CONFIG),
         console=console,
+        interactive=interactive,
+        embedding_enabled=str(rag_embedding_provider).strip().lower() != "none",
     )
-    rag_embedding_provider = _embedding_choice.provider
-    rag_embedding_model = _embedding_choice.model
-    rag_embedding_base_url = _embedding_choice.base_url
+    if _embedding_route is None:
+        rag_embedding_provider = "none"
+        rag_embedding_model = ""
+        rag_embedding_base_url = ""
+    else:
+        rag_embedding_provider = _embedding_route.label
+        rag_embedding_model = _embedding_route.model
+        rag_embedding_base_url = _embedding_route.base_url
     from .provider_report import record_embedding_route
 
     record_embedding_route(
         rag_embedding_provider, rag_embedding_model, rag_embedding_base_url
     )
 
-    _rerank_model = remembered_reranker_model()
+    _reranker = (
+        reranker_for_route(_rerank_route, APP_CONFIG)
+        if _rerank_route is not None
+        else None
+    )
 
     def _initialize_knowledge_base_with_embeddings(
         docs_path,
@@ -1550,8 +1558,7 @@ async def _build_session_setup(
             embedding_provider=rag_embedding_provider,
             embedding_model=rag_embedding_model,
             embedding_base_url=rag_embedding_base_url,
-            rerank_model=_rerank_model,
-            on_reranker_resolved=save_reranker_route,
+            reranker=_reranker,
         )
 
     # Start RAG indexing (background when no existing index needs an

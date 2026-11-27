@@ -109,11 +109,11 @@ def load_reranker_choice() -> dict[str, str] | None:
     return _load_route("reranker")
 
 
-def save_reranker_choice(*, model: str, base_url: str) -> None:
-    """Remember the resolved reranker endpoint and model."""
+def save_reranker_choice(*, label: str, model: str, base_url: str) -> None:
+    """Remember the selected reranker endpoint and model."""
     state = load_last_provider() or {}
     state["reranker"] = {
-        "provider": "rerank",
+        "provider": str(label),
         "model": str(model),
         "base_url": str(base_url),
     }

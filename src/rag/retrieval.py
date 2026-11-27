@@ -10,7 +10,7 @@ from langchain_core.documents import Document
 from config import RAG_RELEVANCE_THRESHOLD, RAG_SIMILARITY_RESULTS
 from ui.console import console  # noqa: F401 (shared console)
 
-from .rerank import HttpReranker, local_cosine_rerank
+from .rerank import HttpReranker
 
 _RRF_K = 60
 # Above this many chunks, SQLite FTS5 ranks keyword matches with an index
@@ -201,21 +201,17 @@ class HybridRAGRetriever:
         return [self.documents[index] for index, score in top_scored_docs if score > 0]
 
     def _rerank(self, query: str, documents: list[Document]) -> list[Document]:
-        """Prefer ``/v1/rerank``; otherwise use local embedding similarity."""
+        """Rerank only when a serving endpoint provides a reranker."""
         if not documents:
             return documents
         documents = _dedupe_and_cap(
             documents, getattr(self, "max_candidates", DEFAULT_MAX_RERANK_CANDIDATES)
         )
         reranker = getattr(self, "reranker", None)
-        if reranker is not None:
-            reranked = reranker.rerank(query, documents)
-            if reranked is not None:
-                return reranked
-        embeddings = getattr(self.vectorstore, "embeddings", None)
-        if embeddings is None or not hasattr(embeddings, "embed_query"):
+        if reranker is None:
             return documents
-        return local_cosine_rerank(query, documents, embeddings=embeddings)
+        reranked = reranker.rerank(query, documents)
+        return reranked if reranked is not None else documents
 
     def similarity_search(
         self,
