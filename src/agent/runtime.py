@@ -2678,7 +2678,14 @@ async def _run_agent_cli_session(
                 if user_input.lower() == "/doctor":
                     from diagnostics.doctor import doctor_interactive
 
-                    doctor_interactive()
+                    if not non_interactive:
+                        session_ui._footer.stop()
+                    try:
+                        doctor_interactive()
+                    finally:
+                        if not non_interactive:
+                            session_ui._footer.start()
+                            session_ui._footer.update(session_ui._current_state())
                     continue
                 if user_input.lower() == "/context":
                     if not pending_folder_context:
