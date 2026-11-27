@@ -850,7 +850,9 @@ def test_file_snapshots_are_unique_and_workspace_local(temp_workspace):
     snapshots = list(snapshot_directory.glob("important.txt_*.bak"))
     assert len(snapshots) == 2
     assert all(path.read_text(encoding="utf-8") == "initial" for path in snapshots)
-    assert all(path.resolve().is_relative_to(temp_workspace) for path in snapshots)
+    assert all(
+        path.resolve().is_relative_to(temp_workspace.resolve()) for path in snapshots
+    )
 
 
 def test_read_binary_file_guard(temp_workspace):
