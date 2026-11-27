@@ -17,6 +17,13 @@ from .theme import SEGMENT_LABELS, SEGMENT_SEPARATOR
 GAUGE_FILLED = "\u25b0"
 GAUGE_EMPTY = "\u25b1"
 
+# Theme tokens for the context gauge. The status ribbon colours its context
+# segment with the same tokens, so both read one definition instead of one
+# raw colour each.
+CONTEXT_STYLE_OK = "ribbon.context.ok"
+CONTEXT_STYLE_WARN = "ribbon.context.warn"
+CONTEXT_STYLE_HIGH = "ribbon.context.high"
+
 
 def _context_use(tokens: Any, maximum: Any) -> tuple[int, int, float]:
     """Clamp context-window counts to a usable ``(used, maximum, fraction)``."""
@@ -41,13 +48,18 @@ def context_percent(tokens: Any, maximum: Any) -> float:
 
 
 def context_style(tokens: Any, maximum: Any) -> str:
-    """Return the colour that warns as the context window fills up."""
+    """Return the theme token that warns as the context window fills up.
+
+    The result is a ``ribbon.context.*`` style name rather than a raw colour so
+    the gauge and the status ribbon cannot drift apart: one threshold table and
+    one palette entry now drive both.
+    """
     percent = context_percent(tokens, maximum)
     if percent >= 80:
-        return "red"
+        return CONTEXT_STYLE_HIGH
     if percent >= 50:
-        return "yellow"
-    return "green"
+        return CONTEXT_STYLE_WARN
+    return CONTEXT_STYLE_OK
 
 
 def context_bar(

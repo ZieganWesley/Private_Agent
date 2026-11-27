@@ -14,7 +14,7 @@ from __future__ import annotations
 from rich.text import Text
 
 from .console import resolve_style
-from .state import StatusState
+from .state import StatusState, context_style
 from .theme import SEGMENT_LABELS, SEGMENT_SEPARATOR
 
 _PERMISSION_STYLES: dict[str, str] = {
@@ -40,13 +40,12 @@ _STATIC_STYLES: dict[str, str] = {
 
 
 def context_segment_style(state: StatusState) -> str:
-    """Return the style name for the context segment of ``state``."""
-    percent = state.percent()
-    if percent >= 80:
-        return "ribbon.context.high"
-    if percent >= 50:
-        return "ribbon.context.warn"
-    return "ribbon.context.ok"
+    """Return the style name for the context segment of ``state``.
+
+    Delegates to ``context_style`` so the ribbon and the pre-request gauge share
+    one threshold table and one set of tokens.
+    """
+    return context_style(state.context_tokens, state.context_maximum)
 
 
 def permission_segment_style(mode: object) -> str:
