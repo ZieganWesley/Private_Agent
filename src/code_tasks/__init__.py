@@ -97,20 +97,145 @@ def isolation_unavailable_reason() -> str | None:
     return None
 
 
+# Read-only system locations a sandboxed command legitimately needs: the dyld
+# shared cache, libc/system frameworks, the toolchain, and locale/timezone data.
+_SEATBELT_READ_PATHS = (
+    "/bin",
+    "/sbin",
+    "/usr",
+    "/System",
+    "/Library",
+    "/etc",
+    "/private/etc",
+    "/private/var/db/timezone",
+    "/dev",
+    "/opt/homebrew",
+    "/opt/local",
+)
+
+# Scratch space tools expect to write to, plus the character devices every
+# process needs. Host data outside these paths and the workspace stays read-only.
+_SEATBELT_WRITE_PATHS = (
+    "/private/tmp",
+    "/private/var/folders",
+    "/dev/null",
+    "/dev/zero",
+    "/dev/stdout",
+    "/dev/stderr",
+)
+
+
+def _seatbelt_path(path: Path | str) -> str:
+    text = str(path)
+    if '"' in text or "\n" in text or "\r" in text:
+        raise ValueError("Sandbox paths cannot contain a quote or newline.")
+    return text.replace("\\", "\\\\")
+
+
 def _seatbelt_profile(root: Path, *, allow_network: bool = False) -> str:
-    """Return a minimal Seatbelt profile for the workspace."""
-    root_text = str(root.resolve())
-    if '"' in root_text or "\n" in root_text or "\r" in root_text:
-        raise ValueError("Workspace path cannot contain a quote or newline.")
-    root_text = root_text.replace("\\", "\\\\").replace('"', '\\"')
+    """Return a default-deny Seatbelt profile scoped to the workspace.
+
+    The previous profile started with ``(allow default)`` and only denied or
+    re-allowed writes, which left the whole host readable and every binary
+    executable. This profile denies everything up front and then allows only
+    reads of system/runtime locations, writes inside the workspace and system
+    scratch space, and network access when explicitly requested.
+    """
+    root_text = _seatbelt_path(root.resolve())
+    read_paths = [_seatbelt_path(path) for path in _SEATBELT_READ_PATHS]
+    for candidate in (sys.prefix, sys.base_prefix):
+        resolved = _seatbelt_path(Path(candidate).resolve())
+        if resolved not in read_paths:
+            read_paths.append(resolved)
+    read_paths.append(root_text)
+    write_paths = [_seatbelt_path(path) for path in _SEATBELT_WRITE_PATHS]
+    write_paths.append(root_text)
+    read_rules = " ".join(f'(subpath "{path}")' for path in read_paths)
+    write_rules = " ".join(f'(subpath "{path}")' for path in write_paths)
     network_rule = "(allow network*)" if allow_network else "(deny network*)"
     return (
         "(version 1)\n"
+        "(deny default)\n"
         f"{network_rule}\n"
-        "(allow default)\n"
-        "(deny file-write*)\n"
-        f'(allow file-write* (subpath "{root_text}"))\n'
+        "(allow process*)\n"
+        "(allow signal (target self))\n"
+        "(allow sysctl-read)\n"
+        "(allow mach-lookup)\n"
+        "(allow ipc-posix-shm)\n"
+        "(allow file-read-metadata)\n"
+        f'(allow file-read* (literal "/") {read_rules})\n'
+        f"(allow file-write* {write_rules})\n"
     )
+
+
+# Names a sandboxed child may inherit. Anything that looks like a credential is
+# dropped, and PRIVATE_AGENT_* settings never cross the boundary.
+_SANDBOX_ENVIRONMENT_NAMES = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "LANG",
+        "LANGUAGE",
+        "TZ",
+        "TERM",
+        "COLORTERM",
+        "NO_COLOR",
+        "FORCE_COLOR",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONUNBUFFERED",
+        "PYTHONUTF8",
+        "PYTHONIOENCODING",
+        "VIRTUAL_ENV",
+        "CONDA_PREFIX",
+        "SOURCE_DATE_EPOCH",
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+    }
+)
+_SECRET_ENVIRONMENT_MARKERS = (
+    "KEY",
+    "TOKEN",
+    "SECRET",
+    "PASSWORD",
+    "PASSWD",
+    "CREDENTIAL",
+    "AUTH",
+    "SESSION",
+    "COOKIE",
+)
+
+
+def _sandbox_environment_name_allowed(name: str) -> bool:
+    """Decide whether one host environment variable may reach the sandbox."""
+    if name.startswith("PRIVATE_AGENT"):
+        return False
+    if name in _SANDBOX_ENVIRONMENT_NAMES:
+        return True
+    upper = name.upper()
+    if any(marker in upper for marker in _SECRET_ENVIRONMENT_MARKERS):
+        return False
+    return upper.startswith("LC_")
+
+
+def _sandboxed_environment() -> dict[str, str]:
+    """Return only the non-secret environment entries a sandboxed child needs.
+
+    ``dict(os.environ)`` handed every API key, provider token, and
+    ``PRIVATE_AGENT_*`` setting to a generated project's commands.
+    """
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if _sandbox_environment_name_allowed(name)
+    }
 
 
 def _isolated_command(
@@ -129,7 +254,9 @@ def _isolated_command(
                 "Command execution is disabled: macOS sandbox support is unavailable."
             )
         profile = _seatbelt_profile(root, allow_network=allow_network)
-        return ([sandbox_exec, "-p", profile, *command], dict(os.environ))
+        environment = _sandboxed_environment()
+        environment.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+        return ([sandbox_exec, "-p", profile, *command], environment)
     bwrap = shutil.which("bwrap")
     prlimit = shutil.which("prlimit")
     root = root.resolve()
