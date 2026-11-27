@@ -2,13 +2,33 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
+import pathlib
 
+import pytest
 from rich.console import Console
 
 from ui import SessionUI
 from ui.ribbon import status_ribbon
 from ui.state import StatusState
+
+_UI_CHECK_SCRIPT = (
+    pathlib.Path(__file__).resolve().parents[2] / "scripts" / "ui_check.py"
+)
+
+
+@pytest.fixture
+def ui_check():
+    """Load the developer UI self-check script from its source path.
+
+    It lives outside ``src/ui`` so it is not importable from an installed
+    wheel; the tests exercise the script file itself.
+    """
+    spec = importlib.util.spec_from_file_location("ui_check", _UI_CHECK_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_no_color_output_has_no_ansi_escapes(monkeypatch):
@@ -253,22 +273,18 @@ def test_model_failure_panel_shows_reference_and_never_the_exception_text():
     assert "The request did not complete." in rendered
 
 
-def test_ui_check_covers_every_component_and_passes(capsys):
-    from ui.check import run_ui_check
-
-    assert run_ui_check() == 0
+def test_ui_check_covers_every_component_and_passes(ui_check, capsys):
+    assert ui_check.run_ui_check() == 0
     assert "All UI components rendered successfully" in capsys.readouterr().out
 
 
-def test_ui_check_reports_a_component_failure(monkeypatch, capsys):
-    from ui import check
-
+def test_ui_check_reports_a_component_failure(ui_check, monkeypatch, capsys):
     def boom(*_args, **_kwargs):
         raise RuntimeError("render exploded")
 
-    monkeypatch.setattr(check, "status_ribbon", boom)
+    monkeypatch.setattr(ui_check, "status_ribbon", boom)
 
-    assert check.run_ui_check() == 1
+    assert ui_check.run_ui_check() == 1
     assert "render exploded" in capsys.readouterr().out
 
 
@@ -314,18 +330,16 @@ def test_prompt_text_follows_the_active_palette(monkeypatch):
     assert dark_prompt.value != light_prompt.value
 
 
-def test_ui_check_does_not_leak_the_accessible_flag(monkeypatch):
+def test_ui_check_does_not_leak_the_accessible_flag(ui_check, monkeypatch):
     """Probing accessible mode must not change later renders in this process."""
-    from ui.check import run_ui_check
     from ui.theme import ACCESSIBLE_ENV
 
     monkeypatch.delenv(ACCESSIBLE_ENV, raising=False)
-    assert run_ui_check() == 0
+    assert ui_check.run_ui_check() == 0
     assert ACCESSIBLE_ENV not in os.environ
 
 
-def test_ui_check_restores_the_accessible_flag_even_on_failure(monkeypatch):
-    from ui import check
+def test_ui_check_restores_the_accessible_flag_even_on_failure(ui_check, monkeypatch):
     from ui.theme import ACCESSIBLE_ENV
 
     monkeypatch.setenv(ACCESSIBLE_ENV, "1")
@@ -333,15 +347,13 @@ def test_ui_check_restores_the_accessible_flag_even_on_failure(monkeypatch):
     def boom(*_args, **_kwargs):
         raise RuntimeError("render exploded")
 
-    monkeypatch.setattr(check, "status_ribbon", boom)
-    assert check.run_ui_check() == 1
+    monkeypatch.setattr(ui_check, "status_ribbon", boom)
+    assert ui_check.run_ui_check() == 1
     assert os.environ[ACCESSIBLE_ENV] == "1"
 
 
-def test_ui_check_exercises_every_colour_depth(monkeypatch, capsys):
+def test_ui_check_exercises_every_colour_depth(ui_check, monkeypatch, capsys):
     from rich.console import Console as RealConsole
-
-    import ui.check as check
 
     depths = []
 
@@ -350,16 +362,15 @@ def test_ui_check_exercises_every_colour_depth(monkeypatch, capsys):
             depths.append(kwargs.get("color_system"))
             super().__init__(*args, **kwargs)
 
-    monkeypatch.setattr(check, "Console", RecordingConsole)
+    monkeypatch.setattr(ui_check, "Console", RecordingConsole)
 
-    assert check.run_ui_check() == 0
+    assert ui_check.run_ui_check() == 0
     capsys.readouterr()
     assert {"truecolor", "256", "standard"} <= set(depths)
     assert None in depths
 
 
-def test_ui_check_runs_as_a_module(tmp_path):
-    import pathlib
+def test_ui_check_runs_as_a_script(tmp_path):
     import subprocess
     import sys
 
@@ -375,7 +386,7 @@ def test_ui_check_runs_as_a_module(tmp_path):
     }
 
     result = subprocess.run(
-        [sys.executable, "-m", "ui.check"],
+        [sys.executable, str(_UI_CHECK_SCRIPT)],
         capture_output=True,
         text=True,
         env=env,
@@ -384,3 +395,9 @@ def test_ui_check_runs_as_a_module(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert "All UI components rendered successfully" in result.stdout
+
+
+def test_ui_check_is_not_importable_from_the_shipped_package():
+    import importlib.util
+
+    assert importlib.util.find_spec("ui.check") is None

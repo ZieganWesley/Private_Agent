@@ -42,5 +42,5 @@ See [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Developer Checks
 - `pytest -q` — full suite.
-- `python -m ui.check` — UI-only self-check (development aid, remove before production).
+- `python scripts/ui_check.py` — UI-only self-check (development aid, not shipped).
 - `private-agent --doctor` — environment diagnostics.
