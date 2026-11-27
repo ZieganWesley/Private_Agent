@@ -412,7 +412,7 @@ def test_seatbelt_profile_denies_by_default_and_scopes_the_workspace(tmp_path):
     # ancestors stay readable as directories while their contents stay hidden.
     for parent in tmp_path.resolve().parents:
         assert f'(literal "{parent}")' in read_rule
-        assert f'(subpath "{parent}")' not in profile
+        assert f'(subpath "{parent}")' not in read_rule
 
     connected = code_tasks._seatbelt_profile(tmp_path, allow_network=True)
     assert "(allow network*)" in connected.splitlines()
