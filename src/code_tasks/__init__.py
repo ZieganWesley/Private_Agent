@@ -161,6 +161,14 @@ def _seatbelt_profile(root: Path, *, allow_network: bool = False) -> str:
     write_paths.append(root_text)
     read_rules = " ".join(f'(subpath "{path}")' for path in read_paths)
     write_rules = " ".join(f'(subpath "{path}")' for path in write_paths)
+    # Tools call getcwd() and realpath(), which reopen every ancestor of the
+    # working directory. Denying those reads leaves a default-deny profile
+    # unable to resolve the workspace at all (git and shells fail with
+    # "getcwd: cannot access parent directories"). Allow the ancestor
+    # directories themselves, never their contents.
+    ancestor_rules = " ".join(
+        f'(literal "{_seatbelt_path(parent)}")' for parent in root.resolve().parents
+    )
     network_rule = "(allow network*)" if allow_network else "(deny network*)"
     return (
         "(version 1)\n"
@@ -172,7 +180,7 @@ def _seatbelt_profile(root: Path, *, allow_network: bool = False) -> str:
         "(allow mach-lookup)\n"
         "(allow ipc-posix-shm)\n"
         "(allow file-read-metadata)\n"
-        f'(allow file-read* (literal "/") {read_rules})\n'
+        f'(allow file-read* (literal "/") {ancestor_rules} {read_rules})\n'
         f"(allow file-write* {write_rules})\n"
     )
 
