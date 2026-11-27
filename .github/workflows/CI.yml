@@ -74,7 +74,8 @@ jobs:
 
       - name: Import Smoke Test
         run: |
-          ulimit -v 2400000
+          # RLIMIT_AS does not exist on macOS, so only cap Linux runs.
+          if [ "$RUNNER_OS" = "Linux" ]; then ulimit -v 2400000; fi
           python -c "import cli, agent.runtime, config; print('core import ok')"
 
   test:
@@ -109,7 +110,8 @@ jobs:
       - name: Run Tests
         run: |
           # Keep the test process inside a 2.4 GB virtual-memory ceiling.
-          ulimit -v 2400000
+          # macOS has no RLIMIT_AS, so the cap only applies to Linux runs.
+          if [ "$RUNNER_OS" = "Linux" ]; then ulimit -v 2400000; fi
           pytest -q
 
   audit:
