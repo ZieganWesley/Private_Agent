@@ -24,6 +24,7 @@ from ui.turn import GenerationStats
 from utils.run_logging import RUN_LOGGER, log_event
 
 from .console import console, resolve_style
+from .messages import normalize_system_messages
 from .prompts import token_count as _token_count
 from .session_state import SESSION_STATS as _SESSION_STATS
 from .status import (
@@ -623,6 +624,9 @@ async def _invoke_with_status(
 ):
     """Show operation progress and report elapsed time for slow model calls."""
     started = time.monotonic()
+    # Strict local chat templates (Qwen3.5+) reject any system message outside
+    # the single leading system block, so normalize once at the request boundary.
+    messages = normalize_system_messages(messages)
     if _supports_async_streaming(model):
         try:
             response = await _invoke_with_budget(
