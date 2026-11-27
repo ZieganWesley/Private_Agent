@@ -56,12 +56,13 @@ def test_code_workspace_isolated_git_and_test_gated_checkpoint(tmp_path, monkeyp
     monkeypatch.setenv("GIT_CONFIG_KEY_1", "user.email")
     monkeypatch.setenv("GIT_CONFIG_VALUE_1", "private-agent-test@example.invalid")
 
+    reasons: list[str] = []
     workspace = CodeTaskWorkspace.create(
         "Create a sample Python application",
         str(tmp_path / "projects"),
-        confirm_without_git=lambda reason: False,
+        confirm_without_git=lambda reason: reasons.append(reason) and False,
     )
-    assert workspace is not None
+    assert workspace is not None, reasons
     assert workspace.git_enabled
     assert workspace.root.parent == (tmp_path / "projects")
     assert (
@@ -188,12 +189,14 @@ def test_existing_code_workspace_copy_excludes_git_secrets_and_caches(
     (source / "__pycache__" / "cache.pyc").write_bytes(b"cache")
     (source / "app.py").write_text("print('unchanged')\n")
 
+    reasons: list[str] = []
     workspace = CodeTaskWorkspace.create(
         "Modify this Python project",
         str(tmp_path / "projects"),
         source_path=str(source),
+        confirm_without_git=lambda reason: reasons.append(reason) and False,
     )
-    assert workspace is not None
+    assert workspace is not None, reasons
     assert workspace.git_enabled
     assert (workspace.root / "app.py").read_text() == "print('unchanged')\n"
     assert not (workspace.root / ".git" / "config").read_text().count("[remote]")
@@ -417,6 +420,39 @@ def test_seatbelt_profile_denies_by_default_and_scopes_the_workspace(tmp_path):
     connected = code_tasks._seatbelt_profile(tmp_path, allow_network=True)
     assert "(allow network*)" in connected.splitlines()
     assert "(deny default)" in connected.splitlines()
+
+
+def test_macos_toolchain_paths_use_the_selected_developer_directory(monkeypatch):
+    import code_tasks
+
+    toolchain = pathlib.Path("/Applications/Xcode.app/Contents/Developer")
+    monkeypatch.setattr(
+        code_tasks.subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args[0], 0, f"{toolchain}\n", ""
+        ),
+    )
+    code_tasks._macos_toolchain_paths.cache_clear()
+    try:
+        assert code_tasks._macos_toolchain_paths()[0] == str(toolchain.resolve())
+    finally:
+        code_tasks._macos_toolchain_paths.cache_clear()
+
+
+def test_seatbelt_profile_allows_the_apple_toolchain(monkeypatch, tmp_path):
+    import code_tasks
+
+    toolchain = "/Applications/Xcode.app/Contents/Developer"
+    monkeypatch.setattr(code_tasks, "_macos_toolchain_paths", lambda: (toolchain,))
+    profile = code_tasks._seatbelt_profile(tmp_path, allow_network=False)
+    read_rule = next(
+        line for line in profile.splitlines() if line.startswith("(allow file-read*")
+    )
+
+    # /usr/bin/git is a shim that execs the developer directory's real tool.
+    assert f'(subpath "{toolchain}")' in read_rule
+    assert '(literal "/Applications")' in read_rule
 
 
 def test_isolated_command_scrubs_secrets_from_the_macos_child_environment(

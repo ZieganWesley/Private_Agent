@@ -1,3 +1,4 @@
+import functools
 import os
 import platform  # noqa: F401 (used by tests)
 import re
@@ -126,6 +127,42 @@ _SEATBELT_READ_PATHS = (
     "/opt/local",
 )
 
+# ``xcode-select -p`` records its choice as a symlink here; xcrun follows it to
+# find the toolchain it should exec.
+_XCODE_SELECT_LINK = "/private/var/db/xcode_select_link"
+
+
+@functools.lru_cache(maxsize=1)
+def _macos_toolchain_paths() -> tuple[str, ...]:
+    """Return the read-only paths of the active Apple developer toolchain.
+
+    ``/usr/bin/git`` and friends are shims: they exec the real tool from the
+    developer directory chosen by ``xcode-select``, which lives under
+    ``/Applications`` and is not otherwise readable in a default-deny sandbox.
+    """
+    paths: list[str] = []
+    try:
+        completed = subprocess.run(
+            ["xcode-select", "-p"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except OSError:
+        completed = None
+    except subprocess.SubprocessError:
+        completed = None
+    if completed is not None and completed.returncode == 0:
+        selected = completed.stdout.strip()
+        if selected:
+            paths.append(str(Path(selected).resolve()))
+    for candidate in ("/Library/Developer/CommandLineTools", "/Applications/Xcode.app"):
+        if os.path.isdir(candidate) and candidate not in paths:
+            paths.append(candidate)
+    return tuple(paths)
+
+
 # Scratch space tools expect to write to, plus the character devices every
 # process needs. Host data outside these paths and the workspace stays read-only.
 _SEATBELT_WRITE_PATHS = (
@@ -161,6 +198,14 @@ def _seatbelt_profile(root: Path, *, allow_network: bool = False) -> str:
         if resolved not in read_paths:
             read_paths.append(resolved)
     read_paths.append(root_text)
+    readable_bases = [root.resolve()]
+    for candidate in _macos_toolchain_paths():
+        if candidate not in read_paths:
+            read_paths.append(_seatbelt_path(candidate))
+            readable_bases.append(Path(candidate))
+    if os.path.lexists(_XCODE_SELECT_LINK):
+        read_paths.append(_seatbelt_path(_XCODE_SELECT_LINK))
+        readable_bases.append(Path(_XCODE_SELECT_LINK))
     write_paths = [_seatbelt_path(path) for path in _SEATBELT_WRITE_PATHS]
     write_paths.append(root_text)
     read_rules = " ".join(f'(subpath "{path}")' for path in read_paths)
@@ -170,8 +215,13 @@ def _seatbelt_profile(root: Path, *, allow_network: bool = False) -> str:
     # unable to resolve the workspace at all (git and shells fail with
     # "getcwd: cannot access parent directories"). Allow the ancestor
     # directories themselves, never their contents.
+    ancestors: list[Path] = []
+    for base in readable_bases:
+        for parent in base.parents:
+            if str(parent) != "/" and parent not in ancestors:
+                ancestors.append(parent)
     ancestor_rules = " ".join(
-        f'(literal "{_seatbelt_path(parent)}")' for parent in root.resolve().parents
+        f'(literal "{_seatbelt_path(parent)}")' for parent in ancestors
     )
     network_rule = "(allow network*)" if allow_network else "(deny network*)"
     return (
