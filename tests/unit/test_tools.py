@@ -1532,12 +1532,15 @@ def test_shell_plain_command_is_not_wrapped_in_bash(temp_workspace):
 
 
 def test_shell_script_host_workspace_paths_point_at_sandbox_mount(temp_workspace):
+    import code_tasks
+
     root = SandboxManager.root_dir
+    workspace = code_tasks.sandbox_workspace_path(root)
     _result, isolated, _run = _run_shell_with_fake_sandbox(
         f"cd {root}/src && ls {root}"
     )
     wrapped = (
-        "cd /workspace && cd /workspace/src && ls /workspace; __pa_status=$?; "
+        f"cd {workspace} && cd {workspace}/src && ls {workspace}; __pa_status=$?; "
         "printf '\\n__PA_CWD__:%s\\n' \"$(pwd)\"; exit $__pa_status"
     )
     assert isolated[0][0] == ["/bin/bash", "-c", wrapped]
