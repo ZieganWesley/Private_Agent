@@ -535,8 +535,7 @@ async def test_http_total_timeout_releases_concurrency_slot(monkeypatch):
     )
     with pytest.raises(asyncio.TimeoutError):
         await _get_limited_response(SlowClient(), "https://public.test/", 100)
-    assert tools._network_slots.acquire(blocking=False)
-    tools._network_slots.release()
+    assert not tools._async_network_slots.locked()
 
 
 @pytest.mark.asyncio
@@ -570,8 +569,7 @@ async def test_async_request_timeout_cancels_dns_validation(monkeypatch):
         )
 
     assert cancelled.is_set()
-    assert tools._network_slots.acquire(blocking=False)
-    tools._network_slots.release()
+    assert not tools._async_network_slots.locked()
 
 
 def test_failed_download_preserves_existing_destination(temp_workspace, monkeypatch):
@@ -1122,3 +1120,30 @@ def test_online_selection_uses_the_preferred_configured_endpoint(monkeypatch):
     assert selected["model"] == "online-model"
     assert seen["url"] == "https://gateway.example.test/v1/models"
     assert seen["headers"]["Authorization"] == "Bearer gateway-key"
+
+
+@pytest.mark.asyncio
+async def test_async_network_slot_cancel_mid_acquire_restores_count():
+    import tools
+
+    sem = tools._async_network_slots
+    # Acquire all currently available permits so the next acquire must wait.
+    permits = []
+    while not sem.locked():
+        await sem.acquire()
+        permits.append(True)
+    assert sem.locked()
+    before = sem._value
+
+    task = asyncio.create_task(sem.acquire())
+    await asyncio.sleep(0)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # Cancellation must not have consumed or leaked a permit.
+    assert sem._value == before
+
+    # Release held permits for other tests.
+    for _ in permits:
+        sem.release()
