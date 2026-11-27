@@ -35,6 +35,9 @@ from .media import (
     transcribe_workspace_audio,
 )
 from .network import (
+    _async_network_slots as _async_network_slots,
+)
+from .network import (
     _get_limited_response as _get_limited_response,
 )
 from .network import (

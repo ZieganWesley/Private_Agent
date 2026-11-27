@@ -526,6 +526,12 @@ def mcp_http_client_factory(headers=None, timeout=None, auth=None):
 
 _network_slots = threading.BoundedSemaphore(MAX_NETWORK_CONCURRENCY)
 
+# Cancellation-safe counterpart used by async callers. asyncio.Semaphore.acquire()
+# is properly cancelled (it removes itself from waiters) so a CancelledError
+# while waiting cannot leak a permit the way asyncio.to_thread(threading.acquire)
+# could. Sync callers keep using _network_slots above.
+_async_network_slots = asyncio.Semaphore(MAX_NETWORK_CONCURRENCY)
+
 
 def validate_outbound_url(url: str) -> str:
     """Reject non-HTTP(S), credentialed, local, and non-public network targets."""
@@ -606,12 +612,21 @@ def validate_explicit_service_url(url: str, transports: set[str]) -> str:
 
 
 async def _get_limited_response(client, url: str, max_bytes: int) -> tuple[bytes, str]:
-    acquired = await asyncio.to_thread(
-        _network_slots.acquire, True, NETWORK_REQUEST_TIMEOUT
-    )
-    if not acquired:
-        raise TimeoutError("Outbound request concurrency limit wait timed out.")
+    # Acquire the permit on the cancellation-aware asyncio semaphore. A
+    # CancelledError while waiting removes this waiter instead of leaking a
+    # permit, and a cancellation during the request releases the held permit in
+    # the finally block below.
+    acquired = False
     try:
+        try:
+            await asyncio.wait_for(
+                _async_network_slots.acquire(), timeout=NETWORK_REQUEST_TIMEOUT
+            )
+        except TimeoutError as exc:
+            raise TimeoutError(
+                "Outbound request concurrency limit wait timed out."
+            ) from exc
+        acquired = True
 
         async def request_with_redirects():
             current_url = await _validate_outbound_url_async(url)
@@ -648,7 +663,8 @@ async def _get_limited_response(client, url: str, max_bytes: int) -> tuple[bytes
             timeout=NETWORK_REQUEST_TIMEOUT,
         )
     finally:
-        _network_slots.release()
+        if acquired:
+            _async_network_slots.release()
 
 
 def _get_limited_response_sync(
