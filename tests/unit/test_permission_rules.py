@@ -78,3 +78,62 @@ def test_evaluate_permission_rules_handles_none_inputs():
     decision, rule = evaluate_permission_rules(None, None, "read_local_file", {})
     assert decision is None
     assert rule is None
+
+
+def _console(answer: str = "yes", printed: list | None = None):
+    from types import SimpleNamespace
+
+    printed = printed if printed is not None else []
+    return SimpleNamespace(
+        input=lambda *a, **k: answer,
+        print=lambda message="", *a, **k: printed.append(str(message)),
+    )
+
+
+def test_full_mode_requires_a_typed_confirmation():
+    from agent.permissions import enforce_full_mode_confirmation
+
+    assert (
+        enforce_full_mode_confirmation("full", _console("yes"), lambda: True) == "full"
+    )
+    # A single keypress is not the deliberate confirmation full mode needs.
+    assert enforce_full_mode_confirmation("full", _console("y"), lambda: True) == "auto"
+    assert enforce_full_mode_confirmation("full", _console(""), lambda: True) == "auto"
+
+
+def test_full_mode_confirmation_is_refused_without_a_terminal():
+    from agent.permissions import enforce_full_mode_confirmation
+
+    printed: list = []
+    console = _console("yes", printed)
+
+    assert enforce_full_mode_confirmation("full", console, lambda: False) == "auto"
+    assert any("interactive confirmation" in message for message in printed)
+
+
+def test_full_mode_confirmation_warning_names_what_it_grants():
+    from agent.permissions import enforce_full_mode_confirmation
+
+    printed: list = []
+    enforce_full_mode_confirmation("full", _console("no", printed), lambda: True)
+
+    warning = " ".join(printed)
+    assert "shell commands" in warning
+    assert "without another prompt" in warning
+
+
+def test_non_full_modes_are_returned_without_asking():
+    from agent.permissions import enforce_full_mode_confirmation
+
+    prompts: list = []
+
+    def fail_if_asked(*_args, **_kwargs):
+        prompts.append("asked")
+        raise AssertionError("non-full modes must not prompt")
+
+    from types import SimpleNamespace
+
+    console = SimpleNamespace(input=fail_if_asked, print=lambda *a, **k: None)
+    for mode in ("auto", "manual", "monitored"):
+        assert enforce_full_mode_confirmation(mode, console, lambda: True) == mode
+    assert prompts == []

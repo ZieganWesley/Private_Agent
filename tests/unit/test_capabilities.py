@@ -188,3 +188,49 @@ def test_every_pack_tool_name_is_registered():
     registered.add(code_tasks.run_project_unit_tests.name)
 
     assert capabilities.unknown_pack_tools(registered) == {}
+
+
+def test_every_pack_with_a_mutating_tool_is_a_mutating_pack():
+    """A new pack with a write tool must not escalate without approval."""
+    from agent.permissions import MUTATING_TOOL_NAMES
+
+    mutating = {
+        name
+        for name, pack in capabilities.PACKS.items()
+        if pack.tools & MUTATING_TOOL_NAMES
+    }
+    assert mutating
+    assert mutating <= capabilities.MUTATING_PACKS
+
+
+@pytest.mark.parametrize("pack", sorted(capabilities.MUTATING_PACKS))
+def test_gate_capability_denies_each_mutating_pack_noninteractive(pack):
+    from types import SimpleNamespace
+
+    import agent.runtime_f_integration as f
+
+    state = SimpleNamespace(blocked_tool_messages=[], capability_approved=False)
+    console = SimpleNamespace(input=lambda *a, **k: "y", print=lambda *a, **k: None)
+
+    assert f.gate_capability({"args": {"name": pack}}, "auto", console, state) is False
+    assert state.capability_approved is False
+    assert state.blocked_tool_messages
+    assert pack in state.blocked_tool_messages[0].content
+
+
+@pytest.mark.parametrize("pack", ["Knowledge", "Planning"])
+def test_gate_capability_allows_read_only_packs_without_a_prompt(pack):
+    from types import SimpleNamespace
+
+    import agent.runtime_f_integration as f
+
+    prompts = []
+    state = SimpleNamespace(blocked_tool_messages=[], capability_approved=False)
+    console = SimpleNamespace(
+        input=lambda *a, **k: prompts.append(a) or "n",
+        print=lambda *a, **k: None,
+    )
+
+    assert f.gate_capability({"args": {"name": pack}}, "auto", console, state) is True
+    assert prompts == []
+    assert state.blocked_tool_messages == []
