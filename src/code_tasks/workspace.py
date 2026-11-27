@@ -51,6 +51,7 @@ class CodeTaskWorkspace:
         from . import (
             _ask_without_git,
             _copy_ignore,
+            _host_git_identity,
             _run_git,
             _slug,
         )
@@ -180,9 +181,8 @@ class CodeTaskWorkspace:
                 "New code workspace unexpectedly has one or more Git remotes."
             )
 
-        identity_name = _run_git(destination, "config", "--get", "user.name")
-        identity_email = _run_git(destination, "config", "--get", "user.email")
-        if identity_name.returncode != 0 or identity_email.returncode != 0:
+        identity = _host_git_identity()
+        if identity is None:
             if not sys.stdin.isatty():
                 if not ask("no Git commit identity is configured"):
                     shutil.rmtree(destination)
@@ -203,13 +203,14 @@ class CodeTaskWorkspace:
                     shutil.rmtree(destination)
                     return None
                 return continue_without_git()
-            for key, value in (("user.name", name), ("user.email", email)):
-                result = _run_git(destination, "config", "--local", key, value)
-                if result.returncode != 0:
-                    if not ask("repository-local Git identity configuration failed"):
-                        shutil.rmtree(destination)
-                        return None
-                    return continue_without_git()
+            identity = (name, email)
+        for key, value in (("user.name", identity[0]), ("user.email", identity[1])):
+            result = _run_git(destination, "config", "--local", key, value)
+            if result.returncode != 0:
+                if not ask("repository-local Git identity configuration failed"):
+                    shutil.rmtree(destination)
+                    return None
+                return continue_without_git()
 
         gitignore = destination / ".gitignore"
         if not gitignore.exists():

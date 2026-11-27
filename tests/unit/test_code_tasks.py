@@ -483,9 +483,57 @@ def test_isolated_command_scrubs_secrets_from_the_macos_child_environment(
     assert environment["LANG"] == "en_US.UTF-8"
     assert environment["LC_ALL"] == "en_US.UTF-8"
     assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+    # The host's Git configuration is neither readable nor fatal inside the
+    # sandbox; only the author identity crosses the boundary.
+    assert environment["GIT_CONFIG_GLOBAL"] == os.devnull
+    assert environment["GIT_CONFIG_NOSYSTEM"] == "1"
     assert not any("do-not-leak" in value for value in environment.values()), (
         environment
     )
+
+
+def test_git_identity_environment_keeps_only_the_author(monkeypatch):
+    import code_tasks
+
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "3")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "user.name")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "Workspace Author")
+    monkeypatch.setenv("GIT_CONFIG_KEY_1", "user.email")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_1", "author@example.invalid")
+    monkeypatch.setenv("GIT_CONFIG_KEY_2", "credential.helper")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_2", "osxkeychain")
+
+    identity = code_tasks._git_identity_environment()
+
+    assert identity["GIT_CONFIG_COUNT"] == "2"
+    assert identity["GIT_CONFIG_KEY_0"] == "user.name"
+    assert identity["GIT_CONFIG_VALUE_1"] == "author@example.invalid"
+    assert "osxkeychain" not in identity.values()
+
+
+def test_host_git_identity_reads_the_developer_configuration(monkeypatch):
+    import code_tasks
+
+    outputs = {"user.name": "Workspace Author", "user.email": "a@example.invalid"}
+    monkeypatch.setattr(
+        code_tasks.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(
+            command, 0, outputs[command[-1]] + "\n", ""
+        ),
+    )
+
+    assert code_tasks._host_git_identity() == (
+        "Workspace Author",
+        "a@example.invalid",
+    )
+
+    monkeypatch.setattr(
+        code_tasks.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "", ""),
+    )
+    assert code_tasks._host_git_identity() is None
 
 
 def test_isolated_command_scrubs_secrets_from_the_linux_child_environment(
