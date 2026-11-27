@@ -28,7 +28,7 @@ from ui import json_output
 from . import runtime_f_integration as f_integration
 from ui.chat_ui import ChatTranscript
 from ui.markup import citation_line, plan_line, verification_line
-from ui.startup import startup_section, welcome_panel
+from ui.startup import runtime_info_panel, startup_section, welcome_panel
 from platform_support import (
     detect_platform,
     is_windows_mount_path,
@@ -2228,48 +2228,31 @@ async def _choose_provider(
             "Resumed history messages": len(chat_history),
         }
     )
-    startup_summary = Table(
-        title="Ready",
-        box=None,
-        show_header=False,
-    )
-    startup_summary.add_column("Setting", style="cyan")
-    startup_summary.add_column("Value", overflow="fold")
     _platform_info = detect_platform()
     os_name = _platform_info.name or _platform_info.system or sys.platform
     architecture = _platform_info.machine
-    startup_summary.add_row(
-        "Platform",
-        f"{os_name} ({architecture})" if architecture else os_name,
+    console.print(
+        runtime_info_panel(
+            model=selected_model,
+            provider=(
+                f"Local ({selected_local_runtime.name})"
+                if provider_type == "local" and selected_local_runtime
+                else "Online"
+            ),
+            permission=permission_mode.title(),
+            isolation=(
+                f"Disabled — {isolation_warning}"
+                if isolation_warning
+                else "Available — bubblewrap + prlimit"
+            ),
+            workspace=SandboxManager.get_root(),
+            rag=docs_input or RAG_DOCS_DEFAULT or "disabled",
+            rag_active=is_rag_active,
+            skills=len(loaded_skills),
+            capabilities=capabilities,
+            platform=f"{os_name} ({architecture})" if architecture else os_name,
+        )
     )
-    startup_summary.add_row(
-        "Isolation",
-        (
-            f"Disabled — {isolation_warning}"
-            if isolation_warning
-            else "Available — bubblewrap + prlimit"
-        ),
-    )
-    startup_summary.add_row(
-        "Provider",
-        (
-            f"Local ({selected_local_runtime.name})"
-            if provider_type == "local"
-            else "Online"
-        ),
-    )
-    startup_summary.add_row("Model", selected_model)
-    startup_summary.add_row("Permission", permission_mode.title())
-    startup_summary.add_row(
-        "Workspace",
-        str(SandboxManager.get_root()),
-    )
-    startup_summary.add_row(
-        "Local RAG",
-        "active" if is_rag_active else "inactive",
-    )
-    startup_summary.add_row("Skills", str(len(loaded_skills)))
-    console.print(startup_summary)
     console.print(
         "[dim]Version: dev "
         f"\u00b7 Workspace: {SandboxManager.get_root()} \u00b7 Type /help for commands.[/dim]"
