@@ -284,6 +284,7 @@ def main():
             restore_logging_consoles(originals)
         stop_debug_logging()
         console.print("[info][Info] Goodbye.[/info]")
+        console.print()
     if exit_code:
         raise SystemExit(exit_code)
 

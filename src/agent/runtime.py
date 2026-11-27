@@ -4292,6 +4292,13 @@ async def run_agent_cli_async(
             input_provider=input_provider,
         )
     finally:
+        # Erase any live status ribbon before shutdown messages and the final
+        # Goodbye print, so the footer cannot outlive the session.
+        from ui.status_bar import get_active_footer
+
+        _footer = get_active_footer(console)
+        if _footer is not None:
+            _footer.stop()
         global _ACTIVE_RAG_TASK
         if _ACTIVE_RAG_TASK is not None and not _ACTIVE_RAG_TASK.done():
             _ACTIVE_RAG_TASK.cancel()
