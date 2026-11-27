@@ -29,6 +29,17 @@ def _context_rows(context_value: Any) -> tuple[tuple[str, str], ...]:
     return tuple(rows)
 
 
+def _network_consent_label(state: Any) -> str:
+    """Describe the session's one-time full-mode internet decision."""
+    if not isinstance(state, dict):
+        return "not requested yet"
+    if state.get("granted"):
+        return "granted for this session"
+    if state.get("denied"):
+        return "denied for this session"
+    return "not requested yet"
+
+
 def session_status_panel(
     *,
     provider_type: Any,
@@ -41,23 +52,29 @@ def session_status_panel(
     queued_context_files: int,
     queued_context_bytes: int,
     context_value: Any,
+    network_consent_state: Any = None,
 ) -> Any:
     """Return the one renderable behind ``/status``."""
     provider_label = (
         f"Local ({local_runtime_name})" if provider_type == "local" else "Online"
     )
+    session_rows: list[tuple[str, str]] = [
+        ("Provider kind", str(provider_type).title()),
+        ("Provider", provider_label),
+        ("Model", selected_model),
+        ("Permission mode", permission_mode.title()),
+    ]
+    if permission_mode.strip().lower() == "full":
+        session_rows.append(
+            ("Internet access", _network_consent_label(network_consent_state))
+        )
+    session_rows.append(("Workspace", workspace))
     return status_panel(
         "Session Status",
         (
             StatusSection(
                 "Session",
-                (
-                    ("Provider kind", str(provider_type).title()),
-                    ("Provider", provider_label),
-                    ("Model", selected_model),
-                    ("Permission mode", permission_mode.title()),
-                    ("Workspace", workspace),
-                ),
+                tuple(session_rows),
                 ("Setting", "Value"),
             ),
             StatusSection(

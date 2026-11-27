@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 
+import pytest
 from rich.console import Console
 
 from ui.status_view import StatusSection, status_panel, status_table
@@ -122,6 +123,60 @@ def test_session_status_panel_reports_context_and_queue_state():
         "2 file(s), 1,024 bytes",
     ):
         assert expected in rendered, expected
+
+
+@pytest.mark.parametrize(
+    ("state", "expected"),
+    [
+        (None, "not requested yet"),
+        ({}, "not requested yet"),
+        ({"granted": True}, "granted for this session"),
+        ({"denied": True}, "denied for this session"),
+    ],
+)
+def test_session_status_panel_reports_full_mode_network_consent(state, expected):
+    from agent.commands.status import session_status_panel
+
+    rendered = _render(
+        session_status_panel(
+            provider_type="local",
+            local_runtime_name="Ollama",
+            selected_model="qwen2.5-coder:7b",
+            permission_mode="full",
+            workspace="/w",
+            rag_description="inactive",
+            queued_context_present=False,
+            queued_context_files=0,
+            queued_context_bytes=0,
+            context_value={},
+            network_consent_state=state,
+        )
+    )
+
+    assert "Internet access" in rendered
+    assert expected in rendered
+
+
+def test_session_status_panel_omits_network_consent_outside_full_mode():
+    from agent.commands.status import session_status_panel
+
+    rendered = _render(
+        session_status_panel(
+            provider_type="local",
+            local_runtime_name="Ollama",
+            selected_model="qwen2.5-coder:7b",
+            permission_mode="auto",
+            workspace="/w",
+            rag_description="inactive",
+            queued_context_present=False,
+            queued_context_files=0,
+            queued_context_bytes=0,
+            context_value={},
+            network_consent_state={"granted": True},
+        )
+    )
+
+    assert "Internet access" not in rendered
 
 
 def test_session_status_panel_says_when_nothing_was_measured():
