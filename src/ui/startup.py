@@ -16,6 +16,7 @@ from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
 from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
 
 from .console import resolve_style
@@ -93,10 +94,112 @@ def welcome_panel(
     return Panel(body, title=Text(title), border_style=resolve_style("accent"))
 
 
+# Capability flags rendered as one compact icon per capability: yes, unknown,
+# unsupported. The order is fixed so two sessions compare at a glance.
+CAPABILITY_ICONS: tuple[tuple[str, str, str, str], ...] = (
+    ("tools", "🔧", "🛠️", "🚫"),
+    ("function_calls", "⚡", "❓", "➖"),
+    ("structured_output", "📐", "❔", "➖"),
+    ("thinking", "🧠", "💭", "➖"),
+    ("vision", "👁️", "🙈", "🙈"),
+    ("audio", "🎙️", "🔇", "🔇"),
+)
+
+
+def capability_icons(capabilities: dict[str, Any] | None) -> str:
+    """Render capability flags as the reference UI's compact icon row."""
+    flags = capabilities or {}
+    icons: list[str] = []
+    for key, yes_icon, unknown_icon, no_icon in CAPABILITY_ICONS:
+        value = str(flags.get(key, "no")).strip().lower()
+        if value == "yes":
+            icons.append(yes_icon)
+        elif value == "unknown":
+            icons.append(unknown_icon)
+        else:
+            icons.append(no_icon)
+    return "".join(icons)
+
+
+def _runtime_cell(value: Any) -> Text:
+    """Return a runtime value as literal text so markup never eats it."""
+    return value if isinstance(value, Text) else Text(str(value))
+
+
+def runtime_info_panel(
+    *,
+    model: str,
+    provider: str,
+    permission: str,
+    isolation: str,
+    workspace: Any,
+    rag: Any,
+    rag_active: bool,
+    skills: int,
+    capabilities: dict[str, Any] | None = None,
+    platform: str = "",
+) -> Panel:
+    """Return the production startup panel: runtime facts and capability badges.
+
+    This is the reference UI's ``Model & Runtime Info`` panel. Two aligned
+    columns keep the session's identity, safety mode and environment readable
+    without wrapping into a stack of ``[Label] text | text`` lines.
+    """
+    rag_status = Text("active" if rag_active else "inactive")
+    rag_status.stylize(resolve_style("border.success" if rag_active else "muted"))
+    caps = Text(f"{skills} · {capability_icons(capabilities)}")
+
+    left_rows: list[tuple[str, Any]] = [
+        ("Model", model),
+        ("Provider", provider),
+        ("Permission", permission),
+        ("Isolation", isolation),
+    ]
+    if platform:
+        left_rows.append(("Platform", platform))
+    right_rows: list[tuple[str, Any]] = [
+        ("Workspace", str(workspace)),
+        ("RAG Dir", str(rag)),
+        ("Local RAG", rag_status),
+        ("Skills / Caps", caps),
+    ]
+
+    # One four-column grid keeps the two halves side by side even when either
+    # value is long; nested expanding tables would stack instead.
+    grid = Table.grid(padding=(0, 2), expand=True)
+    grid.add_column(style=resolve_style("key"), width=12, no_wrap=True)
+    grid.add_column(style=resolve_style("value"), ratio=1, overflow="fold")
+    grid.add_column(style=resolve_style("key"), width=13, no_wrap=True)
+    grid.add_column(style=resolve_style("value"), ratio=1, overflow="fold")
+    for index in range(max(len(left_rows), len(right_rows))):
+        left = left_rows[index] if index < len(left_rows) else ("", "")
+        right = right_rows[index] if index < len(right_rows) else ("", "")
+        grid.add_row(
+            Text(left[0]),
+            _runtime_cell(left[1]),
+            Text(right[0]),
+            _runtime_cell(right[1]),
+        )
+
+    return Panel(
+        grid,
+        title=Text("Model & Runtime Info", style=resolve_style("border.success")),
+        subtitle=Text(
+            "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
+            style=resolve_style("muted"),
+        ),
+        border_style=resolve_style("border.success"),
+        padding=(0, 1),
+    )
+
+
 __all__ = [
+    "CAPABILITY_ICONS",
+    "capability_icons",
     "figlet_banner",
     "field_text",
     "key_value_columns",
+    "runtime_info_panel",
     "startup_rule",
     "startup_section",
     "welcome_panel",

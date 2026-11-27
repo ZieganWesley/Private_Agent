@@ -4815,6 +4815,7 @@ async def test_exit_prints_session_statistics_table(
     await run_agent_cli_async()
     out = capsys.readouterr().out
     for label in (
+        "Model & Runtime Info",
         "Session Statistics",
         "SQL session ID",
         "Agent (permission) mode",

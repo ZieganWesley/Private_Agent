@@ -7,9 +7,11 @@ import io
 from rich.console import Console
 
 from ui.startup import (
+    capability_icons,
     field_text,
     figlet_banner,
     key_value_columns,
+    runtime_info_panel,
     startup_rule,
     startup_section,
 )
@@ -79,3 +81,71 @@ def test_summary_renders_on_a_console_without_the_theme():
     # would raise MissingStyle, so every lookup must carry a fallback.
     rendered = _render(field_text("Model", "m"), width=20)
     assert "Model: m" in rendered
+
+
+def test_runtime_info_panel_shows_runtime_facts_and_capability_icons():
+    rendered = _render(
+        runtime_info_panel(
+            model="local-model",
+            provider="Local (llama.cpp)",
+            permission="Auto",
+            isolation="Available — bubblewrap + prlimit",
+            workspace="/work/project",
+            rag="/work/rag",
+            rag_active=True,
+            skills=3,
+            capabilities={
+                "tools": "yes",
+                "function_calls": "unknown",
+                "structured_output": "no",
+                "thinking": "yes",
+                "vision": "no",
+                "audio": "unknown",
+            },
+            platform="Linux (x86_64)",
+        ),
+        width=120,
+    )
+
+    for expected in (
+        "Model & Runtime Info",
+        "local-model",
+        "Local (llama.cpp)",
+        "Auto",
+        "Available — bubblewrap + prlimit",
+        "Linux (x86_64)",
+        "/work/project",
+        "/work/rag",
+        "active",
+        "3 · 🔧❓➖🧠🙈🔇",
+        "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
+    ):
+        assert expected in rendered, expected
+
+
+def test_runtime_info_panel_keeps_values_literal():
+    rendered = _render(
+        runtime_info_panel(
+            model="[bold]evil[/bold]",
+            provider="Local",
+            permission="Full",
+            isolation="unavailable",
+            workspace="[red]/work[/red]",
+            rag="[not-a-style]/rag",
+            rag_active=False,
+            skills=0,
+            capabilities={},
+        ),
+        width=120,
+    )
+
+    assert "[bold]evil[/bold]" in rendered
+    assert "[red]/work[/red]" in rendered
+    assert "[not-a-style]/rag" in rendered
+    assert "🔧❓➖🧠🙈🔇" not in rendered
+    assert "🚫➖➖➖🙈🔇" in rendered
+
+
+def test_capability_icons_uses_unknown_and_no_states():
+    assert capability_icons(None) == "🚫➖➖➖🙈🔇"
+    assert capability_icons({"tools": "unknown", "vision": "yes"}) == "🛠️➖➖➖👁️🔇"
