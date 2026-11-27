@@ -28,7 +28,7 @@ from ui import json_output
 from . import runtime_f_integration as f_integration
 from ui.chat_ui import ChatTranscript
 from ui.markup import citation_line, plan_line, verification_line
-from ui.startup import runtime_info_panel, startup_section, welcome_panel
+from ui.startup import ready_header, startup_section, welcome_panel
 from platform_support import (
     detect_platform,
     is_windows_mount_path,
@@ -2232,7 +2232,7 @@ async def _choose_provider(
     os_name = _platform_info.name or _platform_info.system or sys.platform
     architecture = _platform_info.machine
     console.print(
-        runtime_info_panel(
+        ready_header(
             model=selected_model,
             provider=(
                 f"Local ({selected_local_runtime.name})"
@@ -2256,9 +2256,6 @@ async def _choose_provider(
     console.print(
         "[dim]Version: dev "
         f"\u00b7 Workspace: {SandboxManager.get_root()} \u00b7 Type /help for commands.[/dim]"
-    )
-    console.print(
-        f"\n[bold success]--- {mode_label} Ready! Type 'exit' or 'switch' ---[/bold success]"
     )
     return ProviderSelection(
         provider_type=provider_type,
@@ -2534,6 +2531,15 @@ async def _run_agent_cli_session(
             status_bar=STATUS_BAR,
         )
         session_ui.bind(model=selected_model, permission=permission_mode)
+        chat_screen = None
+        if not non_interactive:
+            from ui.chat_screen import ChatScreenUI, terminal_capable
+
+            if terminal_capable():
+                chat_screen = ChatScreenUI(
+                    console=console,
+                    state_provider=session_ui._current_state,
+                )
         if SHOW_WELCOME_SCREEN and not non_interactive:
             session_ui.print(welcome_panel(selected_model, SandboxManager.get_root()))
         _local_model_has_answered = False
@@ -2549,8 +2555,10 @@ async def _run_agent_cli_session(
                         prompt = None
                     else:
                         session_ui._footer.stop()
-                        if SHOW_TURN_DIVIDER:
+                        if SHOW_TURN_DIVIDER and chat_screen is None:
                             session_ui.console.rule(style="dim")
+                        if chat_screen is not None:
+                            chat_screen.show()
                         user_input = (
                             await prompt_user_input(
                                 console,
@@ -2561,6 +2569,8 @@ async def _run_agent_cli_session(
                                 bottom_toolbar=session_ui.ribbon_text(),
                             )
                         ).strip()
+                        if chat_screen is not None and user_input:
+                            chat_screen.add_user(user_input)
                     if not non_interactive:
                         session_ui._footer.start()
                         session_ui._footer.update(session_ui._current_state())
@@ -4164,6 +4174,8 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                 )
                 if non_interactive:
                     _LAST_HEADLESS_RESPONSE = full_output_content
+                if chat_screen is not None:
+                    chat_screen.add_assistant(full_output_content)
                 session_summary_saved = False
                 _SESSION_STATS.turns += 1
                 chat_history = chat_history[-MAX_HISTORY_MESSAGES:]

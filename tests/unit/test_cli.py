@@ -235,7 +235,7 @@ def test_goodbye_is_followed_by_a_blank_line(monkeypatch, capsys):
     assert "Goodbye.\n\n" in capsys.readouterr().out
 
 
-def test_startup_banner_prints(monkeypatch, capsys):
+def test_startup_banner_is_not_printed_separately(monkeypatch, capsys):
     from agent import runtime
     from utils import run_logging
 
@@ -247,7 +247,7 @@ def test_startup_banner_prints(monkeypatch, capsys):
 
     cli.main()
 
-    assert "Local Inference & Tool Runtime" in capsys.readouterr().out
+    assert "Local Inference & Tool Runtime" not in capsys.readouterr().out
 
 
 def test_ui_check_flag_is_retired(monkeypatch, capsys):

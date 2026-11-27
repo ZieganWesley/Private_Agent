@@ -11,6 +11,7 @@ from ui.startup import (
     field_text,
     figlet_banner,
     key_value_columns,
+    ready_header,
     runtime_info_panel,
     startup_rule,
     startup_section,
@@ -149,3 +150,29 @@ def test_runtime_info_panel_keeps_values_literal():
 def test_capability_icons_uses_unknown_and_no_states():
     assert capability_icons(None) == "🚫➖➖➖🙈🔇"
     assert capability_icons({"tools": "unknown", "vision": "yes"}) == "🛠️➖➖➖👁️🔇"
+
+
+def test_ready_header_combines_banner_panel_and_command_footer():
+    rendered = _render(
+        ready_header(
+            model="local-model",
+            provider="Local (llama.cpp)",
+            permission="Auto",
+            isolation="Available — bubblewrap + prlimit",
+            workspace="/work/project",
+            rag="/work/rag",
+            rag_active=True,
+            skills=3,
+            capabilities={"tools": "yes"},
+            platform="Linux (x86_64)",
+        ),
+        width=120,
+    )
+
+    for expected in (
+        "Local Inference & Tool Runtime",
+        "Model & Runtime Info",
+        "local-model",
+        "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
+    ):
+        assert expected in rendered, expected

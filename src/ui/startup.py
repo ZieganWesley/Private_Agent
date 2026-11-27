@@ -193,6 +193,47 @@ def runtime_info_panel(
     )
 
 
+def ready_header(
+    *,
+    model: str,
+    provider: str,
+    permission: str,
+    isolation: str,
+    workspace: Any,
+    rag: Any,
+    rag_active: bool,
+    skills: int,
+    capabilities: dict[str, Any] | None = None,
+    platform: str = "",
+    title: str = "Private Agent",
+    subtitle: str = "Local Inference & Tool Runtime",
+    font: str = "slant",
+    command_footer: str = "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
+) -> Group:
+    """Return the combined production ready screen.
+
+    The reference UI does not print the banner and runtime facts as separate
+    blocks. Keeping them in one renderable also lets the command footer travel
+    with the runtime panel instead of being rediscovered from scattered prints.
+    """
+    return Group(
+        figlet_banner(title=title, subtitle=subtitle, font=font),
+        runtime_info_panel(
+            model=model,
+            provider=provider,
+            permission=permission,
+            isolation=isolation,
+            workspace=workspace,
+            rag=rag,
+            rag_active=rag_active,
+            skills=skills,
+            capabilities=capabilities,
+            platform=platform,
+        ),
+        Align.center(Text(command_footer, style=resolve_style("muted"))),
+    )
+
+
 __all__ = [
     "CAPABILITY_ICONS",
     "capability_icons",
@@ -202,5 +243,6 @@ __all__ = [
     "runtime_info_panel",
     "startup_rule",
     "startup_section",
+    "ready_header",
     "welcome_panel",
 ]
