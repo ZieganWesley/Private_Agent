@@ -392,3 +392,78 @@ def test_visible_reasoning_summary_is_sanitised(monkeypatch):
     rendered = buffer.getvalue()
     assert "\x1b" not in rendered
     assert "compared options" in rendered
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_retry_records_one_model_call(monkeypatch):
+    """The empty attempt and its retry are one turn, not two model calls."""
+    _patch_streaming(monkeypatch, visible_reasoning=False)
+    stats = MagicMock()
+    logger = MagicMock()
+    monkeypatch.setattr(streaming, "_SESSION_STATS", stats)
+    monkeypatch.setattr(streaming, "RUN_LOGGER", logger)
+
+    class EmptyThenRecoveredModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(content="")
+
+        async def ainvoke(self, _messages):
+            return AIMessage(content="recovered")
+
+    response = await streaming._invoke_with_budget(
+        EmptyThenRecoveredModel(), [], time.monotonic() + 5, model_name="m"
+    )
+
+    assert response.content == "recovered"
+    assert stats.record_model_call.call_count == 1
+    assert stats.record_model_call.call_args.args[1].content == "recovered"
+
+    completed = [
+        call.kwargs["extra"]["event_fields"]
+        for call in logger.log.call_args_list
+        if call.kwargs["extra"]["event"] == "model.invoke.completed"
+    ]
+    assert completed
+    assert completed[0]["first_token_seconds"] is not None
+
+
+@pytest.mark.asyncio
+async def test_empty_stream_retry_that_stays_empty_records_one_model_call(monkeypatch):
+    _patch_streaming(monkeypatch, visible_reasoning=False)
+    stats = MagicMock()
+    monkeypatch.setattr(streaming, "_SESSION_STATS", stats)
+    monkeypatch.setattr(streaming, "RUN_LOGGER", MagicMock())
+
+    class NeverRespondsModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(content="")
+
+        async def ainvoke(self, _messages):
+            return AIMessage(content="   ")
+
+    response = await streaming._invoke_with_budget(
+        NeverRespondsModel(), [], time.monotonic() + 5, model_name="m"
+    )
+
+    assert "twice" in response.content
+    assert stats.record_model_call.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_invoke_empty_retry_records_one_model_call(monkeypatch):
+    monkeypatch.setattr(streaming, "STREAMING_OUTPUT", False)
+    monkeypatch.setattr(streaming.console, "print", lambda *_a, **_k: None)
+    stats = MagicMock()
+    monkeypatch.setattr(streaming, "_SESSION_STATS", stats)
+    model = MagicMock()
+    model.ainvoke = AsyncMock(
+        side_effect=[AIMessage(content=""), AIMessage(content="recovered")]
+    )
+    model.astream = AsyncMock()
+
+    response = await streaming._invoke_with_budget(
+        model, [], time.monotonic() + 5, model_name="m"
+    )
+
+    assert response.content == "recovered"
+    assert stats.record_model_call.call_count == 1
