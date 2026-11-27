@@ -37,8 +37,9 @@ MONITORED_COMMAND_TOOL_NAMES = frozenset(
 )
 FULL_MODE_WARNING = (
     "Full mode approves every tool call for the rest of this session: file "
-    "writes, shell commands, Git operations, network requests and stored-data "
-    "changes run without another prompt."
+    "writes, shell commands, Git operations and stored-data changes run "
+    "without another prompt. Internet access still needs a one-time approval "
+    "when the model first requests it."
 )
 CODING_ACCESS_LEVELS = {
     "full_hitl": (
@@ -444,14 +445,40 @@ async def authorize_network_research(
     session_consent_state = (
         session_consent_state if session_consent_state is not None else {}
     )
-    # Full mode already approves every tool call for the session.
-    full_mode = permission_mode == "full"
+    if permission_mode == "full":
+        # Full mode approves tool calls, but reaching the internet is a separate
+        # decision. Ask once for the session and remember the answer.
+        if session_consent_state.get("granted", False):
+            return True, ""
+        if session_consent_state.get("denied", False):
+            return False, (
+                "Internet access was declined for this session; no request was made."
+            )
+        if not is_interactive():
+            return False, (
+                "Internet access requires interactive approval in full mode; "
+                "no request was made."
+            )
+        request_summary = _request_summary(tool_name, tool_args)
+        choice = (
+            console.input(
+                "[warning]Full permission mode does not include internet access. "
+                f"'{tool_name}' will send this to an external service: "
+                f"{request_summary}\nAllow internet access for the rest of this "
+                "session? \\[y/N]: [/warning]"
+            )
+            .strip()
+            .lower()
+        )
+        if choice != "y":
+            session_consent_state["denied"] = True
+            return False, "Internet access was not approved; no request was made."
+        session_consent_state["granted"] = True
+        return True, ""
     needs_session_consent = (
-        not full_mode
-        and consent_policy == "session"
-        and not session_consent_state.get("granted", False)
+        consent_policy == "session" and not session_consent_state.get("granted", False)
     )
-    needs_per_request_consent = not full_mode and consent_policy == "ask"
+    needs_per_request_consent = consent_policy == "ask"
     if needs_session_consent or needs_per_request_consent:
         if not is_interactive():
             return False, "Online search requires interactive user consent."

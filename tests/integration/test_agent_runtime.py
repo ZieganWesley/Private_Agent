@@ -1023,21 +1023,97 @@ async def test_web_research_ask_policy_prompts_outside_manual_mode(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("policy", ["ask", "session"])
-async def test_full_permission_mode_skips_web_consent_prompt(policy):
+async def test_full_permission_mode_asks_once_for_network_access(policy):
     from agent.permissions import authorize_network_research as authorize
 
     console = MagicMock()
-    allowed, _ = await authorize(
+    console.input.return_value = "y"
+    state = {}
+    arguments = {
+        "permission_mode": "full",
+        "enabled": True,
+        "consent_policy": policy,
+        "internet_check": lambda: True,
+        "console": console,
+        "is_interactive": lambda: True,
+        "session_consent_state": state,
+    }
+
+    assert (await authorize("web_search", {"query": "first"}, **arguments))[0]
+    assert (await authorize("download_web_file", {"url": "https://x"}, **arguments))[0]
+
+    assert state == {"granted": True}
+    console.input.assert_called_once()
+    prompt = console.input.call_args.args[0].lower()
+    assert "internet access" in prompt
+    assert "first" in console.input.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_full_permission_mode_declined_network_stays_blocked():
+    from agent.permissions import authorize_network_research as authorize
+
+    console = MagicMock()
+    console.input.return_value = "n"
+    state = {}
+    arguments = {
+        "permission_mode": "full",
+        "enabled": True,
+        "consent_policy": "ask",
+        "internet_check": lambda: True,
+        "console": console,
+        "is_interactive": lambda: True,
+        "session_consent_state": state,
+    }
+
+    allowed, message = await authorize("web_search", {"query": "first"}, **arguments)
+    assert allowed is False
+    assert "not approved" in message
+    assert (await authorize("web_search", {"query": "second"}, **arguments))[0] is False
+
+    assert state == {"denied": True}
+    console.input.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_full_permission_mode_network_requires_interactive_consent():
+    from agent.permissions import authorize_network_research as authorize
+
+    console = MagicMock()
+    allowed, message = await authorize(
         "web_search",
-        {"query": "weather today"},
+        {"query": "x"},
         permission_mode="full",
         enabled=True,
-        consent_policy=policy,
+        consent_policy="ask",
+        internet_check=lambda: True,
+        console=console,
+        is_interactive=lambda: False,
+    )
+
+    assert allowed is False
+    assert "interactive approval" in message
+    console.input.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_full_permission_mode_respects_never_consent_policy():
+    from agent.permissions import authorize_network_research as authorize
+
+    console = MagicMock()
+    allowed, message = await authorize(
+        "web_search",
+        {"query": "x"},
+        permission_mode="full",
+        enabled=True,
+        consent_policy="never",
         internet_check=lambda: True,
         console=console,
         is_interactive=lambda: True,
     )
-    assert allowed is True
+
+    assert allowed is False
+    assert "consent policy" in message
     console.input.assert_not_called()
 
 
