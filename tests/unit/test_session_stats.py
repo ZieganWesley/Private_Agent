@@ -1,4 +1,7 @@
+from io import StringIO
+
 from langchain_core.messages import AIMessage, HumanMessage
+from rich.console import Console
 
 from agent.session_stats import (
     SessionStats,
@@ -35,9 +38,33 @@ def test_ollama_metadata_and_tool_counts():
     stats = SessionStats()
     stats.record_tool_call("web_search")
     stats.record_tool_call("web_search")
-    table = build_stats_table(stats, {"Model": "m"})
-    cells = [c for col in table.columns for c in col._cells]
-    assert any("web_search x2" in c for c in cells)
+    rendered = StringIO()
+    Console(file=rendered, width=120, no_color=True).print(
+        build_stats_table(stats, {"Model": "m"})
+    )
+    assert "web_search x2" in rendered.getvalue()
+
+
+def test_statistics_are_grouped_into_sections():
+    stats = SessionStats()
+    stats.record_tool_call("search_media")
+    rendered = StringIO()
+    Console(file=rendered, width=120, no_color=True).print(
+        build_stats_table(
+            stats,
+            {
+                "SQL session ID": "session_1",
+                "Model provider": "Local (llama.cpp)",
+                "Model": "local-model",
+            },
+        )
+    )
+    output = rendered.getvalue()
+    for heading in ("Session", "Model", "Tokens", "Tools", "Summary"):
+        assert heading in output
+    assert output.index("Session") < output.index("Model") < output.index("Tokens")
+    assert "SQL session ID" in output
+    assert "local-model" in output
 
 
 def test_format_duration():
