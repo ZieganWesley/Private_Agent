@@ -225,6 +225,27 @@ async def _invoke_with_budget(
     if remaining <= 0:
         raise TimeoutError("Agent task time budget exhausted before model invocation.")
     started = time.monotonic()
+    _call_recorded = False
+
+    def _record_call_once(response: Any) -> None:
+        """Account for one model call however many attempts it took.
+
+        Recording the empty first attempt and the retry counted the same turn
+        twice, and the retry's elapsed time already spanned both attempts, so
+        the session reported roughly double the wall clock. The final outcome
+        is the one that matters: it carries the tokens the user received.
+        """
+        nonlocal _call_recorded
+        if _call_recorded:
+            return
+        _call_recorded = True
+        _SESSION_STATS.record_model_call(
+            messages,
+            response if response is not None else AIMessageChunk(content=""),
+            time.monotonic() - started,
+            model_name,
+        )
+
     stream_method: Callable[[list], AsyncIterator[Any]] | None = getattr(
         model, "astream", None
     )
@@ -335,12 +356,6 @@ async def _invoke_with_budget(
                 return _interrupted_response(partial.get("text", ""))
             aggregate, first_token_at = result
             if _model_response_is_empty(aggregate):
-                _SESSION_STATS.record_model_call(
-                    messages,
-                    aggregate if aggregate is not None else AIMessageChunk(content=""),
-                    time.monotonic() - started,
-                    model_name,
-                )
                 log_event(
                     RUN_LOGGER,
                     "model.stream.empty_retry_started",
@@ -356,6 +371,7 @@ async def _invoke_with_budget(
                         level=logging.WARNING,
                         model=model_name,
                     )
+                    _record_call_once(aggregate)
                     return AIMessageChunk(
                         content=(
                             "The model returned no response after an automatic "
@@ -372,6 +388,7 @@ async def _invoke_with_budget(
                             model=model_name,
                             reason="retry_not_awaitable",
                         )
+                        _record_call_once(aggregate)
                         return AIMessageChunk(
                             content=(
                                 "The model could not retry this response. "
@@ -394,6 +411,7 @@ async def _invoke_with_budget(
                         error_type=type(retry_error).__name__,
                         exc_info=True,
                     )
+                    _record_call_once(aggregate)
                     return AIMessageChunk(
                         content=(
                             "The model did not return a response after an "
@@ -402,12 +420,7 @@ async def _invoke_with_budget(
                         )
                     )
                 if _model_response_is_empty(aggregate):
-                    _SESSION_STATS.record_model_call(
-                        messages,
-                        aggregate,
-                        time.monotonic() - started,
-                        model_name,
-                    )
+                    _record_call_once(aggregate)
                     log_event(
                         RUN_LOGGER,
                         "model.stream.empty_retry_returned_empty",
@@ -420,7 +433,11 @@ async def _invoke_with_budget(
                             "Please try rephrasing or retrying in this session."
                         )
                     )
-                first_token_at = None
+                # A non-streaming retry exposes no per-token timing, so its
+                # arrival is the only observable bound on the first token.
+                # Leaving this None made the stats claim an instant first
+                # token and dropped the measurement from the run log.
+                first_token_at = time.monotonic()
             elapsed = time.monotonic() - started
             _display_visible_reasoning(aggregate)
             _stats = _display_generation_rate(
@@ -435,12 +452,7 @@ async def _invoke_with_budget(
             if aggregate is not None and _stats is not None:
                 with contextlib.suppress(AttributeError, TypeError):
                     aggregate.generation_stats = _stats
-            _SESSION_STATS.record_model_call(
-                messages,
-                aggregate if aggregate is not None else AIMessageChunk(content=""),
-                elapsed,
-                model_name,
-            )
+            _record_call_once(aggregate)
             log_event(
                 RUN_LOGGER,
                 "model.invoke.completed",
@@ -497,12 +509,6 @@ async def _invoke_with_budget(
         )
         raise
     if _model_response_is_empty(response):
-        _SESSION_STATS.record_model_call(
-            messages,
-            response if response is not None else AIMessageChunk(content=""),
-            time.monotonic() - started,
-            model_name,
-        )
         log_event(
             RUN_LOGGER,
             "model.invoke.empty_retry_started",
@@ -511,6 +517,7 @@ async def _invoke_with_budget(
         )
         retry_remaining = deadline - time.monotonic()
         if retry_remaining <= 0:
+            _record_call_once(response)
             return AIMessage(
                 content=(
                     "The model returned no response. The turn budget expired "
@@ -531,6 +538,7 @@ async def _invoke_with_budget(
                 error_type=type(retry_error).__name__,
                 exc_info=True,
             )
+            _record_call_once(response)
             return AIMessage(
                 content=(
                     "The model did not return a response after an automatic "
@@ -538,12 +546,7 @@ async def _invoke_with_budget(
                 )
             )
         if _model_response_is_empty(response):
-            _SESSION_STATS.record_model_call(
-                messages,
-                response if response is not None else AIMessageChunk(content=""),
-                time.monotonic() - started,
-                model_name,
-            )
+            _record_call_once(response)
             log_event(
                 RUN_LOGGER,
                 "model.invoke.empty_retry_returned_empty",
@@ -564,7 +567,7 @@ async def _invoke_with_budget(
     if _stats is not None:
         with contextlib.suppress(AttributeError, TypeError):
             response.generation_stats = _stats
-    _SESSION_STATS.record_model_call(messages, response, elapsed, model_name)
+    _record_call_once(response)
     log_event(
         RUN_LOGGER,
         "model.invoke.completed",
