@@ -408,6 +408,11 @@ def test_seatbelt_profile_denies_by_default_and_scopes_the_workspace(tmp_path):
     assert f'(subpath "{os.path.realpath(sys.base_prefix)}")' in read_rule
     # The host home directory is not readable wholesale.
     assert f'(subpath "{os.path.expanduser("~")}")' not in profile
+    # getcwd()/realpath() reopen every ancestor of the working directory, so the
+    # ancestors stay readable as directories while their contents stay hidden.
+    for parent in tmp_path.resolve().parents:
+        assert f'(literal "{parent}")' in read_rule
+        assert f'(subpath "{parent}")' not in profile
 
     connected = code_tasks._seatbelt_profile(tmp_path, allow_network=True)
     assert "(allow network*)" in connected.splitlines()
