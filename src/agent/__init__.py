@@ -19,10 +19,6 @@ from . import tool_display as _tool_display
 _build_bounded_user_input = _prompts.build_bounded_user_input
 trim_history_to_context_budget = _prompts.trim_history_to_context_budget
 
-# Backwards-compatible aliases formerly imported by the runtime module.
-_build_bounded_user_input = _prompts.build_bounded_user_input
-trim_history_to_context_budget = _prompts.trim_history_to_context_budget
-
 _HELPER_MODULES = (
     _tool_display,
     _model_selection,
