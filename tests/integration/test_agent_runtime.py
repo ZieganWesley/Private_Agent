@@ -4318,7 +4318,7 @@ async def test_cli_code_task_keeps_failed_final_verification_visible(
         "prompt_user_input",
         AsyncMock(side_effect=["Create a Python project with tests", "exit"]),
     )
-    inputs.side_effect = ["", "", "3", "1", "1", "y"]
+    inputs.side_effect = ["", "", "3", "yes", "1", "1", "y"]
 
     await run_agent_cli_async()
 
@@ -4421,7 +4421,7 @@ async def test_cli_code_task_retries_checkpoint_after_test_failure(
         AIMessage(content="The checkpoint passed after fixing the tests."),
         AIMessage(content="The task and test-retry behavior are complete."),
     ]
-    inputs.side_effect = ["", "", "3", "1", "1", "y", "y"]
+    inputs.side_effect = ["", "", "3", "yes", "1", "1", "y", "y"]
 
     await run_agent_cli_async()
 
