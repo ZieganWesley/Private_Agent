@@ -133,6 +133,10 @@ class TurnController:
         self._abort_requested = True
         self._cancel_event.set()
 
+    def clear_stop(self) -> None:
+        """Clear a pending pause-stop when the user resumes the mission."""
+        self._abort_requested = False
+
     def drain(self) -> list[SteerMessage]:
         """Return queued messages in order and clear the queue."""
         messages = list(self._queue)

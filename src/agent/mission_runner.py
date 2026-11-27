@@ -39,13 +39,24 @@ class MissionAutoRunner:
             "calls when the step is complete."
         )
 
+    def resume_prompt(self) -> str | None:
+        """Return the current step's prompt after a pause, without a new iteration."""
+        mission = self.controller.mission()
+        if mission["status"] != "active":
+            return None
+        step = self.controller.next_step()
+        return self._prompt(step) if step is not None else None
+
     def observe(
         self, text: str, *, had_tool_calls: bool, interrupted: bool = False
     ) -> str | None:
         """Consume one completed model turn and return the next prompt."""
         mission = self.controller.mission()
-        if mission["status"] in {"stopped", "failed", "paused", "waiting_user"}:
+        if mission["status"] in {"stopped", "failed"}:
             self.controller.release_lease(self.owner)
+            return None
+        if mission["status"] in {"paused", "waiting_user"}:
+            # Keep the lease so /resume can continue this mission.
             return None
         step = self.controller.next_step()
         if step is None:
