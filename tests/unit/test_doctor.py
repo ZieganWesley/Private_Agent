@@ -23,6 +23,18 @@ def test_analyze_machine():
     assert info["cpu_count"] >= 1
 
 
+def test_analyze_machine_reports_memory_without_psutil(monkeypatch):
+    import sys
+
+    # Simulate psutil being unavailable so the /proc/meminfo fallback is used.
+    monkeypatch.setitem(sys.modules, "psutil", None)
+    from diagnostics import doctor
+
+    info = doctor.analyze_machine()
+    assert isinstance(info["memory_gb"], (int, float))
+    assert info["memory_gb"] > 0
+
+
 def test_recommend_config():
     info = {"cpu_count": 8, "memory_gb": 16.0}
     rec = recommend_config(info)
