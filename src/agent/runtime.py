@@ -2767,6 +2767,7 @@ async def _run_agent_cli_session(
                             queued_context_present=bool(pending_folder_context),
                             queued_context_files=len(pending_folder_context_files),
                             queued_context_bytes=pending_folder_context_bytes,
+                            network_consent_state=network_consent_state,
                             context_value=_CONTEXT_REPORT_STATE.get("value") or {},
                         )
                     )
