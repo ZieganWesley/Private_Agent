@@ -4001,6 +4001,10 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             task_action_seen=False,
                             tool_call_count=tool_call_count,
                         )
+                        # Permission, consent, and approval prompts read stdin;
+                        # the steering reader must not compete with them.
+                        if _steering_channel:
+                            _steering_channel.pause()
                         await _preflight_tool_calls(
                             response=response,
                             state=state,
@@ -4023,8 +4027,6 @@ Create or update a relevant unit-test file in this project. Before each subtask 
                             state.authorized_planning_searches
                         )
                         tool_call_count = state.tool_call_count
-                        if _steering_channel:
-                            _steering_channel.pause()
                         response, stop = await _execute_tool_batch(
                             response=response,
                             session_id=session_id,

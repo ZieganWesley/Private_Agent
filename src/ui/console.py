@@ -13,6 +13,25 @@ from .theme import MESSAGE_SYMBOLS, build_theme, fallback_style
 class ThemedConsole(Console):
     """A shared console that also exposes one method per message level."""
 
+    def input(self, *args: Any, **kwargs: Any) -> str:
+        """Prompt for input without hiding the prompt under the live footer.
+
+        Rich renders ``Console.input`` through the active ``Live`` region, so a
+        prompt issued mid-turn is painted into the footer and scrolls away. Stop
+        the footer for the duration of the prompt and repaint it afterwards so
+        the cursor and the question are always visible.
+        """
+        from .status_bar import get_active_footer
+
+        footer = get_active_footer(self)
+        if footer is None or not getattr(footer, "started", False):
+            return super().input(*args, **kwargs)
+        footer.stop()
+        try:
+            return super().input(*args, **kwargs)
+        finally:
+            footer.start()
+
     def _print_level(self, level: str, *args: Any, **kwargs: Any) -> None:
         symbol = MESSAGE_SYMBOLS.get(level, "")
         style = level
