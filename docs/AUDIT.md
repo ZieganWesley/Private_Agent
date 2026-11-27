@@ -15,7 +15,7 @@
 
 ## UI / Accessibility
 - **Medium** Accessible mode supported via `PRIVATE_AGENT_ACCESSIBLE=1` and `NO_COLOR=1`.
-- **Low** Live status bar provides real-time updates (`src/ui/status.py`).
+- **Low** Live status bar provides real-time updates (`src/ui/status_bar.py` live footer, `src/ui/ribbon.py` rendering, `src/ui/state.py` state).
 - **Low** Developer-only UI self-check lives outside the shipped package: run `python scripts/ui_check.py` (`scripts/ui_check.py`); the `--ui-check` flag was removed.
 
 ## Code Quality
