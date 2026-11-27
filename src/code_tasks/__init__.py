@@ -296,17 +296,75 @@ def _sandbox_environment_name_allowed(name: str) -> bool:
     return upper.startswith("LC_")
 
 
+def _git_identity_environment() -> dict[str, str]:
+    """Return only the Git author identity from the host environment.
+
+    A sandboxed child cannot read the host's ``~/.gitconfig``, so the identity
+    arrives through the command scope instead.
+    """
+    try:
+        git_config_count = min(20, max(0, int(os.environ.get("GIT_CONFIG_COUNT", "0"))))
+    except ValueError:
+        git_config_count = 0
+    identity: dict[str, str] = {}
+    for index in range(git_config_count):
+        key = os.environ.get(f"GIT_CONFIG_KEY_{index}", "").lower()
+        value = os.environ.get(f"GIT_CONFIG_VALUE_{index}", "")
+        if key in {"user.name", "user.email"} and len(value) <= 200:
+            position = len(identity) // 2
+            identity[f"GIT_CONFIG_KEY_{position}"] = key
+            identity[f"GIT_CONFIG_VALUE_{position}"] = value
+    if identity:
+        identity["GIT_CONFIG_COUNT"] = str(len(identity) // 2)
+    return identity
+
+
+def _host_git_identity() -> tuple[str, str] | None:
+    """Return the developer's Git identity as configured on the host.
+
+    This runs outside the sandbox on purpose: the identity is read once when a
+    workspace is created and then stored in the workspace's local Git config,
+    so sandboxed commands never need host configuration access.
+    """
+    values: list[str] = []
+    for key in ("user.name", "user.email"):
+        try:
+            completed = subprocess.run(
+                ["git", "config", "--get", key],
+                capture_output=True,
+                text=True,
+                timeout=CODE_TASK_GIT_TIMEOUT,
+                check=False,
+            )
+        except OSError:
+            return None
+        except subprocess.SubprocessError:
+            return None
+        value = completed.stdout.strip()
+        if completed.returncode != 0 or not value:
+            return None
+        values.append(value)
+    return values[0], values[1]
+
+
 def _sandboxed_environment() -> dict[str, str]:
     """Return only the non-secret environment entries a sandboxed child needs.
 
     ``dict(os.environ)`` handed every API key, provider token, and
     ``PRIVATE_AGENT_*`` setting to a generated project's commands.
     """
-    return {
+    environment = {
         name: value
         for name, value in os.environ.items()
         if _sandbox_environment_name_allowed(name)
     }
+    # Reading the host's Git configuration is both a data leak and, because the
+    # sandbox denies it, a fatal error for git. Keep the child on the workspace's
+    # own local configuration plus the author identity alone.
+    environment["GIT_CONFIG_NOSYSTEM"] = "1"
+    environment["GIT_CONFIG_GLOBAL"] = os.devnull
+    environment.update(_git_identity_environment())
+    return environment
 
 
 def _host_resource_limit(resource_name: str) -> int | None:
@@ -555,21 +613,7 @@ def _isolated_command(
         "PYTHONDONTWRITEBYTECODE": "1",
         "LANG": os.environ.get("LANG", "C.UTF-8"),
     }
-    try:
-        git_config_count = min(20, max(0, int(os.environ.get("GIT_CONFIG_COUNT", "0"))))
-    except ValueError:
-        git_config_count = 0
-    git_identity = []
-    for index in range(git_config_count):
-        key = os.environ.get(f"GIT_CONFIG_KEY_{index}", "").lower()
-        value = os.environ.get(f"GIT_CONFIG_VALUE_{index}", "")
-        if key in {"user.name", "user.email"} and len(value) <= 200:
-            git_identity.append((key, value))
-    if git_identity:
-        environment["GIT_CONFIG_COUNT"] = str(len(git_identity))
-        for index, (key, value) in enumerate(git_identity):
-            environment[f"GIT_CONFIG_KEY_{index}"] = key
-            environment[f"GIT_CONFIG_VALUE_{index}"] = value
+    environment.update(_git_identity_environment())
     if dependency_mounts:
         environment["PYTHONPATH"] = os.pathsep.join(
             str(sandbox_path) for sandbox_path in dependency_mounts.values()
