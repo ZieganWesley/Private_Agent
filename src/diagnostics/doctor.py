@@ -519,7 +519,7 @@ def doctor_interactive() -> int:
     for key, value in info.items():
         console.print(f"  {key}: {value}")
     try:
-        answer = console.input("Is this information correct? [y/N]: ").strip().lower()
+        answer = console.input("Is this information correct? \\[y/N]: ").strip().lower()
     except EOFError, KeyboardInterrupt:
         answer = ""
     if answer not in {"y", "yes"}:
