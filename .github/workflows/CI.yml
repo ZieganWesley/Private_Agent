@@ -12,61 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  cleanup:
-    name: Delete Previous Runs
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-      contents: read
-
-    steps:
-      - name: Delete previous runs of this workflow
-        # Older runs keep their logs and artifacts around and clutter the
-        # Actions tab; clear them before the rest of the pipeline starts.
-        # Best effort: fork pull requests get a read-only token.
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          # Derive the workflow file (e.g. CI.yml) from the ref the run was
-          # started from; `gh run list` caps at 100 entries, so page through the
-          # REST API instead and re-list after each sweep until only this run is
-          # left. Deletion shifts the pages, hence the outer loop.
-          workflow_file="${GITHUB_WORKFLOW_REF#*/.github/workflows/}"
-          workflow_file="${workflow_file%%@*}"
-
-          deleted=0
-          for _pass in $(seq 1 200); do
-            stale=$(gh api --paginate \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_file}/runs?per_page=100" \
-              --jq ".workflow_runs[] | select(.id != ${GITHUB_RUN_ID}) | .id")
-            if [ -z "$stale" ]; then
-              break
-            fi
-            while read -r run_id; do
-              [ -n "$run_id" ] || continue
-              echo "Deleting previous run ${run_id}"
-              if gh api --method DELETE \
-                "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" >/dev/null; then
-                deleted=$((deleted + 1))
-              else
-                echo "Could not delete run ${run_id}"
-              fi
-            done <<< "$stale"
-          done
-
-          remaining=$(gh api --paginate \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/${workflow_file}/runs?per_page=100" \
-            --jq "[.workflow_runs[] | select(.id != ${GITHUB_RUN_ID})] | length" |
-            awk '{ total += $1 } END { print total + 0 }')
-          echo "Deleted ${deleted} previous run(s); ${remaining} left besides run ${GITHUB_RUN_ID}."
-          test "$remaining" -eq 0
-
   lint:
     name: Lint & Static Analysis
-    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
@@ -104,7 +51,6 @@ jobs:
 
   smoke:
     name: Core Smoke Test
-    needs: cleanup
     strategy:
       fail-fast: false
       matrix:
@@ -133,7 +79,6 @@ jobs:
 
   test:
     name: Pytest
-    needs: cleanup
     strategy:
       fail-fast: false
       matrix:
@@ -150,6 +95,8 @@ jobs:
           python-version: "3.14"
   
       - name: Install Bubblewrap
+        # Bubblewrap only exists on Linux; the macOS runners use sandbox-exec.
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y bubblewrap
@@ -167,7 +114,6 @@ jobs:
 
   audit:
     name: Security Audit
-    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
@@ -195,7 +141,6 @@ jobs:
 
   performance:
     name: Performance Profile
-    needs: cleanup
     runs-on: ubuntu-latest
 
     steps:
