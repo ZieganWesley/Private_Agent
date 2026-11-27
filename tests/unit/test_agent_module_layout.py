@@ -54,6 +54,20 @@ def test_package_facade_still_resolves_every_helper():
         _ = agent_package.not_a_real_helper
 
 
+def test_facade_aliases_are_declared_once():
+    from agent import prompts
+
+    source = pathlib.Path(inspect.getfile(agent_package)).read_text()
+    for alias in ("_build_bounded_user_input", "trim_history_to_context_budget"):
+        assert source.count(f"\n{alias} =") == 1
+    assert len(agent_package.__all__) == len(set(agent_package.__all__))
+    assert agent_package._build_bounded_user_input is prompts.build_bounded_user_input
+    assert (
+        agent_package.trim_history_to_context_budget
+        is prompts.trim_history_to_context_budget
+    )
+
+
 def test_console_and_session_state_are_shared_singletons():
     assert runtime.console is tool_display.console
     assert runtime.console is streaming.console
