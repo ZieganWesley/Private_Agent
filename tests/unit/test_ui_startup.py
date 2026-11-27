@@ -6,13 +6,28 @@ import io
 
 from rich.console import Console
 
-from ui.startup import field_text, key_value_columns, startup_rule, startup_section
+from ui.startup import (
+    field_text,
+    figlet_banner,
+    key_value_columns,
+    startup_rule,
+    startup_section,
+)
 
 
 def _render(renderable, width: int = 80) -> str:
     buffer = io.StringIO()
     Console(file=buffer, width=width, no_color=True).print(renderable)
     return buffer.getvalue()
+
+
+def test_banner_renders_ascii_art_and_subtitle():
+    rendered = _render(figlet_banner(), width=100)
+
+    assert "Local Inference & Tool Runtime" in rendered
+    assert "\u2502" in rendered or "\u2503" in rendered
+    # Pyfiglet's slant font draws the title; the plain title is not printed.
+    assert "Private Agent" not in rendered
 
 
 def test_startup_rule_names_the_section():

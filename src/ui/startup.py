@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from rich.align import Align
 from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
@@ -58,6 +59,25 @@ def startup_section(title: str, pairs: Sequence[tuple[str, Any]]) -> Group:
     return Group(startup_rule(title), key_value_columns(pairs))
 
 
+def figlet_banner(
+    title: str = "Private Agent",
+    *,
+    subtitle: str = "Local Inference & Tool Runtime",
+    font: str = "slant",
+) -> Panel:
+    """Return the startup banner: ASCII-art title and a short subtitle."""
+    import pyfiglet
+
+    art = pyfiglet.figlet_format(title, font=font).rstrip("\n")
+    heading = Text(art, style=resolve_style("accent_alt"))
+    caption = Text(subtitle, style="dim italic")
+    return Panel(
+        Align.center(Text.assemble(heading, "\n", caption)),
+        border_style=resolve_style("border"),
+        expand=False,
+    )
+
+
 def welcome_panel(
     model: str,
     workspace: Any,
@@ -74,6 +94,7 @@ def welcome_panel(
 
 
 __all__ = [
+    "figlet_banner",
     "field_text",
     "key_value_columns",
     "startup_rule",
