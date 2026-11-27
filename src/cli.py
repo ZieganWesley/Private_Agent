@@ -73,9 +73,6 @@ def list_saved_sessions(limit: int = 20) -> int:
 def main():
     ensure_supported_platform()
     enforce_offline_environment()
-    from ui.startup import figlet_banner
-
-    console.print(figlet_banner())
     parser = argparse.ArgumentParser(
         prog="private-agent",
         description="Run the local-first Private Agent CLI.",
