@@ -1844,24 +1844,17 @@ async def _choose_provider(
         if _chosen is not None:
             provider_choice = _chosen
         else:
-            for runtime_index, runtime in enumerate(local_runtimes, 1):
-                marker = (
-                    " [success](last used)[/success]"
-                    if last_used.get("display_name") == runtime.name
-                    else ""
-                )
-                console.print(
-                    f"  [info]{runtime_index}.[/info] Local ({runtime.name}) "
-                    f"— {len(runtime.models)} model(s){marker}"
-                )
-            for choice_number, label, _use_saved_details in online_options:
-                console.print(f"  [info]{choice_number}.[/info] {label}")
-            console.print("  [info]0.[/info] Exit")
+            from ui.menu import select_menu
+
             provider_choice = (
-                _input(
-                    f"[info]Choose provider [1-{last_choice}] "
-                    f"(Default: {default_choice}): [/info]"
-                ).strip()
+                select_menu(
+                    "Choose provider",
+                    [(value, label) for value, label in _arrow_choices],
+                    console=console,
+                    input_fn=_input,
+                    default=default_choice,
+                    prompt="Choose provider",
+                )
                 or default_choice
             )
     if provider_choice == "0":
@@ -1985,31 +1978,31 @@ async def _choose_provider(
             else:
                 selected_model = available_models[0]
         else:
-            console.print(
-                f"\n[bold underline]Available {local_runtime.name} Chat Models:[/bold underline]"
+            from ui.menu import select_menu
+
+            _model_choice = select_menu(
+                f"Select model · {local_runtime.name}",
+                [
+                    (
+                        str(model_index),
+                        model_name
+                        + (
+                            " (configured, preferred)"
+                            if PREFERRED_MODEL and model_name == PREFERRED_MODEL
+                            else ""
+                        ),
+                    )
+                    for model_index, model_name in enumerate(available_models, 1)
+                ],
+                console=console,
+                input_fn=_input,
+                default="1",
+                prompt="Select model choice",
             )
-            for idx, model_name in enumerate(available_models, 1):
-                marker = (
-                    " [success](configured, preferred)[/success]"
-                    if PREFERRED_MODEL and model_name == PREFERRED_MODEL
-                    else ""
-                )
-                console.print(f"  [info]{idx}.[/info] {model_name}{marker}")
-            while True:
-                choice_input = _input(
-                    f"[info]Select model choice [1-{len(available_models)}] (Default: 1): [/info]"
-                ).strip()
-                if not choice_input:
-                    selected_model = available_models[0]
-                    break
-                try:
-                    choice_idx = int(choice_input) - 1
-                    if 0 <= choice_idx < len(available_models):
-                        selected_model = available_models[choice_idx]
-                        break
-                except ValueError:
-                    pass
-                console.print("[error][Error] Invalid selection.[/error]")
+            try:
+                selected_model = available_models[int(_model_choice) - 1]
+            except TypeError, ValueError, IndexError:
+                selected_model = available_models[0]
         console.print(
             f"[success][Info] Initializing local model client for: {selected_model}[/success]"
         )

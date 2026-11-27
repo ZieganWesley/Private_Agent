@@ -108,12 +108,18 @@ def select_coding_access_level(
         if not 1 <= choice <= len(choices):
             choice = 4
     else:
-        console.print("[bold info][Coding Workspace Access][/bold info]")
-        for index, (_, description) in enumerate(choices, 1):
-            console.print(f"  {index}. {description}")
-        selection = console.input(
-            "Choose workspace access [1-5] (default: 4, isolated): "
-        ).strip()
+        from ui.menu import select_menu
+
+        selection = select_menu(
+            "Coding Workspace Access",
+            [
+                (str(index), description)
+                for index, (_, description) in enumerate(choices, 1)
+            ],
+            console=console,
+            default="4",
+            prompt="Choose workspace access",
+        )
         try:
             choice = int(selection) if selection else 4
         except ValueError:
@@ -371,18 +377,16 @@ def select_permission_mode(
             return chosen
     except Exception:  # noqa: BLE001 - fall back to typed prompt
         pass
-    console.print("[bold info][Agent Permission Mode][/bold info]")
-    for number, mode in enumerate(("manual", "auto", "full"), 1):
-        console.print(f"  {number}. {labels[mode]}")
-    selection = (
-        console.input(f"Choose permission mode [1/2/3] (default: {configured}): ")
-        .strip()
-        .lower()
+    from ui.menu import select_menu
+
+    chosen = select_menu(
+        "Agent Permission Mode",
+        [(mode, labels[mode]) for mode in ("manual", "auto", "full")],
+        console=console,
+        default=configured,
+        prompt="Choose permission mode",
     )
-    if not selection:
-        return configured
-    modes = {"1": "manual", "2": "auto", "3": "full"}
-    return modes.get(selection, configured)
+    return chosen or configured
 
 
 def _request_summary(tool_name: str, tool_args: dict[str, Any]) -> str:

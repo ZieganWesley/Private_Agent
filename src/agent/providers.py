@@ -383,15 +383,19 @@ def select_online_model(
     ]
     selected_endpoint = resolve_online_endpoint(app_config)
     if len(endpoints) > 1 and use_saved_details is None:
-        console.print("[bold]Configured online endpoints:[/bold]")
-        for index, endpoint in enumerate(endpoints, 1):
-            console.print(
-                f"  [info]{index}.[/info] {endpoint.name} ({endpoint.base_url})"
-            )
-        choice = console.input(
-            f"[info]Select endpoint number [{endpoints[0].name}]: [/info]"
-        ).strip()
-        if choice.isdigit() and 1 <= int(choice) <= len(endpoints):
+        from ui.menu import select_menu
+
+        choice = select_menu(
+            "Configured online endpoints",
+            [
+                (str(index), f"{endpoint.name} ({endpoint.base_url})")
+                for index, endpoint in enumerate(endpoints, 1)
+            ],
+            console=console,
+            default="1",
+            prompt="Select endpoint number",
+        )
+        if choice and choice.isdigit() and 1 <= int(choice) <= len(endpoints):
             selected_endpoint = endpoints[int(choice) - 1]
     configured_url = (
         selected_endpoint.base_url
@@ -410,15 +414,24 @@ def select_online_model(
     if use_saved_details is False:
         use_configured = False
     elif use_saved_details is None and configured_key:
-        answer = (
-            console.input(
-                f"[info]Online configuration: 1. Use saved details ({configured_url}; "
-                "key hidden), 2. Enter URL and key manually [1]: [/info]"
-            )
-            .strip()
-            .lower()
+        from ui.menu import select_menu
+
+        answer = select_menu(
+            "Online configuration",
+            [
+                (
+                    "1",
+                    "Use saved details",
+                    f"{configured_url}; key hidden",
+                ),
+                ("2", "Enter URL and key manually"),
+            ],
+            console=console,
+            default="1",
+            prompt="Online configuration",
+            allow_custom=True,
         )
-        if answer in {"", "1", "y", "yes"}:
+        if answer in {"1", "y", "yes"}:
             use_configured = True
         elif answer in {"2", "n", "no"}:
             use_configured = False
@@ -542,21 +555,20 @@ def select_online_model(
     if not configured_model and endpoint_models:
         configured_model = endpoint_models[0]
     if model_choices:
-        console.print("[bold]Available API models:[/bold]")
-        for index, candidate in enumerate(model_choices[:model_list_limit], 1):
-            console.print(f"  [info]{index}.[/info] {candidate}")
+        from ui.menu import select_menu
+
         default_model = (
             configured_model if configured_model in model_choices else model_choices[0]
         )
-        model_input = console.input(
-            f"[info]Select model number or enter ID [{default_model}]: [/info]"
-        ).strip()
-        if model_input.isdigit() and 1 <= int(model_input) <= min(
-            model_list_limit, len(model_choices)
-        ):
-            model_name = model_choices[int(model_input) - 1]
-        else:
-            model_name = model_input or default_model
+        model_input = select_menu(
+            "Available API models",
+            [(candidate, candidate) for candidate in model_choices[:model_list_limit]],
+            console=console,
+            default=default_model,
+            prompt="Select model number or enter ID",
+            allow_custom=True,
+        )
+        model_name = model_input or default_model
     else:
         model_name = (
             console.input(
