@@ -598,11 +598,13 @@ async def test_cli_applies_explicit_skill_to_next_request(
     assert "Available Skills" in captured_output.getvalue()
     assert "Python Expert" in captured_output.getvalue()
     assert "python_expert" in captured_output.getvalue()
-    assert any(
-        isinstance(message, SystemMessage)
-        and message.content == "Apply the Python expert workflow."
-        for message in model.calls[0]
-    )
+    request_system_messages = [
+        message for message in model.calls[0] if isinstance(message, SystemMessage)
+    ]
+    # Strict local templates accept only one leading system message, so the
+    # skill prompt is merged into that block instead of being appended.
+    assert len(request_system_messages) == 1
+    assert "Apply the Python expert workflow." in request_system_messages[0].content
 
 
 @pytest.mark.asyncio
