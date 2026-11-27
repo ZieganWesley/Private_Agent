@@ -832,6 +832,39 @@ def _select_permission_mode(interactive: bool = True) -> str:
     )
 
 
+async def _run_tool_call(name: Any, args: Any, tool_func: Any) -> Any:
+    """Invoke one tool, returning an error result instead of raising.
+
+    A tool can fail in any way: a provider SDK raising a bare ``Exception``, a
+    ``JSONDecodeError``, a ``KeyError`` from malformed arguments. None of those
+    is a reason to abort the turn, so the failure is logged with a reference id
+    and handed back to the model as an error result it can recover from.
+    Cancellation and interrupts are not tool failures and still propagate.
+    """
+    try:
+        with approved_tool_invocation():
+            if hasattr(tool_func, "ainvoke"):
+                return await tool_func.ainvoke(args)
+            return await asyncio.to_thread(tool_func.invoke, args)
+    except Exception as exc:  # noqa: BLE001 - a tool failure must not end the turn
+        reference_id = uuid.uuid4().hex[:8]
+        log_event(
+            RUN_LOGGER,
+            "tool.execution_failed",
+            level=logging.ERROR,
+            reference_id=reference_id,
+            tool=str(name or "unknown"),
+            error_type=type(exc).__name__,
+            exc_info=True,
+            redactions=_tool_log_redactions(args),
+        )
+        return (
+            f"Error executing tool {name}: {exc} "
+            f"(reference {reference_id}; verify possible side effects "
+            "before retrying)."
+        )
+
+
 async def execute_tool_call(
     tool_call: dict,
     *,
@@ -949,8 +982,7 @@ async def execute_tool_call(
                     "Error: Chat history deletion was declined; no data was removed."
                 )
             else:
-                with approved_tool_invocation():
-                    result = await asyncio.to_thread(tool_func.invoke, args)
+                result = await _run_tool_call(name, args, tool_func)
     elif (
         _tool_needs_permission(
             name,
@@ -981,54 +1013,9 @@ async def execute_tool_call(
             if not approved:
                 result = "Error: Tool invocation was declined; no action was taken."
             else:
-                try:
-                    with approved_tool_invocation():
-                        result = (
-                            await tool_func.ainvoke(args)
-                            if hasattr(tool_func, "ainvoke")
-                            else await asyncio.to_thread(tool_func.invoke, args)
-                        )
-                except (ValueError, OSError, RuntimeError) as exc:
-                    reference_id = uuid.uuid4().hex[:8]
-                    log_event(
-                        RUN_LOGGER,
-                        "tool.execution_failed",
-                        level=logging.ERROR,
-                        reference_id=reference_id,
-                        tool=str(name or "unknown"),
-                        error_type=type(exc).__name__,
-                        exc_info=True,
-                        redactions=_tool_log_redactions(args),
-                    )
-                    result = (
-                        f"Error executing tool {name}: {exc} "
-                        f"(reference {reference_id}; verify possible side effects "
-                        "before retrying)."
-                    )
+                result = await _run_tool_call(name, args, tool_func)
     elif tool_func:
-        try:
-            with approved_tool_invocation():
-                if hasattr(tool_func, "ainvoke"):
-                    result = await tool_func.ainvoke(args)
-                else:
-                    result = await asyncio.to_thread(tool_func.invoke, args)
-        except (ValueError, OSError, RuntimeError) as exc:
-            reference_id = uuid.uuid4().hex[:8]
-            log_event(
-                RUN_LOGGER,
-                "tool.execution_failed",
-                level=logging.ERROR,
-                reference_id=reference_id,
-                tool=str(name or "unknown"),
-                error_type=type(exc).__name__,
-                exc_info=True,
-                redactions=_tool_log_redactions(args),
-            )
-            result = (
-                f"Error executing tool {name}: {exc!s} "
-                f"(reference {reference_id}; verify possible side effects "
-                "before retrying)."
-            )
+        result = await _run_tool_call(name, args, tool_func)
     else:
         result = f"Error: Tool {name} not found."
     result_text = _redact_sensitive_values(str(result), args)

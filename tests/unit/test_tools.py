@@ -1649,3 +1649,78 @@ def test_download_web_file_reports_httpx_transport_errors_instead_of_raising(
 
     assert result.startswith("Failed to download file:")
     assert "connection refused" in result
+
+
+@pytest.mark.asyncio
+async def test_unexpected_tool_exception_returns_an_error_result(monkeypatch):
+    """A tool raising an arbitrary exception must fail the call, not the turn."""
+    import agent.runtime as agent
+
+    tool = MagicMock()
+    tool.name = "fragile_tool"
+    tool.ainvoke = AsyncMock(side_effect=KeyError("missing"))
+    logger = MagicMock()
+    monkeypatch.setattr(agent, "AVAILABLE_TOOLS", {tool.name: tool})
+    monkeypatch.setattr(agent, "RUN_LOGGER", logger)
+    monkeypatch.setattr(agent.console, "print", lambda *_a, **_k: None)
+
+    result = await execute_tool_call(
+        {"name": tool.name, "args": {}, "id": "fragile"},
+        permission_mode="full",
+    )
+
+    assert result.tool_call_id == "fragile"
+    assert result.content.startswith(f"Error executing tool {tool.name}:")
+    assert "missing" in result.content
+    assert "reference" in result.content
+
+    event_fields = [
+        call.kwargs["extra"]["event_fields"]
+        for call in logger.log.call_args_list
+        if call.kwargs["extra"]["event"] == "tool.execution_failed"
+    ]
+    assert event_fields
+    assert event_fields[0]["error_type"] == "KeyError"
+
+
+@pytest.mark.asyncio
+async def test_synchronous_tool_exception_is_contained_too(monkeypatch):
+    import agent.runtime as agent
+
+    class BrokenTool:
+        name = "broken_sync_tool"
+        description = "always fails"
+
+        def invoke(self, _args):
+            raise ArithmeticError("division by zero")
+
+    monkeypatch.setattr(agent, "AVAILABLE_TOOLS", {BrokenTool.name: BrokenTool()})
+    monkeypatch.setattr(agent, "RUN_LOGGER", MagicMock())
+    monkeypatch.setattr(agent.console, "print", lambda *_a, **_k: None)
+
+    result = await execute_tool_call(
+        {"name": BrokenTool.name, "args": {}, "id": "broken"},
+        permission_mode="full",
+    )
+
+    assert result.content.startswith(f"Error executing tool {BrokenTool.name}:")
+    assert "division by zero" in result.content
+
+
+@pytest.mark.asyncio
+async def test_tool_cancellation_is_not_swallowed(monkeypatch):
+    """Cancellation is not a tool failure and must still stop the turn."""
+    import agent.runtime as agent
+
+    tool = MagicMock()
+    tool.name = "cancelled_tool"
+    tool.ainvoke = AsyncMock(side_effect=asyncio.CancelledError())
+    monkeypatch.setattr(agent, "AVAILABLE_TOOLS", {tool.name: tool})
+    monkeypatch.setattr(agent, "RUN_LOGGER", MagicMock())
+    monkeypatch.setattr(agent.console, "print", lambda *_a, **_k: None)
+
+    with pytest.raises(asyncio.CancelledError):
+        await execute_tool_call(
+            {"name": tool.name, "args": {}, "id": "cancelled"},
+            permission_mode="full",
+        )
