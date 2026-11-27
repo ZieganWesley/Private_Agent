@@ -1513,30 +1513,19 @@ async def _build_session_setup(
     rag_embedding_provider = _rag_config.EMBEDDING_PROVIDER
     rag_embedding_model = _rag_config.EMBEDDING_MODEL
     rag_embedding_base_url = _rag_config.EMBEDDING_BASE_URL
-    from rag.embedding_resolver import resolve_embedding_provider
-
-    _embedding_choice = resolve_embedding_provider(
-        local_runtimes,
-        rag_embedding_provider,
-        rag_embedding_model,
-        rag_embedding_base_url,
+    from .rag_routes import (
+        remembered_reranker_model,
+        resolve_embedding_route,
+        save_reranker_route,
     )
-    if rag_embedding_provider == "ollama" and _embedding_choice.provider == (
-        "openai-compatible"
-    ):
-        console.print(
-            "[info][RAG][/info] Ollama is unavailable; using the local "
-            f"OpenAI-compatible endpoint for embeddings ({_embedding_choice.model})."
-        )
-    if (
-        _embedding_choice.provider == "none"
-        and local_runtimes
-        and rag_embedding_provider != "none"
-    ):
-        console.print(
-            "[warning][RAG][/warning] No embedding-capable runtime is "
-            "available; continuing without local RAG."
-        )
+
+    _embedding_choice = resolve_embedding_route(
+        configured_provider=rag_embedding_provider,
+        configured_model=rag_embedding_model,
+        configured_base_url=rag_embedding_base_url,
+        runtimes=local_runtimes,
+        console=console,
+    )
     rag_embedding_provider = _embedding_choice.provider
     rag_embedding_model = _embedding_choice.model
     rag_embedding_base_url = _embedding_choice.base_url
@@ -1545,6 +1534,8 @@ async def _build_session_setup(
     record_embedding_route(
         rag_embedding_provider, rag_embedding_model, rag_embedding_base_url
     )
+
+    _rerank_model = remembered_reranker_model()
 
     def _initialize_knowledge_base_with_embeddings(
         docs_path,
@@ -1559,6 +1550,8 @@ async def _build_session_setup(
             embedding_provider=rag_embedding_provider,
             embedding_model=rag_embedding_model,
             embedding_base_url=rag_embedding_base_url,
+            rerank_model=_rerank_model,
+            on_reranker_resolved=save_reranker_route,
         )
 
     # Start RAG indexing (background when no existing index needs an

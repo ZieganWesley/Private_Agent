@@ -2,7 +2,10 @@
 
 from types import SimpleNamespace
 
-from rag.embedding_resolver import resolve_embedding_provider
+from rag.embedding_resolver import (
+    resolve_embedding_provider,
+    stored_embedding_choice,
+)
 
 
 def _runtime(name, kind, base_url, models=(), embeddings=()):
@@ -94,6 +97,31 @@ def test_auto_prefers_ollama_then_openai_then_none():
     assert resolve_embedding_provider([openai, ollama], "auto").provider == "ollama"
     assert resolve_embedding_provider([openai], "auto").provider == "openai-compatible"
     assert resolve_embedding_provider([], "auto").provider == "none"
+
+
+def test_stored_choice_is_reused_only_while_the_runtime_still_offers_it():
+    ollama = _runtime("o", "ollama", "http://o:11434", (), ("nomic", "bge-m3"))
+    openai = _runtime("l", "openai-compatible", "http://l:1234/v1", (), ("bge",))
+
+    choice = stored_embedding_choice(
+        {"provider": "openai-compatible", "model": "bge", "base_url": ""},
+        [ollama, openai],
+    )
+    assert choice == type(choice)("openai-compatible", "bge", "http://l:1234/v1")
+
+    assert (
+        stored_embedding_choice(
+            {"provider": "ollama", "model": "gone", "base_url": ""}, [ollama]
+        )
+        is None
+    )
+    assert stored_embedding_choice(None, [ollama]) is None
+    assert (
+        stored_embedding_choice(
+            {"provider": "none", "model": "x", "base_url": ""}, [ollama]
+        )
+        is None
+    )
 
 
 def test_auto_ignores_chat_models_and_unknown_provider_values():

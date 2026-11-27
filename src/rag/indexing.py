@@ -357,6 +357,8 @@ def initialize_knowledge_base(
     embedding_provider: str | None = None,
     embedding_model: str | None = None,
     embedding_base_url: str | None = None,
+    rerank_model: str | None = None,
+    on_reranker_resolved: Callable[[str, str], None] | None = None,
 ):
     _ensure_rag_dependencies()
     """Initializes the Chroma vector store exclusively when an explicit, valid knowledge base folder path is provided."""
@@ -753,10 +755,13 @@ def initialize_knowledge_base(
         from .rerank import reranker_from_config
         from .retrieval import HybridRAGRetriever
 
+        reranker = reranker_from_config(APP_CONFIG, preferred_model=rerank_model)
+        if reranker is not None and on_reranker_resolved is not None:
+            on_reranker_resolved(reranker.model, reranker.base_url)
         return HybridRAGRetriever(
             vectorstore,
             all_parsed_docs,
-            reranker=reranker_from_config(APP_CONFIG),
+            reranker=reranker,
         )
     except (ValueError, OSError, RuntimeError) as e:
         if (
@@ -791,10 +796,15 @@ def initialize_knowledge_base(
                 from .rerank import reranker_from_config
                 from .retrieval import HybridRAGRetriever
 
+                reranker = reranker_from_config(
+                    APP_CONFIG, preferred_model=rerank_model
+                )
+                if reranker is not None and on_reranker_resolved is not None:
+                    on_reranker_resolved(reranker.model, reranker.base_url)
                 return HybridRAGRetriever(
                     vectorstore,
                     all_parsed_docs,
-                    reranker=reranker_from_config(APP_CONFIG),
+                    reranker=reranker,
                 )
             except (ValueError, OSError, RuntimeError) as recovery_error:
                 console.print(
