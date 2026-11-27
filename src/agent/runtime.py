@@ -123,7 +123,6 @@ from .memory_context import (
     _build_learned_context,
     _build_relevant_episode_context,
     _build_startup_memory_context,
-    _initialize_rag_for_docs,
     _is_coding_guidance_request,
     _load_task,
     _prune_memory_retention,
@@ -182,6 +181,7 @@ from .providers import (
     online_request_failure as _online_request_failure,
 )
 from .session_resume import resolve_session_id, take_over_session_task_lease
+from .rag_startup import finalize_online_rag, initialize_rag_session
 from .session_state import SESSION_INFO as _SESSION_INFO
 from .session_state import SESSION_STATS as _SESSION_STATS
 from .session_summary import (
@@ -1508,61 +1508,6 @@ async def _build_session_setup(
             f"mount ({docs_input}); indexing may be slow. Prefer a Linux "
             "filesystem path."
         )
-    import config as _rag_config
-
-    rag_embedding_provider = _rag_config.EMBEDDING_PROVIDER
-    rag_embedding_model = _rag_config.EMBEDDING_MODEL
-    rag_embedding_base_url = _rag_config.EMBEDDING_BASE_URL
-    from providers.endpoints import EndpointRegistry
-    from rag.rerank import reranker_for_route
-
-    from .rag_routes import resolve_rag_routes
-
-    _embedding_route, _rerank_route = resolve_rag_routes(
-        runtimes=local_runtimes,
-        registry=EndpointRegistry.from_config(APP_CONFIG),
-        console=console,
-        interactive=interactive,
-        embedding_enabled=str(rag_embedding_provider).strip().lower() != "none",
-    )
-    if _embedding_route is None:
-        rag_embedding_provider = "none"
-        rag_embedding_model = ""
-        rag_embedding_base_url = ""
-    else:
-        rag_embedding_provider = _embedding_route.label
-        rag_embedding_model = _embedding_route.model
-        rag_embedding_base_url = _embedding_route.base_url
-    from .provider_report import record_embedding_route
-
-    record_embedding_route(
-        rag_embedding_provider, rag_embedding_model, rag_embedding_base_url
-    )
-
-    _reranker = (
-        reranker_for_route(_rerank_route, APP_CONFIG)
-        if _rerank_route is not None
-        else None
-    )
-
-    def _initialize_knowledge_base_with_embeddings(
-        docs_path,
-        *,
-        index_path=None,
-        confirm_rebuild=None,
-    ):
-        return initialize_knowledge_base(
-            docs_path,
-            index_path=index_path,
-            confirm_rebuild=confirm_rebuild,
-            embedding_provider=rag_embedding_provider,
-            embedding_model=rag_embedding_model,
-            embedding_base_url=rag_embedding_base_url,
-            reranker=_reranker,
-        )
-
-    # Start RAG indexing (background when no existing index needs an
-    # interactive rebuild) so provider selection is not blocked by it
     global _ACTIVE_RAG_TASK
     (
         vectorstore,
@@ -1570,16 +1515,15 @@ async def _build_session_setup(
         rag_signature,
         rag_task,
         rag_last_check,
-    ) = await _initialize_rag_for_docs(
-        docs_input,
-        rag_index_path=RAG_INDEX_PATH,
+    ) = await initialize_rag_session(
+        docs_input=docs_input,
+        local_runtimes=local_runtimes,
         console=console,
+        interactive=interactive,
         input_fn=_input,
-        log_event=log_event,
-        run_logger=RUN_LOGGER,
-        uuid=uuid,
-        logging=logging,
-        initialize_knowledge_base_fn=_initialize_knowledge_base_with_embeddings,
+        rag_index_path=RAG_INDEX_PATH,
+        app_config=APP_CONFIG,
+        initialize_knowledge_base_fn=initialize_knowledge_base,
         knowledge_base_signature_fn=knowledge_base_signature,
     )
     if rag_task is not None:
@@ -1767,12 +1711,15 @@ async def _choose_provider(
     vectorstore,
     session_id,
     skills_folder_input,
+    docs_input: str = "",
     non_interactive: bool = False,
     interactive: bool = True,
     input_provider=None,
 ) -> ProviderSelection | None:
     """Ask for a provider and model, initialise it and print the ready summary."""
+    global _ACTIVE_RAG_TASK
     _input = input_provider if input_provider is not None else console.input
+    rag_state = None
     available_models: list = []
     console.print("\n[bold underline]Model Provider[/bold underline]")
     from providers.selection import (
@@ -2186,6 +2133,27 @@ async def _choose_provider(
             f"[error]Choose a provider number between 1 and {last_choice}.[/error]"
         )
         return None
+    if provider_type == "online" and docs_input:
+        online_rag = await finalize_online_rag(
+            docs_input=docs_input,
+            local_runtimes=local_runtimes,
+            online_selection=preference.online_selection,
+            console=console,
+            interactive=interactive,
+            input_fn=_input,
+            loaded_skills=loaded_skills,
+            rag_index_path=RAG_INDEX_PATH,
+            app_config=APP_CONFIG,
+            initialize_knowledge_base_fn=initialize_knowledge_base,
+            knowledge_base_signature_fn=knowledge_base_signature,
+            previous_task=_ACTIVE_RAG_TASK,
+        )
+        if online_rag is not None:
+            rag_state, mode_label = online_rag
+            vectorstore, is_rag_active, rag_signature, rag_last_check, rag_task = (
+                rag_state
+            )
+            _ACTIVE_RAG_TASK = None
     if provider_type == "local":
         webcam_status = (
             "webcam, workspace image, and sampled workspace video input enabled"
@@ -2330,6 +2298,7 @@ async def _choose_provider(
         context_summary=context_summary,
         session_summary_saved=session_summary_saved,
         available_models=available_models,
+        rag_state=rag_state,
     )
 
 
@@ -2457,6 +2426,7 @@ async def _run_agent_cli_session(
             vectorstore=vectorstore,
             session_id=session_id,
             skills_folder_input=skills_folder_input,
+            docs_input=docs_input,
             non_interactive=non_interactive,
             interactive=interactive,
             input_provider=input_provider,
@@ -2468,6 +2438,10 @@ async def _run_agent_cli_session(
                 get_event_bus().subscribe(Event, json_output.emit_event)
                 return
             continue
+        if selection.rag_state is not None:
+            vectorstore, is_rag_active, rag_signature, rag_last_check, rag_task = (
+                selection.rag_state
+            )
         # Collect the RAG index that was built in the background during
         # provider selection (J2, step 13.5).
         if rag_task is not None:

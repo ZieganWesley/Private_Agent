@@ -343,6 +343,32 @@ def test_discovery_lists_every_configured_ollama_server():
     ]
 
 
+def test_online_listing_separates_embedding_and_rerank_models():
+    from agent.providers import classify_capability_models
+
+    embedding, rerank = classify_capability_models(
+        {
+            "data": [
+                {"id": "gpt-4o"},
+                {"id": "text-embedding-3-small"},
+                {"id": "bge-reranker-v2-m3"},
+                {"id": "text-embedding-3-small"},
+            ]
+        },
+        base_url="https://models.example/v1",
+    )
+
+    assert embedding == ("text-embedding-3-small",)
+    assert rerank == ("bge-reranker-v2-m3",)
+
+
+def test_online_listing_without_capability_models_returns_empty_tuples():
+    from agent.providers import classify_capability_models
+
+    assert classify_capability_models({"data": [{"id": "gpt-4o"}]}) == ((), ())
+    assert classify_capability_models(None) == ((), ())
+
+
 def test_embedding_models_are_filtered_out_for_openai_compatible_servers():
     from agent.local_runtimes import discover_local_runtimes
 

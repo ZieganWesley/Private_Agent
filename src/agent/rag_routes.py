@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 from providers.selection import (
@@ -69,6 +70,25 @@ def choose_route(
         return routes[int(answer) - 1]
     except IndexError, TypeError, ValueError:
         return routes[default]
+
+
+def runtime_for_online_selection(selection: dict | None) -> Any | None:
+    """Describe the selected online endpoint as a RAG discovery runtime."""
+    if not selection:
+        return None
+    embedding = tuple(selection.get("embedding_models") or ())
+    rerank = tuple(selection.get("rerank_models") or ())
+    if not embedding and not rerank:
+        return None
+    return SimpleNamespace(
+        name="online endpoint",
+        kind="openai-compatible",
+        base_url=str(selection.get("base_url") or ""),
+        embedding_models=embedding,
+        records=tuple(
+            SimpleNamespace(model_id=model, role="reranker") for model in rerank
+        ),
+    )
 
 
 def resolve_rag_routes(
@@ -181,4 +201,5 @@ __all__ = [
     "remembered_embedding_route",
     "remembered_rerank_route",
     "resolve_rag_routes",
+    "runtime_for_online_selection",
 ]

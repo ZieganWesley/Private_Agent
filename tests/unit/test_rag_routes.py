@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from agent.rag_routes import (
     choose_embedding_route,
     choose_rerank_route,
     choose_route,
+    runtime_for_online_selection,
 )
 from providers.selection import load_embedding_choice, load_reranker_choice
-from rag.embedding_resolver import ModelRoute
+from rag.embedding_resolver import ModelRoute, embedding_routes, rerank_routes
 
 
 class _Console:
@@ -91,6 +94,50 @@ def test_non_interactive_sessions_use_the_remembered_or_first_route():
 def test_absent_routes_disable_the_capability():
     assert (
         choose_route((), role="embedding", console=_Console(), interactive=True) is None
+    )
+
+
+def test_selected_online_endpoint_joins_the_embedding_and_rerank_menus(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("PRIVATE_AGENT_PROVIDER_STATE", str(tmp_path / "state.json"))
+    local = SimpleNamespace(
+        name="local endpoint",
+        base_url="http://127.0.0.1:1111",
+        embedding_models=("local-embed",),
+        records=(SimpleNamespace(model_id="local-rank", role="reranker"),),
+    )
+    online = runtime_for_online_selection(
+        {
+            "base_url": "https://models.example/v1",
+            "embedding_models": ("online-embed",),
+            "rerank_models": ("online-rank",),
+        }
+    )
+
+    assert online is not None
+    embedding = choose_embedding_route(
+        embedding_routes([local, online]),
+        console=_Console(answer="2"),
+        interactive=True,
+    )
+    rerank = choose_rerank_route(
+        rerank_routes([local, online]),
+        console=_Console(answer="2"),
+        interactive=True,
+    )
+
+    assert embedding is not None and embedding.model == "online-embed"
+    assert rerank is not None and rerank.model == "online-rank"
+
+
+def test_an_online_endpoint_without_capability_models_is_not_added():
+    assert runtime_for_online_selection(None) is None
+    assert (
+        runtime_for_online_selection(
+            {"base_url": "https://models.example/v1", "embedding_models": ()}
+        )
+        is None
     )
 
 
