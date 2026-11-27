@@ -18,7 +18,7 @@ from rich.text import Text
 from config import STREAMING_OUTPUT, VERBOSE_TIMINGS, VISIBLE_REASONING
 from ui.failure_panel import model_failure_panel
 from ui.markdown_view import MarkdownStream
-from ui.markup import assistant_header, reasoning_header
+from ui.markup import assistant_header, reasoning_header, sanitize_terminal_text
 from ui.status_bar import get_active_footer
 from ui.turn import GenerationStats
 from utils.run_logging import RUN_LOGGER, log_event
@@ -153,7 +153,7 @@ def _display_visible_reasoning(response: Any) -> None:
     if summary:
         console.print(
             Panel(
-                Text(summary),
+                Text(sanitize_terminal_text(summary)),
                 title=Text("Model rationale summary"),
                 border_style=resolve_style("accent_alt"),
             )
@@ -282,7 +282,7 @@ async def _invoke_with_budget(
                                 )
                                 reasoning_open = True
                             console.print(
-                                reasoning,
+                                sanitize_terminal_text(reasoning),
                                 end="",
                                 style="dim",
                                 markup=False,
@@ -295,6 +295,7 @@ async def _invoke_with_budget(
                                 message=thinking_message(model_name),
                             )
                     if text:
+                        text = sanitize_terminal_text(text)
                         if first_token_at is None:
                             first_token_at = time.monotonic()
                         indicator.stop()

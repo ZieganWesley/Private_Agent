@@ -16,6 +16,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .console import resolve_style
+from .markup import sanitize_terminal_text
 
 
 def model_failure_panel(
@@ -32,22 +33,29 @@ def model_failure_panel(
     ``message`` is safe for the user: exception text is never included, only
     its type, so endpoint details and credentials cannot leak.
     """
+    model_name = sanitize_terminal_text(model_name) if model_name else None
+    error_type = sanitize_terminal_text(error_type) if error_type else None
     details = Table.grid(padding=(0, 1))
     details.add_column(style=resolve_style("muted"), justify="right", no_wrap=True)
     details.add_column(style=resolve_style("value"), overflow="fold")
-    details.add_row("reference", reference_id)
+    details.add_row("reference", sanitize_terminal_text(reference_id))
     if model_name:
         details.add_row("model", model_name)
     if error_type:
         details.add_row("error", error_type)
 
-    blocks: list = [details, Text(message, style=resolve_style("value"))]
+    blocks: list = [
+        details,
+        Text(sanitize_terminal_text(message), style=resolve_style("value")),
+    ]
     for hint in hints:
-        blocks.append(Text(hint, style=resolve_style("muted")))
+        blocks.append(Text(sanitize_terminal_text(hint), style=resolve_style("muted")))
 
     return Panel(
         Group(*blocks),
-        title=Text(f"\u2717 {title}", style=resolve_style("error")),
+        title=Text(
+            f"\u2717 {sanitize_terminal_text(title)}", style=resolve_style("error")
+        ),
         border_style=resolve_style("border.error"),
         padding=(0, 1),
     )

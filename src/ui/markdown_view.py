@@ -16,12 +16,18 @@ from typing import Any
 from rich.live import Live
 from rich.markdown import Markdown
 
+from .markup import sanitize_terminal_text
+
 DEFAULT_REFRESH_PER_SECOND = 8
 
 
 def markdown_renderable(text: str) -> Markdown:
-    """Return the renderable used for every assistant reply."""
-    return Markdown(text)
+    """Return the renderable used for every assistant reply.
+
+    Markdown rendering passes control sequences through, so a reply that
+    carries ANSI or OSC bytes is neutralised here once for every caller.
+    """
+    return Markdown(sanitize_terminal_text(text))
 
 
 def print_markdown(console: Any, text: str, *, end: str = "") -> None:

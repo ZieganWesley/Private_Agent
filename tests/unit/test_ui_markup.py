@@ -12,6 +12,7 @@ from ui.markup import (
     literal,
     plan_line,
     reasoning_header,
+    sanitize_terminal_text,
     verification_line,
 )
 
@@ -86,3 +87,51 @@ def test_escaped_content_does_not_leak_style_into_the_next_line():
     console.print("after " + literal("plain"))
     tail = colour.getvalue().rsplit("after", 1)[1]
     assert "\x1b[1m" not in tail
+
+
+def test_terminal_control_sequences_are_neutralised():
+    hostile = (
+        "before "
+        "\x1b[2J"  # clear the screen
+        "\x1b]0;pwned\x07"  # retitle the window (BEL terminated)
+        "\x1b]52;c;aGFjaw==\x1b\\"  # clipboard read (ST terminated)
+        "\x1bPq#0;2;0;0;0\x1b\\"  # device control string
+        "\x9b1m"  # 8-bit CSI
+        "\x00\x08\x7f"  # other control bytes
+        " after"
+    )
+
+    cleaned = sanitize_terminal_text(hostile)
+
+    assert cleaned == "before  after"
+    assert not any(
+        char == "\x1b" or 0x80 <= ord(char) <= 0x9F or ord(char) < 0x20
+        for char in cleaned
+    )
+
+
+def test_newlines_and_tabs_are_content_and_survive():
+    layout = "first line\n\tindented\n\nlast line"
+
+    assert sanitize_terminal_text(layout) == layout
+    # A carriage return is a control character, not layout.
+    assert sanitize_terminal_text("progress\rdone") == "progressdone"
+    assert sanitize_terminal_text("plain reply") == "plain reply"
+
+
+def test_markup_is_still_escaped_after_sanitising():
+    escaped = literal("\x1b[2J[bold]x[/bold]")
+
+    assert escaped == r"\[bold]x\[/bold]"
+    assert "\x1b" not in escaped
+
+
+def test_unterminated_osc_loses_only_its_own_line():
+    assert sanitize_terminal_text("\x1b]0;title\nnext line") == "\nnext line"
+
+
+def test_hostile_sequence_never_reaches_the_console():
+    rendered = _render(literal("model output \x1b[2J\x1b]0;pwned\x07 with \x1b[31mred"))
+
+    assert "\x1b" not in rendered
+    assert "model output  with red" in rendered

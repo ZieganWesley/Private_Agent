@@ -1,11 +1,13 @@
 """Behavioural tests for the extracted streaming/invocation helpers."""
 
+import io
 import time
 import types
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk
+from rich.console import Console
 
 from agent import streaming
 
@@ -310,3 +312,83 @@ async def test_streamed_text_is_printed_only_after_the_spinner_stops(monkeypatch
     assert created_live
     assert all(not live.started_while_spinner_active for live in created_live)
     assert indicator.stops == 1
+
+
+@pytest.mark.asyncio
+async def test_hostile_streamed_reasoning_is_sanitised(monkeypatch):
+    _indicator, printed = _patch_streaming(monkeypatch, visible_reasoning=True)
+
+    class HostileModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(
+                content="",
+                additional_kwargs={"reasoning_content": "weigh \x1b[2Joptions"},
+            )
+            yield AIMessageChunk(content="final answer")
+
+    await streaming._invoke_with_budget(
+        HostileModel(), [], time.monotonic() + 5, model_name="m"
+    )
+
+    dimmed = [values for values, kwargs in printed if kwargs.get("style") == "dim"]
+    assert dimmed == [("weigh options",)]
+    assert not any("\x1b" in str(values[0]) for values, _kwargs in printed if values)
+
+
+@pytest.mark.asyncio
+async def test_hostile_streamed_text_is_sanitised_before_markdown(monkeypatch):
+    _patch_streaming(monkeypatch, visible_reasoning=False)
+    created = []
+
+    class FakeLive:
+        def __init__(self, renderable, *, console=None, **kwargs):
+            self.renderable = renderable
+            created.append(self)
+
+        def start(self):
+            return None
+
+        def update(self, renderable):
+            self.renderable = renderable
+
+        def stop(self):
+            return None
+
+    from ui import markdown_view
+
+    monkeypatch.setattr(markdown_view, "Live", FakeLive)
+
+    class HostileModel:
+        async def astream(self, _messages):
+            yield AIMessageChunk(content="answer \x1b[2J\x1b]0;pwned\x07 here")
+
+    await streaming._invoke_with_budget(
+        HostileModel(), [], time.monotonic() + 5, model_name="m"
+    )
+
+    assert created
+    markup = created[0].renderable.markup
+    assert "\x1b" not in markup
+    assert "answer  here" in markup
+
+
+def test_visible_reasoning_summary_is_sanitised(monkeypatch):
+    printed = []
+    monkeypatch.setattr(
+        streaming.console,
+        "print",
+        lambda *values, **_kwargs: printed.append(values[0]),
+    )
+    monkeypatch.setattr(streaming, "VISIBLE_REASONING", True)
+    response = types.SimpleNamespace(
+        additional_kwargs={},
+        response_metadata={"reasoning_summary": "compared \x1b[2Joptions"},
+    )
+
+    streaming._display_visible_reasoning(response)
+
+    buffer = io.StringIO()
+    Console(file=buffer, width=200, no_color=True).print(printed[0])
+    rendered = buffer.getvalue()
+    assert "\x1b" not in rendered
+    assert "compared options" in rendered

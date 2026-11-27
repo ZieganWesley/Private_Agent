@@ -68,3 +68,30 @@ def test_transcript_stream_chunk_uses_the_shared_renderer():
 
 def test_renderable_is_a_markdown_document():
     assert markdown_renderable("# Title").markup.startswith("# Title")
+
+
+def test_streamed_reply_cannot_emit_terminal_sequences():
+    console, buffer = _console()
+    stream = MarkdownStream(console)
+    stream.update("answer \x1b[2Jone\x1b]0;pwned\x07\ntwo")
+    stream.stop()
+
+    rendered = buffer.getvalue()
+
+    assert "\x1b" not in rendered
+    assert "answer one" in rendered
+    assert "two" in rendered
+
+
+def test_complete_reply_is_sanitised_too():
+    console, buffer = _console()
+    print_markdown(console, "hi \x1b[2Jthere\x1b]0;title\x07")
+
+    rendered = buffer.getvalue()
+
+    assert "\x1b" not in rendered
+    assert "hi there" in rendered
+
+
+def test_renderable_drops_sequences_before_markdown_sees_them():
+    assert markdown_renderable("\x1b[2Jkept").markup == "kept"

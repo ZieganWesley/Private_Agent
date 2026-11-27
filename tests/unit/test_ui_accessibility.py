@@ -273,6 +273,26 @@ def test_model_failure_panel_shows_reference_and_never_the_exception_text():
     assert "The request did not complete." in rendered
 
 
+def test_model_failure_panel_neutralises_terminal_sequences():
+    import io
+
+    from ui.failure_panel import model_failure_panel
+
+    panel = model_failure_panel(
+        "The request did not complete.",
+        reference_id="deadbeef",
+        model_name="local\x1b[2Jmodel",
+        error_type="RuntimeError\x1b]0;pwned\x07",
+    )
+    output = io.StringIO()
+    Console(file=output, width=100, no_color=True).print(panel)
+    rendered = output.getvalue()
+
+    assert "\x1b" not in rendered
+    assert "localmodel" in rendered
+    assert "RuntimeError" in rendered
+
+
 def test_ui_check_covers_every_component_and_passes(ui_check, capsys):
     assert ui_check.run_ui_check() == 0
     assert "All UI components rendered successfully" in capsys.readouterr().out
