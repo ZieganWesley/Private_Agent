@@ -8,7 +8,11 @@ from urllib.parse import urlsplit, urlunsplit
 from utils.run_logging import RUN_LOGGER, log_event
 
 from .model_capabilities import find_model_entry, merge_capabilities
-from .model_catalog import record_from_listing_entry
+from .model_catalog import (
+    ROLE_EMBEDDING,
+    ROLE_RERANKER,
+    record_from_listing_entry,
+)
 
 
 def _response_field(response: Any, key: str, default: Any = None) -> Any:
@@ -318,6 +322,27 @@ def has_saved_online_config(app_config: dict) -> bool:
     return has_configured_online_key(app_config)
 
 
+def classify_capability_models(
+    model_listing: Any, *, base_url: str = ""
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return the embedding and rerank model ids advertised by a listing."""
+    embedding_models: list[str] = []
+    rerank_models: list[str] = []
+    if isinstance(model_listing, dict):
+        for entry in model_listing.get("data", []):
+            if not isinstance(entry, dict):
+                continue
+            record = record_from_listing_entry(entry, base_url=base_url)
+            if record.role == ROLE_EMBEDDING:
+                embedding_models.append(record.model_id)
+            elif record.role == ROLE_RERANKER:
+                rerank_models.append(record.model_id)
+    return (
+        tuple(dict.fromkeys(embedding_models)),
+        tuple(dict.fromkeys(rerank_models)),
+    )
+
+
 def select_online_model(
     *,
     app_config: dict,
@@ -611,10 +636,15 @@ def select_online_model(
         if listing_entry is not None
         else None
     )
+    embedding_models, rerank_models = classify_capability_models(
+        model_listing, base_url=base_url
+    )
     return {
         "model": model,
         "model_name": model_name,
         "base_url": base_url,
+        "embedding_models": embedding_models,
+        "rerank_models": rerank_models,
         "share_context": share_context,
         "allow_tools": allow_tools,
         "enforce_tool_call_limits": enforce_tool_call_limits,

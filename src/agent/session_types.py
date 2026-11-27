@@ -48,6 +48,7 @@ class ProviderSelection:
     context_summary: str
     session_summary_saved: bool
     available_models: list[Any]
+    rag_state: tuple[Any, bool, Any, float, Any] | None = None
 
 
 @dataclass
