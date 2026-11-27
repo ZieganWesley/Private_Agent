@@ -225,3 +225,38 @@ def test_run_doctor_reports_the_context_budget_plan(monkeypatch):
     assert "Context usage" in joined
     assert "history: requested=" in joined
     assert "allocated=" in joined
+
+
+def test_doctor_module_uses_shared_console():
+    import diagnostics.doctor as doctor_mod
+    from ui.console import console as shared
+
+    assert doctor_mod.console is shared
+
+
+def test_doctor_interactive_returns_zero_on_no(monkeypatch):
+    import diagnostics.doctor as doctor_mod
+    from ui.console import console as shared
+
+    monkeypatch.setattr(shared, "input", lambda prompt="": "n")
+    assert doctor_mod.doctor_interactive() == 0
+
+
+def test_runtime_suspends_footer_around_doctor():
+    import inspect
+
+    import agent.runtime as runtime_mod
+
+    source = inspect.getsource(runtime_mod)
+    assert "session_ui._footer.stop()" in source
+    start = source.index('if user_input.lower() == "/doctor":')
+    end = source.index("continue", start)
+    block = source[start:end]
+    assert "doctor_interactive()" in block
+    # stop must come before the call, start after it.
+    assert block.index("session_ui._footer.stop()") < block.index(
+        "doctor_interactive()"
+    )
+    assert block.index("session_ui._footer.start()") > block.index(
+        "doctor_interactive()"
+    )

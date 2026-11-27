@@ -21,10 +21,8 @@ from platform_support import (
     format_install_command,
     system_dependency_status,
 )
-from ui.console import build_console
+from ui.console import console
 from ui.status_view import StatusSection, status_panel
-
-console = build_console()
 
 ENDPOINT_PROBE_TIMEOUT_SECONDS = 0.75
 
