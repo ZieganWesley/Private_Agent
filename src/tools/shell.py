@@ -2,8 +2,10 @@
 
 import contextlib
 import logging
+import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
@@ -213,6 +215,8 @@ def run_shell_command(command: str, timeout: int | None = None) -> str:
 
 _BACKGROUND_PROCESS_LOCK = threading.RLock()
 _BACKGROUND_PROCESSES: dict[str, dict] = {}
+# Seconds a background group gets to exit after SIGTERM before SIGKILL.
+_BACKGROUND_STOP_GRACE_SECONDS = 5.0
 
 
 def _background_process_count() -> int:
@@ -236,6 +240,49 @@ def _reap_background_processes() -> None:
                     with contextlib.suppress(OSError):
                         handle.close()
                     item["stdout_handle"] = None
+
+
+def _signal_background_group(pgid: int, sig: int) -> bool:
+    """Signal a background process group, reporting whether it still exists."""
+    try:
+        os.killpg(pgid, sig)
+    except ProcessLookupError:
+        # The whole group is already gone; nothing left to signal.
+        return False
+    except PermissionError:
+        logger.debug("Cannot signal background process group %s", pgid)
+        return False
+    return True
+
+
+def _stop_background_group(process: subprocess.Popen) -> None:
+    """Stop a background process and every process it spawned.
+
+    Background commands start in their own session, so the direct child also
+    leads a process group. Signalling only that child leaves the grandchildren
+    it spawned running (and holding the output file open), so signal the group
+    and escalate to SIGKILL when it outlives the grace period.
+    """
+    pgid = process.pid
+    if process.poll() is not None:
+        return
+    if pgid <= 1 or pgid == os.getpgrp():
+        # Defensive: a misconfigured launch must never signal our own group.
+        process.terminate()
+        try:
+            process.wait(timeout=_BACKGROUND_STOP_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=_BACKGROUND_STOP_GRACE_SECONDS)
+        return
+    _signal_background_group(pgid, signal.SIGTERM)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=_BACKGROUND_STOP_GRACE_SECONDS)
+    # The leader may have exited while children that ignored SIGTERM survived,
+    # so kill the group rather than assuming the leader's exit was enough.
+    _signal_background_group(pgid, signal.SIGKILL)
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=_BACKGROUND_STOP_GRACE_SECONDS)
 
 
 def _read_background_output(item: dict, tail: int = 4000) -> str:
@@ -357,13 +404,7 @@ def stop_background_process(process_id: str) -> str:
         if item is None:
             return f"Error: Unknown background process '{process_id}'."
         process = item["process"]
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+        _stop_background_group(process)
         item["status"] = "stopped"
         item["returncode"] = process.returncode
         item["ended_at"] = time.time()
