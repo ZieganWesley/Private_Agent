@@ -2,8 +2,12 @@
 
 import pytest
 from langchain_core.messages import AIMessage, AIMessageChunk
+from rich.console import Console
 
 from agent import status
+from ui.ribbon import context_segment_style
+from ui.state import GAUGE_FILLED, StatusState
+from ui.theme import DARK_STYLES, LIGHT_STYLES, build_theme
 
 
 class FakeStatus:
@@ -229,9 +233,53 @@ def test_context_gauge_clamps_and_ignores_unusable_limits():
 
 
 def test_context_style_warns_as_the_window_fills_up():
-    assert status.context_style(10, 100) == "green"
-    assert status.context_style(60, 100) == "yellow"
-    assert status.context_style(80, 100) == "red"
+    assert status.context_style(10, 100) == "ribbon.context.ok"
+    assert status.context_style(60, 100) == "ribbon.context.warn"
+    assert status.context_style(80, 100) == "ribbon.context.high"
+
+
+def test_context_style_and_the_ribbon_segment_share_one_definition():
+    cases = (
+        (10, 100, "ribbon.context.ok"),
+        (49, 100, "ribbon.context.ok"),
+        (50, 100, "ribbon.context.warn"),
+        (79, 100, "ribbon.context.warn"),
+        (80, 100, "ribbon.context.high"),
+        (100, 100, "ribbon.context.high"),
+        (0, 0, "ribbon.context.ok"),
+        ("unavailable", "unavailable", "ribbon.context.ok"),
+    )
+    for tokens, maximum, expected in cases:
+        state = StatusState(context_tokens=tokens, context_maximum=maximum)
+        assert status.context_style(tokens, maximum) == expected
+        assert context_segment_style(state) == expected
+
+
+def test_every_context_style_token_exists_in_both_palettes():
+    tokens = {status.context_style(used, 100) for used in (0, 60, 90)}
+
+    assert tokens == {
+        "ribbon.context.ok",
+        "ribbon.context.warn",
+        "ribbon.context.high",
+    }
+    for token in tokens:
+        assert token in DARK_STYLES
+        assert token in LIGHT_STYLES
+
+
+def test_context_state_line_markup_resolves_through_the_theme():
+    line = status.context_state_line({"tokens": 90, "max": 100}, 512)
+
+    assert "[ribbon.context.high]" in line
+    console = Console(theme=build_theme(False), width=200, color_system="truecolor")
+    bar_styles = [
+        segment.style
+        for segment in console.render(line)
+        if GAUGE_FILLED in segment.text
+    ]
+    assert bar_styles
+    assert str(bar_styles[0]) == str(console.get_style("ribbon.context.high"))
 
 
 def test_context_state_line_shows_the_gauge_and_budgets():
@@ -241,7 +289,7 @@ def test_context_state_line_shows_the_gauge_and_budgets():
     assert "25%" in line
     assert "3,000 / 12,000 prompt tokens" in line
     assert "up to 2048 output tokens" in line
-    assert "[green]" in line
+    assert "[ribbon.context.ok]" in line
     assert "[Context State]" in status.context_state_line({"tokens": 0, "max": 0}, 100)
 
 
