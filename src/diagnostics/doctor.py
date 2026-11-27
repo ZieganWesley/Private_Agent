@@ -197,15 +197,32 @@ def check_config_file(path: Path | None = None) -> list[ConfigProblem]:
     return problems
 
 
+def _read_proc_meminfo_total_gb() -> float | None:
+    """Read total physical memory from /proc/meminfo (Linux fallback)."""
+    try:
+        with open("/proc/meminfo", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("MemTotal:"):
+                    parts = line.split()
+                    if len(parts) < 2:
+                        return None
+                    kilobytes = int(parts[1])
+                    return round(kilobytes * 1024 / (1024**3), 2)
+    except OSError, ValueError, IndexError:
+        return None
+    return None
+
+
 def analyze_machine() -> dict[str, Any]:
+    memory_gb: float | None = None
+    cpu_count = os.cpu_count() or 1
     try:
         import psutil
 
         memory_gb = round(psutil.virtual_memory().total / (1024**3), 2)
-        cpu_count = psutil.cpu_count(logical=True) or os.cpu_count() or 1
+        cpu_count = psutil.cpu_count(logical=True) or cpu_count
     except Exception:  # noqa: BLE001 - psutil may be unavailable
-        memory_gb = None
-        cpu_count = os.cpu_count() or 1
+        memory_gb = _read_proc_meminfo_total_gb()
     disk = shutil.disk_usage(str(Path.home()))
     return {
         "platform": platform.platform(),
