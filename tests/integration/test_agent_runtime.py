@@ -5104,6 +5104,12 @@ async def test_enable_capability_rebinds_and_runs_the_new_tool_in_the_same_turn(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
+    # Full mode now needs a typed confirmation; grant it as the user would.
+    monkeypatch.setattr(
+        agent,
+        "_enforce_full_mode_impl",
+        lambda mode, console, is_interactive: mode,
+    )
     import agent.runtime_f_integration as f_integration
 
     monkeypatch.setattr(f_integration, "DEFAULT_DB_PATH", str(database_path))
@@ -5158,6 +5164,12 @@ async def test_capability_packs_do_not_leak_between_turns(
     scripted_local_cli, capsys, monkeypatch
 ):
     agent, model, inputs, workspace, database_path = scripted_local_cli
+    # Full mode now needs a typed confirmation; grant it as the user would.
+    monkeypatch.setattr(
+        agent,
+        "_enforce_full_mode_impl",
+        lambda mode, console, is_interactive: mode,
+    )
     import agent.runtime_f_integration as f_integration
     from tools import get_tool_context
 

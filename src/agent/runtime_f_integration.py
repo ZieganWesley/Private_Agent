@@ -49,8 +49,13 @@ def gate_capability(tool_call, permission_mode, console, state):
 
 
 def approve_capability(name, permission_mode, console, interactive):
-    """Return (allowed, reason) for an enable_capability request."""
-    if name not in ("Coding", "Research"):
+    """Return (allowed, reason) for an enable_capability request.
+
+    Only read-only packs escalate freely. A mutating pack needs the same
+    approval funnel as its tools, so a mid-turn model call cannot hand itself
+    the filesystem; full mode already carries the user's session-wide consent.
+    """
+    if name not in capability_packs.MUTATING_PACKS:
         return True, ""
     if permission_mode == "full":
         return True, ""

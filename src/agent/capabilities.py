@@ -15,6 +15,11 @@ from dataclasses import dataclass, field
 # the router or by ``enable_capability`` during a turn.
 BASELINE_PACKS = {"Core"}
 
+# Packs whose tools can change the workspace, stored data, or a device. A
+# mid-turn escalation to one of these needs user approval through the
+# permission funnel (see ``agent.runtime_f_integration.approve_capability``).
+MUTATING_PACKS = frozenset({"Coding", "Research", "Memory", "Helper", "Media"})
+
 CORE_TOOLS = frozenset(
     {
         "get_local_datetime",

@@ -144,6 +144,9 @@ from .permissions import (
     coding_uses_isolated_copy as _coding_uses_isolated_copy,
 )
 from .permissions import (
+    enforce_full_mode_confirmation as _enforce_full_mode_impl,
+)
+from .permissions import (
     evaluate_permission_rules as _evaluate_permission_rules,
 )
 from .permissions import (
@@ -1712,7 +1715,9 @@ async def _build_session_setup(
                     "permission mode; choosing interactively."
                 )
             _permission_mode = _select_permission_mode(interactive=interactive)
-    permission_mode = _permission_mode
+    permission_mode = _enforce_full_mode_impl(
+        _permission_mode, console, lambda: interactive and not non_interactive
+    )
     if verbose_startup:
         console.print(f"[info][Agent Permission Mode][/info] {permission_mode.title()}")
     safe_run_session_start_hooks(

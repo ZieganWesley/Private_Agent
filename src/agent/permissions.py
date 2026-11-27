@@ -35,6 +35,11 @@ MONITORED_COMMAND_TOOL_NAMES = frozenset(
         "finalize_code_task",
     }
 )
+FULL_MODE_WARNING = (
+    "Full mode approves every tool call for the rest of this session: file "
+    "writes, shell commands, Git operations, network requests and stored-data "
+    "changes run without another prompt."
+)
 CODING_ACCESS_LEVELS = {
     "full_hitl": (
         "Full workspace access — network-enabled commands; ask before every tool action"
@@ -303,6 +308,42 @@ def prompt_tool_approval(
                 session_callback(name)
         return True
     return approval in {"y", "yes", "run"}
+
+
+def confirm_full_permission_mode(
+    console: Any,
+    is_interactive: Callable[[], bool],
+) -> bool:
+    """Return True only after the user explicitly confirms entering full mode.
+
+    Full mode disables the approval funnel for the rest of the session, so it
+    takes a deliberate typed confirmation rather than one menu keypress. A
+    non-interactive session cannot give that confirmation and is refused.
+    """
+    if not is_interactive():
+        console.print(
+            "[error]Full permission mode needs interactive confirmation; "
+            "continuing in 'auto' mode instead.[/error]"
+        )
+        return False
+    console.print("[bold warning][Permission Mode: Full][/bold warning]")
+    console.print(f"[warning]{FULL_MODE_WARNING}[/warning]")
+    answer = console.input(
+        "[warning]Type 'yes' to run this session without further tool "
+        "approvals: [/warning]"
+    )
+    return answer.strip().lower() == "yes"
+
+
+def enforce_full_mode_confirmation(
+    mode: str,
+    console: Any,
+    is_interactive: Callable[[], bool],
+) -> str:
+    """Downgrade ``full`` to ``auto`` unless the user explicitly confirmed it."""
+    if mode != "full":
+        return mode
+    return "full" if confirm_full_permission_mode(console, is_interactive) else "auto"
 
 
 def select_permission_mode(
