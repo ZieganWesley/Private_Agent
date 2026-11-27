@@ -2122,6 +2122,29 @@ async def test_local_agent_turn_persists_history_and_summary(monkeypatch, tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_session_shutdown_stops_the_status_footer(monkeypatch):
+    from agent import runtime
+    from ui import status_bar
+
+    stopped = []
+
+    class Footer:
+        def stop(self):
+            stopped.append(True)
+
+    monkeypatch.setattr(status_bar, "get_active_footer", lambda _console: Footer())
+
+    async def no_session(**_kwargs):
+        return None
+
+    monkeypatch.setattr(runtime, "_run_agent_cli_session", no_session)
+
+    await runtime.run_agent_cli_async()
+
+    assert stopped == [True]
+
+
+@pytest.mark.asyncio
 async def test_runtime_rag_citations_are_prompted_and_shown(
     scripted_local_cli, monkeypatch
 ):

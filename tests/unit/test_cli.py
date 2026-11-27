@@ -220,6 +220,21 @@ def test_end_of_input_at_a_startup_prompt_exits_cleanly(monkeypatch, capsys):
     assert "Goodbye" in output
 
 
+def test_goodbye_is_followed_by_a_blank_line(monkeypatch, capsys):
+    from agent import runtime
+    from utils import run_logging
+
+    monkeypatch.setattr("sys.argv", ["private-agent"])
+    monkeypatch.setattr(run_logging, "start_debug_logging", lambda: None)
+    monkeypatch.setattr(run_logging, "log_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(run_logging, "stop_debug_logging", lambda: None)
+    monkeypatch.setattr(runtime, "run_agent_cli", lambda **_kwargs: None)
+
+    cli.main()
+
+    assert "Goodbye.\n\n" in capsys.readouterr().out
+
+
 def test_startup_banner_prints(monkeypatch, capsys):
     from agent import runtime
     from utils import run_logging
