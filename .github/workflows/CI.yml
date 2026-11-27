@@ -120,11 +120,12 @@ jobs:
           PROFILE
             sudo apparmor_parser -r /etc/apparmor.d/bwrap
           fi
-          if ! bwrap --unshare-all --die-with-parent /bin/true; then
+          probe() { bwrap --unshare-all --ro-bind / / --die-with-parent /bin/true; }
+          if ! probe; then
             # Fallback for runners without a loaded AppArmor policy set.
             sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
           fi
-          if ! bwrap --unshare-all --die-with-parent /bin/true; then
+          if ! probe; then
             echo "::error::Bubblewrap cannot create an isolated namespace on this runner"
             exit 1
           fi
@@ -139,7 +140,7 @@ jobs:
           # Keep the test process inside a 2.4 GB virtual-memory ceiling.
           # macOS has no RLIMIT_AS, so the cap only applies to Linux runs.
           if [ "$RUNNER_OS" = "Linux" ]; then ulimit -v 2400000; fi
-          pytest -q
+          pytest -q --tb=short
 
   audit:
     name: Security Audit
