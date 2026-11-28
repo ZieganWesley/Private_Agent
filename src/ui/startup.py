@@ -138,6 +138,7 @@ def runtime_info_panel(
     skills: int,
     capabilities: dict[str, Any] | None = None,
     platform: str = "",
+    command_footer: str = "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
 ) -> Panel:
     """Return the production startup panel: runtime facts and capability badges.
 
@@ -185,7 +186,7 @@ def runtime_info_panel(
         grid,
         title=Text("Model & Runtime Info", style=resolve_style("border.success")),
         subtitle=Text(
-            "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
+            command_footer,
             style=resolve_style("muted"),
         ),
         border_style=resolve_style("border.success"),
@@ -229,8 +230,8 @@ def ready_header(
             skills=skills,
             capabilities=capabilities,
             platform=platform,
+            command_footer=command_footer,
         ),
-        Align.center(Text(command_footer, style=resolve_style("muted"))),
     )
 
 
