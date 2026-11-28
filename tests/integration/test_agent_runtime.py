@@ -5722,3 +5722,52 @@ async def test_expand_command_with_no_result_prints_message(
     await agent.run_agent_cli_async()
 
     assert any("No tool output" in output for output in printed)
+
+
+@pytest.mark.asyncio
+async def test_prod_ui_main_surface_tracks_tty_turn(scripted_local_cli, monkeypatch):
+    """End-to-end-ish check that the production UI is the main session surface."""
+    agent, model, inputs, _workspace, _database_path = scripted_local_cli
+
+    monkeypatch.setattr("ui.chat_screen.terminal_capable", lambda: True)
+
+    class FakeChatScreen:
+        def __init__(self, console=None, state_provider=None, **kwargs):
+            self.console = console
+            self.state_provider = state_provider
+            self.shows = 0
+            self.users = []
+            self.assistants = []
+
+        def show(self):
+            self.shows += 1
+
+        def add_user(self, text):
+            self.users.append(text)
+
+        def add_assistant(self, text):
+            self.assistants.append(text)
+
+    created = {}
+
+    def factory(*args, **kwargs):
+        screen = FakeChatScreen(*args, **kwargs)
+        created["screen"] = screen
+        return screen
+
+    monkeypatch.setattr("ui.chat_screen.ChatScreenUI", factory)
+    monkeypatch.setattr(
+        agent, "prompt_user_input", AsyncMock(side_effect=["hello", "exit"])
+    )
+    inputs.side_effect = ["", "", "", "1", "1"]
+    model.responses = [
+        AIMessage(content="assistant reply"),
+        AIMessage(content="Session summary."),
+    ]
+
+    await run_agent_cli_async()
+
+    screen = created["screen"]
+    assert screen.shows >= 1
+    assert screen.users == ["hello", "exit"]
+    assert any("assistant reply" in text for text in screen.assistants)
