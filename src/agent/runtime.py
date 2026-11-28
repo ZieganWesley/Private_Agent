@@ -2251,6 +2251,7 @@ async def _choose_provider(
             skills=len(loaded_skills),
             capabilities=capabilities,
             platform=f"{os_name} ({architecture})" if architecture else os_name,
+            width=console.size.width,
         )
     )
     console.print(
@@ -2530,7 +2531,17 @@ async def _run_agent_cli_session(
             console=console,
             status_bar=STATUS_BAR,
         )
-        session_ui.bind(model=selected_model, permission=permission_mode)
+        provider_label = (
+            f"Local ({selected_local_runtime.name})"
+            if provider_type == "local" and selected_local_runtime
+            else "Online"
+        )
+        session_ui.bind(
+            model=selected_model,
+            permission=permission_mode,
+            provider=provider_label,
+            thinking_enabled=thinking_enabled,
+        )
         chat_screen = None
         if not non_interactive:
             from ui.chat_screen import ChatScreenUI, terminal_capable

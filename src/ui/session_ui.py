@@ -31,7 +31,13 @@ class SessionUI:
         self._model: Any = None
         self._permission: str = "auto"
         self._output_tokens: Any = None
+        self._provider: str = ""
         self._provider_mode: str = ""
+        self._thinking_enabled: bool = False
+        self._thinking_effort: str = "med"
+        self._skills_count: int = 0
+        self._capabilities: dict[str, Any] = {}
+        self._rag_enabled: bool = True
         self._context_used: int = 0
         self._context_max: int = 0
         self._bg: int = 0
@@ -49,7 +55,13 @@ class SessionUI:
             permission_mode=self._permission,
             output_tokens=self._output_tokens,
             background_processes=self._bg,
+            provider=self._provider,
             provider_mode=self._provider_mode,
+            thinking_enabled=self._thinking_enabled,
+            thinking_effort=self._thinking_effort,
+            skills_count=self._skills_count,
+            capabilities=dict(self._capabilities),
+            rag_enabled=self._rag_enabled,
         )
 
     def bind(
@@ -58,7 +70,13 @@ class SessionUI:
         model: Any = None,
         permission: str | None = None,
         output_tokens: Any = None,
+        provider: str | None = None,
         provider_mode: str | None = None,
+        thinking_enabled: bool | None = None,
+        thinking_effort: str | None = None,
+        skills_count: int | None = None,
+        capabilities: dict[str, Any] | None = None,
+        rag_enabled: bool | None = None,
     ) -> None:
         if model is not None:
             self._model = model
@@ -66,8 +84,20 @@ class SessionUI:
             self._permission = permission
         if output_tokens is not None:
             self._output_tokens = output_tokens
+        if provider is not None:
+            self._provider = str(provider)
         if provider_mode is not None:
             self._provider_mode = str(provider_mode)
+        if thinking_enabled is not None:
+            self._thinking_enabled = bool(thinking_enabled)
+        if thinking_effort is not None:
+            self._thinking_effort = str(thinking_effort)
+        if skills_count is not None:
+            self._skills_count = int(skills_count)
+        if capabilities is not None:
+            self._capabilities = dict(capabilities)
+        if rag_enabled is not None:
+            self._rag_enabled = bool(rag_enabled)
         self._footer.update(self._current_state())
         # The footer owns the ribbon: Mode A paints it live and Mode B prints
         # it as each turn's closing line, so no copy is printed here.

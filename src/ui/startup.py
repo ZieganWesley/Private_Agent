@@ -63,19 +63,31 @@ def startup_section(title: str, pairs: Sequence[tuple[str, Any]]) -> Group:
 def figlet_banner(
     title: str = "Private Agent",
     *,
-    subtitle: str = "Local Inference & Tool Runtime",
+    subtitle: str = "READY · Local-first AI assistant with repository intelligence, memory and tools",
     font: str = "slant",
+    width: int | None = None,
 ) -> Panel:
-    """Return the startup banner: ASCII-art title and a short subtitle."""
+    """Return the startup banner: ASCII-art title and a short subtitle.
+
+    The reference UI falls back to a plain uppercase title when the ASCII art
+    would not fit the terminal. Keeping the fallback here avoids a broken,
+    wrapped figlet drawing in narrow windows.
+    """
     import pyfiglet
 
     art = pyfiglet.figlet_format(title, font=font).rstrip("\n")
-    heading = Text(art, style=resolve_style("accent_alt"))
+    art_width = max((len(line) for line in art.splitlines()), default=0)
+    fits = width is None or art_width + 6 <= width
+    heading = Text(
+        art if fits else title.upper(),
+        style=resolve_style("accent_alt" if fits else "accent"),
+    )
     caption = Text(subtitle, style="dim italic")
     return Panel(
         Align.center(Text.assemble(heading, "\n", caption)),
-        border_style=resolve_style("border"),
-        expand=False,
+        border_style=resolve_style("border.banner"),
+        padding=(0, 2),
+        expand=True,
     )
 
 
@@ -126,6 +138,17 @@ def _runtime_cell(value: Any) -> Text:
     return value if isinstance(value, Text) else Text(str(value))
 
 
+def _rag_status(rag: Any, rag_active: bool, rag_detail: str) -> Text:
+    """Return the reference UI's three-state local-RAG label."""
+    label = str(rag).strip().lower()
+    if label in {"", "disabled", "none", "off"}:
+        return Text("disabled", style=resolve_style("muted"))
+    if rag_active:
+        return Text("active", style=resolve_style("border.success"))
+    detail = f" ({rag_detail})" if rag_detail else ""
+    return Text(f"inactive{detail}", style=resolve_style("border.warning"))
+
+
 def runtime_info_panel(
     *,
     model: str,
@@ -138,6 +161,7 @@ def runtime_info_panel(
     skills: int,
     capabilities: dict[str, Any] | None = None,
     platform: str = "",
+    rag_detail: str = "",
     command_footer: str = "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
 ) -> Panel:
     """Return the production startup panel: runtime facts and capability badges.
@@ -146,9 +170,12 @@ def runtime_info_panel(
     columns keep the session's identity, safety mode and environment readable
     without wrapping into a stack of ``[Label] text | text`` lines.
     """
-    rag_status = Text("active" if rag_active else "inactive")
-    rag_status.stylize(resolve_style("border.success" if rag_active else "muted"))
-    caps = Text(f"{skills} · {capability_icons(capabilities)}")
+    caps_text = (
+        ", ".join(f"{key}={value}" for key, value in (capabilities or {}).items())
+        or "—"
+    )
+    caps = Text(f"{skills} · ")
+    caps.append(caps_text, style=resolve_style("muted"))
 
     left_rows: list[tuple[str, Any]] = [
         ("Model", model),
@@ -156,26 +183,24 @@ def runtime_info_panel(
         ("Permission", permission),
         ("Isolation", isolation),
     ]
-    if platform:
-        left_rows.append(("Platform", platform))
     right_rows: list[tuple[str, Any]] = [
         ("Workspace", str(workspace)),
         ("RAG Dir", str(rag)),
-        ("Local RAG", rag_status),
+        ("Local RAG", _rag_status(rag, rag_active, rag_detail)),
         ("Skills / Caps", caps),
     ]
 
-    # One four-column grid keeps the two halves side by side even when either
-    # value is long; nested expanding tables would stack instead.
-    grid = Table.grid(padding=(0, 2), expand=True)
-    grid.add_column(style=resolve_style("key"), width=12, no_wrap=True)
-    grid.add_column(style=resolve_style("value"), ratio=1, overflow="fold")
-    grid.add_column(style=resolve_style("key"), width=13, no_wrap=True)
-    grid.add_column(style=resolve_style("value"), ratio=1, overflow="fold")
+    # One four-column grid keeps the reference's two halves side by side.
+    # Nested expanding tables measure as full-width and stack instead.
+    body = Table.grid(padding=(0, 2), expand=True)
+    body.add_column(style=resolve_style("key"), width=12, no_wrap=True)
+    body.add_column(style=resolve_style("value"), ratio=1, overflow="fold")
+    body.add_column(style=resolve_style("key"), width=13, no_wrap=True)
+    body.add_column(style=resolve_style("value"), ratio=1, overflow="fold")
     for index in range(max(len(left_rows), len(right_rows))):
         left = left_rows[index] if index < len(left_rows) else ("", "")
         right = right_rows[index] if index < len(right_rows) else ("", "")
-        grid.add_row(
+        body.add_row(
             Text(left[0]),
             _runtime_cell(left[1]),
             Text(right[0]),
@@ -183,13 +208,13 @@ def runtime_info_panel(
         )
 
     return Panel(
-        grid,
-        title=Text("Model & Runtime Info", style=resolve_style("border.success")),
+        body,
+        title=Text("Model & Runtime Info", style=resolve_style("border.runtime")),
         subtitle=Text(
             command_footer,
             style=resolve_style("muted"),
         ),
-        border_style=resolve_style("border.success"),
+        border_style=resolve_style("border.runtime"),
         padding=(0, 1),
     )
 
@@ -206,9 +231,11 @@ def ready_header(
     skills: int,
     capabilities: dict[str, Any] | None = None,
     platform: str = "",
+    rag_detail: str = "",
     title: str = "Private Agent",
-    subtitle: str = "Local Inference & Tool Runtime",
+    subtitle: str = "READY · Local-first AI assistant with repository intelligence, memory and tools",
     font: str = "slant",
+    width: int | None = None,
     command_footer: str = "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
 ) -> Group:
     """Return the combined production ready screen.
@@ -218,7 +245,7 @@ def ready_header(
     with the runtime panel instead of being rediscovered from scattered prints.
     """
     return Group(
-        figlet_banner(title=title, subtitle=subtitle, font=font),
+        figlet_banner(title=title, subtitle=subtitle, font=font, width=width),
         runtime_info_panel(
             model=model,
             provider=provider,
@@ -230,6 +257,7 @@ def ready_header(
             skills=skills,
             capabilities=capabilities,
             platform=platform,
+            rag_detail=rag_detail,
             command_footer=command_footer,
         ),
     )

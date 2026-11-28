@@ -25,6 +25,10 @@ def test_chat_screen_has_conversation_input_and_live_ribbon_panes():
             context_tokens=4,
             context_maximum=10,
             permission_mode="auto",
+            provider="Local (llama.cpp)",
+            thinking_enabled=True,
+            skills_count=3,
+            capabilities={"tools": "yes"},
         ),
     )
     screen.add_user("inspect the repository")
@@ -38,13 +42,25 @@ def test_chat_screen_has_conversation_input_and_live_ribbon_panes():
     rendered = _render(layout)
     for expected in (
         "Conversation",
-        "inspect the repository",
+        "Auto-scroll active · History: 2 block(s)",
+        "User: inspect the repository",
+        "AI:",
         "The repository is ready.",
-        "Input",
+        "You ›",
         "Live Status Ribbon",
-        "Model: local-model",
-        "Context: 40.0%",
-        "Permission: auto",
+        "[Model & Mode] Local (llama.cpp)/local-model",
+        "Mode:agentic",
+        "🧠Think:ON(med)",
+        "[Safety & Execution] 🔐Perm:auto",
+        "🧰Tools:0",
+        "⚙️BG:0",
+        "🌐Net:allow",
+        "[Context & Caps] 📊Ctx:4/10 (40%)",
+        "📁WS:on",
+        "🔎RAG:on",
+        "📚Skills:3",
+        "Caps:🔧➖➖➖🙈🔇",
+        "[● ready]",
     ):
         assert expected in rendered, expected
 
@@ -69,6 +85,19 @@ def test_chat_screen_show_renders_layout_without_clearing():
 
     rendered = output.getvalue()
     assert "Conversation" in rendered
-    assert "Input" in rendered
+    assert "You ›" in rendered
     assert "Live Status Ribbon" in rendered
-    assert "hello" in rendered
+    assert "User: hello" in rendered
+
+
+def test_chat_screen_busy_state_matches_reference_ribbon():
+    console = Console(file=StringIO(), width=100, height=30, no_color=True)
+    screen = ChatScreenUI(console)
+    screen.add_user("hello")
+    screen.set_processing(True)
+
+    rendered = _render(screen.render())
+
+    assert "Model is responding..." in rendered
+    assert "⏳ busy" in rendered
+    assert "You ›" not in rendered
