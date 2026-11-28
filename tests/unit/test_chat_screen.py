@@ -59,18 +59,16 @@ def test_chat_screen_keeps_user_text_literal():
     assert "[bold]not markup[/bold]" in rendered
 
 
-def test_chat_screen_falls_back_to_console_input_without_a_tty(monkeypatch):
-    class FakeConsole:
-        def __init__(self):
-            self.prompts = []
-
-        def input(self, prompt, **kwargs):
-            self.prompts.append(prompt)
-            return "typed line"
-
-    monkeypatch.setattr("ui.chat_screen.terminal_capable", lambda: False)
-    console = FakeConsole()
+def test_chat_screen_show_renders_layout_without_clearing():
+    output = StringIO()
+    console = Console(file=output, width=100, height=30, no_color=True)
     screen = ChatScreenUI(console)
+    screen.add_user("hello")
 
-    assert screen.read_line() == "typed line"
-    assert console.prompts == ["Input: "]
+    screen.show()
+
+    rendered = output.getvalue()
+    assert "Conversation" in rendered
+    assert "Input" in rendered
+    assert "Live Status Ribbon" in rendered
+    assert "hello" in rendered
