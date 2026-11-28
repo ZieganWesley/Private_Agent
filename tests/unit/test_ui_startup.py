@@ -123,6 +123,8 @@ def test_runtime_info_panel_shows_runtime_facts_and_capability_icons():
     ):
         assert expected in rendered, expected
 
+    assert rendered.count("Commands: /help") == 1
+
 
 def test_runtime_info_panel_keeps_values_literal():
     rendered = _render(
@@ -176,3 +178,5 @@ def test_ready_header_combines_banner_panel_and_command_footer():
         "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
     ):
         assert expected in rendered, expected
+
+    assert rendered.count("Commands: /help") == 1
