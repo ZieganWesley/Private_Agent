@@ -13,7 +13,6 @@ line is submitted, so the runtime keeps its existing streaming behaviour.
 from __future__ import annotations
 
 import contextlib
-import os
 import sys
 from collections import deque
 from collections.abc import Callable
@@ -192,46 +191,10 @@ class ChatScreenUI:
             self._live = None
 
     # ------------------------------------------------------------------
-    # Input
+    # Rendering only
     # ------------------------------------------------------------------
-
-    def read_line(self) -> str:
-        """Read one line inside the screen, or fall back to console input."""
-        if not terminal_capable():
-            self.input_buffer = ""
-            return self.console.input(_INPUT_LABEL, markup=False)
-
-        self.input_buffer = ""
-        self.start()
-        try:
-            self.refresh()
-            with _raw_stdin() as fd:
-                if fd is None:
-                    return self.console.input(_INPUT_LABEL, markup=False)
-                while True:
-                    raw = os.read(fd, 1)
-                    if not raw:
-                        raise EOFError
-                    char = raw.decode("utf-8", errors="ignore")
-                    if char in ("\r", "\n"):
-                        result = self.input_buffer.strip()
-                        self.input_buffer = ""
-                        self.refresh()
-                        return result
-                    if char == "\x03":
-                        raise KeyboardInterrupt
-                    if char == "\x04":
-                        raise EOFError
-                    if char in ("\x7f", "\b"):
-                        if self.input_buffer:
-                            self.input_buffer = self.input_buffer[:-1]
-                            self.refresh()
-                        continue
-                    if char.isprintable():
-                        self.input_buffer += char
-                        self.refresh()
-        finally:
-            self.stop()
+    # ChatScreenUI is intentionally a simple layout renderer. Interactive
+    # terminal input stays with the canonical prompt machinery in runtime.py.
 
     def __enter__(self) -> ChatScreenUI:
         self.start()
@@ -239,27 +202,6 @@ class ChatScreenUI:
 
     def __exit__(self, *_exc: object) -> None:
         self.stop()
-
-
-@contextlib.contextmanager
-def _raw_stdin():
-    """Put stdin in cbreak mode when possible, restoring it on exit."""
-    if not terminal_capable():
-        yield None
-        return
-    try:
-        import termios
-        import tty
-    except ImportError:  # pragma: no cover - non-POSIX
-        yield None
-        return
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    try:
-        tty.setcbreak(fd)
-        yield fd
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 __all__ = ["ChatScreenUI", "terminal_capable"]
