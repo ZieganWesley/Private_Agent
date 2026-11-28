@@ -6,7 +6,7 @@ rounding rule, one fill rule, one segment list (with width-aware dropping).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from rich.markup import escape
@@ -121,6 +121,20 @@ class StatusState:
     output_tokens: Any = None
     background_processes: int = 0
     provider_mode: str = ""
+    # Reference chat-surface facts. They are additive: the canonical ribbon
+    # still reads ``segment_pairs`` and is unaffected by these fields.
+    provider: str = ""
+    mode: str = "agentic"
+    thinking_enabled: bool = False
+    thinking_effort: str = "med"
+    tools_used: int = 0
+    internet_online: bool = True
+    internet_allowed: bool = True
+    workspace_enabled: bool = True
+    rag_enabled: bool = True
+    skills_count: int = 0
+    capabilities: dict[str, Any] = field(default_factory=dict)
+    processing: bool = False
 
     def percent(self) -> float:
         return context_percent(self.context_tokens, self.context_maximum)

@@ -27,10 +27,20 @@ def _render(renderable, width: int = 80) -> str:
 def test_banner_renders_ascii_art_and_subtitle():
     rendered = _render(figlet_banner(), width=100)
 
-    assert "Local Inference & Tool Runtime" in rendered
+    assert (
+        "READY · Local-first AI assistant with repository intelligence, memory and tools"
+        in rendered
+    )
     assert "\u2502" in rendered or "\u2503" in rendered
     # Pyfiglet's slant font draws the title; the plain title is not printed.
     assert "Private Agent" not in rendered
+
+
+def test_banner_falls_back_to_plain_title_in_a_narrow_window():
+    rendered = _render(figlet_banner(width=50), width=50)
+
+    assert "PRIVATE AGENT" in rendered
+    assert "\u2588" not in rendered
 
 
 def test_startup_rule_names_the_section():
@@ -114,15 +124,22 @@ def test_runtime_info_panel_shows_runtime_facts_and_capability_icons():
         "Local (llama.cpp)",
         "Auto",
         "Available — bubblewrap + prlimit",
-        "Linux (x86_64)",
         "/work/project",
         "/work/rag",
         "active",
-        "3 · 🔧❓➖🧠🙈🔇",
         "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
     ):
         assert expected in rendered, expected
 
+    for capability in (
+        "tools=yes",
+        "function_calls=unknown",
+        "structured_output=no",
+        "thinking=yes",
+        "vision=no",
+        "audio=unknown",
+    ):
+        assert capability in rendered, capability
     assert rendered.count("Commands: /help") == 1
 
 
@@ -146,7 +163,8 @@ def test_runtime_info_panel_keeps_values_literal():
     assert "[red]/work[/red]" in rendered
     assert "[not-a-style]/rag" in rendered
     assert "🔧❓➖🧠🙈🔇" not in rendered
-    assert "🚫➖➖➖🙈🔇" in rendered
+    assert "inactive" in rendered
+    assert "0 · —" in rendered
 
 
 def test_capability_icons_uses_unknown_and_no_states():
@@ -172,7 +190,7 @@ def test_ready_header_combines_banner_panel_and_command_footer():
     )
 
     for expected in (
-        "Local Inference & Tool Runtime",
+        "READY · Local-first AI assistant with repository intelligence, memory and tools",
         "Model & Runtime Info",
         "local-model",
         "Commands: /help · /mode · /think · /net · /up · /down · switch · exit",
